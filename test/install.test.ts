@@ -361,6 +361,24 @@ test('by default: one broken settings file refuses the whole uninstall and leave
   assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), true);
 });
 
+test('by default: a hook pointer this account cannot remove refuses the whole uninstall and leaves every directory as it was', { skip: process.getuid?.() === 0 }, () => {
+  const { home, env, dirs } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  const pointerDir = path.join(home, '.local', 'share', 'sextant');
+  const read = () => dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
+  const before = read();
+  fs.chmodSync(pointerDir, 0o555);
+  try {
+    const r = runCli(['uninstall'], env);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /sextant-hook\. Nothing was changed\./);
+    assert.doesNotMatch(r.stdout, /: removed/);
+    assert.deepEqual(read(), before);
+  } finally {
+    fs.chmodSync(pointerDir, 0o755);
+  }
+});
+
 test('--managed warns about each login whose server-managed settings make Claude Code ignore the managed files', { skip: !supported }, () => {
   const { home, env } = logins();
   fs.writeFileSync(path.join(home, '.claude', 'remote-settings.json'), JSON.stringify({ permissions: { deny: ['WebFetch'] } }));

@@ -70,16 +70,19 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
         record(target, true, home, lines);
       }
     } else {
-      // The per-account pointer is shared by every account install of this account.
-      const keepPointer = (target: InstallTarget): boolean =>
-        target.kind === 'account' && accountInstalls(stateDir(home)).some((d) => d !== target.configDir);
-      for (const target of targets) {
+      // The per-account pointer is shared by every account install of this account: it stays while a
+      // recorded directory that this uninstall has not reached yet still runs it.
+      const recorded = accountInstalls(stateDir(home));
+      const keepPointer = targets.map(
+        (target, i) => target.kind === 'account' && recorded.some((d) => !targets.slice(0, i + 1).some((t) => t.configDir === d)),
+      );
+      for (const [i, target] of targets.entries()) {
         current = target;
-        checkUninstallable(target, { keepPointer: keepPointer(target) });
+        checkUninstallable(target, { keepPointer: keepPointer[i] === true });
       }
-      for (const target of targets) {
+      for (const [i, target] of targets.entries()) {
         current = target;
-        lines.push(...uninstall(target, { keepPointer: keepPointer(target) }));
+        lines.push(...uninstall(target, { keepPointer: keepPointer[i] === true }));
         record(target, false, home, lines);
       }
     }
@@ -88,11 +91,11 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     if (failed === undefined) throw e;
     if (lines.length) io.out(lines.join('\n'));
     if (e instanceof NeedsPermission) {
-      io.err(permissionMessage(command, failed, e.paths, runtime, env, home));
+      io.err(permissionMessage(command, failed, e.paths, runtime, env, home, lines.length > 0));
       return 1;
     }
     if (e instanceof InstallRefused) {
-      io.err(`sextant: ${e.message}`);
+      io.err(`sextant: ${e.message}${lines.length > 0 ? ' (except what the lines above report)' : ''}`);
       return 1;
     }
     // A permission the check before writing could not foresee, such as a file locked meanwhile.
@@ -221,7 +224,7 @@ function permissionMessage(
   runtime: Runtime,
   env: Env,
   home: string,
-  changedBefore = false,
+  changedBefore: boolean,
 ): string {
   const unchanged = changedBefore ? 'Nothing was changed past the lines above.' : 'Nothing was changed.';
   const lines = [`sextant: this account cannot write ${paths.join(' or ')}. ${unchanged}`];
