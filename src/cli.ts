@@ -1,19 +1,27 @@
 #!/usr/bin/env node
-// sextant command line. Exit codes: 0 for every decision (matched, none, undeclared);
-// 2 for a usage error or a refused configuration.
+// sextant command line. Exit codes: 0 for success and for every decision (matched, none,
+// undeclared); 1 when install, uninstall or check finds a problem; 2 for a usage error or a refused
+// configuration. `sextant hook` always exits 0.
 
 import fs from 'node:fs';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CHECK_USAGE, runCheck } from './commands/check.js';
+import { HOOK_USAGE, runHookCommand } from './commands/hook.js';
+import { INSTALL_USAGE, runInstall } from './commands/install.js';
 import { RESOLVE_USAGE, runResolve } from './commands/resolve.js';
 import { UsageError } from './commands/usage.js';
 import { ConfigError } from './config/load.js';
-import { PACKAGE_ROOT, type Env } from './config/paths.js';
+import type { Env } from './config/paths.js';
+import { packageVersion } from './version.js';
 
 const USAGE = `usage: sextant <command>
 
 Commands:
+  install [--account <dir>]         install the Claude Code hooks, machine-wide or for one account
+  uninstall [--account <dir>]       remove them
+  check                             check the configuration, the installs and Claude Code
   resolve <model> [scope] [place]   show the rules a model receives
+  hook <event>                      the hook adapter that Claude Code runs; not run by hand
 
 Options:
   --help       show this help
@@ -26,13 +34,28 @@ export interface Io {
   readonly err: (text: string) => void;
 }
 
+const COMMAND_USAGE: Record<string, string> = {
+  resolve: RESOLVE_USAGE,
+  install: INSTALL_USAGE,
+  uninstall: INSTALL_USAGE,
+  check: CHECK_USAGE,
+  hook: HOOK_USAGE,
+};
+
 export function main(argv: readonly string[], env: Env, io: Io): number {
   const [command, ...rest] = argv;
+  // The hook never prints usage or fails: Claude Code would show it as a hook error.
+  if (command === 'hook') return runHookCommand(rest, env, io.out);
   try {
+    const usage = command !== undefined ? COMMAND_USAGE[command] : undefined;
+    if (usage !== undefined && (rest.includes('--help') || rest.includes('-h'))) {
+      io.out(usage);
+      return 0;
+    }
     switch (command) {
       case '--version':
       case '-v':
-        io.out(version());
+        io.out(packageVersion());
         return 0;
       case '--help':
       case '-h':
@@ -40,12 +63,13 @@ export function main(argv: readonly string[], env: Env, io: Io): number {
         io.out(USAGE);
         return 0;
       case 'resolve':
-        if (rest.includes('--help') || rest.includes('-h')) {
-          io.out(RESOLVE_USAGE);
-          return 0;
-        }
         io.out(JSON.stringify(runResolve(rest, env), null, 2));
         return 0;
+      case 'install':
+      case 'uninstall':
+        return runInstall(command, rest, env, io);
+      case 'check':
+        return runCheck(rest, env, io.out);
       case undefined:
         throw new UsageError('missing the command', USAGE);
       default:
@@ -62,11 +86,6 @@ export function main(argv: readonly string[], env: Env, io: Io): number {
     }
     throw e;
   }
-}
-
-function version(): string {
-  const pkg = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { version: string };
-  return pkg.version;
 }
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

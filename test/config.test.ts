@@ -121,7 +121,7 @@ test('user rules: the file must exist and hold text, the id must be free, the sc
   assertProblem(problems, /\/add\/4\/scopes: "\*" already covers every scope; list it alone/);
 });
 
-test('every combination of scope and place must fit the delivery limit', () => {
+test('every combination of scope and place must fit the delivery limit, with room for the model-change note', () => {
   const big = 'x'.repeat(6000);
   const problems = problemsOf(
     {
@@ -140,16 +140,16 @@ test('every combination of scope and place must fit the delivery limit', () => {
     { 'a.md': big, 'b.md': big },
   );
   assert.equal(problems.length, 1, problems.join('\n'));
-  assertProblem(problems, /^\/models\/claude-haiku-5-5: the rules delivered for scope "review" in place "session" come to \d+ characters; the limit is 10000$/);
+  assertProblem(problems, /^\/models\/claude-haiku-5-5: the rules delivered for scope "review" in place "session" come to \d+ characters; the limit is 9500 \(Claude Code's 10000, less 500 kept for the model-change note\)$/);
 });
 
 test('a text exactly at the limit is accepted', () => {
   const dir = tempTree({ 'sextant.json': { version: 1, models: { 'claude-haiku-5-5': custom() } } });
   const envelopeSize = '<sextant-rules model="claude-haiku-5-5">\nWorking rules the user declared for claude-haiku-5-5 (delivered by sextant, rules r):\n\n</sextant-rules>'.length;
-  fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(10000 - envelopeSize));
+  fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(9500 - envelopeSize));
   loadConfig(path.join(dir, 'sextant.json'));
-  fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(10001 - envelopeSize));
-  assert.throws(() => loadConfig(path.join(dir, 'sextant.json')), /come to 10001 characters/);
+  fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(9501 - envelopeSize));
+  assert.throws(() => loadConfig(path.join(dir, 'sextant.json')), /come to 9501 characters/);
 });
 
 test('every schema problem is reported together', () => {

@@ -3,8 +3,8 @@
 Take a fix before you set the course: pick the right model for each agent task, and hand every agent the practices that fit the model it actually runs on.
 
 **Status: early development.** Nothing is published yet.
-The core works: given a model, a task scope and a place, it decides which rules apply and produces the exact text to deliver.
-The Claude Code hooks, the installer and the preset come next.
+Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
+Subagents, task scopes and the starting preset come next.
 
 ## What it will do
 
@@ -14,6 +14,21 @@ The Claude Code hooks, the installer and the preset come next.
 
 It works on its own and alongside agent orchestrators.
 One configuration file serves the whole machine, for every Claude Code account on it.
+
+## Install
+
+```bash
+sudo "$(command -v node)" "$(command -v sextant)" install   # once per machine, for every Claude Code account
+sextant install --account ~/.claude                         # or for one account, without administrator rights
+sextant check                                               # configuration, installs, Claude Code version
+```
+
+The machine-wide install adds sextant's own file to Claude Code's managed settings and never edits the files already there.
+On a machine with managed settings, Claude Code loads its [built-in guard for the mods users install](https://code.claude.com/docs/en/plugins/mods/admin#know-what-happens-by-default).
+[docs/install.md](docs/install.md) covers both installs, what they write, and how to remove them.
+[docs/hooks.md](docs/hooks.md) describes what the hooks deliver, the decision log, and how to turn sextant off for a session (`SEXTANT_DISABLE=1`).
+
+The hooks read only local files: nothing leaves the machine.
 
 ## Try the core
 
@@ -29,8 +44,12 @@ See [docs/configuration.md](docs/configuration.md) for the configuration file an
 ## Development
 
 ```bash
-npm test    # builds, then runs every test with node --test
+npm test             # builds, then runs every test with node --test
+npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
+
+`SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` also asks the models which rules they received, which spends a little usage; the token stays in the environment.
+See [docs/verification/claude-code.md](docs/verification/claude-code.md).
 
 Node 20 or newer.
 There are no runtime dependencies; the only development dependencies are TypeScript and the Node type definitions.

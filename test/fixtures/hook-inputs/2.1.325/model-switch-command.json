@@ -1,0 +1,16 @@
+{
+  "session_id": "555b0143-2730-4a99-a6bf-0609dd548387",
+  "transcript_path": "/Users/user/.claude/projects/-Users-user-project/555b0143-2730-4a99-a6bf-0609dd548387.jsonl",
+  "cwd": "/Users/user/project",
+  "prompt_id": "bde1c789-6d8c-47f1-acf8-55708f5ede78",
+  "hook_event_name": "PostModelSwitch",
+  "from_model": "claude-sonnet-5-5",
+  "to_model": "claude-haiku-5-5",
+  "requested_model": "haiku",
+  "source": "command",
+  "context_tokens": 0,
+  "prompt_cache_warm": false,
+  "cache_ttl": "1h",
+  "estimated_cache_write_usd": 0,
+  "pricing": "catalog"
+}

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizeModel } from './normalize.js';
-import { ANY_SCOPE } from './types.js';
+import { ANY_SCOPE, SWITCH_NOTE_RESERVE } from './types.js';
 import type { Config, Decision, ModelEntry, Place, Rule } from './types.js';
 
 export interface ResolveRequest {
@@ -79,6 +79,34 @@ export function envelope(model: string, scope: string | null, ruleIds: readonly 
     `${joined}\n` +
     `</sextant-rules>`
   );
+}
+
+/**
+ * The note delivered when the session's model changes away from a model that had received rules.
+ * Rules delivered earlier stay in the conversation, so the new model is told, as a fact, that they
+ * no longer apply. Model names are cut to a fixed length so the note always fits SWITCH_NOTE_RESERVE.
+ */
+export function switchNote(fromModel: string, toModel: string): string {
+  const from = noteName(fromModel);
+  const to = noteName(toModel);
+  const note =
+    `<sextant-rules-change from="${from}" to="${to}">\n` +
+    `The session's model changed from ${from} to ${to}. ` +
+    `The working rules sextant delivered earlier in this conversation for ${from} no longer apply.\n` +
+    `</sextant-rules-change>`;
+  if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('switchNote: the note outgrew its reserve');
+  return note;
+}
+
+/** Joins the model-change note and the new model's rules into one delivery. */
+export function joinDelivery(parts: readonly string[]): string {
+  return parts.join('\n\n');
+}
+
+const NOTE_NAME_LENGTH = 48;
+function noteName(model: string): string {
+  const safe = model.replace(/[^a-z0-9._:@\[\]-]/gi, '?');
+  return safe.length > NOTE_NAME_LENGTH ? `${safe.slice(0, NOTE_NAME_LENGTH - 3)}...` : safe || '(not reported)';
 }
 
 function matchModel(config: Config, model: string): { key: string; entry: ModelEntry } | null {

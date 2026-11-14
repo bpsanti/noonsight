@@ -3,7 +3,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { loadConfig } from '../src/config/load.js';
 import { normalizeModel } from '../src/core/normalize.js';
-import { resolve } from '../src/core/resolve.js';
+import { resolve, switchNote } from '../src/core/resolve.js';
+import { DELIVERY_TEXT_LIMIT, RULES_TEXT_LIMIT, SWITCH_NOTE_RESERVE } from '../src/core/types.js';
 import type { Config, Decision, MatchedDecision, Place } from '../src/core/types.js';
 import { LAB_CONFIG, LAB_PRESETS, tempTree } from './helpers.js';
 
@@ -143,4 +144,21 @@ test('undeclared models carry a warning unless the configuration says to ignore 
 test('a configuration with no models declares nothing', () => {
   const cfg = load({ version: 1 });
   assert.equal(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'session' }).status, 'undeclared');
+});
+
+test('the model-change note always fits the room kept for it, whatever the model names', () => {
+  const note = switchNote('claude-sonnet-5-5', 'claude-opus-5-5');
+  assert.equal(
+    note,
+    '<sextant-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">\n' +
+      "The session's model changed from claude-sonnet-5-5 to claude-opus-5-5. " +
+      'The working rules sextant delivered earlier in this conversation for claude-sonnet-5-5 no longer apply.\n' +
+      '</sextant-rules-change>',
+  );
+  const long = switchNote('x'.repeat(300), 'y"<z>'.repeat(60));
+  assert.ok(long.length + 2 <= SWITCH_NOTE_RESERVE, String(long.length));
+  // Only the two tags' own quotes and angle brackets remain: the names cannot break the tags.
+  assert.deepEqual([...long].filter((c) => c === '"' || c === '<' || c === '>').join(''), '<""""><>');
+  assert.match(switchNote('', 'claude-opus-5-5'), /from="\(not reported\)"/);
+  assert.equal(RULES_TEXT_LIMIT + SWITCH_NOTE_RESERVE, DELIVERY_TEXT_LIMIT);
 });

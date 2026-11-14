@@ -41,11 +41,36 @@ export interface CliResult {
  * Run the built command line with an environment that holds only what the test passes, so the
  * machine's own configuration can never leak in. HOME points at an empty directory by default.
  */
-export function runCli(args: readonly string[], env: Record<string, string> = {}, nodeArgs: readonly string[] = []): CliResult {
+export function runCli(
+  args: readonly string[],
+  env: Record<string, string> = {},
+  nodeArgs: readonly string[] = [],
+  input = '',
+): CliResult {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-home-'));
   const r = spawnSync(process.execPath, [...nodeArgs, CLI, ...args], {
     encoding: 'utf8',
+    input,
     env: { PATH: process.env.PATH ?? '', HOME: home, ...env },
   });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+/** Run any program the same way, such as an installed hook pointer. */
+export function runProgram(file: string, args: readonly string[], env: Record<string, string>, input = ''): CliResult {
+  const r = spawnSync(file, [...args], { encoding: 'utf8', input, env: { PATH: process.env.PATH ?? '', ...env } });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+/** A directory holding a fake `claude` that reports the given version, to put on PATH. */
+export function fakeClaude(version: string): string {
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-bin-'));
+  fs.writeFileSync(path.join(bin, 'claude'), `#!/bin/sh\necho '${version} (Claude Code)'\n`, { mode: 0o755 });
+  return bin;
+}
+
+/** A recorded or documented Claude Code hook input, with fields replaced as given. */
+export function hookInput(name: string, fields: Record<string, unknown> = {}): string {
+  const file = path.join(FIXTURES, 'hook-inputs', '2.1.325', `${name}.json`);
+  return JSON.stringify({ ...(JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>), ...fields });
 }
