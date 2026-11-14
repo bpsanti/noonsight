@@ -17,8 +17,11 @@ import { packageVersion } from './version.js';
 const USAGE = `usage: sextant <command>
 
 Commands:
-  install [--account <dir>]         install the Claude Code hooks, machine-wide or for one account
-  uninstall [--account <dir>]       remove them
+  install [--account <dir>|--managed]
+                                    install the Claude Code hooks: by default for every Claude Code
+                                    login of this account, or for one directory, or machine-wide
+  uninstall [--account <dir>|--managed]
+                                    remove them
   check                             check the configuration, the installs and Claude Code
   resolve <model> [scope] [place]   show the rules a model receives
   hook <event>                      the hook adapter that Claude Code runs; not run by hand

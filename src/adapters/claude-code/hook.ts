@@ -1,8 +1,9 @@
 // The Claude Code hook adapter for the main session: SessionStart and PostModelSwitch.
 //
 // Contract (docs/hooks.md has the full table):
-//   - Always exits 0 and never holds the session: it reads local files only, never the network,
-//     and starts no process.
+//   - Always exits 0 and never holds the session: it reads local files only and never the network.
+//     It starts no process, except `ps` on macOS to read the Claude Code command line when nothing
+//     else names the session's model (launch.ts).
 //   - Prints nothing, or one JSON object: additionalContext for Claude, systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.
 //   - A configuration with any problem is refused whole: nothing is delivered, the person is warned,
@@ -16,6 +17,7 @@ import { joinDelivery, resolve, switchNote } from '../../core/resolve.js';
 import type { Config, Decision } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
+import { launchModel, type LaunchModel } from './launch.js';
 import type { InstallKind } from './locations.js';
 import { HOOK_EVENTS, type HookEvent } from './settings.js';
 
@@ -79,7 +81,9 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     const processState = processFile(state, ctx.parentPid);
     const result =
       event === 'SessionStart'
-        ? sessionStart(input, config, file, readState(sessionState), readState(processState))
+        ? sessionStart(input, config, file, readState(sessionState), readState(processState), () =>
+            launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd) }),
+          )
         : modelSwitch(input, config, file, readState(sessionState));
     log(result.record);
     if (result.state) {
@@ -114,6 +118,10 @@ interface Outcome {
  *   clear, compact  deliver again: the earlier context, and the rules in it, are gone
  *   resume, fork    deliver only when the model or the rules changed since this session's record
  *   anything else   deliver: delivering twice costs little, missing a delivery is the defect
+ *
+ * The model comes from the input; when Claude Code leaves it out, from the record of the same
+ * session or, after /clear and compaction, of the same Claude Code process; and when neither knows
+ * it, as in every `claude -p` run, from what the session was started with (launch.ts).
  */
 function sessionStart(
   input: Record<string, unknown>,
@@ -121,24 +129,34 @@ function sessionStart(
   file: string,
   session: DeliveryState | null,
   process: DeliveryState | null,
+  readLaunch: () => LaunchModel,
 ): Outcome {
   const source = str(input.source);
   const reported = normalizeModel(str(input.model));
-  // Claude Code can leave the model out, for example after /clear. The same session, or for /clear
-  // and compaction the same Claude Code process, still runs the model recorded last.
   const recorded = session?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
-  const model = reported || recorded;
-  const modelSource = reported ? 'hook-input' : recorded ? (session?.model ? 'session-record' : 'process-record') : null;
+  const launch = reported || recorded ? null : readLaunch();
+  const launched = launch?.kind === 'found' ? launch.model : null;
+  const model = reported || recorded || launched;
+  const modelSource = reported
+    ? 'hook-input'
+    : recorded
+      ? session?.model
+        ? 'session-record'
+        : 'process-record'
+      : launch?.kind === 'found'
+        ? launch.source
+        : null;
   const decision = resolve(config, { model, scope: null, place: 'session' });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
   const repeat = (source === 'resume' || source === 'fork') && session !== null && session.model === decision.model && session.sha256 === sha;
 
   const context = decision.status === 'matched' && !repeat ? decision.text : null;
-  const messages = repeat ? [] : undeclaredMessages(decision, file);
+  const messages = repeat ? [] : undeclaredMessages(decision, file, launch);
   return {
     record: {
       ...decisionFields(decision),
       model_source: modelSource,
+      ...launchFields(launch),
       delivered: repeat ? 'already-delivered' : context ? 'rules' : 'nothing',
       warned: messages.length > 0,
     },
@@ -183,14 +201,32 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
   };
 }
 
-function undeclaredMessages(decision: Decision, file: string): string[] {
+function undeclaredMessages(decision: Decision, file: string, launch: LaunchModel | null = null): string[] {
   if (decision.status !== 'undeclared' || decision.warning === undefined) return [];
-  return [
-    decision.reason === 'model-not-reported'
-      ? "sextant: Claude Code did not report this session's model, so no rules were delivered."
-      : `sextant: ${decision.model} is not declared in ${file}, so this session gets no rules. ` +
+  if (decision.reason !== 'model-not-reported')
+    return [
+      `sextant: ${decision.model} is not declared in ${file}, so this session gets no rules. ` +
         'Declare it under "models" (with "use": "none" if it needs no rules).',
+    ];
+  if (launch?.kind === 'unresolved')
+    return [
+      `sextant: this session's model is set to "${launch.value}" (${launch.from}), and sextant cannot tell which model that is ` +
+        `(${launch.why}), so no rules were delivered.`,
+    ];
+  return [
+    "sextant: Claude Code did not report this session's model, and neither its command line, ANTHROPIC_MODEL nor a model setting names one, " +
+      'so no rules were delivered.',
   ];
+}
+
+/** What the decision log records about a model taken from the session's start. */
+function launchFields(launch: LaunchModel | null): Record<string, unknown> {
+  if (launch === null || launch.kind === 'none') return {};
+  if (launch.kind === 'unresolved') return { model_from: launch.from, model_unresolved: launch.value, unresolved_why: launch.why };
+  return {
+    model_from: launch.from,
+    ...(launch.alias !== undefined ? { model_alias: launch.alias, alias_from: launch.aliasFrom } : {}),
+  };
 }
 
 function decisionFields(d: Decision): Record<string, unknown> {

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `sextant install` with no option now installs into the user settings of every Claude Code configuration directory of the account (`~/.claude`, the one in `CLAUDE_CONFIG_DIR`, and every directory in the home directory that holds a Claude Code configuration), with no administrator rights. It reaches logins whose organization delivers server-managed settings, where Claude Code ignores the managed settings files. `uninstall` removes them all. The machine-wide install moved to `sextant install --managed`. See `docs/install.md`.
+- `sextant check` lists every Claude Code configuration directory and says which install reaches it, including a login whose server-managed settings shadow the machine-wide install, or turn its hooks off.
+- `SessionStart` without a model, as in every `claude -p` run, now takes it from the `--model` argument of the Claude Code process, `ANTHROPIC_MODEL`, or the `model` setting, in Claude Code's order, and logs which one in `model_source` and `model_from`. It warns only when none names a model, or when the one that does cannot be pinned down. See `docs/hooks.md`.
 - Session hooks: `SessionStart` and `PostModelSwitch` give each Claude Code session the rules for the model it runs on, and after `/model` say that the earlier rules no longer apply. They always exit 0, never use the network, and never block; an undeclared model only warns, and a refused configuration delivers nothing. See `docs/hooks.md`.
 - Decision log: one JSON line per decision in `~/.local/state/sextant/decisions.jsonl`.
 - `sextant install` and `sextant uninstall`: machine-wide by default, as sextant's own file in Claude Code's `managed-settings.d/` (administrator rights once), or for one Claude Code account with `--account <dir>`. Installing twice changes nothing, and other hooks and settings are kept. See `docs/install.md`.

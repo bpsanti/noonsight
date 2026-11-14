@@ -34,7 +34,16 @@ export class NeedsPermission extends Error {
 
 const EVENTS = Object.keys(HOOK_EVENTS).join(', ');
 
-export function install(target: InstallTarget, runtime: Runtime): string[] {
+interface InstallPlan {
+  readonly settings: Record<string, unknown> | null;
+  readonly edit: { readonly settings: Record<string, unknown>; readonly changed: boolean };
+  readonly script: string;
+  readonly oldScript: string | null;
+  readonly pointerChanged: boolean;
+}
+
+/** What install would write, after every check that can refuse it; nothing is written. */
+function planInstall(target: InstallTarget, runtime: Runtime): InstallPlan {
   if (target.configDir !== undefined && !isDirectory(target.configDir))
     throw new InstallRefused(`${target.configDir} is not a directory; give the Claude Code configuration directory of an account, such as ~/.claude`);
   refuseRootInAccount(target);
@@ -49,6 +58,16 @@ export function install(target: InstallTarget, runtime: Runtime): string[] {
   const toWrite = [...(pointerChanged ? [target.pointer] : []), ...(edit.changed ? [target.settingsFile] : [])];
   const blocked = toWrite.filter((f) => !canCreate(f));
   if (blocked.length) throw new NeedsPermission(blocked);
+  return { settings, edit, script, oldScript, pointerChanged };
+}
+
+/** Throws what install would throw, and writes nothing; for installing into several directories at once. */
+export function checkInstallable(target: InstallTarget, runtime: Runtime): void {
+  planInstall(target, runtime);
+}
+
+export function install(target: InstallTarget, runtime: Runtime): string[] {
+  const { settings, edit, script, oldScript, pointerChanged } = planInstall(target, runtime);
 
   if (pointerChanged) {
     mkdirWithMode(path.dirname(target.pointer), 0o755);

@@ -7,14 +7,16 @@ Two hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, w
 ## Rules every hook follows
 
 - **It never holds the session.**
-  It always exits 0, reads only local files, never uses the network and starts no other process.
+  It always exits 0, reads only local files and never uses the network.
+  It starts no other process, with one exception: on macOS, when nothing else names the session's model, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second.
 - **It never blocks anything.**
   An undeclared model gets a warning, never a refusal.
 - **A configuration with any problem is refused whole.**
   The hook delivers nothing, warns the person, and logs `config-invalid`; `sextant check` lists the problems.
-- **It decides from structural facts.**
-  The model comes from the hook input Claude Code sends, or from sextant's own record of the same session or of the same Claude Code process, never from an environment variable a session could have inherited.
+- **It decides from what Claude Code itself uses.**
+  The model comes from the hook input Claude Code sends, from sextant's own record of the same session or of the same Claude Code process, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
+  The decision log names the source every time.
 - **It leaves foreign input alone.**
   Input that is not the expected Claude Code event, such as another tool reading the same settings, gets no output and no log line.
 
@@ -47,10 +49,34 @@ The hook decides by how the session started (the `source` field):
 | `resume`, `fork` | Delivers only when the model or the rules changed since this session's record | The restored conversation already holds them |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect sextant exists to prevent |
 
-The model comes from the `model` field of the input.
-Claude Code can leave it out; after `/clear`, for example, the new session has a new id and no `model`.
-Then sextant uses its record of the same session, or, for `/clear` and compaction only, its record of the same Claude Code process: the hook's parent process, which is the `claude` process running the session.
-A brand-new session without a model, as `claude -p` starts, gets no rules and a warning.
+The model comes from the first of these that knows it:
+
+1. The `model` field of the input.
+   Claude Code can leave it out ([SessionStart input](https://code.claude.com/docs/en/hooks#sessionstart-input)): after `/clear` the new session has a new id and no `model`, and in non-interactive mode (`claude -p`) no start carries one.
+2. sextant's record of the same session, or, for `/clear` and compaction only, its record of the same Claude Code process: the hook's parent process, which is the `claude` process running the session.
+3. What the session was started with, read the way Claude Code reads it ([Setting your model](https://code.claude.com/docs/en/model-config#setting-your-model)), so that `claude -p` sessions get their rules:
+   1. the `--model` argument of the Claude Code process;
+   2. `ANTHROPIC_MODEL` in the hook's environment, which Claude Code passes to hooks with its settings' `env` applied ([Hook input and output](https://code.claude.com/docs/en/hooks#hook-input-and-output));
+   3. the `model` setting of the highest-ranked settings file that sets one: the server-managed settings cached for the login, else the managed settings files; then `--settings`; then the project's `.claude/settings.local.json` and `.claude/settings.json`; then the user's `settings.json` in `CLAUDE_CONFIG_DIR` or `~/.claude`, with `--setting-sources` honored.
+
+   The first of the three that names a model decides, as in Claude Code; a lower one is never consulted past it.
+
+Only when none of them names a model does the session get no rules and a warning.
+
+Reading the launch settings has limits, and the hook prefers saying so to guessing:
+
+- **Aliases.**
+  An alias such as `sonnet` follows `ANTHROPIC_DEFAULT_SONNET_MODEL` (and the matching variable for `opus`, `haiku` and `fable`) when it is set.
+  Otherwise sextant uses what the alias selects on the Anthropic API, as Claude Code's documentation lists it from version 2.1.321 on ([Model aliases](https://code.claude.com/docs/en/model-config#model-aliases)); `sextant check` warns about an older `claude`.
+  On another provider (`CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_USE_FOUNDRY` and the like) an alias selects other models, so without the pinning variable the hook warns instead.
+- **Models chosen while the session runs.**
+  `default` and `opusplan` depend on the account, the organization or plan mode; the hook warns that it cannot tell which model they select.
+- **The command line on macOS.**
+  Linux keeps each argument of the Claude Code process apart (`/proc/<pid>/cmdline`); macOS gives them joined by spaces (`ps`).
+  There, a prompt that holds the text `--model x` cannot be told from the option, so only values that name a model count (an identifier containing `claude`, or an alias), and two different ones are reported instead of guessed.
+  An inline `--settings` JSON value that holds a space cannot be read there either, and the hook warns.
+- **MDM profiles.**
+  A `model` set only in an MDM profile is not read.
 
 Only the place `session` is used for now, with no task scope, so a session receives the rules that apply to every scope in a watched session.
 
@@ -84,7 +110,10 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
 | `install` | `managed` or `account`: which install ran the hook |
 | `model`, `from_model` | The normalized model identifiers |
-| `model_source` | `hook-input`, `session-record`, `process-record`, or null when no model was known |
+| `model_source` | `hook-input`, `session-record`, `process-record`, `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known |
+| `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
+| `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |
+| `model_unresolved`, `unresolved_why` | When a launch setting names a model sextant cannot tell: the value, and why |
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |
 | `reason`, `key`, `rules`, `sha256` | As in `sextant resolve` ([configuration.md](configuration.md)) |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing` |
