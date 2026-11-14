@@ -49,7 +49,7 @@ test('resolve: scope and place are positional, as in sextant resolve <model> [sc
   assert.deepEqual(both.rules, ['sonnet/general', 'sonnet/investigate', 'sonnet/carry-through']);
 });
 
-test('a refused configuration exits 2, prints every problem and no decision', () => {
+test('a refused configuration exits 2, prints its problems and no decision', () => {
   const dir = tempTree({ 'sextant.json': { version: 1, models: { sonnet: { use: 'none' }, 'claude-x-*': { use: 'custom' } } } });
   const r = runCli(['resolve', 'claude-sonnet-5-5'], { SEXTANT_CONFIG: path.join(dir, 'sextant.json') });
   assert.equal(r.status, 2);

@@ -1,7 +1,7 @@
 // Reads the configuration, the preset and every rule file, checks all of it, and builds the value
 // the core resolves against. A configuration with any problem is refused whole and no partial
-// configuration is ever applied. Schema problems are reported together first; once the shape is
-// valid, every remaining problem is reported together.
+// configuration is ever applied. Problems are reported in passes: schema problems first, then
+// preset problems, then every remaining problem together.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -92,6 +92,7 @@ export function loadConfig(file: string, options: LoadOptions = {}, env: Env = p
   const presetName = cfg.preset ?? DEFAULT_PRESET;
   const presetNeeded = cfg.preset !== undefined || Object.values(models).some((m) => m.use === 'preset');
   const preset = loadPreset(presetName, options.presetsDir ?? defaultPresetsDir(env), presetNeeded, problems);
+  if (problems.length) refuse();
 
   const scopes = new Set<string>([...(preset?.scopes ?? []), ...Object.keys(cfg.scopes ?? {})]);
   const configDir = path.dirname(configFile);

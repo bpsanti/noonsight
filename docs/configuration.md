@@ -90,9 +90,10 @@ The same configuration and the same request always give the same text and the sa
 ## Validation
 
 A configuration with any problem is refused whole, and nothing from it is applied.
-Problems are reported with their location in the file, in two passes.
+Problems are reported with their location in the file, in three passes.
 Schema problems (unknown keys, wrong types or values) are reported together first.
-Once the file matches the schema, every remaining problem is reported together.
+Once the file matches the schema, problems with the preset (missing, or failing its own checks) are reported together.
+Once the preset loads, every remaining problem is reported together.
 Beyond the schema, sextant checks that:
 
 - every model key is already in bare form;

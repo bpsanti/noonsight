@@ -1,4 +1,5 @@
-// A configuration with any problem is refused whole, with every problem listed.
+// A configuration with any problem is refused whole, with its problems listed: schema problems first,
+// then preset problems, then the rest.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -184,6 +185,16 @@ test('the preset is checked too: sources, scopes, files and its own id', () => {
     p.models.sonnet = p.models['claude-sonnet-5-5'];
   });
   assertProblem(problemsOf({ version: 1, preset: 'lab' }, {}, aliasKey), /\/models\/sonnet: key "sonnet" does not have the expected form/);
+});
+
+test('a refused preset is reported alone, without blaming user rules that name its scopes', () => {
+  const missingSource = labPresetWith((p) => {
+    delete p.models['claude-haiku-5-5'].rules[0].source;
+  });
+  const config = { version: 1, preset: 'lab', models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'mine', file: 'mine.md', scopes: ['investigate'] }] } } };
+  const problems = problemsOf(config, { 'mine.md': 'MINE' }, missingSource);
+  assertProblem(problems, /missing required key "source"/);
+  assert.ok(problems.every((p) => !/is not declared/.test(p)), problems.join('\n'));
 });
 
 test('an unused default preset that is not installed is not a problem', () => {
