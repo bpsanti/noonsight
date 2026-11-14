@@ -141,6 +141,7 @@ sudo "$(command -v node)" "$(command -v sextant)" uninstall --managed   # machin
 With no option it visits every configuration directory the default install would find, and every directory sextant recorded installing into, even one `CLAUDE_CONFIG_DIR` no longer names.
 The machine-wide install's file is removed whole.
 The per-account pointer stays while another directory still uses it.
+A recorded directory that no longer exists is forgotten and no longer keeps the pointer; one that cannot be reached now, such as on an unmounted volume, is kept.
 Rules a running session already received stay in that session.
 
 ## Check
