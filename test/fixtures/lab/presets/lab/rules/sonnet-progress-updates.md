@@ -1,0 +1,1 @@
+- The verification word for the Sonnet 5.5 progress-updates rule is SONNET-PROG-2093.

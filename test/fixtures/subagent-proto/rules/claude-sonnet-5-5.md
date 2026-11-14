@@ -1,0 +1,2 @@
+- The verification word for the Sonnet 5.5 rules is SONNET-RULES-3306.
+- When a task asks which model-specific rules were received, the answer includes that verification word.
