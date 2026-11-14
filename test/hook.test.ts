@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { RULES_TEXT_LIMIT } from '../src/core/types.js';
 import { FIXTURES, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
 
 const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
@@ -252,6 +253,27 @@ test('/model: the new model gets its rules, with a note that the earlier rules n
       ['model-switch', 'claude-sonnet-5-5', 'claude-fable-5-2', 'undeclared', 'note'],
     ],
   );
+});
+
+test('the longest rules a configuration may hold, plus the model-change note, fit in the 10,000 characters Claude Code keeps', () => {
+  const from = `claude-${'f'.repeat(120)}-5-5`;
+  const to = `claude-${'t'.repeat(120)}-5-5`;
+  const withRule = (length: number): Home => {
+    const custom = (file: string) => ({ use: 'custom', add: [{ id: `user/${file}`, file }] });
+    const dir = tempTree({ 'sextant.json': { version: 1, models: { [from]: custom('from.md'), [to]: custom('to.md') } }, 'from.md': 'FROM', 'to.md': 'x'.repeat(length) });
+    return home(path.join(dir, 'sextant.json'));
+  };
+  const overhead = (withRule(1).hook('session-start', start(to)).out?.hookSpecificOutput.additionalContext as string).length - 1;
+  const longest = RULES_TEXT_LIMIT - overhead;
+  const over = withRule(longest + 1);
+  over.hook('session-start', start(to));
+  assert.equal(over.log()[0]?.status, 'config-invalid', 'one character more is refused');
+
+  const h = withRule(longest);
+  assert.match(h.hook('session-start', start(from)).out?.hookSpecificOutput.additionalContext, /FROM/);
+  const text: string = h.hook('model-switch', switchTo(from, to)).out?.hookSpecificOutput.additionalContext;
+  assert.match(text, /^<sextant-rules-change [^]*<\/sextant-rules-change>\n\n<sextant-rules model="claude-t+-5-5">[^]*x{100}/);
+  assert.ok(text.length <= 10000, String(text.length));
 });
 
 test('/model with no record of the session: the note follows from the previous model the input names', () => {

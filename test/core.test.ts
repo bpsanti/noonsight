@@ -4,7 +4,7 @@ import test from 'node:test';
 import { loadConfig } from '../src/config/load.js';
 import { normalizeModel } from '../src/core/normalize.js';
 import { resolve, switchNote } from '../src/core/resolve.js';
-import { DELIVERY_TEXT_LIMIT, RULES_TEXT_LIMIT, SWITCH_NOTE_RESERVE } from '../src/core/types.js';
+import { SWITCH_NOTE_RESERVE } from '../src/core/types.js';
 import type { Config, Decision, MatchedDecision, Place } from '../src/core/types.js';
 import { LAB_CONFIG, LAB_PRESETS, tempTree } from './helpers.js';
 
@@ -160,5 +160,4 @@ test('the model-change note always fits the room kept for it, whatever the model
   // Only the two tags' own quotes and angle brackets remain: the names cannot break the tags.
   assert.deepEqual([...long].filter((c) => c === '"' || c === '<' || c === '>').join(''), '<""""><>');
   assert.match(switchNote('', 'claude-opus-5-5'), /from="\(not reported\)"/);
-  assert.equal(RULES_TEXT_LIMIT + SWITCH_NOTE_RESERVE, DELIVERY_TEXT_LIMIT);
 });

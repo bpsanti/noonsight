@@ -78,6 +78,23 @@ test('a hook pointer whose copy of sextant is gone, or missing, is a problem', (
   assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hook pointer .* is missing or unreadable/);
 });
 
+test('a hook pointer whose copy of sextant this account cannot reach is reported as unreachable, not gone', { skip: process.getuid?.() === 0 }, () => {
+  const { env, home } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
+  const locked = tempTree({ 'cli.js': '' });
+  fs.writeFileSync(pointer, fs.readFileSync(pointer, 'utf8').replace(/^cli=.*$/m, `cli='${path.join(locked, 'cli.js')}'`));
+  fs.chmodSync(locked, 0o000);
+  try {
+    const r = runCli(['check'], env);
+    assert.equal(r.status, 1);
+    assert.match(r.stdout, /problem: account install .*: this account cannot run .*cli\.js, so its hooks do nothing; install sextant from a Node\.js and a copy of sextant that every account can read and run/);
+    assert.doesNotMatch(r.stdout, /no longer exists/);
+  } finally {
+    fs.chmodSync(locked, 0o755);
+  }
+});
+
 test('an account install whose entries were removed by hand, or that sets disableAllHooks, is a problem', () => {
   const { env } = setup();
   const claudeDir = tempTree({});

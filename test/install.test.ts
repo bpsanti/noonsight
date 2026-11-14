@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { accountTarget, managedTarget, UnsupportedPlatformError } from '../src/adapters/claude-code/locations.js';
-import { CLI, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
+import { CLI, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
 
 /** A settings file that already has hooks of its own, and other settings, before sextant arrives. */
 const THIRD_PARTY = {
@@ -165,7 +165,11 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
     ['SessionStart', target.pointer],
     ['PostModelSwitch', target.pointer],
   ]);
-  assert.match(fs.readFileSync(target.pointer, 'utf8'), /exec "\$node" "\$cli" hook --install managed "\$@"/);
+  const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
+  assert.equal(hooked.status, 0, hooked.stderr);
+  assert.match(JSON.parse(hooked.stdout).hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
+  const decisions = fs.readFileSync(path.join(env.HOME, '.local', 'state', 'sextant', 'decisions.jsonl'), 'utf8').trimEnd().split('\n');
+  assert.equal(JSON.parse(decisions.at(-1) ?? '{}').install, 'managed');
   assert.equal(fs.statSync(target.pointer).mode & 0o777, 0o755);
   assert.equal(fs.statSync(target.settingsFile).mode & 0o777, 0o644);
 

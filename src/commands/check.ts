@@ -121,9 +121,19 @@ function checkInstall(
     add('problem', `${label}: the hook pointer ${target.pointer} is missing or unreadable; run \`sextant install\` again`);
     return true;
   }
-  const gone = [pointer.node, pointer.cli].filter((p) => !fs.existsSync(p));
+  const unreachable = [reach(pointer.node, fs.constants.X_OK), reach(pointer.cli, fs.constants.R_OK)];
+  const gone = [pointer.node, pointer.cli].filter((_, i) => unreachable[i] === 'ENOENT');
   if (gone.length) {
     add('problem', `${label}: the hook pointer runs ${gone.join(' and ')}, which no longer exists; hooks do nothing. Run \`sextant install\` again`);
+    return true;
+  }
+  const denied = [pointer.node, pointer.cli].filter((_, i) => unreachable[i] !== null);
+  if (denied.length) {
+    add(
+      'problem',
+      `${label}: this account cannot run ${denied.join(' and ')}, so its hooks do nothing; ` +
+        'install sextant from a Node.js and a copy of sextant that every account can read and run',
+    );
     return true;
   }
   const running = pointer.cli === cli ? version : versionOf(pointer.node, pointer.cli);
@@ -200,6 +210,16 @@ function checkClaude(env: Env, add: (level: Level, text: string) => void): void 
   if (short.length)
     for (const f of short) add('problem', `claude: installed ${found}; ${f.feature} needs ${f.version} or later (upgrade: claude update)`);
   else add('ok', `claude: ${found}`);
+}
+
+/** Why this account cannot use a file in the given mode, as an error code, or null when it can. */
+function reach(file: string, mode: number): string | null {
+  try {
+    fs.accessSync(file, mode);
+    return null;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code ?? 'EACCES';
+  }
 }
 
 function versionOf(node: string, cli: string): string | null {
