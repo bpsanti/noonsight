@@ -66,7 +66,7 @@ A user rule has these keys:
 ## Model keys
 
 A key is the full model identifier, as Claude Code reports it without suffixes: `claude-fable-5-2`, never `fable` or `claude-fable-5-2[1m]`.
-When sextant looks a model up, it first reduces the reported identifier to that form: it lowercases it and drops a `[1m]`-style suffix, a `#effort` suffix, a provider path such as `anthropic/`, an Amazon Bedrock prefix such as `global.anthropic.` and version suffix such as `-v1:0`, and a Google Vertex AI version suffix such as `@20261001`.
+When sextant looks a model up, it first reduces the reported identifier to that form: it lowercases it and drops a `[1m]`-style suffix, a `#effort` suffix, a provider path such as `anthropic/`, an Amazon Bedrock prefix such as `global.anthropic.` and version suffix such as `-v1:0` or `-v1`, and a Google Vertex AI version suffix such as `@20261001`.
 
 A key with `*` or `?` is a wildcard, and a wildcard only accepts `{ "use": "none" }`.
 Rules always need the exact identifier, so a new model version never inherits rules written for an earlier one: `claude-fable-5-3` stays undeclared until someone declares it.
