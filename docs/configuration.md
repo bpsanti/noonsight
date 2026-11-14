@@ -10,8 +10,7 @@ Every Claude Code account and every Claude Code configuration directory (`~/.cla
 sextant looks for it in this order:
 
 1. The path in `SEXTANT_CONFIG`.
-2. `$XDG_CONFIG_HOME/sextant/sextant.json`, when `XDG_CONFIG_HOME` is set to an absolute path.
-3. `~/.config/sextant/sextant.json`.
+2. `~/.config/sextant/sextant.json`.
 
 Paths inside the file (the `file` of a rule) are relative to the file itself.
 
@@ -67,7 +66,7 @@ A user rule has these keys:
 ## Model keys
 
 A key is the full model identifier, as Claude Code reports it without suffixes: `claude-fable-5-2`, never `fable` or `claude-fable-5-2[1m]`.
-When sextant looks a model up, it first reduces the reported identifier to that form: it lowercases it and drops a `[1m]`-style suffix, a `#effort` suffix, a provider path such as `anthropic/`, and an Amazon Bedrock prefix such as `global.anthropic.`.
+When sextant looks a model up, it first reduces the reported identifier to that form: it lowercases it and drops a `[1m]`-style suffix, a `#effort` suffix, a provider path such as `anthropic/`, an Amazon Bedrock prefix such as `global.anthropic.` and version suffix such as `-v1:0`, and a Google Vertex AI version suffix such as `@20261001`.
 
 A key with `*` or `?` is a wildcard, and a wildcard only accepts `{ "use": "none" }`.
 Rules always need the exact identifier, so a new model version never inherits rules written for an earlier one: `claude-fable-5-3` stays undeclared until someone declares it.
@@ -84,13 +83,16 @@ Between wildcards, the one with more literal text wins, and a tie goes to the ke
    A scope that is not declared only means "rules for every scope"; it never blocks and never warns.
 3. The place narrows them again.
 
-The rules that remain are joined in order (the preset's first, then the user's), wrapped in a short envelope that says where the text came from, and hashed.
+The rules that remain are joined in order (the preset's first, then the user's) and hashed.
+The joined text is then wrapped in a short envelope that says where it came from; the hash covers the rules only, not the envelope.
 The same configuration and the same request always give the same text and the same hash.
 
 ## Validation
 
 A configuration with any problem is refused whole, and nothing from it is applied.
-Every problem is reported at once, each with the location in the file.
+Problems are reported with their location in the file, in two passes.
+Schema problems (unknown keys, wrong types or values) are reported together first.
+Once the file matches the schema, every remaining problem is reported together.
 Beyond the schema, sextant checks that:
 
 - every model key is already in bare form;
@@ -106,11 +108,12 @@ The preset is checked the same way, and every preset rule must name its source: 
 ## `sextant resolve`
 
 ```text
-sextant resolve <model> [--scope <scope>] [--place session|unattended|subagent]
+sextant resolve <model> [scope] [session|unattended|subagent]
 ```
 
 Prints the decision as JSON.
 The place defaults to `session`.
+An empty scope (`""`) means no scope, so a place can be given without one, as in `sextant resolve claude-sonnet-5-5 "" subagent`.
 
 | `status` | Meaning | Other fields |
 | --- | --- | --- |

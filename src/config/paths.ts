@@ -13,14 +13,11 @@ export type Env = Readonly<Record<string, string | undefined>>;
  * follow the model and not the account.
  *
  *   1. $SEXTANT_CONFIG
- *   2. $XDG_CONFIG_HOME/sextant/sextant.json, when XDG_CONFIG_HOME is an absolute path
- *   3. ~/.config/sextant/sextant.json
+ *   2. ~/.config/sextant/sextant.json
  */
 export function configPath(env: Env = process.env, home: string = os.homedir()): string {
   if (env.SEXTANT_CONFIG) return path.resolve(env.SEXTANT_CONFIG);
-  const xdg = env.XDG_CONFIG_HOME;
-  const base = xdg && path.isAbsolute(xdg) ? xdg : path.join(home, '.config');
-  return path.join(base, 'sextant', 'sextant.json');
+  return path.join(home, '.config', 'sextant', 'sextant.json');
 }
 
 /**

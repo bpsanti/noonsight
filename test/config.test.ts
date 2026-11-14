@@ -151,7 +151,7 @@ test('a text exactly at the limit is accepted', () => {
   assert.throws(() => loadConfig(path.join(dir, 'sextant.json')), /come to 10001 characters/);
 });
 
-test('every problem is reported at once, so one fix round is enough', () => {
+test('every schema problem is reported together', () => {
   const problems = problemsOf({
     version: 1,
     on_undeclared: 'block',

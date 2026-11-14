@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://unpkg.com/sextant-ai@0/schema/sextant.schema.json",
   "title": "sextant configuration",
-  "description": "The sextant configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. sextant looks for it at $SEXTANT_CONFIG, then $XDG_CONFIG_HOME/sextant/sextant.json, then ~/.config/sextant/sextant.json.",
+  "description": "The sextant configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. sextant looks for it at $SEXTANT_CONFIG, then ~/.config/sextant/sextant.json.",
   "type": "object",
   "required": ["version"],
   "additionalProperties": false,

@@ -13,14 +13,13 @@ import { PACKAGE_ROOT, type Env } from './config/paths.js';
 const USAGE = `usage: sextant <command>
 
 Commands:
-  resolve <model> [--scope <scope>] [--place <place>]   show the rules a model receives
+  resolve <model> [scope] [place]   show the rules a model receives
 
 Options:
   --help       show this help
   --version    print the version
 
-The configuration is read from $SEXTANT_CONFIG, else $XDG_CONFIG_HOME/sextant/sextant.json,
-else ~/.config/sextant/sextant.json. One file serves every Claude Code account on the machine.`;
+The configuration is read from $SEXTANT_CONFIG, else ~/.config/sextant/sextant.json. One file serves every Claude Code account on the machine.`;
 
 export interface Io {
   readonly out: (text: string) => void;

@@ -11,7 +11,7 @@ const LAB_ENV = { SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS }
 const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
 
 test('resolve prints the decision as JSON and exits 0 for each status', () => {
-  const m = runCli(['resolve', 'claude-sonnet-5-5[1m]', '--scope', 'investigate'], LAB_ENV);
+  const m = runCli(['resolve', 'claude-sonnet-5-5[1m]', 'investigate'], LAB_ENV);
   assert.equal(m.status, 0, m.stderr);
   const d = JSON.parse(m.stdout);
   assert.equal(d.status, 'matched');
@@ -24,7 +24,7 @@ test('resolve prints the decision as JSON and exits 0 for each status', () => {
   assert.equal(n.status, 0, n.stderr);
   assert.equal(JSON.parse(n.stdout).status, 'none');
 
-  const u = runCli(['resolve', 'claude-fable-5-2', '--place=subagent'], LAB_ENV);
+  const u = runCli(['resolve', 'claude-fable-5-2', '', 'subagent'], LAB_ENV);
   assert.equal(u.status, 0, u.stderr);
   assert.deepEqual(JSON.parse(u.stdout), {
     status: 'undeclared',
@@ -40,9 +40,13 @@ test('resolve prints the decision as JSON and exits 0 for each status', () => {
   assert.equal(JSON.parse(r.stdout).reason, 'model-not-reported');
 });
 
-test('resolve: --place selects the place rules', () => {
-  const r = runCli(['resolve', 'claude-sonnet-5-5', '--place', 'unattended'], LAB_ENV);
+test('resolve: scope and place are positional, as in sextant resolve <model> [scope] [place]', () => {
+  const r = runCli(['resolve', 'claude-sonnet-5-5', '', 'unattended'], LAB_ENV);
   assert.deepEqual(JSON.parse(r.stdout).rules, ['sonnet/general', 'sonnet/carry-through']);
+  const both = JSON.parse(runCli(['resolve', 'claude-sonnet-5-5', 'investigate', 'subagent'], LAB_ENV).stdout);
+  assert.equal(both.scope, 'investigate');
+  assert.equal(both.place, 'subagent');
+  assert.deepEqual(both.rules, ['sonnet/general', 'sonnet/investigate', 'sonnet/carry-through']);
 });
 
 test('a refused configuration exits 2, prints every problem and no decision', () => {
@@ -57,7 +61,7 @@ test('a refused configuration exits 2, prints every problem and no decision', ()
 });
 
 test('usage errors exit 2 with the usage text', () => {
-  for (const args of [[], ['nope'], ['resolve'], ['resolve', 'a', 'b'], ['resolve', 'a', '--place', 'office'], ['resolve', 'a', '--scope'], ['resolve', 'a', '--x']]) {
+  for (const args of [[], ['nope'], ['resolve'], ['resolve', 'a', 'b', 'session', 'c'], ['resolve', 'a', 'b', 'office'], ['resolve', 'a', '--scope', 'b'], ['resolve', 'a', '--x']]) {
     const r = runCli(args, LAB_ENV);
     assert.equal(r.status, 2, `${JSON.stringify(args)}: ${r.stdout}`);
     assert.match(r.stderr, /usage: sextant/);
@@ -76,7 +80,7 @@ test('--version prints only the package version, --help the usage', () => {
   assert.match(h.stdout, /resolve <model>/);
   const rh = runCli(['resolve', '--help']);
   assert.equal(rh.status, 0);
-  assert.match(rh.stdout, /--place session\|unattended\|subagent/);
+  assert.match(rh.stdout, /resolve <model> \[scope\] \[session\|unattended\|subagent\]/);
 });
 
 test('one configuration serves the whole machine: it never comes from a Claude Code config directory', () => {
@@ -87,14 +91,7 @@ test('one configuration serves the whole machine: it never comes from a Claude C
   const viaHome = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home, CLAUDE_CONFIG_DIR: claudeDir });
   assert.equal(JSON.parse(viaHome.stdout).status, 'none', viaHome.stderr);
 
-  const xdg = tempTree({ 'sextant/sextant.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'x', file: 'x.md' }] } } }, 'sextant/x.md': 'XDG-RULE' });
-  const viaXdg = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home, XDG_CONFIG_HOME: xdg, CLAUDE_CONFIG_DIR: claudeDir });
-  assert.match(JSON.parse(viaXdg.stdout).text, /XDG-RULE/);
-
-  const relativeXdg = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home, XDG_CONFIG_HOME: 'relative/dir' });
-  assert.equal(JSON.parse(relativeXdg.stdout).status, 'none', 'a relative XDG_CONFIG_HOME is ignored, as the XDG specification says');
-
-  const explicit = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home, XDG_CONFIG_HOME: xdg, ...LAB_ENV });
+  const explicit = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home, CLAUDE_CONFIG_DIR: claudeDir, ...LAB_ENV });
   assert.equal(JSON.parse(explicit.stdout).status, 'matched');
 });
 
@@ -114,7 +111,7 @@ test('the network guard used below does stop a connection attempt', () => {
 
 test('resolve never touches the network', () => {
   for (const args of [
-    ['resolve', 'claude-sonnet-5-5', '--scope', 'investigate', '--place', 'subagent'],
+    ['resolve', 'claude-sonnet-5-5', 'investigate', 'subagent'],
     ['resolve', 'claude-opus-5-5'],
     ['resolve', 'claude-fable-5-2'],
   ]) {

@@ -17,7 +17,7 @@ const load = (config: unknown, files: Record<string, string> = {}): Config => {
   return loadConfig(path.join(dir, 'sextant.json'), { presetsDir: LAB_PRESETS });
 };
 
-test('normalize: suffixes, provider paths, Bedrock prefixes and case', () => {
+test('normalize: suffixes, provider paths, Bedrock and Vertex forms, and case', () => {
   const cases: [string | null | undefined, string][] = [
     ['claude-fable-5-2', 'claude-fable-5-2'],
     ['claude-fable-5-2[1m]', 'claude-fable-5-2'],
@@ -25,6 +25,10 @@ test('normalize: suffixes, provider paths, Bedrock prefixes and case', () => {
     ['global.anthropic.claude-fable-5-2', 'claude-fable-5-2'],
     ['us.anthropic.claude-sonnet-5-5', 'claude-sonnet-5-5'],
     ['anthropic.claude-haiku-5-5', 'claude-haiku-5-5'],
+    ['global.anthropic.claude-fable-5-2-v1:0', 'claude-fable-5-2'],
+    ['anthropic.claude-haiku-5-5-v2:1', 'claude-haiku-5-5'],
+    ['claude-sonnet-5-5@20261001', 'claude-sonnet-5-5'],
+    ['claude-opus-5-5@latest', 'claude-opus-5-5'],
     ['  CLAUDE-OPUS-5-5  ', 'claude-opus-5-5'],
     ['', ''],
     [null, ''],

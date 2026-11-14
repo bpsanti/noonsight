@@ -21,7 +21,7 @@ One configuration file serves the whole machine, for every Claude Code account o
 npm install
 npm run build
 SEXTANT_CONFIG=test/fixtures/lab/config/sextant.json SEXTANT_PRESETS_DIR=test/fixtures/lab/presets \
-  node dist/src/cli.js resolve claude-sonnet-5-5 --scope investigate
+  node dist/src/cli.js resolve claude-sonnet-5-5 investigate
 ```
 
 See [docs/configuration.md](docs/configuration.md) for the configuration file and the `resolve` output.

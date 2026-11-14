@@ -1,6 +1,7 @@
 // Reads the configuration, the preset and every rule file, checks all of it, and builds the value
-// the core resolves against. A configuration with any problem is refused whole: the caller gets
-// every problem at once and no partial configuration is ever applied.
+// the core resolves against. A configuration with any problem is refused whole and no partial
+// configuration is ever applied. Schema problems are reported together first; once the shape is
+// valid, every remaining problem is reported together.
 
 import fs from 'node:fs';
 import path from 'node:path';
