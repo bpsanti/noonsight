@@ -470,6 +470,18 @@ test('claude -p: a --model naming a custom model identifier decides, so a lower 
   assert.deepEqual(h.log().map((l) => [l.model_from ?? null, l.delivered]), [['--model', 'nothing']]);
 });
 
+test('a command line without argument boundaries: a --setting-sources value that is no list of settings files warns instead of skipping every file', () => {
+  const h = home();
+  const env = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'claude-haiku-5-5' } }) };
+  const r = underClaude(h, ['-p', 'what does --setting-sources do'], print('sources-prompt'), env);
+  if (process.platform === 'darwin') {
+    assert.match(r.out?.systemMessage, /set to "do" \(--setting-sources\)/);
+    assert.deepEqual(h.log().map((l) => [l.model_from ?? null, l.delivered]), [['--setting-sources', 'nothing']]);
+  } else {
+    assert.match(context(r), /HAIKU-GEN-9047/);
+  }
+});
+
 test('an option given more than one value on a command line without argument boundaries has every value as a candidate', () => {
   assert.deepEqual(optionCandidates({ args: 'claude -p read --settings foo --settings /tmp/s.json'.split(' '), exact: false }, '--settings'), ['foo', '/tmp/s.json']);
   assert.deepEqual(optionCandidates({ args: ['claude', '-p', 'read --settings foo', '--settings', '/tmp/s.json'], exact: true }, '--settings'), ['/tmp/s.json']);

@@ -347,6 +347,20 @@ test('by default: one broken settings file refuses the whole install and leaves 
   assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
 });
 
+test('by default: one broken settings file refuses the whole uninstall and leaves every directory as it was', () => {
+  const { home, env, dirs } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  fs.writeFileSync(path.join(home, 'second-login', 'settings.json'), '{ broken');
+  const read = () => dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
+  const before = read();
+  const r = runCli(['uninstall'], env);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /second-login\/settings\.json is not valid JSON .*nothing was changed/);
+  assert.doesNotMatch(r.stdout, /: removed/);
+  assert.deepEqual(read(), before);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), true);
+});
+
 test('--managed warns about each login whose server-managed settings make Claude Code ignore the managed files', { skip: !supported }, () => {
   const { home, env } = logins();
   fs.writeFileSync(path.join(home, '.claude', 'remote-settings.json'), JSON.stringify({ permissions: { deny: ['WebFetch'] } }));

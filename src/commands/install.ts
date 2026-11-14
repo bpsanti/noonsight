@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { checkInstallable, install, InstallRefused, NeedsPermission, readSettings, uninstall, type Runtime } from '../adapters/claude-code/install.js';
+import { checkInstallable, checkUninstallable, install, InstallRefused, NeedsPermission, readSettings, uninstall, type Runtime } from '../adapters/claude-code/install.js';
 import { accountTarget, defaultAccountDir, discoverConfigDirs, managedTarget, UnsupportedPlatformError, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readRemoteSettings } from '../adapters/claude-code/managed.js';
 import { findSextantHandlers } from '../adapters/claude-code/settings.js';
@@ -70,11 +70,16 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
         record(target, true, home, lines);
       }
     } else {
+      // The per-account pointer is shared by every account install of this account.
+      const keepPointer = (target: InstallTarget): boolean =>
+        target.kind === 'account' && accountInstalls(stateDir(home)).some((d) => d !== target.configDir);
       for (const target of targets) {
         current = target;
-        // The per-account pointer is shared by every account install of this account.
-        const others = target.kind === 'account' ? accountInstalls(stateDir(home)).filter((d) => d !== target.configDir) : [];
-        lines.push(...uninstall(target, { keepPointer: others.length > 0 }));
+        checkUninstallable(target, { keepPointer: keepPointer(target) });
+      }
+      for (const target of targets) {
+        current = target;
+        lines.push(...uninstall(target, { keepPointer: keepPointer(target) }));
         record(target, false, home, lines);
       }
     }
@@ -92,7 +97,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     }
     // A permission the check before writing could not foresee, such as a file locked meanwhile.
     if (isPermissionError(e)) {
-      io.err(permissionMessage(command, failed, [(e as NodeJS.ErrnoException).path ?? failed.settingsFile], runtime, env, home));
+      io.err(permissionMessage(command, failed, [(e as NodeJS.ErrnoException).path ?? failed.settingsFile], runtime, env, home, lines.length > 0));
       return 1;
     }
     throw e;
@@ -209,10 +214,19 @@ function configLine(env: Env, home: string): string {
   }
 }
 
-function permissionMessage(command: string, target: InstallTarget, paths: readonly string[], runtime: Runtime, env: Env, home: string): string {
-  const lines = [`sextant: this account cannot write ${paths.join(' or ')}. Nothing was changed.`];
+function permissionMessage(
+  command: string,
+  target: InstallTarget,
+  paths: readonly string[],
+  runtime: Runtime,
+  env: Env,
+  home: string,
+  changedBefore = false,
+): string {
+  const unchanged = changedBefore ? 'Nothing was changed past the lines above.' : 'Nothing was changed.';
+  const lines = [`sextant: this account cannot write ${paths.join(' or ')}. ${unchanged}`];
   if (target.kind === 'managed') {
-    lines[0] = `sextant: ${command === 'install' ? 'installing' : 'uninstalling'} with --managed writes Claude Code's managed settings, which needs administrator rights. Nothing was changed.`;
+    lines[0] = `sextant: ${command === 'install' ? 'installing' : 'uninstalling'} with --managed writes Claude Code's managed settings, which needs administrator rights. ${unchanged}`;
     lines.push(
       `It writes: ${paths.join('\n           ')}`,
       'Run it once as an administrator:',

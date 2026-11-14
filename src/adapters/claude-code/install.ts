@@ -98,7 +98,15 @@ export interface UninstallOptions {
   readonly keepPointer?: boolean;
 }
 
-export function uninstall(target: InstallTarget, options: UninstallOptions = {}): string[] {
+interface UninstallPlan {
+  readonly edit: { readonly settings: Record<string, unknown>; readonly changed: boolean } | null;
+  readonly removeFile: boolean;
+  readonly pointer: ReturnType<typeof readPointer>;
+  readonly removePointer: boolean;
+}
+
+/** What uninstall would write, after every check that can refuse it; nothing is written. */
+function planUninstall(target: InstallTarget, options: UninstallOptions): UninstallPlan {
   refuseRootInAccount(target);
   const settings = readSettings(target.settingsFile);
   const edit = settings === null ? null : editSettings(target.settingsFile, () => withoutSextantHooks(settings));
@@ -110,6 +118,16 @@ export function uninstall(target: InstallTarget, options: UninstallOptions = {})
   const toWrite = [...(edit?.changed || removeFile ? [target.settingsFile] : []), ...(removePointer ? [target.pointer] : [])];
   const blocked = toWrite.filter((f) => !canCreate(f));
   if (blocked.length) throw new NeedsPermission(blocked);
+  return { edit, removeFile, pointer, removePointer };
+}
+
+/** Throws what uninstall would throw, and writes nothing; for uninstalling from several directories at once. */
+export function checkUninstallable(target: InstallTarget, options: UninstallOptions = {}): void {
+  planUninstall(target, options);
+}
+
+export function uninstall(target: InstallTarget, options: UninstallOptions = {}): string[] {
+  const { edit, removeFile, pointer, removePointer } = planUninstall(target, options);
 
   if (removeFile) fs.rmSync(target.settingsFile, { force: true });
   else if (edit?.changed)

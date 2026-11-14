@@ -75,7 +75,7 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
   Linux keeps each argument of the Claude Code process apart (`/proc/<pid>/cmdline`); macOS gives them joined by spaces (`ps`).
   There, a prompt that holds the text `--model x` cannot be told from the option.
   A single `--model` value that names a model (an identifier containing `claude`, or an alias) counts; any other value, such as a custom model identifier behind a gateway or a word from the prompt, and two different values, are reported with a warning instead of letting `ANTHROPIC_MODEL` or a settings file decide.
-  The same holds for `--settings` and `--setting-sources`: two different values warn, and so does an inline `--settings` JSON value that holds a space, since it cannot be read.
+  The same holds for `--settings` and `--setting-sources`: two different values warn, and so do an inline `--settings` JSON value that holds a space and a `--setting-sources` value that is not a comma-separated list of `user`, `project` and `local`, since neither can be read.
 - **MDM profiles.**
   A `model` set only in an MDM profile is not read.
 

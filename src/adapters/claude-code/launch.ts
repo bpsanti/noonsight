@@ -126,6 +126,9 @@ export function optionCandidates(cmd: CommandLine, name: string): string[] {
 
 const NO_BOUNDARIES = 'a command line read without argument boundaries cannot tell the option from prompt text';
 
+/** A --setting-sources value: a comma-separated list of the settings files Claude Code may read. */
+const SETTING_SOURCES = /^(?:user|project|local)(?:,(?:user|project|local))*$/;
+
 /** Values that name a model: a Claude model identifier in any provider's form, or an alias. */
 const LOOKS_LIKE_MODEL = new RegExp(
   `^(?:[a-z0-9._:@/-]*claude[a-z0-9._:@/-]*|${[...MODEL_ALIASES.map((a) => a.alias), ...RUNTIME_MODEL_VALUES].join('|')})(?:\\[1m\\])?$`,
@@ -176,7 +179,7 @@ function settingsModel(ctx: LaunchContext, cmd: CommandLine | null): LaunchModel
 
   // --setting-sources narrows the files below to the ones it lists.
   const lists = cmd ? optionCandidates(cmd, '--setting-sources') : [];
-  if (lists.length > 1)
+  if (lists.length > 1 || (cmd !== null && !cmd.exact && lists.some((l) => !SETTING_SOURCES.test(l))))
     return { kind: 'unresolved', value: lists.join(' or '), source: 'settings', from: '--setting-sources', why: NO_BOUNDARIES };
   const listed = lists[0];
   const sources = listed === undefined ? null : new Set(listed.split(',').map((s) => s.trim()));
