@@ -14,6 +14,12 @@ export const ANY_SCOPE = '*';
  */
 export const DELIVERY_TEXT_LIMIT = 10000;
 
+/** Room kept for the note that says the session's model changed (see switchNote). */
+export const SWITCH_NOTE_RESERVE = 500;
+
+/** The longest rule text, envelope included, a configuration may produce: the note must still fit. */
+export const RULES_TEXT_LIMIT = DELIVERY_TEXT_LIMIT - SWITCH_NOTE_RESERVE;
+
 /** One rule, with its text already read and normalized. */
 export interface Rule {
   readonly id: string;

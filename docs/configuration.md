@@ -102,7 +102,7 @@ Beyond the schema, sextant checks that:
 - every scope a rule names is declared;
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
-- the delivered text fits the 10,000-character limit Claude Code puts on hook text, for every combination of scope and place.
+- the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
 
 The preset is checked the same way, and every preset rule must name its source: the page, the section and the date it was read.
 

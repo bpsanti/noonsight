@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeModel } from '../core/normalize.js';
 import { envelope, joinRules, selectRules } from '../core/resolve.js';
-import { ANY_SCOPE, DELIVERY_TEXT_LIMIT, PLACES } from '../core/types.js';
+import { ANY_SCOPE, DELIVERY_TEXT_LIMIT, PLACES, RULES_TEXT_LIMIT, SWITCH_NOTE_RESERVE } from '../core/types.js';
 import type { Config, ModelEntry, Place, Rule, WildcardKey } from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
 import { presetsDir as defaultPresetsDir, SCHEMA_DIR, type Env } from './paths.js';
@@ -212,7 +212,10 @@ function checkScopes(
   for (const s of ruleScopes) if (s !== ANY_SCOPE && !declared.has(s)) report(at, `scope "${s}" is not declared`);
 }
 
-/** The text limit applies to what is delivered, so every combination of scope and place is checked. */
+/**
+ * The text limit applies to what is delivered, so every combination of scope and place is checked.
+ * Part of Claude Code's limit is kept for the note sent along when the session's model changes.
+ */
 function checkDeliverySize(
   model: string,
   rules: readonly Rule[],
@@ -225,11 +228,12 @@ function checkDeliverySize(
       const picked = selectRules(rules, scope, place);
       if (picked.length === 0) continue;
       const size = envelope(model, scope, picked.map((r) => r.id), joinRules(picked)).length;
-      if (size > DELIVERY_TEXT_LIMIT)
+      if (size > RULES_TEXT_LIMIT)
         report(
           at,
           `the rules delivered for ${scope === null ? 'no scope' : `scope "${scope}"`} in place "${place}" ` +
-            `come to ${size} characters; the limit is ${DELIVERY_TEXT_LIMIT}`,
+            `come to ${size} characters; the limit is ${RULES_TEXT_LIMIT} ` +
+            `(Claude Code's ${DELIVERY_TEXT_LIMIT}, less ${SWITCH_NOTE_RESERVE} kept for the model-change note)`,
         );
     }
 }

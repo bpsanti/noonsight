@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 /** The installed package's root directory (this file lives in dist/src/config/). */
 export const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
+/** The command line's entry point in the installed package; hooks run this file. */
+export const CLI_FILE = path.join(PACKAGE_ROOT, 'dist', 'src', 'cli.js');
+
 export type Env = Readonly<Record<string, string | undefined>>;
 
 /**
@@ -29,3 +32,17 @@ export function presetsDir(env: Env = process.env): string {
 }
 
 export const SCHEMA_DIR = path.join(PACKAGE_ROOT, 'schema');
+
+/**
+ * The account's own state: the decision log, what each session last received, and the list of
+ * Claude Code configuration directories sextant was installed into. Hooks run as the account that
+ * owns the session, so a machine-wide install still keeps state per account.
+ */
+export function stateDir(home: string = os.homedir()): string {
+  return path.join(home, '.local', 'state', 'sextant');
+}
+
+/** Files sextant writes for one account, such as the hook pointer of a per-account install. */
+export function dataDir(home: string = os.homedir()): string {
+  return path.join(home, '.local', 'share', 'sextant');
+}

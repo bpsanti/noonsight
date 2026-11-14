@@ -1,0 +1,58 @@
+# Drives one interactive Claude Code session for the live tests.
+#
+# usage: expect drive.exp <probe-dir> <step>... -- <claude arguments>...
+#
+# Steps run in order:
+#   wait:<seconds>   let the session run, reading its screen
+#   type:<text>      type a line (a slash command), then wait 4 seconds
+#   ask:<text>       type a prompt, then wait until the Stop probe writes a new file in <probe-dir>
+# The session ends with /exit. Exit codes: 0 done, 3 the session ended early, 4 an answer never came.
+
+set timeout 30
+set probe [lindex $argv 0]
+set steps {}
+set i 1
+while {$i < [llength $argv] && [lindex $argv $i] ne "--"} {
+  lappend steps [lindex $argv $i]
+  incr i
+}
+set claude_args [lrange $argv [expr {$i + 1}] end]
+
+proc drain {seconds} {
+  expect -timeout $seconds eof { exit 3 } timeout {}
+}
+
+proc stops {probe} {
+  return [llength [glob -nocomplain -directory $probe stop-*.json]]
+}
+
+spawn claude {*}$claude_args
+foreach step $steps {
+  set kind [lindex [split $step :] 0]
+  set arg [string range $step [expr {[string length $kind] + 1}] end]
+  switch -- $kind {
+    wait { drain $arg }
+    type {
+      send -- $arg
+      drain 1
+      send "\r"
+      drain 4
+    }
+    ask {
+      set before [stops $probe]
+      send -- $arg
+      drain 1
+      send "\r"
+      set answered 0
+      for {set t 0} {$t < 240} {incr t} {
+        if {[stops $probe] > $before} { set answered 1; break }
+        drain 1
+      }
+      if {!$answered} { exit 4 }
+      drain 2
+    }
+  }
+}
+send "/exit\r"
+expect -timeout 20 eof {} timeout { exit 0 }
+exit 0

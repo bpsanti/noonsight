@@ -1,0 +1,77 @@
+// What each session last received, so a hook can tell a resumed conversation that already holds the
+// rules from one that needs them, and can say "the earlier rules no longer apply" after a switch.
+//
+// Two keys, both structural facts rather than inherited environment variables:
+//   - the session id Claude Code puts in every hook input;
+//   - the Claude Code process that runs the hook (the hook's parent process). After /clear the new
+//     session has a new id and Claude Code may leave the model out, but it is the same process,
+//     still on the same model.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { writeFileAtomic } from './files.js';
+
+export interface DeliveryState {
+  /** The normalized model the last decision was for, or null when it was not reported. */
+  readonly model: string | null;
+  readonly status: 'matched' | 'none' | 'undeclared';
+  /** The hash of the rules delivered, or null when no rules were delivered. */
+  readonly sha256: string | null;
+  readonly at: string;
+}
+
+/** Records older than this are removed; any write refreshes a record. */
+const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+export function sessionFile(stateDir: string, sessionId: string): string | null {
+  return SAFE_ID.test(sessionId) ? path.join(stateDir, 'sessions', `${sessionId}.json`) : null;
+}
+
+export function processFile(stateDir: string, pid: number): string | null {
+  return Number.isSafeInteger(pid) && pid > 1 ? path.join(stateDir, 'processes', `${pid}.json`) : null;
+}
+
+export function readState(file: string | null): DeliveryState | null {
+  if (file === null) return null;
+  try {
+    const value = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<DeliveryState>;
+    if (
+      (value.model === null || typeof value.model === 'string') &&
+      (value.status === 'matched' || value.status === 'none' || value.status === 'undeclared') &&
+      (value.sha256 === null || typeof value.sha256 === 'string')
+    )
+      return { model: value.model, status: value.status, sha256: value.sha256, at: String(value.at) };
+  } catch {
+    // Missing or unreadable: the same as never recorded.
+  }
+  return null;
+}
+
+export function writeState(file: string | null, state: DeliveryState): void {
+  if (file === null) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  writeFileAtomic(file, `${JSON.stringify(state)}\n`, 0o600);
+}
+
+/** Remove records nobody has written for a long time. */
+export function pruneState(stateDir: string, now: number): void {
+  for (const sub of ['sessions', 'processes']) {
+    const dir = path.join(stateDir, sub);
+    let names: string[];
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const file = path.join(dir, name);
+      try {
+        if (now - fs.statSync(file).mtimeMs > MAX_AGE_MS) fs.rmSync(file, { force: true });
+      } catch {
+        // Removed by another session meanwhile.
+      }
+    }
+  }
+}
