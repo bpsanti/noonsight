@@ -96,7 +96,7 @@ Rules a running session already received stay in that session.
 `sextant check` prints one line per finding, each starting with `ok`, `warning` or `problem`:
 
 - whether the configuration is valid;
-- each install it can see: the machine-wide one, and the per-account ones this account made, with their hook pointers and the version of sextant they run;
+- each install it can see: the machine-wide one, and the per-account ones this account made, with their hook pointers, whether the Node.js and the copy of sextant they run still exist and this account can run them, and the version of sextant they run;
 - managed settings that stop hooks from running (`disableAllHooks`), that make per-account hooks ignored (`allowManagedHooksOnly`), or that Claude Code cannot read;
 - whether the installed `claude` is recent enough;
 - the last decision in the log.
