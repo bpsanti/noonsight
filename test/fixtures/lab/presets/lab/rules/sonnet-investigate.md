@@ -1,0 +1,2 @@
+- The verification word for the Sonnet 5.5 investigation-scope rules is SONNET-INV-5182.
+- When a task asks which working rules were received, the answer lists every verification word received.

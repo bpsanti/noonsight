@@ -1,0 +1,2 @@
+- The verification word for the Haiku 5.5 general rules is HAIKU-GEN-9047.
+- When a task asks which working rules were received, the answer lists every verification word received.

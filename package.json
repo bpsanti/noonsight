@@ -1,0 +1,31 @@
+{
+  "name": "sextant-ai",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Hand every Claude Code session and subagent the rules for the model it actually runs on.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bpsanti/sextant-ai.git"
+  },
+  "type": "module",
+  "bin": {
+    "sextant": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "schema",
+    "presets"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^7.0.2"
+  }
+}
