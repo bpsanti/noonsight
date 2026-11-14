@@ -71,8 +71,8 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
       }
     } else {
       // The per-account pointer is shared by every account install of this account: it stays while a
-      // recorded directory that this uninstall has not reached yet still runs it.
-      const recorded = accountInstalls(stateDir(home));
+      // recorded directory that still exists, and that this uninstall has not reached yet, runs it.
+      const [recorded, vanished] = partition(accountInstalls(stateDir(home)), isDirectory);
       const keepPointer = targets.map(
         (target, i) => target.kind === 'account' && recorded.some((d) => !targets.slice(0, i + 1).some((t) => t.configDir === d)),
       );
@@ -85,6 +85,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
         lines.push(...uninstall(target, { keepPointer: keepPointer[i] === true }));
         record(target, false, home, lines);
       }
+      for (const dir of vanished) recordDir(dir, false, home, lines);
     }
   } catch (e) {
     const failed = current ?? targets[0];
@@ -140,11 +141,26 @@ function ownerOf(file: string): number | null {
 }
 
 function record(target: InstallTarget, installed: boolean, home: string, lines: string[]): void {
-  if (target.kind !== 'account' || target.configDir === undefined) return;
+  if (target.kind === 'account' && target.configDir !== undefined) recordDir(target.configDir, installed, home, lines);
+}
+
+function recordDir(configDir: string, installed: boolean, home: string, lines: string[]): void {
   try {
-    recordAccountInstall(stateDir(home), target.configDir, installed);
+    recordAccountInstall(stateDir(home), configDir, installed);
   } catch {
     lines.push(`warning: could not update the list of account installs in ${stateDir(home)}; \`sextant check\` may not see this install`);
+  }
+}
+
+function partition<T>(items: readonly T[], test: (item: T) => boolean): [T[], T[]] {
+  return [items.filter(test), items.filter((item) => !test(item))];
+}
+
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
   }
 }
 

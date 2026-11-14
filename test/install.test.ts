@@ -329,6 +329,17 @@ test('by default: install reaches every Claude Code configuration directory of t
   assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
 });
 
+test('by default: a login deleted since install does not keep the hook pointer, and uninstall forgets it', () => {
+  const { home, env } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  fs.rmSync(path.join(home, 'second-login'), { recursive: true });
+  const r = runCli(['uninstall'], env);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /kept \(another account install uses it\)\n?$/);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
+});
+
 test('by default: install creates ~/.claude when Claude Code has not run yet', () => {
   const home = tempTree({});
   const r = runCli(['install'], { HOME: home });
