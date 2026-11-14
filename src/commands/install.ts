@@ -72,9 +72,11 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     } else {
       // The per-account pointer is shared by every account install of this account: it stays while a
       // recorded directory that still exists, and that this uninstall has not reached yet, runs it.
-      const [recorded, vanished] = partition(accountInstalls(stateDir(home)), isDirectory);
+      const recorded = accountInstalls(stateDir(home));
+      const vanished = recorded.filter(isGone);
+      const live = recorded.filter((d) => !vanished.includes(d));
       const keepPointer = targets.map(
-        (target, i) => target.kind === 'account' && recorded.some((d) => !targets.slice(0, i + 1).some((t) => t.configDir === d)),
+        (target, i) => target.kind === 'account' && live.some((d) => !targets.slice(0, i + 1).some((t) => t.configDir === d)),
       );
       for (const [i, target] of targets.entries()) {
         current = target;
@@ -85,7 +87,9 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
         lines.push(...uninstall(target, { keepPointer: keepPointer[i] === true }));
         record(target, false, home, lines);
       }
-      for (const dir of vanished) recordDir(dir, false, home, lines);
+      if (mode.kind !== 'managed')
+        for (const dir of vanished)
+          if (recordDir(dir, false, home, lines)) lines.push(`account install ${dir}: forgotten (the directory no longer exists)`);
     }
   } catch (e) {
     const failed = current ?? targets[0];
@@ -144,23 +148,23 @@ function record(target: InstallTarget, installed: boolean, home: string, lines: 
   if (target.kind === 'account' && target.configDir !== undefined) recordDir(target.configDir, installed, home, lines);
 }
 
-function recordDir(configDir: string, installed: boolean, home: string, lines: string[]): void {
+function recordDir(configDir: string, installed: boolean, home: string, lines: string[]): boolean {
   try {
     recordAccountInstall(stateDir(home), configDir, installed);
+    return true;
   } catch {
     lines.push(`warning: could not update the list of account installs in ${stateDir(home)}; \`sextant check\` may not see this install`);
+    return false;
   }
 }
 
-function partition<T>(items: readonly T[], test: (item: T) => boolean): [T[], T[]] {
-  return [items.filter(test), items.filter((item) => !test(item))];
-}
-
-function isDirectory(dir: string): boolean {
+/** Whether a recorded directory is gone; one that cannot be reached now, such as on an unmounted volume, is not. */
+function isGone(dir: string): boolean {
   try {
-    return fs.statSync(dir).isDirectory();
-  } catch {
-    return false;
+    return !fs.statSync(dir).isDirectory();
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    return code === 'ENOENT' || code === 'ENOTDIR';
   }
 }
 

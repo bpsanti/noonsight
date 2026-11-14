@@ -335,9 +335,21 @@ test('by default: a login deleted since install does not keep the hook pointer, 
   fs.rmSync(path.join(home, 'second-login'), { recursive: true });
   const r = runCli(['uninstall'], env);
   assert.equal(r.status, 0, r.stderr);
-  assert.doesNotMatch(r.stdout, /kept \(another account install uses it\)\n?$/);
+  assert.match(r.stdout, new RegExp(`account install ${path.join(home, 'second-login')}: forgotten`));
   assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
   assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
+});
+
+test('uninstall --managed leaves the list of account installs alone, even for a login deleted since', { skip: !supported }, () => {
+  const { home, env } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  const installs = path.join(home, '.local', 'state', 'sextant', 'installs.json');
+  fs.rmSync(path.join(home, 'second-login'), { recursive: true });
+  const before = fs.readFileSync(installs, 'utf8');
+  const r = runCli(['uninstall', '--managed'], env);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /forgotten/);
+  assert.equal(fs.readFileSync(installs, 'utf8'), before);
 });
 
 test('by default: install creates ~/.claude when Claude Code has not run yet', () => {
