@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { modelArgument } from '../src/adapters/claude-code/launch.js';
+import { modelArgument, optionCandidates } from '../src/adapters/claude-code/launch.js';
 import { managedTarget } from '../src/adapters/claude-code/locations.js';
 import { RULES_TEXT_LIMIT } from '../src/core/types.js';
 import { CLI, FIXTURES, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
@@ -354,14 +354,17 @@ test('claude -p: the --model argument of the Claude Code process names the model
   assert.match(context(underClaude(h, ['-p', '--model', 'haiku', 'hello'], print('pinned'), pinned)), /SONNET-GEN-3306/);
   // The argument outranks ANTHROPIC_MODEL, as it does in Claude Code.
   assert.match(context(underClaude(h, ['-p', '--model', 'sonnet[1m]', 'hello'], print('over-env'), { ANTHROPIC_MODEL: 'claude-haiku-5-5' })), /SONNET-GEN-3306/);
-  // A prompt that mentions the option is not the option.
-  assert.match(underClaude(h, ['-p', 'what does --model nope do?'], print('prompt')).out?.systemMessage, /did not report/);
+  // A prompt that mentions the option is not the option where arguments keep their boundaries; where
+  // they do not, as on macOS, the hook cannot tell them apart and warns instead of guessing.
+  const prompt = underClaude(h, ['-p', 'what does --model nope do?'], print('prompt'));
+  assert.equal(context(prompt), '');
+  assert.match(prompt.out?.systemMessage, process.platform === 'darwin' ? /set to "nope" \(--model\)/ : /did not report/);
   assert.deepEqual(launchLog(h), [
     ['claude-sonnet-5-5', 'claude-args', '--model', null, null, 'rules'],
     ['claude-haiku-5-5', 'claude-args', '--model', 'haiku', 'built-in', 'rules'],
     ['claude-sonnet-5-5', 'claude-args', '--model', 'haiku', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'rules'],
     ['claude-sonnet-5-5', 'claude-args', '--model', 'sonnet[1m]', 'built-in', 'rules'],
-    [null, null, null, null, null, 'nothing'],
+    [null, null, process.platform === 'darwin' ? '--model' : null, null, null, 'nothing'],
   ]);
 });
 
@@ -446,11 +449,29 @@ test('a reported model, or the record of the session, always outranks the launch
   ]);
 });
 
-test('a command line read without argument boundaries, as on macOS, counts only values that name a model', () => {
+test('a command line read without argument boundaries, as on macOS, reports a --model it cannot read instead of falling through', () => {
   const joined = (line: string) => modelArgument({ args: line.split(' '), exact: false }, {});
-  assert.equal(joined('claude -p explain --model flags'), null);
+  assert.equal(joined('claude -p hello'), null);
   assert.deepEqual(joined('claude -p hi --model claude-opus-5-5'), { kind: 'found', model: 'claude-opus-5-5', source: 'claude-args', from: '--model' });
-  assert.equal(joined('claude -p use --model haiku --model sonnet')?.kind, 'unresolved');
+  // A custom model identifier, as behind a gateway, cannot be told from prompt text; a lower source must not decide.
+  assert.deepEqual(joined('claude -p --model my-gateway-opus hi')?.kind, 'unresolved');
+  // A prompt that mentions --model warns rather than letting ANTHROPIC_MODEL or a settings file decide.
+  assert.equal(joined('claude -p explain --model flags')?.kind, 'unresolved');
+  assert.equal(joined('claude -p use --model haiku --model claude-opus-5-5')?.kind, 'unresolved');
   const exact = modelArgument({ args: ['claude', '-p', 'use --model haiku', '--model', 'sonnet'], exact: true }, {});
   assert.equal(exact?.kind === 'found' && exact.model, 'claude-sonnet-5-5');
+});
+
+test('claude -p: a --model naming a custom model identifier decides, so a lower settings file never delivers its model\'s rules', () => {
+  const h = home();
+  const env = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'haiku' } }), ANTHROPIC_MODEL: 'claude-sonnet-5-5' };
+  const r = underClaude(h, ['-p', '--model', 'my-gateway-opus', 'hello'], print('gateway'), env);
+  assert.doesNotMatch(context(r), /HAIKU-GEN-9047|SONNET-GEN-3306/);
+  assert.deepEqual(h.log().map((l) => [l.model_from ?? null, l.delivered]), [['--model', 'nothing']]);
+});
+
+test('an option given more than one value on a command line without argument boundaries has every value as a candidate', () => {
+  assert.deepEqual(optionCandidates({ args: 'claude -p read --settings foo --settings /tmp/s.json'.split(' '), exact: false }, '--settings'), ['foo', '/tmp/s.json']);
+  assert.deepEqual(optionCandidates({ args: ['claude', '-p', 'read --settings foo', '--settings', '/tmp/s.json'], exact: true }, '--settings'), ['/tmp/s.json']);
+  assert.deepEqual(optionCandidates({ args: 'claude -p hello'.split(' '), exact: false }, '--settings'), []);
 });

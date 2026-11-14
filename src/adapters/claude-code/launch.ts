@@ -99,7 +99,7 @@ export function readCommandLine(pid: number, platform: NodeJS.Platform): Command
 }
 
 /** Every value given to an option, as --name value or --name=value, up to a "--" that ends the options. */
-export function optionValues(cmd: CommandLine, name: string): string[] {
+function optionValues(cmd: CommandLine, name: string): string[] {
   const values: string[] = [];
   for (let i = 0; i < cmd.args.length; i++) {
     const a = cmd.args[i] ?? '';
@@ -113,6 +113,19 @@ export function optionValues(cmd: CommandLine, name: string): string[] {
   return values;
 }
 
+/**
+ * The values an option may have been given. On an exact command line, the last one, which Claude Code
+ * uses. Without argument boundaries a prompt can hold the option's text too, so every distinct value is
+ * a candidate, and more than one means the option cannot be read.
+ */
+export function optionCandidates(cmd: CommandLine, name: string): string[] {
+  const values = optionValues(cmd, name);
+  if (cmd.exact) return values.slice(-1);
+  return [...new Set(values)];
+}
+
+const NO_BOUNDARIES = 'a command line read without argument boundaries cannot tell the option from prompt text';
+
 /** Values that name a model: a Claude model identifier in any provider's form, or an alias. */
 const LOOKS_LIKE_MODEL = new RegExp(
   `^(?:[a-z0-9._:@/-]*claude[a-z0-9._:@/-]*|${[...MODEL_ALIASES.map((a) => a.alias), ...RUNTIME_MODEL_VALUES].join('|')})(?:\\[1m\\])?$`,
@@ -120,18 +133,14 @@ const LOOKS_LIKE_MODEL = new RegExp(
 );
 
 export function modelArgument(cmd: CommandLine, env: Env): LaunchModel | null {
-  const values = optionValues(cmd, '--model');
-  if (cmd.exact) {
-    const last = values.at(-1);
-    return last ? resolveValue(last, 'claude-args', '--model', env) : null;
-  }
-  // A prompt can hold the text "--model x" too. Without argument boundaries, only values that name a
-  // model count, and two different ones cannot be told apart.
-  const named = [...new Set(values.filter((v) => LOOKS_LIKE_MODEL.test(v)))];
-  if (named.length === 0) return null;
-  if (named.length > 1)
-    return { kind: 'unresolved', value: named.join(' or '), source: 'claude-args', from: '--model', why: 'the command line names more than one model' };
-  return resolveValue(named[0] ?? '', 'claude-args', '--model', env);
+  const values = optionCandidates(cmd, '--model');
+  const value = values[0];
+  if (value === undefined) return null;
+  // Without argument boundaries, a value that names no Claude model may be prompt text or a custom
+  // model identifier; either way a lower source would not decide, so it is reported instead.
+  if (values.length > 1 || (!cmd.exact && !LOOKS_LIKE_MODEL.test(value)))
+    return { kind: 'unresolved', value: values.join(' or '), source: 'claude-args', from: '--model', why: NO_BOUNDARIES };
+  return resolveValue(value, 'claude-args', '--model', env);
 }
 
 /**
@@ -154,7 +163,10 @@ function settingsModel(ctx: LaunchContext, cmd: CommandLine | null): LaunchModel
   }
 
   // --settings: a file, or inline JSON.
-  const inline = cmd ? optionValues(cmd, '--settings').at(-1) : undefined;
+  const inlines = cmd ? optionCandidates(cmd, '--settings') : [];
+  if (inlines.length > 1)
+    return { kind: 'unresolved', value: inlines.join(' or '), source: 'settings', from: '--settings', why: NO_BOUNDARIES };
+  const inline = inlines[0];
   if (inline !== undefined) {
     const value = readSettingsArgument(inline);
     if (value === undefined)
@@ -163,7 +175,10 @@ function settingsModel(ctx: LaunchContext, cmd: CommandLine | null): LaunchModel
   }
 
   // --setting-sources narrows the files below to the ones it lists.
-  const listed = cmd ? optionValues(cmd, '--setting-sources').at(-1) : undefined;
+  const lists = cmd ? optionCandidates(cmd, '--setting-sources') : [];
+  if (lists.length > 1)
+    return { kind: 'unresolved', value: lists.join(' or '), source: 'settings', from: '--setting-sources', why: NO_BOUNDARIES };
+  const listed = lists[0];
   const sources = listed === undefined ? null : new Set(listed.split(',').map((s) => s.trim()));
   const project = ctx.env.CLAUDE_PROJECT_DIR || ctx.cwd;
   const files: [string, string | null][] = [
