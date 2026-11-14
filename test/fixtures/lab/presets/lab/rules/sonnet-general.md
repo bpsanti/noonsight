@@ -1,0 +1,2 @@
+- The verification word for the Sonnet 5.5 general rules is SONNET-GEN-3306.
+- When a task asks which working rules were received, the answer lists every verification word received.

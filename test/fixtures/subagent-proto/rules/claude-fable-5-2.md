@@ -1,0 +1,2 @@
+- The verification word for the Fable 5.2 rules is FABLE-RULES-7421.
+- When a task asks which model-specific rules were received, the answer includes that verification word.

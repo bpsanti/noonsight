@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/sextant-ai@0/schema/sextant.schema.json",
+  "title": "sextant configuration",
+  "description": "The sextant configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. sextant looks for it at $SEXTANT_CONFIG, then $XDG_CONFIG_HOME/sextant/sextant.json, then ~/.config/sextant/sextant.json.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "description": "Format version of this file.",
+      "const": 1
+    },
+    "preset": {
+      "description": "The preset shipped with the package that \"use\": \"preset\" entries draw their rules from. The preset follows the installed package version.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "default": "claude"
+    },
+    "models": {
+      "description": "The models declared active, keyed by full model identifier (for example claude-fable-5-2). A model missing from this map is undeclared.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(?:(?=.*[0-9])[a-z0-9]+(?:[-.][a-z0-9]+)*|[a-z0-9.*?-]*[*?][a-z0-9.*?-]*)$",
+        "x-hint": "a model key is a full lowercase model identifier with its version, such as claude-fable-5-2, or a wildcard pattern such as claude-opus-4-*"
+      },
+      "patternProperties": {
+        "^(?=.*[0-9])[a-z0-9]+(?:[-.][a-z0-9]+)*$": { "$ref": "#/$defs/modelEntry" },
+        "^[a-z0-9.*?-]*[*?][a-z0-9.*?-]*$": { "$ref": "#/$defs/wildcardEntry" }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "on_undeclared": {
+      "description": "What to do when a model has no entry in \"models\". There is deliberately no option to block.",
+      "enum": ["warn", "ignore"],
+      "default": "warn"
+    },
+    "scopes": {
+      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$",
+        "x-hint": "a scope name is lowercase letters, digits and hyphens, starting with a letter"
+      },
+      "additionalProperties": { "$ref": "#/$defs/scope" },
+      "default": {}
+    }
+  },
+  "$defs": {
+    "modelEntry": {
+      "description": "How a model gets its rules.",
+      "type": "object",
+      "required": ["use"],
+      "additionalProperties": false,
+      "properties": {
+        "use": {
+          "description": "preset: the preset's rules for this exact model. custom: only the rules in \"add\". none: decided that this model needs no rules.",
+          "enum": ["preset", "custom", "none"]
+        },
+        "enable": {
+          "description": "Preset rules, off by default, to turn on.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ruleId" }
+        },
+        "disable": {
+          "description": "Preset rules, on by default, to turn off.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ruleId" }
+        },
+        "add": {
+          "description": "The user's own rule files, delivered after the preset's rules.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/userRule" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["use"], "properties": { "use": { "const": "none" } } },
+          "then": {
+            "properties": { "use": true },
+            "additionalProperties": false,
+            "x-hint": "a model declared with \"use\": \"none\" takes no other key"
+          }
+        },
+        {
+          "if": { "required": ["use"], "properties": { "use": { "const": "custom" } } },
+          "then": {
+            "required": ["add"],
+            "properties": { "use": true, "add": { "minItems": 1 } },
+            "additionalProperties": false,
+            "x-hint": "a model declared with \"use\": \"custom\" takes only \"add\", with at least one rule"
+          }
+        }
+      ]
+    },
+    "wildcardEntry": {
+      "description": "A wildcard key only declares models that need no rules. Rules always need the exact model identifier, so a new model version never inherits rules written for an earlier one.",
+      "type": "object",
+      "required": ["use"],
+      "additionalProperties": false,
+      "properties": {
+        "use": {
+          "const": "none",
+          "x-hint": "a wildcard key only accepts {\"use\": \"none\"}; give rules under the exact model identifier"
+        }
+      },
+      "x-hint": "a wildcard key only accepts {\"use\": \"none\"}; give rules under the exact model identifier"
+    },
+    "userRule": {
+      "type": "object",
+      "required": ["id", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/ruleId" },
+        "file": {
+          "description": "Path to the rule text, relative to this configuration file or absolute.",
+          "type": "string",
+          "minLength": 1
+        },
+        "scopes": {
+          "description": "Scopes the rule applies to, or [\"*\"] for every scope.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/scopeRef" },
+          "default": ["*"]
+        },
+        "where": {
+          "description": "Places the rule applies to.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/place" },
+          "default": ["session", "unattended", "subagent"]
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "What kind of task this scope covers.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ruleId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*$",
+      "x-hint": "a rule id is lowercase segments separated by \"/\", such as team/commit-style"
+    },
+    "scopeRef": {
+      "type": "string",
+      "pattern": "^(?:\\*|[a-z][a-z0-9-]*)$"
+    },
+    "place": {
+      "description": "session: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task.",
+      "enum": ["session", "unattended", "subagent"]
+    }
+  }
+}

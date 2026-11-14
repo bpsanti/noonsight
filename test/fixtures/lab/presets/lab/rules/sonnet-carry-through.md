@@ -1,0 +1,1 @@
+- The verification word for the Sonnet 5.5 carry-through rule is SONNET-CARRY-4471.

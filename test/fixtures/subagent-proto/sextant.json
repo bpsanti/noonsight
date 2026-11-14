@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "on_undeclared": "warn",
+  "models": {
+    "claude-fable-5-2": {
+      "use": "custom",
+      "add": [{ "id": "fable", "file": "rules/claude-fable-5-2.md" }]
+    },
+    "claude-sonnet-5-5": { "use": "none" },
+    "claude-opus-*": { "use": "none" }
+  }
+}

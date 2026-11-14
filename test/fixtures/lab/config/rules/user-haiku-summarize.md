@@ -1,0 +1,1 @@
+- The verification word for the Haiku 5.5 summarize-scope rules is HAIKU-SUM-6610.

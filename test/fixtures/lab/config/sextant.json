@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "preset": "lab",
+  "on_undeclared": "warn",
+  "models": {
+    "claude-sonnet-5-5": { "use": "preset" },
+    "claude-haiku-5-5": {
+      "use": "preset",
+      "add": [{ "id": "user/haiku-summarize", "file": "rules/user-haiku-summarize.md", "scopes": ["summarize"] }]
+    },
+    "claude-opus-*": { "use": "none" }
+  },
+  "scopes": {
+    "summarize": { "description": "Read existing material and condense it into a summary or digest; no code change." },
+    "investigate": { "description": "Open-ended investigation or root-cause diagnosis of an unclear problem." },
+    "search": { "description": "Locate code or files in a repository without changing anything." },
+    "implement": { "description": "Write or change code whose intended behavior is already clear." }
+  }
+}
