@@ -1,0 +1,75 @@
+{
+  "session_id": "ced9b318-880e-4eee-8ff8-02342e85f10d",
+  "transcript_path": "/home/user/.claude/projects/-home-user-project/ced9b318-880e-4eee-8ff8-02342e85f10d.jsonl",
+  "cwd": "/home/user/project",
+  "prompt_id": "6ed46ce0-531d-4c44-9065-77154ba648dc",
+  "permission_mode": "default",
+  "agent_id": "af1ea3c521a1c3328",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Nested probe reply",
+    "prompt": "Reply with the single word OK.",
+    "subagent_type": "general-purpose"
+  },
+  "tool_response": {
+    "status": "completed",
+    "prompt": "Reply with the single word OK.",
+    "agentId": "a92fbba5fa2c7141c",
+    "agentType": "general-purpose",
+    "harnessNoteCount": 0,
+    "harnessTailCount": 0,
+    "harnessSectionHash": "056f371b8718da5c",
+    "content": [
+      {
+        "type": "text",
+        "text": "OK"
+      }
+    ],
+    "resolvedModel": "claude-haiku-5-5",
+    "totalDurationMs": 1762,
+    "totalTokens": 12397,
+    "totalToolUseCount": 0,
+    "usage": {
+      "output_tokens_details": {
+        "thinking_tokens": 92
+      },
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 4288,
+      "cache_read_input_tokens": 8011,
+      "output_tokens": 96,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 4288
+      },
+      "inference_geo": "global",
+      "iterations": [
+        {
+          "input_tokens": 2,
+          "output_tokens": 96,
+          "cache_read_input_tokens": 8011,
+          "cache_creation_input_tokens": 4288,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 4288,
+            "ephemeral_1h_input_tokens": 0
+          },
+          "type": "message"
+        }
+      ],
+      "speed": "standard",
+      "fallback_credit": null
+    },
+    "canContinueAgent": true
+  },
+  "tool_use_id": "toolu_01PtPBfhnQBnXwJRDai5t9BJ",
+  "duration_ms": 1762
+}

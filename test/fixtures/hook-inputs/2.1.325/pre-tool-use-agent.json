@@ -1,0 +1,19 @@
+{
+  "session_id": "dbef0a98-a930-44c9-9a0c-9f41dae960c8",
+  "transcript_path": "/home/user/.claude/projects/-home-user-project/dbef0a98-a930-44c9-9a0c-9f41dae960c8.jsonl",
+  "cwd": "/home/user/project",
+  "prompt_id": "7e410b6d-9de2-4bfd-b703-6696205870b2",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Nested subagent configuration test",
+    "prompt": "This is a configuration test of nested subagents. First run the Bash command: echo nested-probe . Then make exactly one Agent tool call with subagent_type general-purpose, no model parameter, and exactly this prompt: 'Reply with the single word OK.' Wait for its result, then reply with the single word DONE.",
+    "subagent_type": "general-purpose",
+    "model": "haiku"
+  },
+  "tool_use_id": "toolu_01QAm9nwSHxTG1dse6osHPi2"
+}

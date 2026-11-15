@@ -5,6 +5,7 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 
 `npm run test:live` drives real interactive sessions through a terminal and sends no prompt and no request to Anthropic: a placeholder token gets Claude Code past sign-in, and `ANTHROPIC_BASE_URL` points at a closed local port.
 `SEXTANT_LIVE_TOKENS=1` adds the checks that ask a model, which need a real token in `CLAUDE_CODE_OAUTH_TOKEN`.
+`SEXTANT_LIVE_LOGIN=1` adds the subagent checks (`test/live/subagents.test.ts`), which send prompts from the Claude Code login of whoever runs them: they read no token, give sextant's hook entries through `--settings`, and leave the person's own settings out with `--setting-sources project,local`, so nothing is installed into that account.
 
 ## Checked live
 
@@ -21,6 +22,17 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 | The hook reads the `--model` argument of its parent `claude` process (by `ps` on macOS, `/proc` on Linux), `ANTHROPIC_MODEL` from its environment, and the `model` setting, in that order | 2.1.325 | 2026-11-14 | `npm run test:live` (the `claude -p` test) |
 | A hook's environment holds the variables of the settings' `env` block | 2.1.325 | 2026-11-14 | Checked by hand: a hook recorded `ANTHROPIC_MODEL` set only in `settings.json` `env` |
 | A model reads `additionalContext` from `SessionStart` and `PostModelSwitch` and can quote it | 2.1.325 | Not yet run | `SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` |
+| The `PreToolUse` input of an agent call has `tool_name: "Agent"`, `tool_use_id`, `permission_mode`, and `tool_input` with `description`, `prompt`, `subagent_type`, `run_in_background`, and `model` only when the call sets one | 2.1.325 | 2026-11-15 | Recorded inputs in `test/fixtures/hook-inputs/2.1.325/` |
+| A call made inside a subagent fires the same settings hooks, with the subagent's `agent_id` and `agent_type`; `transcript_path` stays the session's | 2.1.325 | 2026-11-15 | Recorded input; `SEXTANT_LIVE_LOGIN=1 npm run test:live` (nested) |
+| `updatedInput` with `permissionDecision: "allow"` replaces the call, and the subagent reads and quotes rules added to the end of its `prompt`, in `claude -p` and in interactive sessions | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` |
+| A changed call whose hook output is longer than 10,000 characters still applies: the limit is on context strings, not on `updatedInput` | 2.1.325 | 2026-11-15 | Checked by hand: rules of 9,339 characters plus the task text reached a Haiku subagent |
+| The `PostToolUse` input of an agent call has `tool_response.agentId` and `resolvedModel`; for a call that runs in the background (`status: "async_launched"`) it fires at once, for a foreground call when the subagent finishes | 2.1.325 | 2026-11-15 | Recorded inputs |
+| Claude Code can run an agent call in the background even when the call does not ask for it, in `claude -p` and in interactive sessions | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live`; the subagent's metadata recorded the request shape as background |
+| When a subagent makes its first agent call, its transcript is at `<session transcript dir>/<session id>/subagents/agent-<agent id>.jsonl` and names its model; with `--no-session-persistence` there is no transcript | 2.1.325 | 2026-11-15 | Checked by hand with a hook that read the file |
+| The built-in Explore subagent under a Sonnet parent runs on Sonnet | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (inherit-explore) |
+| A plugin's subagent with `model: haiku` runs on Haiku whatever the session's model | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (mismatch) |
+| A `systemMessage` from `PreToolUse` or `PostToolUse` reaches `claude -p --output-format stream-json` as a `system` event of subtype `informational` | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` |
+| In auto mode, the classifier reviews an agent call that no hook allowed, and can deny it | 2.1.325 | 2026-11-15 | Seen in an interactive session started in auto mode; the live tests pin `--permission-mode default` |
 
 ## From the documentation, not checked live
 
@@ -38,6 +50,12 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 | `SessionStart` can leave `model` out; a hook inherits Claude Code's environment and can read `ANTHROPIC_MODEL` | https://code.claude.com/docs/en/hooks, sections "SessionStart input" and "Hook input and output" | 2026-11-14 |
 | The starting model comes from `--model`, then `ANTHROPIC_MODEL`, then the `model` setting; what each alias selects per provider and version | https://code.claude.com/docs/en/model-config, sections "Setting your model", "Model aliases" and "Version history" | 2026-11-14 |
 | Hook context over 10,000 characters is replaced by a file path and a preview | https://code.claude.com/docs/en/hooks, section "JSON output" | 2026-11-14 |
+| A subagent's model comes from the call's `model` parameter (an alias), then the definition's `model` field (including `inherit`), then `CLAUDE_CODE_SUBAGENT_MODEL`, then the parent's model; a family alias keeps the parent's version when the parent is of that family; `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides the first two, except for forks | https://code.claude.com/docs/en/sub-agents, sections "Choose a model", "Which version a model alias selects" and "Run every subagent on one model" | 2026-11-15 |
+| Explore runs on its parent's model, but under a Fable parent on the model the `opus` alias selects, except on Amazon Bedrock, Google Cloud and Microsoft Foundry; Explore and Plan ignore `CLAUDE_CODE_SUBAGENT_MODEL` alone; `statusline-setup` runs on Sonnet and `claude-code-guide` on Haiku | Same page, section "Built-in subagents" | 2026-11-15 |
+| Project subagent definitions are found in every `.claude/agents/` from the working directory up to the repository root, the closest winning, then in the user's `agents/`; both are scanned recursively, and the frontmatter `name` identifies the subagent | Same page, section "Choose the subagent scope" | 2026-11-15 |
+| `updatedInput` replaces the whole tool input; with no `permissionDecision`, auto mode can deny the changed call; among hooks, `deny` beats `defer`, `ask` and `allow`, and deny and ask rules apply whatever a hook returns | https://code.claude.com/docs/en/hooks, section "PreToolUse decision control" | 2026-11-15 |
+| A matcher of letters, digits and `\|` is a list of exact tool names | Same page, section "Matcher patterns" | 2026-11-15 |
+| Settings hooks run inside subagents, and their input carries `agent_id` and `agent_type` | Same page, section "Hook locations" | 2026-11-15 |
 
 The machine-wide install (`--managed`) is not checked live, because that would mean writing the real system directory of the machine running the tests.
 Its tests install into a temporary directory that stands in for `/` (`SEXTANT_SYSTEM_ROOT`), and the per-account live tests use the same hook entries and the same pointer.

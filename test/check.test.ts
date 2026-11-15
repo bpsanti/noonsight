@@ -36,8 +36,8 @@ test('after an account install, check reports every part as ok and exits 0', () 
   const out = lines(r.stdout);
   assert.ok(out.every((l) => /^(ok|warning|problem): /.test(l)), r.stdout);
   assert.ok(out.every((l) => l.startsWith('ok: ')), r.stdout);
-  assert.match(r.stdout, /ok: config .*sextant\.json: valid \(3 model entries\)/);
-  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch\\)`));
+  assert.match(r.stdout, /ok: config .*sextant\.json: valid \(3 model entries; subagents: rules in the task text, permission allow, on mismatch warn\)/);
+  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, PostToolUse on Agent\\|Task\\)`));
   assert.match(r.stdout, /ok: account install .*: hook pointer .*sextant-hook runs sextant \d+\.\d+\.\d+/);
   assert.match(r.stdout, /ok: claude: 2\.1\.325/);
   assert.match(r.stdout, /ok: last decision: \S+ session-start matched claude-haiku-5-5 \(rules\)/);
@@ -106,6 +106,38 @@ test('an account install whose entries were removed by hand, or that sets disabl
 
   assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
   assert.match(runCli(['check'], env).stdout, /problem: account install .*sets disableAllHooks, so Claude Code runs none of this account's hooks/);
+});
+
+test('an install from before the subagent hooks, or one whose agent-tool matcher was widened, is a problem until install runs again', () => {
+  const { env } = setup();
+  const claudeDir = tempTree({});
+  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  const file = path.join(claudeDir, 'settings.json');
+  const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const full = structuredClone(settings);
+  delete settings.hooks.PreToolUse;
+  delete settings.hooks.PostToolUse;
+  fs.writeFileSync(file, JSON.stringify(settings));
+  const old = runCli(['check'], env);
+  assert.equal(old.status, 1);
+  assert.match(old.stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: PreToolUse, PostToolUse\); run `sextant install` again/);
+
+  full.hooks.PreToolUse[0].matcher = '*';
+  fs.writeFileSync(file, JSON.stringify(full));
+  assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere; run/);
+  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['check'], env, NO_NETWORK).status, 0);
+});
+
+test('the last decision can be a subagent result', () => {
+  const { env } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const session = JSON.parse(hookInput('pre-tool-use-agent')) as Record<string, any>;
+  runCli(['hook', 'session-start'], env, [], hookInput('session-start-startup', { session_id: session.session_id, model: 'claude-sonnet-5-5' }));
+  runCli(['hook', 'agent-call'], env, [], JSON.stringify(session));
+  const post = JSON.parse(hookInput('post-tool-use-agent')) as Record<string, any>;
+  runCli(['hook', 'agent-result'], env, [], JSON.stringify({ ...post, session_id: session.session_id, tool_use_id: session.tool_use_id }));
+  assert.match(runCli(['check'], env, NO_NETWORK).stdout, /ok: last decision: \S+ agent-result match claude-haiku-5-5 \(rules\)/);
 });
 
 test('a refused or missing configuration exits 2 and lists the problems', () => {

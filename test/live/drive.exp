@@ -4,8 +4,12 @@
 #
 # Steps run in order:
 #   wait:<seconds>   let the session run, reading its screen
+#   trust:<seconds>  wait up to that long for the folder trust question; when it appears, answer
+#                    "Yes, I trust this folder" (the second choice; the first exits)
 #   type:<text>      type a line (a slash command), then wait 4 seconds
 #   ask:<text>       type a prompt, then wait until the Stop probe writes a new file in <probe-dir>
+#   until:<regex>    wait until an answer the Stop probe recorded matches the regular expression, for
+#                    a turn that ends while background subagents still run and resumes when they finish
 # The session ends with /exit. Exit codes: 0 done, 3 the session ended early, 4 an answer never came.
 
 set timeout 30
@@ -26,12 +30,31 @@ proc stops {probe} {
   return [llength [glob -nocomplain -directory $probe stop-*.json]]
 }
 
+proc answered {probe re} {
+  foreach f [glob -nocomplain -directory $probe stop-*.json] {
+    set fh [open $f]
+    set content [read $fh]
+    close $fh
+    if {[regexp -- $re $content]} { return 1 }
+  }
+  return 0
+}
+
 spawn claude {*}$claude_args
 foreach step $steps {
   set kind [lindex [split $step :] 0]
   set arg [string range $step [expr {[string length $kind] + 1}] end]
   switch -- $kind {
     wait { drain $arg }
+    trust {
+      expect -timeout $arg -re {trust} {
+        after 500
+        send "\033\[B"
+        after 500
+        send "\r"
+        drain 3
+      } eof { exit 3 } timeout {}
+    }
     type {
       send -- $arg
       drain 1
@@ -46,6 +69,15 @@ foreach step $steps {
       set answered 0
       for {set t 0} {$t < 240} {incr t} {
         if {[stops $probe] > $before} { set answered 1; break }
+        drain 1
+      }
+      if {!$answered} { exit 4 }
+      drain 2
+    }
+    until {
+      set answered 0
+      for {set t 0} {$t < 300} {incr t} {
+        if {[answered $probe $arg]} { set answered 1; break }
         drain 1
       }
       if {!$answered} { exit 4 }

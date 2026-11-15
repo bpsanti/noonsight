@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -73,4 +74,42 @@ export function fakeClaude(version: string): string {
 export function hookInput(name: string, fields: Record<string, unknown> = {}): string {
   const file = path.join(FIXTURES, 'hook-inputs', '2.1.325', `${name}.json`);
   return JSON.stringify({ ...(JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>), ...fields });
+}
+
+/** Node options that end the process with a marker on stderr at any attempt to reach the network. */
+export const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
+
+export interface HookHome {
+  readonly env: Record<string, string>;
+  readonly dir: string;
+  hook(event: string, input: string, extra?: Record<string, string>): { status: number | null; out: Record<string, any> | null; raw: string };
+  log(): Record<string, any>[];
+}
+
+/**
+ * A home directory of its own, so the decision log and the records start empty, in which to run the
+ * hook as Claude Code runs it: a separate process that gets the hook input on stdin.
+ */
+export function hookHome(config: string = LAB_CONFIG, extraEnv: Record<string, string> = {}): HookHome {
+  const dir = tempTree({});
+  // The system root keeps this machine's own managed settings out of the model lookup.
+  const env = { HOME: dir, SEXTANT_CONFIG: config, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}), ...extraEnv };
+  return {
+    env,
+    dir,
+    hook(event, input, extra = {}) {
+      const r = runCli(['hook', event], { ...env, ...extra }, NO_NETWORK, input);
+      assert.equal(r.stderr, '', r.stderr);
+      return { status: r.status, out: r.stdout ? (JSON.parse(r.stdout) as Record<string, any>) : null, raw: r.stdout };
+    },
+    log() {
+      const file = path.join(dir, '.local', 'state', 'sextant', 'decisions.jsonl');
+      if (!fs.existsSync(file)) return [];
+      return fs
+        .readFileSync(file, 'utf8')
+        .trimEnd()
+        .split('\n')
+        .map((l) => JSON.parse(l) as Record<string, any>);
+    },
+  };
 }

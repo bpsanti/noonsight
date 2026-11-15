@@ -10,9 +10,28 @@ export const POINTER_NAME = 'sextant-hook';
 export const HOOK_EVENTS = {
   SessionStart: 'session-start',
   PostModelSwitch: 'model-switch',
+  PreToolUse: 'agent-call',
+  PostToolUse: 'agent-result',
 } as const;
 export type HookEvent = keyof typeof HOOK_EVENTS;
 export type HookArg = (typeof HOOK_EVENTS)[HookEvent];
+
+/**
+ * The names of the tool that starts a subagent. Claude Code calls it Agent; earlier versions called
+ * it Task, and both names are valid (https://code.claude.com/docs/en/sub-agents).
+ */
+export const AGENT_TOOLS: readonly string[] = ['Agent', 'Task'];
+
+/**
+ * The matcher of each event's entry, or undefined for an entry with no matcher. The tool events only
+ * run sextant for the agent tool, under either name; the hook checks the tool name again itself.
+ */
+export const HOOK_MATCHERS: Readonly<Record<HookEvent, string | undefined>> = {
+  SessionStart: undefined,
+  PostModelSwitch: undefined,
+  PreToolUse: AGENT_TOOLS.join('|'),
+  PostToolUse: AGENT_TOOLS.join('|'),
+};
 
 /**
  * Seconds before Claude Code cancels the hook. The hook itself takes a fraction of a second; the
@@ -81,9 +100,15 @@ export interface Edit {
   readonly changed: boolean;
 }
 
+/** The matcher group sextant adds for one event. */
+export function groupFor(pointer: string, event: HookEvent): JsonObject {
+  const matcher = HOOK_MATCHERS[event];
+  return { ...(matcher !== undefined ? { matcher } : {}), hooks: [handlerFor(pointer, event)] };
+}
+
 /**
- * The settings with exactly one sextant handler per event, each in its own matcher group with no
- * matcher, pointing at the given pointer. Running it again on its own result changes nothing.
+ * The settings with exactly one sextant handler per event, each in its own matcher group with the
+ * event's matcher, pointing at the given pointer. Running it again on its own result changes nothing.
  */
 export function withSextantHooks(settings: unknown, pointer: string): Edit {
   const base = checkShape(settings);
@@ -94,7 +119,7 @@ export function withSextantHooks(settings: unknown, pointer: string): Edit {
     events.every((event) => {
       const mine = found.filter((f) => f.event === event);
       const only = mine.length === 1 ? mine[0] : undefined;
-      return only !== undefined && only.matcher === undefined && sameHandler(only.handler, handlerFor(pointer, event));
+      return only !== undefined && only.matcher === HOOK_MATCHERS[event] && sameHandler(only.handler, handlerFor(pointer, event));
     });
   if (current) return { settings: base, changed: false };
 
@@ -102,7 +127,7 @@ export function withSextantHooks(settings: unknown, pointer: string): Edit {
   const hooks = isObject(next.hooks) ? next.hooks : (next.hooks = {});
   for (const event of events) {
     const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : (hooks[event] = []);
-    groups.push({ hooks: [handlerFor(pointer, event)] });
+    groups.push(groupFor(pointer, event));
   }
   return { settings: next, changed: true };
 }

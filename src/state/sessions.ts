@@ -55,9 +55,20 @@ export function writeState(file: string | null, state: DeliveryState): void {
   writeFileAtomic(file, `${JSON.stringify(state)}\n`, 0o600);
 }
 
+/**
+ * Records of subagents only serve while their session runs, and a session makes many, so they are
+ * kept for less time. A call whose result never came (another hook denied it) leaves its record here.
+ */
+const AGENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Remove records nobody has written for a long time. */
 export function pruneState(stateDir: string, now: number): void {
-  for (const sub of ['sessions', 'processes']) {
+  for (const [sub, maxAge] of [
+    ['sessions', MAX_AGE_MS],
+    ['processes', MAX_AGE_MS],
+    ['agent-calls', AGENT_MAX_AGE_MS],
+    ['agents', AGENT_MAX_AGE_MS],
+  ] as const) {
     const dir = path.join(stateDir, sub);
     let names: string[];
     try {
@@ -68,7 +79,7 @@ export function pruneState(stateDir: string, now: number): void {
     for (const name of names) {
       const file = path.join(dir, name);
       try {
-        if (now - fs.statSync(file).mtimeMs > MAX_AGE_MS) fs.rmSync(file, { force: true });
+        if (now - fs.statSync(file).mtimeMs > maxAge) fs.rmSync(file, { force: true });
       } catch {
         // Removed by another session meanwhile.
       }

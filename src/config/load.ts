@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeModel } from '../core/normalize.js';
 import { envelope, joinRules, selectRules } from '../core/resolve.js';
-import { ANY_SCOPE, DELIVERY_TEXT_LIMIT, PLACES, RULES_TEXT_LIMIT, SWITCH_NOTE_RESERVE } from '../core/types.js';
+import { ANY_SCOPE, DEFAULT_SUBAGENT_SETTINGS, DELIVERY_TEXT_LIMIT, PLACES, RULES_TEXT_LIMIT, SWITCH_NOTE_RESERVE } from '../core/types.js';
 import type { Config, ModelEntry, Place, Rule, WildcardKey } from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
 import { presetsDir as defaultPresetsDir, SCHEMA_DIR, type Env } from './paths.js';
@@ -46,6 +46,7 @@ interface RawConfig {
   models?: Record<string, RawModelEntry>;
   on_undeclared?: 'warn' | 'ignore';
   scopes?: Record<string, { description?: string }>;
+  subagents?: { delivery?: 'prompt' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
 }
 interface RawPresetRule {
   id: string;
@@ -153,7 +154,13 @@ export function loadConfig(file: string, options: LoadOptions = {}, env: Env = p
 
   if (problems.length) refuse();
   wildcards.sort((a, b) => b.literal - a.literal || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  return { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes };
+  const sub = cfg.subagents ?? {};
+  const subagents = {
+    delivery: sub.delivery ?? DEFAULT_SUBAGENT_SETTINGS.delivery,
+    permission: sub.permission ?? DEFAULT_SUBAGENT_SETTINGS.permission,
+    onMismatch: sub.on_mismatch ?? DEFAULT_SUBAGENT_SETTINGS.onMismatch,
+  };
+  return { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, subagents };
 }
 
 function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {

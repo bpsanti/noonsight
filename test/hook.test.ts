@@ -9,40 +9,9 @@ import test from 'node:test';
 import { modelArgument, optionCandidates } from '../src/adapters/claude-code/launch.js';
 import { managedTarget } from '../src/adapters/claude-code/locations.js';
 import { RULES_TEXT_LIMIT } from '../src/core/types.js';
-import { CLI, FIXTURES, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
+import { CLI, FIXTURES, hookHome, hookInput, LAB_CONFIG, LAB_PRESETS, NO_NETWORK, runCli, runProgram, tempTree, type HookHome as Home } from './helpers.js';
 
-const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
-
-interface Home {
-  readonly env: Record<string, string>;
-  readonly dir: string;
-  hook(event: string, input: string, extra?: Record<string, string>): { status: number | null; out: Record<string, any> | null; raw: string };
-  log(): Record<string, any>[];
-}
-
-function home(config: string = LAB_CONFIG): Home {
-  const dir = tempTree({});
-  // The system root keeps this machine's own managed settings out of the model lookup.
-  const env = { HOME: dir, SEXTANT_CONFIG: config, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) };
-  return {
-    env,
-    dir,
-    hook(event, input, extra = {}) {
-      const r = runCli(['hook', event], { ...env, ...extra }, NO_NETWORK, input);
-      assert.equal(r.stderr, '', r.stderr);
-      return { status: r.status, out: r.stdout ? (JSON.parse(r.stdout) as Record<string, any>) : null, raw: r.stdout };
-    },
-    log() {
-      const file = path.join(dir, '.local', 'state', 'sextant', 'decisions.jsonl');
-      if (!fs.existsSync(file)) return [];
-      return fs
-        .readFileSync(file, 'utf8')
-        .trimEnd()
-        .split('\n')
-        .map((l) => JSON.parse(l) as Record<string, any>);
-    },
-  };
-}
+const home = hookHome;
 
 const start = (model: string | null, fields: Record<string, unknown> = {}): string =>
   hookInput('session-start-startup', model === null ? { model: undefined, ...fields } : { model, ...fields });

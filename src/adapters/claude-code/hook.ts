@@ -1,10 +1,12 @@
-// The Claude Code hook adapter for the main session: SessionStart and PostModelSwitch.
+// The Claude Code hook adapter: SessionStart and PostModelSwitch for the session itself, and
+// PreToolUse and PostToolUse on the agent tool for the subagents it starts (subagents.ts).
 //
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session: it reads local files only and never the network.
 //     It starts no process, except `ps` on macOS to read the Claude Code command line when nothing
 //     else names the session's model (launch.ts).
-//   - Prints nothing, or one JSON object: additionalContext for Claude, systemMessage for the person.
+//   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session context, or a
+//     subagent call with its task text extended), systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.
 //   - A configuration with any problem is refused whole: nothing is delivered, the person is warned,
 //     and the log records config-invalid.
@@ -19,7 +21,8 @@ import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
 import { launchModel, type LaunchModel } from './launch.js';
 import type { InstallKind } from './locations.js';
-import { HOOK_EVENTS, type HookEvent } from './settings.js';
+import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
+import { agentCall, agentResult, decisionFields } from './subagents.js';
 
 export interface HookContext {
   readonly env: Env;
@@ -42,6 +45,9 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
   // Anything that is not this Claude Code event (another tool reading the same settings, a hand
   // run, a renamed event) is left alone, silently.
   if (!input || input.hook_event_name !== event) return '';
+  const toolEvent = event === 'PreToolUse' || event === 'PostToolUse';
+  // The settings entry only matches the agent tool; a hand-edited or widened matcher must not reach other tools.
+  if (toolEvent && !AGENT_TOOLS.includes(str(input.tool_name) ?? '')) return '';
 
   const state = stateDir(ctx.home);
   const record: Record<string, unknown> = {
@@ -49,7 +55,14 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     version: ctx.version,
     event: arg,
     session_id: str(input.session_id),
-    source: str(input.source),
+    ...(toolEvent
+      ? {
+          tool_name: str(input.tool_name),
+          tool_use_id: str(input.tool_use_id),
+          ...(str(input.agent_id) !== null ? { agent_id: str(input.agent_id) } : {}),
+          permission_mode: str(input.permission_mode),
+        }
+      : { source: str(input.source) }),
     install: ctx.install,
   };
   const log = (fields: Record<string, unknown>): void => {
@@ -70,11 +83,23 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       config = loadConfig(file, {}, ctx.env);
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
+      // The call this result belongs to already warned and logged.
+      if (event === 'PostToolUse') return '';
       log({ status: 'config-invalid', problems: e.problems.length, delivered: 'nothing', warned: true });
-      return output(event, null, [
-        `sextant: the configuration at ${file} was refused (${plural(e.problems.length, 'problem')}), ` +
-          'so no rules were delivered. Run `sextant check` to see the problems.',
-      ]);
+      return output(
+        [
+          `sextant: the configuration at ${file} was refused (${plural(e.problems.length, 'problem')}), ` +
+            'so no rules were delivered. Run `sextant check` to see the problems.',
+        ],
+        null,
+      );
+    }
+    if (toolEvent) {
+      const sub = { env: ctx.env, home: ctx.home, now: ctx.now, state, parentPid: ctx.parentPid, file };
+      const outcome = event === 'PreToolUse' ? agentCall(input, config, sub) : agentResult(input, config, sub);
+      if (outcome === null) return '';
+      log(outcome.record);
+      return output(outcome.messages, outcome.specific);
     }
     const sessionId = str(input.session_id) ?? '';
     const sessionState = sessionFile(state, sessionId);
@@ -96,11 +121,15 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
         // Without the record, a later resume delivers again: the safe direction.
       }
     }
-    return output(event, result.context, result.messages);
+    return output(result.messages, result.context ? { hookEventName: event, additionalContext: result.context } : null);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    if (event === 'PostToolUse') {
+      log({ status: 'error', error: message, warned: true });
+      return output([`sextant: the hook failed (${message}), so the subagent's model was not checked.`], null);
+    }
     log({ status: 'error', error: message, delivered: 'nothing', warned: true });
-    return output(event, null, [`sextant: the hook failed (${message}), so no rules were delivered.`]);
+    return output([`sextant: the hook failed (${message}), so no rules were delivered.`], null);
   }
 }
 
@@ -229,21 +258,11 @@ function launchFields(launch: LaunchModel | null): Record<string, unknown> {
   };
 }
 
-function decisionFields(d: Decision): Record<string, unknown> {
-  return {
-    model: d.model,
-    status: d.status,
-    ...('reason' in d ? { reason: d.reason } : {}),
-    ...('key' in d ? { key: d.key } : {}),
-    ...(d.status === 'matched' ? { rules: d.rules, sha256: d.sha256 } : {}),
-  };
-}
-
-function output(event: HookEvent, context: string | null, messages: readonly string[]): string {
-  if (!context && messages.length === 0) return '';
+function output(messages: readonly string[], specific: Record<string, unknown> | null): string {
+  if (!specific && messages.length === 0) return '';
   return JSON.stringify({
     ...(messages.length ? { systemMessage: messages.join('\n') } : {}),
-    ...(context ? { hookSpecificOutput: { hookEventName: event, additionalContext: context } } : {}),
+    ...(specific ? { hookSpecificOutput: specific } : {}),
   });
 }
 

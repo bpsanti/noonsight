@@ -1,17 +1,17 @@
-# The session hooks
+# The hooks
 
-sextant gives each Claude Code session the rules for the model it actually runs on.
-Two hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, when the session's model changes.
+sextant gives each Claude Code session, and each subagent it starts, the rules for the model it actually runs on.
+Four hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, when the session's model changes; `PreToolUse` on the agent tool, before a subagent starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
 [install.md](install.md) covers putting them in place; this page is the contract they keep.
 
 ## Rules every hook follows
 
-- **It never holds the session.**
+- **It never holds the session, or a subagent call.**
   It always exits 0, reads only local files and never uses the network.
   It starts no other process, with one exception: on macOS, when nothing else names the session's model, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second.
 - **It never blocks anything.**
-  An undeclared model gets a warning, never a refusal.
+  An undeclared model, or a subagent whose model sextant cannot tell, gets a warning, never a refusal; sextant never denies a call.
 - **A configuration with any problem is refused whole.**
   The hook delivers nothing, warns the person, and logs `config-invalid`; `sextant check` lists the problems.
 - **It decides from what Claude Code itself uses.**
@@ -26,8 +26,9 @@ Nothing, or one JSON object with up to two fields:
 
 | Field | Reader | Content |
 | --- | --- | --- |
-| `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The rules, and on a model change, the note below |
-| `systemMessage` | The person, on screen | A warning: undeclared model, refused configuration, or a failed hook |
+| `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The session hooks: the rules, and on a model change, the note below |
+| `hookSpecificOutput.updatedInput`, `permissionDecision` | Claude Code | `PreToolUse`: the agent call with the rules at the end of its task text, and the permission decision the configuration asks for (see [Subagents](#subagents)) |
+| `systemMessage` | The person, on screen | A warning: undeclared model, refused configuration, a subagent that started on another model than predicted, or a failed hook |
 
 The rules arrive wrapped in a short envelope that says where they came from, written as facts, as Claude Code's documentation asks for hook context:
 
@@ -79,7 +80,7 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
 - **MDM profiles.**
   A `model` set only in an MDM profile is not read.
 
-Only the place `session` is used for now, with no task scope, so a session receives the rules that apply to every scope in a watched session.
+A session uses the place `session` for now, with no task scope, so it receives the rules that apply to every scope in a watched session.
 
 ## PostModelSwitch
 
@@ -96,6 +97,77 @@ A switch to a model with no rules delivers the note alone.
 Resuming a session restores its model and reports it as a switch; when the session's record shows the same model and rules, nothing is delivered again.
 The configuration keeps room for the note: the rules for any model, scope and place must fit in 9,500 characters, so rules and note together stay within the 10,000 characters Claude Code accepts from a hook.
 
+## Subagents
+
+A subagent does not see the session's conversation, so the rules delivered to the session never reach it ([What loads at startup](https://code.claude.com/docs/en/sub-agents)).
+And it can run on another model than the session.
+So before a subagent starts, sextant adds the rules for the model it will run on to the end of its task text; after it starts, sextant checks that it started on that model.
+
+Both hooks run only for the agent tool: the entries match `Agent|Task`, its current and earlier names, and the hook checks the tool name again, so a widened matcher reaches no other tool.
+They also run for calls made inside a subagent, since Claude Code runs settings hooks there too; the input then carries the subagent's `agent_id`.
+
+### PreToolUse: the rules go with the call
+
+1. sextant predicts the model the subagent will run on, in Claude Code's own order ([Choose a model](https://code.claude.com/docs/en/sub-agents#choose-a-model)):
+
+   | Order | Source | `model_source` |
+   | --- | --- | --- |
+   | 1 | A fork runs on its parent's model | `fork` |
+   | 2 | With `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` set: `CLAUDE_CODE_SUBAGENT_MODEL`, else the parent's model (Explore keeps its own rule) | `forced` |
+   | 3 | The `model` parameter of the call | `parameter` |
+   | 4 | The `model` field of the subagent's definition | `definition` |
+   | 5 | A built-in subagent's own model (below) | `built-in` |
+   | 6 | `CLAUDE_CODE_SUBAGENT_MODEL` | `env` |
+   | 7 | The parent's model | `parent` |
+
+   `inherit` means the parent's model.
+   A family alias (`opus`, `sonnet`, `haiku`, `fable`) means the parent's own model when the parent is of that family, as in Claude Code ([Which version a model alias selects](https://code.claude.com/docs/en/sub-agents)); otherwise an alias resolves as for the session (see [SessionStart](#sessionstart)).
+   Definitions are read from every `.claude/agents/` from the project directory (`CLAUDE_PROJECT_DIR`, else the input's `cwd`) up to the repository root, the closest first, then from `agents/` in the Claude Code configuration directory; both are scanned recursively, and a subagent is known by the `name` in its frontmatter.
+   A definition of the same name replaces a built-in subagent.
+   The built-in subagents ([Built-in subagents](https://code.claude.com/docs/en/sub-agents#built-in-subagents)): Explore runs on its parent's model, except that under a Fable parent it runs on the model the `opus` alias selects, unless Claude Code runs on Amazon Bedrock, Google Cloud or Microsoft Foundry; Explore and Plan ignore `CLAUDE_CODE_SUBAGENT_MODEL`; `statusline-setup` runs on Sonnet and `claude-code-guide` on Haiku.
+2. The parent's model, for a call the session makes, comes from sextant's record of the session, which `SessionStart` and `PostModelSwitch` keep current (`parent_source: session-record`); else from the session's transcript (`session-transcript`); else from the settings the session started with, as for `SessionStart`.
+   For a call made inside a subagent, it comes from sextant's record of that subagent, written when the result of the call that started it named its model, which happens at once for a subagent started in the background (`agent-record`); else from the model of that subagent's own transcript (`agent-transcript`).
+   When neither knows, sextant does not guess the session's model: the subagent gets no rules, and the person is warned.
+3. The rules are resolved for the place `subagent` ([configuration.md](configuration.md)), with no task scope.
+4. With rules to deliver, the hook returns the call unchanged except for its `prompt`, which gains a blank line and the rules in the same envelope as the session's.
+   sextant never changes the model, the effort or any other field.
+   A task text that already holds the exact rules is left alone.
+5. With the changed call, it returns the permission decision `subagents.permission` names:
+
+   | Value | What Claude Code does |
+   | --- | --- |
+   | `allow` (default) | Runs the call without a permission prompt. Deny and ask rules still apply, and another hook's `deny` or `ask` still wins ([PreToolUse decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)) |
+   | `ask` | Asks the person to confirm each call sextant changed |
+   | `passthrough` | No decision: the session's permission mode decides. In auto mode Claude Code can deny a call a hook changed, because its classifier reviewed the call as Claude wrote it |
+
+   A call sextant does not change gets no decision at all.
+6. An undeclared model warns the person, unless `on_undeclared` is `ignore`; the call goes ahead unchanged.
+
+The prediction is written to `~/.local/state/sextant/agent-calls/`, under the call's `tool_use_id`.
+
+### PostToolUse: the check
+
+The result of an agent call names the model the subagent started on (`tool_response.resolvedModel`, [Agent](https://code.claude.com/docs/en/hooks)).
+sextant compares it with the prediction for the same `tool_use_id` and logs the `result`:
+
+| `result` | Meaning |
+| --- | --- |
+| `match` | The subagent started on the predicted model |
+| `MISMATCH` | It started on another model, so it received another model's rules, or none. The person is warned, unless `subagents.on_mismatch` is `ignore` |
+| `unpredicted` | sextant could not tell the model before the start, and already warned then |
+| `unknown` | The result names no model |
+
+The rules already delivered stay in the subagent's task; the check can only report.
+`models_used`, when Claude Code reports it, lists the models a subagent switched between while it ran.
+The result also records the subagent's model under its agent id, in `~/.local/state/sextant/agents/`, for the calls that subagent makes in turn.
+
+### What the prediction does not see
+
+- The definitions of a plugin's subagents (`plugin:name`), the subagents given with `--agents`, and managed subagent definitions are not read.
+  Such a subagent is predicted on its parent's model, logged with `definition: "not-read"`, and the check reports a difference.
+- An installed mod that sets the model in its `agent.spawn` hook replaces the call's parameter; the check reports a difference.
+- Subagents that do not start through the agent tool, such as agent team teammates and workflow agents, get nothing from these hooks.
+
 ## The decision log
 
 Every decision adds one JSON line to `~/.local/state/sextant/decisions.jsonl`, in the home of the account that ran the session.
@@ -107,27 +179,36 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 
 | Field | Values |
 | --- | --- |
-| `event` | `session-start`, `model-switch` |
+| `event` | `session-start`, `model-switch`, `agent-call` (`PreToolUse`), `agent-result` (`PostToolUse`) |
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
+| `tool_name`, `tool_use_id`, `permission_mode` | For the subagent events: the agent tool's name, the call's id and the session's permission mode |
+| `agent_id` | For a call made inside a subagent: that subagent's id |
+| `subagent_type`, `requested_model` | The call's subagent type (`general-purpose` when it names none) and `model` parameter |
+| `parent_model`, `parent_source` | The model of whoever made the call, and where it came from (see [Subagents](#subagents)) |
+| `model_value`, `definition`, `unresolved_why` | What the prediction's source named, the definition file that decided, and why a model could not be told |
+| `permission` | For a call sextant changed: the permission decision returned |
+| `subagent_id`, `predicted`, `models_used`, `result` | For `agent-result`: the subagent's agent id, the model predicted for it, the models it switched between, and the check's `result` |
 | `install` | `managed` or `account`: which install ran the hook |
 | `model`, `from_model` | The normalized model identifiers |
-| `model_source` | `hook-input`, `session-record`, `process-record`, `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known |
+| `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
 | `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
 | `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model sextant cannot tell: the value, and why |
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |
 | `reason`, `key`, `rules`, `sha256` | As in `sextant resolve` ([configuration.md](configuration.md)) |
-| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing` |
+| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |
 
 What each session last received is kept in `~/.local/state/sextant/sessions/` and `processes/`, one small file per session id and per Claude Code process; files nobody wrote for 30 days are removed.
+The subagent records in `agent-calls/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
 
 ## Turning sextant off
 
 | Way | Reach |
 | --- | --- |
 | `SEXTANT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line |
+| `"subagents": { "delivery": "off" }` in the configuration | Subagents only: calls are left alone and their results are not checked; each call still gets a log line |
 | No configuration file for the account | Every session of that account, silently |
 | `sextant uninstall` | Every new session reached by that install |
 
