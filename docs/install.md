@@ -1,6 +1,6 @@
 # Installing the hooks
 
-sextant reaches Claude Code through two official settings hooks, `SessionStart` and `PostModelSwitch`.
+sextant reaches Claude Code through four official settings hooks: `SessionStart` and `PostModelSwitch` for the session itself, and `PreToolUse` and `PostToolUse` on the agent tool for the subagents it starts.
 `sextant install` puts them in place, `sextant uninstall` takes them out, and `sextant check` says whether they will run.
 [hooks.md](hooks.md) describes what the hooks do once they run.
 
@@ -27,8 +27,10 @@ Claude Code keeps each login's settings in its own configuration directory: `~/.
 - every directory sextant installed into before.
 
 It needs no administrator rights.
-It adds one entry per event to each settings file and keeps everything else in the file, other hooks included.
-Running it again changes nothing, and it repairs an entry of its own that was moved, duplicated or points at an old place.
+It adds one entry per event to each settings file, in a matcher group of its own, and keeps everything else in the file, other hooks included.
+The two tool events match only the agent tool, under both of its names (`"matcher": "Agent|Task"`), so sextant runs for no other tool call.
+Running it again changes nothing, and it repairs an entry of its own that was moved, duplicated, points at an old place or has another matcher.
+On an install from before the subagent hooks, running it again adds them.
 Every settings file is checked before any is written: one that is not valid JSON, or whose `hooks` do not have the documented shape, refuses the whole install, and every directory is left as it was.
 The hook pointer goes to `~/.local/share/sextant/sextant-hook`, and each directory is recorded in `~/.local/state/sextant/installs.json`.
 
@@ -123,8 +125,17 @@ The settings entries do not call Node.js or sextant directly.
 They call `sextant-hook`, a small shell script that runs the Node.js and the copy of sextant that wrote it, by absolute path:
 
 ```json
-{ "type": "command", "command": "/Users/me/.local/share/sextant/sextant-hook", "args": ["session-start"], "timeout": 10 }
+{
+  "SessionStart": [
+    { "hooks": [{ "type": "command", "command": "/Users/me/.local/share/sextant/sextant-hook", "args": ["session-start"], "timeout": 10 }] }
+  ],
+  "PreToolUse": [
+    { "matcher": "Agent|Task", "hooks": [{ "type": "command", "command": "/Users/me/.local/share/sextant/sextant-hook", "args": ["agent-call"], "timeout": 10 }] }
+  ]
+}
 ```
+
+`PostModelSwitch` runs it with `model-switch`, and `PostToolUse`, with the same matcher, with `agent-result`.
 
 So the hook does not depend on the `PATH` of whatever started Claude Code, and installing a new copy of sextant rewrites only the pointer, never a settings file.
 If the copy it points at is removed, the pointer exits quietly and `sextant check` reports it.
@@ -149,7 +160,7 @@ Rules a running session already received stay in that session.
 `sextant check` prints one line per finding, each starting with `ok`, `warning` or `problem`:
 
 - whether the configuration is valid;
-- the machine-wide install and every configuration directory of this account, with their hook pointers, whether the Node.js and the copy of sextant they run still exist and this account can run them, and the version of sextant they run;
+- the machine-wide install and every configuration directory of this account: whether all four entries are there with their matchers (an install from before the subagent hooks is reported, with what is missing), their hook pointers, whether the Node.js and the copy of sextant they run still exist and this account can run them, and the version of sextant they run;
 - each configuration directory no install reaches, including a login whose server-managed settings make Claude Code ignore the machine-wide install;
 - server-managed settings that turn hooks off for a login (`disableAllHooks`, `allowManagedHooksOnly`);
 - managed settings files that stop hooks from running (`disableAllHooks`), that make per-account hooks ignored (`allowManagedHooksOnly`), or that Claude Code cannot read;

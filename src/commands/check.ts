@@ -11,7 +11,7 @@ import { readSettings } from '../adapters/claude-code/install.js';
 import { accountTarget, discoverConfigDirs, managedTarget, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSettings } from '../adapters/claude-code/managed.js';
 import { readPointer } from '../adapters/claude-code/pointer.js';
-import { findSextantHandlers, HOOK_EVENTS } from '../adapters/claude-code/settings.js';
+import { findSextantHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
@@ -43,7 +43,13 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   try {
     const config = loadConfig(file, {}, env);
     configOk = true;
-    add('ok', `config ${file}: valid (${config.exact.size + config.wildcards.length} model entries)`);
+    const sub = config.subagents;
+    add(
+      'ok',
+      `config ${file}: valid (${config.exact.size + config.wildcards.length} model entries; subagents: ` +
+        (sub.delivery === 'off' ? 'off' : `rules in the task text, permission ${sub.permission}, on mismatch ${sub.onMismatch}`) +
+        ')',
+    );
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     add('problem', `config ${e.message.replace(/^configuration refused \(([^)]*)\):/, '$1: refused, so sessions get no rules:')}`);
@@ -96,7 +102,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   if (last)
     add(
       'ok',
-      `last decision: ${String(last.ts)} ${String(last.event)} ${String(last.status)}` +
+      `last decision: ${String(last.ts)} ${String(last.event)} ${String(last.status ?? last.result)}` +
         `${last.model ? ` ${String(last.model)}` : ''} (${String(last.delivered)}), log in ${stateDir(home)}`,
     );
   else add('ok', `no decisions logged yet in ${stateDir(home)}`);
@@ -129,11 +135,17 @@ function checkInstall(
     else add('ok', `${label}: not installed (${target.settingsFile})`);
     return false;
   }
-  const missing = Object.keys(HOOK_EVENTS).filter((event) => !found.some((f) => f.event === event));
-  const stray = found.filter((f) => f.handler.command !== target.pointer);
-  if (missing.length || stray.length || found.length !== Object.keys(HOOK_EVENTS).length)
-    add('problem', `${label}: the hooks in ${target.settingsFile} are incomplete or point elsewhere; run ${again} to repair them`);
-  else add('ok', `${label}: hooks in ${target.settingsFile} (${Object.keys(HOOK_EVENTS).join(', ')})`);
+  const events = Object.keys(HOOK_EVENTS) as HookEvent[];
+  const missing = events.filter((event) => !found.some((f) => f.event === event));
+  const stray = found.filter((f) => f.handler.command !== target.pointer || f.matcher !== HOOK_MATCHERS[f.event as HookEvent]);
+  if (missing.length || stray.length || found.length !== events.length)
+    add(
+      'problem',
+      `${label}: the hooks in ${target.settingsFile} are incomplete or point elsewhere` +
+        (missing.length ? ` (missing: ${missing.join(', ')})` : '') +
+        `; run ${again} to repair them`,
+    );
+  else add('ok', `${label}: hooks in ${target.settingsFile} (${events.map(describeEvent).join(', ')})`);
   if (target.kind === 'account' && settings?.disableAllHooks === true)
     add('problem', `${label}: ${target.settingsFile} sets disableAllHooks, so Claude Code runs none of this account's hooks`);
 
@@ -241,6 +253,12 @@ function checkClaude(env: Env, add: (level: Level, text: string) => void): void 
       `claude: installed ${found}; when a session without a reported model, such as \`claude -p\`, names it by an alias, ` +
         `sextant assumes what the aliases select from Claude Code ${aliases} on (upgrade: claude update)`,
     );
+}
+
+/** An event as check lists it, with the tools its entry matches. */
+function describeEvent(event: HookEvent): string {
+  const matcher = HOOK_MATCHERS[event];
+  return matcher === undefined ? event : `${event} on ${matcher}`;
 }
 
 /** Why this account cannot use a file in the given mode, as an error code, or null when it can. */

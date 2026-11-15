@@ -43,6 +43,18 @@ export interface WildcardKey {
   readonly literal: number;
 }
 
+/** How subagents get their rules; the keys under "subagents" in the configuration. */
+export interface SubagentSettings {
+  /** prompt: the rules go at the end of the subagent's task text. off: subagents are left alone. */
+  readonly delivery: 'prompt' | 'off';
+  /** The permission decision returned with a rewritten call; passthrough returns none. */
+  readonly permission: 'allow' | 'ask' | 'passthrough';
+  /** What to do when a subagent starts on another model than the one its rules were chosen for. */
+  readonly onMismatch: 'warn' | 'ignore';
+}
+
+export const DEFAULT_SUBAGENT_SETTINGS: SubagentSettings = { delivery: 'prompt', permission: 'allow', onMismatch: 'warn' };
+
 export interface Config {
   /** Exact model keys, each a full normalized identifier such as claude-fable-5-2. */
   readonly exact: ReadonlyMap<string, ModelEntry>;
@@ -51,6 +63,7 @@ export interface Config {
   readonly onUndeclared: 'warn' | 'ignore';
   /** Every declared scope name: the preset's and the user's. */
   readonly scopes: ReadonlySet<string>;
+  readonly subagents: SubagentSettings;
 }
 
 interface DecisionBase {

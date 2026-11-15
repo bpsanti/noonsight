@@ -4,7 +4,8 @@ Take a fix before you set the course: pick the right model for each agent task, 
 
 **Status: early development.** Nothing is published yet.
 Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
-Subagents, task scopes and the starting preset come next.
+So does each subagent a session starts: before it starts, sextant predicts the model it will run on and adds that model's rules to the end of its task, then checks the model it actually started on and warns on a difference.
+Task scopes and the starting preset come next.
 
 ## What it will do
 
@@ -48,7 +49,8 @@ npm test             # builds, then runs every test with node --test
 npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
 
-`SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` also asks the models which rules they received, which spends a little usage; the token stays in the environment.
+`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage.
+`SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` asks the session models which rules they received; the token stays in the environment.
 See [docs/verification/claude-code.md](docs/verification/claude-code.md).
 
 Node 20 or newer.

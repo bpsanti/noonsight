@@ -56,7 +56,7 @@ test('per account: install twice adds one entry per event and keeps every third-
 
   const first = runCli(['install', '--account', claudeDir], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch\)/);
+  assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
   assert.match(first.stdout, /hook pointer .*sextant-hook: written/);
   const once = fs.readFileSync(file, 'utf8');
 
@@ -71,13 +71,17 @@ test('per account: install twice adds one entry per event and keeps every third-
   assert.deepEqual(sextantHandlers(settings), [
     { event: 'SessionStart', matcher: undefined, type: 'command', command: pointer, args: ['session-start'], timeout: 10 },
     { event: 'PostModelSwitch', matcher: undefined, type: 'command', command: pointer, args: ['model-switch'], timeout: 10 },
+    { event: 'PreToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-call'], timeout: 10 },
+    { event: 'PostToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-result'], timeout: 10 },
   ]);
+  // The third-party PreToolUse group comes first and is left as it was; sextant's has its own group.
+  assert.deepEqual(settings.hooks.PreToolUse[0], THIRD_PARTY.hooks.PreToolUse[0]);
   // Everything that was there is still there, in place.
   assert.equal(settings.model, 'opus');
   assert.deepEqual(settings.permissions, THIRD_PARTY.permissions);
   assert.deepEqual(settings.hooks.SessionStart[0], THIRD_PARTY.hooks.SessionStart[0]);
   assert.deepEqual(settings.hooks.PostModelSwitch[0], THIRD_PARTY.hooks.PostModelSwitch[0]);
-  assert.deepEqual(settings.hooks.PreToolUse, THIRD_PARTY.hooks.PreToolUse);
+  assert.equal(settings.hooks.PreToolUse.length, 2);
   assert.equal(fs.statSync(pointer).mode & 0o777, 0o755);
 
   const removed = runCli(['uninstall', '--account', claudeDir], env);
@@ -96,7 +100,7 @@ test('per account: a missing settings file is created, and a broken one is refus
   const r = runCli(['install', '--account', empty], env);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /settings\.json: created/);
-  assert.equal(sextantHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 2);
+  assert.equal(sextantHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 4);
 
   for (const [content, message] of [
     ['{ "hooks": ', /is not valid JSON/],
@@ -140,9 +144,40 @@ test('per account: install repairs a moved, duplicated or outdated sextant entry
   assert.deepEqual(sextantHandlers(settings).map((h) => [h.event, h.command, h.args[0]]), [
     ['SessionStart', pointer, 'session-start'],
     ['PostModelSwitch', pointer, 'model-switch'],
+    ['PreToolUse', pointer, 'agent-call'],
+    ['PostToolUse', pointer, 'agent-result'],
   ]);
   assert.deepEqual(settings.hooks.SessionStart[0], { matcher: 'startup', hooks: [{ type: 'command', command: 'echo keep' }] });
   assert.equal(settings.hooks.Stop, undefined);
+});
+
+test('per account: an install from before the subagent hooks gains them, and a sextant entry with a widened matcher is narrowed back', () => {
+  const home = tempTree({});
+  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
+  const own = (args: string[]): Record<string, unknown> => ({ type: 'command', command: pointer, args, timeout: 10 });
+  const dir = tempTree({
+    'settings.json': {
+      hooks: {
+        SessionStart: [{ hooks: [own(['session-start'])] }],
+        PostModelSwitch: [{ hooks: [own(['model-switch'])] }],
+        PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '/opt/acme/bin/guard' }] }, { matcher: '.*', hooks: [own(['agent-call'])] }],
+      },
+    },
+  });
+  const r = runCli(['install', '--account', dir], { HOME: home });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /settings\.json: added/);
+  const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
+  // Rewritten events move to the end of the file's hooks object; their order there does not matter.
+  const byEvent = (a: unknown[], b: unknown[]): number => String(a[0]).localeCompare(String(b[0]));
+  assert.deepEqual(sextantHandlers(settings).map((h) => [h.event, h.matcher, h.args[0]]).sort(byEvent), [
+    ['PostModelSwitch', undefined, 'model-switch'],
+    ['PostToolUse', 'Agent|Task', 'agent-result'],
+    ['PreToolUse', 'Agent|Task', 'agent-call'],
+    ['SessionStart', undefined, 'session-start'],
+  ]);
+  assert.deepEqual(settings.hooks.PreToolUse[0], { matcher: 'Bash', hooks: [{ type: 'command', command: '/opt/acme/bin/guard' }] });
+  assert.equal(settings.hooks.PreToolUse.length, 2);
 });
 
 test('machine-wide: sextant writes its own drop-in file and never edits the managed settings already there', { skip: !supported }, () => {
@@ -156,7 +191,7 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
 
   const first = runCli(['install', '--managed'], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /managed-settings\.d\/sextant-ai\.json: created \(SessionStart, PostModelSwitch\)/);
+  assert.match(first.stdout, /managed-settings\.d\/sextant-ai\.json: created \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
   assert.match(first.stdout, /built-in guard for the mods users install: https:\/\/code\.claude\.com\/docs\/en\/plugins\/mods\/admin/);
   assert.match(first.stdout, /SEXTANT_DISABLE=1/);
   const dropIn = fs.readFileSync(target.settingsFile, 'utf8');
@@ -164,6 +199,8 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
   assert.deepEqual(sextantHandlers(JSON.parse(dropIn)).map((h) => [h.event, h.command]), [
     ['SessionStart', target.pointer],
     ['PostModelSwitch', target.pointer],
+    ['PreToolUse', target.pointer],
+    ['PostToolUse', target.pointer],
   ]);
   const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
   assert.equal(hooked.status, 0, hooked.stderr);
@@ -304,11 +341,13 @@ test('by default: install reaches every Claude Code configuration directory of t
     assert.deepEqual(sextantHandlers(readJson(path.join(dir, 'settings.json'))).map((h) => [h.event, h.command]), [
       ['SessionStart', pointer],
       ['PostModelSwitch', pointer],
+      ['PreToolUse', pointer],
+      ['PostToolUse', pointer],
     ]);
   }
   const kept = readJson(path.join(home, '.claude', 'settings.json'));
   assert.deepEqual(kept.permissions, THIRD_PARTY.permissions);
-  assert.deepEqual(kept.hooks.PreToolUse, THIRD_PARTY.hooks.PreToolUse);
+  assert.deepEqual(kept.hooks.PreToolUse[0], THIRD_PARTY.hooks.PreToolUse[0]);
   assert.deepEqual(kept.hooks.SessionStart[0], THIRD_PARTY.hooks.SessionStart[0]);
   assert.equal(readJson(path.join(home, 'second-login', 'settings.json')).theme, 'dark');
   assert.deepEqual(readJson(path.join(home, 'code', 'project', '.claude', 'settings.json')), { model: 'sonnet' }, 'a project is not a login');
@@ -356,7 +395,7 @@ test('by default: install creates ~/.claude when Claude Code has not run yet', (
   const home = tempTree({});
   const r = runCli(['install'], { HOME: home });
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(sextantHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 2);
+  assert.equal(sextantHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 4);
 });
 
 test('by default: one broken settings file refuses the whole install and leaves every directory as it was', () => {

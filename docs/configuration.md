@@ -36,7 +36,8 @@ Presets are read from the installed package, so a preset always follows the pack
   },
   "scopes": {
     "routine": { "description": "A well-scoped change that can be described precisely." }
-  }
+  },
+  "subagents": { "permission": "allow", "on_mismatch": "warn" }
 }
 ```
 
@@ -53,6 +54,9 @@ Presets are read from the installed package, so a preset always follows the pack
 | `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules. Required, with at least one rule, for `custom`. |
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
 | `scopes` | Scope name to `{ "description" }` | Empty | Task scopes, added to the preset's. |
+| `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
+| `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text sextant changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
+| `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
 
 A user rule has these keys:
 
@@ -61,7 +65,7 @@ A user rule has these keys:
 | `id` | Required | A name for the rule, unique for that model, such as `team/commit-style`. |
 | `file` | Required | The rule text. |
 | `scopes` | `["*"]` | The scopes the rule applies to, or `["*"]` for every scope. |
-| `where` | All three places | The places the rule applies to: `session` (someone is watching), `unattended` (nobody is watching), `subagent` (a subagent's task). |
+| `where` | All three places | The places the rule applies to: `session` (someone is watching), `unattended` (nobody is watching), `subagent` (a subagent's task, delivered by the subagent hooks). |
 
 ## Model keys
 

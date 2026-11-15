@@ -233,25 +233,43 @@ function readSettingsArgument(value: string): string | null | undefined {
  * otherwise, on the Anthropic API only, to the model the documentation names for it.
  */
 export function resolveValue(value: string, source: LaunchSource, from: string, env: Env): LaunchModel {
+  const r = resolveModelValue(value, env);
+  if (r.kind === 'unresolved') return { kind: 'unresolved', value, source, from, why: r.why };
+  return { kind: 'found', model: r.model, source, from, ...(r.aliasFrom !== undefined ? { alias: value, aliasFrom: r.aliasFrom } : {}) };
+}
+
+export type ModelValue =
+  | {
+      readonly kind: 'found';
+      readonly model: string;
+      /** For an alias: what resolved it, the environment variable that pins it or "built-in". */
+      readonly aliasFrom?: string;
+    }
+  | { readonly kind: 'unresolved'; readonly why: string };
+
+/** The model a model setting, an alias or an identifier, selects; see resolveValue. */
+export function resolveModelValue(value: string, env: Env): ModelValue {
   const bare = value.trim().replace(/\[1m\]$/i, '').toLowerCase();
-  if (RUNTIME_MODEL_VALUES.includes(bare))
-    return { kind: 'unresolved', value, source, from, why: 'Claude Code chooses that model while the session runs' };
+  if (RUNTIME_MODEL_VALUES.includes(bare)) return { kind: 'unresolved', why: 'Claude Code chooses that model while the session runs' };
   const alias = MODEL_ALIASES.find((a) => a.alias === bare);
   if (alias) {
     const pinned = normalizeModel(env[alias.envVar]);
-    if (pinned && !MODEL_ALIASES.some((a) => a.alias === pinned))
-      return { kind: 'found', model: pinned, source, from, alias: value, aliasFrom: alias.envVar };
-    const provider = PROVIDER_VARS.find((v) => isSet(env[v]));
-    if (provider)
-      return { kind: 'unresolved', value, source, from, why: `the alias selects another model when ${provider} is set; set ${alias.envVar}` };
-    return { kind: 'found', model: alias.model, source, from, alias: value, aliasFrom: 'built-in' };
+    if (pinned && !MODEL_ALIASES.some((a) => a.alias === pinned)) return { kind: 'found', model: pinned, aliasFrom: alias.envVar };
+    const provider = otherProvider(env);
+    if (provider) return { kind: 'unresolved', why: `the alias selects another model when ${provider} is set; set ${alias.envVar}` };
+    return { kind: 'found', model: alias.model, aliasFrom: 'built-in' };
   }
   const model = normalizeModel(value);
-  if (!model) return { kind: 'unresolved', value, source, from, why: 'it names no model' };
-  return { kind: 'found', model, source, from };
+  if (!model) return { kind: 'unresolved', why: 'it names no model' };
+  return { kind: 'found', model };
 }
 
-function isSet(value: string | undefined): boolean {
+/** The variable that moves Claude Code off the Anthropic API, or undefined when none is set. */
+export function otherProvider(env: Env): string | undefined {
+  return PROVIDER_VARS.find((v) => isSet(env[v]));
+}
+
+export function isSet(value: string | undefined): boolean {
   return value !== undefined && !['', '0', 'false', 'no', 'off'].includes(value.trim().toLowerCase());
 }
 

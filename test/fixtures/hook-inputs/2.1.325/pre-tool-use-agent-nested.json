@@ -1,0 +1,20 @@
+{
+  "session_id": "dbef0a98-a930-44c9-9a0c-9f41dae960c8",
+  "transcript_path": "/home/user/.claude/projects/-home-user-project/dbef0a98-a930-44c9-9a0c-9f41dae960c8.jsonl",
+  "cwd": "/home/user/project",
+  "prompt_id": "7e410b6d-9de2-4bfd-b703-6696205870b2",
+  "permission_mode": "default",
+  "agent_id": "a3d49b7cc8d3bb7bc",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Nested probe OK reply",
+    "prompt": "Reply with the single word OK.",
+    "subagent_type": "general-purpose"
+  },
+  "tool_use_id": "toolu_01U15ouyz9mRKRaH6Saj3GbE"
+}
