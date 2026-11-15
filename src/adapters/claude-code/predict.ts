@@ -167,16 +167,22 @@ export function definitionFinder(places: DefinitionPlaces): (name: string) => De
 function definitionDirs(places: DefinitionPlaces): string[] {
   const dirs: string[] = [];
   if (places.projectDir !== null) {
-    let d = path.resolve(places.projectDir);
-    for (;;) {
+    const start = path.resolve(places.projectDir);
+    const top = repositoryRoot(start);
+    for (let d = start; ; d = path.dirname(d)) {
       dirs.push(path.join(d, '.claude', 'agents'));
-      const up = path.dirname(d);
-      if (exists(path.join(d, '.git')) || up === d) break;
-      d = up;
+      if (d === top) break;
     }
   }
   dirs.push(path.join(places.configDir, 'agents'));
   return [...new Set(dirs)];
+}
+
+function repositoryRoot(start: string): string {
+  for (let d = start; ; d = path.dirname(d)) {
+    if (exists(path.join(d, '.git'))) return d;
+    if (path.dirname(d) === d) return start;
+  }
 }
 
 function findIn(root: string, name: string): Definition | null {

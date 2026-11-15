@@ -291,6 +291,23 @@ test('subagent definitions: the closest project definition, then the user\'s, se
   assert.equal(agentLines(h).at(-1)?.model, 'claude-opus-5-5');
 });
 
+test('subagent definitions without a repository: only the working directory\'s own .claude/agents is read, never its parents\'', () => {
+  const parent = tempTree({ '.claude/agents/reviewer.md': '---\nname: reviewer\ndescription: Elsewhere.\nmodel: haiku\n---\n' });
+  const scratch = path.join(parent, 'scratch');
+  fs.mkdirSync(path.join(scratch, '.claude', 'agents'), { recursive: true });
+  fs.writeFileSync(path.join(scratch, '.claude', 'agents', 'helper.md'), '---\nname: helper\ndescription: Own.\nmodel: claude-opus-5-5\n---\n');
+  const configDir = tempTree({});
+  const h = hookHome(undefined, { CLAUDE_CONFIG_DIR: configDir });
+  startOn(h, 'claude-sonnet-5-5');
+  const predicted = (type: string): unknown[] => {
+    h.hook('agent-call', call({ model: undefined, subagent_type: type }, { cwd: scratch }));
+    const l = agentLines(h).at(-1);
+    return [l?.model, l?.model_source];
+  };
+  assert.deepEqual(predicted('reviewer'), ['claude-sonnet-5-5', 'parent'], 'the haiku definition in a parent directory is not the session\'s');
+  assert.deepEqual(predicted('helper'), ['claude-opus-5-5', 'definition'], 'the working directory\'s own definition is still read');
+});
+
 test('model order: the call\'s parameter beats a definition, CLAUDE_CODE_SUBAGENT_MODEL fills in, FORCE overrides, a fork follows its parent', () => {
   const repo = tempTree({ '.git/HEAD': '', '.claude/agents/r.md': '---\nname: reviewer\nmodel: haiku\n---\n' });
   const h = hookHome();
