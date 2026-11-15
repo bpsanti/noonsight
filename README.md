@@ -18,14 +18,14 @@ One configuration file serves the whole machine, for every Claude Code account o
 ## Install
 
 ```bash
-sudo "$(command -v node)" "$(command -v sextant)" install   # once per machine, for every Claude Code account
-sextant install --account ~/.claude                         # or for one account, without administrator rights
-sextant check                                               # configuration, installs, Claude Code version
+sextant install    # every Claude Code login of this account, no administrator rights
+sextant check      # configuration, installs, Claude Code version
 ```
 
-The machine-wide install adds sextant's own file to Claude Code's managed settings and never edits the files already there.
-On a machine with managed settings, Claude Code loads its [built-in guard for the mods users install](https://code.claude.com/docs/en/plugins/mods/admin#know-what-happens-by-default).
-[docs/install.md](docs/install.md) covers both installs, what they write, and how to remove them.
+`sextant install` adds sextant's hooks to the user settings of every Claude Code configuration directory it finds (`~/.claude`, the one in `CLAUDE_CONFIG_DIR`, and every other one in the home directory), keeping every other setting and hook.
+User settings reach every login, including one whose organization delivers server-managed settings, where Claude Code ignores machine-wide managed settings files.
+`sextant install --account <dir>` installs into one directory, and `sudo ... sextant install --managed` once for every account through Claude Code's managed settings files.
+[docs/install.md](docs/install.md) covers the three installs, what they write, why the default is the default, and how to remove them.
 [docs/hooks.md](docs/hooks.md) describes what the hooks deliver, the decision log, and how to turn sextant off for a session (`SEXTANT_DISABLE=1`).
 
 The hooks read only local files: nothing leaves the machine.

@@ -122,7 +122,7 @@ test('a refused or missing configuration exits 2 and lists the problems', () => 
 
 test('machine-wide: check reads the managed settings that decide whether hooks run', { skip: !supported }, () => {
   const { env } = setup();
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--managed'], env).status, 0);
   const ok = runCli(['check'], env);
   assert.equal(ok.status, 0, ok.stdout);
   assert.match(ok.stdout, /ok: machine-wide install: hooks in .*managed-settings\.d\/sextant-ai\.json/);
@@ -145,7 +145,7 @@ test('machine-wide: check reads the managed settings that decide whether hooks r
 
 test('machine-wide on macOS: an MDM profile for Claude Code is a warning, because it can shadow the managed files', { skip: process.platform !== 'darwin' }, () => {
   const { env } = setup();
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--managed'], env).status, 0);
   const profile = path.join(env.SEXTANT_SYSTEM_ROOT, 'Library', 'Managed Preferences', 'com.anthropic.claudecode.plist');
   fs.mkdirSync(path.dirname(profile), { recursive: true });
   fs.writeFileSync(profile, '<plist/>');
@@ -155,4 +155,64 @@ test('machine-wide on macOS: an MDM profile for Claude Code is a warning, becaus
 test('check takes no arguments', () => {
   assert.equal(runCli(['check', 'x']).status, 2);
   assert.match(runCli(['check', '--help']).stdout, /usage: sextant check/);
+});
+
+test('a login whose server-managed settings shadow the managed files is a problem until the default install reaches it', { skip: !supported }, () => {
+  const { home, env } = setup();
+  const claudeDir = path.join(home, '.claude');
+  fs.mkdirSync(claudeDir);
+  fs.writeFileSync(path.join(claudeDir, 'remote-settings.json'), JSON.stringify({ permissions: { deny: ['WebFetch'] } }));
+  const other = path.join(home, '.claude-max');
+  fs.mkdirSync(other);
+  fs.writeFileSync(path.join(other, '.claude.json'), '{}');
+  assert.equal(runCli(['install', '--managed'], env).status, 0);
+
+  const shadowed = runCli(['check'], env);
+  assert.equal(shadowed.status, 1, shadowed.stdout);
+  assert.ok(
+    shadowed.stdout.includes(`problem: Claude Code configuration ${claudeDir}: no sextant hooks reach it (its login receives server-managed settings`),
+    shadowed.stdout,
+  );
+  assert.ok(shadowed.stdout.includes(`ok: Claude Code configuration ${other}: reached by the machine-wide install`), shadowed.stdout);
+
+  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  const reached = runCli(['check'], env);
+  assert.equal(reached.status, 0, reached.stdout);
+  assert.ok(reached.stdout.includes(`ok: account install ${claudeDir}: hooks in`), reached.stdout);
+  assert.ok(reached.stdout.includes(`ok: Claude Code configuration ${claudeDir}: this login receives server-managed settings`), reached.stdout);
+  assert.doesNotMatch(reached.stdout, /twice/);
+});
+
+test('server-managed settings that turn hooks off for a login are a problem', () => {
+  const { home, env } = setup();
+  const claudeDir = path.join(home, '.claude');
+  fs.mkdirSync(claudeDir);
+  assert.equal(runCli(['install'], env).status, 0);
+  fs.writeFileSync(path.join(claudeDir, 'remote-settings.json'), JSON.stringify({ allowManagedHooksOnly: true }));
+  assert.match(runCli(['check'], env).stdout, /problem: Claude Code configuration .*set allowManagedHooksOnly, so Claude Code runs only the hooks the organization delivers/);
+  fs.writeFileSync(path.join(claudeDir, 'remote-settings.json'), JSON.stringify({ disableAllHooks: true }));
+  const off = runCli(['check'], env);
+  assert.equal(off.status, 1);
+  assert.match(off.stdout, /problem: Claude Code configuration .*set disableAllHooks, so Claude Code runs no hooks there/);
+});
+
+test('a Claude Code configuration directory added after the install is a problem until install runs again', () => {
+  const { home, env } = setup();
+  assert.equal(runCli(['install'], env).status, 0);
+  const added = path.join(home, '.claude-new');
+  fs.mkdirSync(added);
+  fs.writeFileSync(path.join(added, '.claude.json'), '{}');
+  const r = runCli(['check'], env);
+  assert.equal(r.status, 1);
+  assert.ok(r.stdout.includes(`problem: Claude Code configuration ${added}: no sextant hooks reach it; run \`sextant install\``), r.stdout);
+  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['check'], env).status, 0);
+});
+
+test('a Claude Code older than the documented aliases is a warning', () => {
+  const { env } = setup('2.1.300');
+  assert.equal(runCli(['install'], env).status, 0);
+  const r = runCli(['check'], env);
+  assert.equal(r.status, 0, r.stdout);
+  assert.match(r.stdout, /warning: claude: installed 2\.1\.300; when a session without a reported model, such as `claude -p`, names it by an alias, sextant assumes what the aliases select from Claude Code 2\.1\.321 on/);
 });

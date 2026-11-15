@@ -109,7 +109,7 @@ interface Run {
   readonly screen: string;
 }
 
-function session(l: Lab, config: string, steps: readonly string[], claudeArgs: readonly string[], tokens: boolean): Run {
+function sessionEnv(l: Lab, config: string, tokens: boolean): Record<string, string> {
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? '',
     HOME: l.home,
@@ -125,6 +125,11 @@ function session(l: Lab, config: string, steps: readonly string[], claudeArgs: r
     env.CLAUDE_CODE_OAUTH_TOKEN = 'sextant-live-test-placeholder';
     env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:9';
   }
+  return env;
+}
+
+function session(l: Lab, config: string, steps: readonly string[], claudeArgs: readonly string[], tokens: boolean): Run {
+  const env = sessionEnv(l, config, tokens);
   const r = spawnSync('expect', [DRIVER, l.probe, ...steps, '--', ...claudeArgs], { cwd: l.project, env, encoding: 'utf8', timeout: 600_000 });
   const screen = (r.stdout + r.stderr)
     .replace(/\x1b\][^\x07]*\x07/g, '')
@@ -166,6 +171,29 @@ test('live, no tokens: an undeclared model and a refused configuration warn on s
   assert.deepEqual(pick(l.log()), [
     ['session-start', 'startup', 'claude-haiku-5-5', 'hook-input', 'undeclared', 'nothing', true],
     ['session-start', 'startup', null, null, 'config-invalid', 'nothing', true],
+  ]);
+});
+
+test('live, no tokens: claude -p reports no model, and the hook takes it from --model, ANTHROPIC_MODEL or the model setting', { skip: tools.length > 0 }, () => {
+  const l = lab();
+  // The run fails at its first request to the closed port; SessionStart has run by then.
+  const print = (args: readonly string[], extra: Record<string, string> = {}): void => {
+    spawnSync('claude', ['-p', 'hello', ...args], {
+      cwd: l.project,
+      env: { ...sessionEnv(l, l.config, false), CLAUDE_CODE_MAX_RETRIES: '0', ...extra },
+      encoding: 'utf8',
+      timeout: 120_000,
+    });
+  };
+  print(['--model', 'sonnet']);
+  print([], { ANTHROPIC_MODEL: 'claude-opus-5-5' });
+  const settingsFile = path.join(l.claudeDir, 'settings.json');
+  fs.writeFileSync(settingsFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')), model: 'haiku' }));
+  print([]);
+  assert.deepEqual(pick(l.log()), [
+    ['session-start', 'startup', 'claude-sonnet-5-5', 'claude-args', 'matched', 'rules', false],
+    ['session-start', 'startup', 'claude-opus-5-5', 'env', 'matched', 'rules', false],
+    ['session-start', 'startup', 'claude-haiku-5-5', 'settings', 'none', 'nothing', false],
   ]);
 });
 

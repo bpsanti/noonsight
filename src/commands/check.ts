@@ -6,11 +6,12 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CLAUDE_CODE_FLOORS } from '../adapters/claude-code/compat.js';
+import { CLAUDE_CODE_FLOORS, MODEL_ALIASES } from '../adapters/claude-code/compat.js';
 import { readSettings } from '../adapters/claude-code/install.js';
-import { accountTarget, managedTarget, type InstallTarget } from '../adapters/claude-code/locations.js';
+import { accountTarget, discoverConfigDirs, managedTarget, type InstallTarget } from '../adapters/claude-code/locations.js';
+import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSettings } from '../adapters/claude-code/managed.js';
 import { readPointer } from '../adapters/claude-code/pointer.js';
-import { findSextantHandlers, HOOK_EVENTS, isObject } from '../adapters/claude-code/settings.js';
+import { findSextantHandlers, HOOK_EVENTS } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
@@ -48,7 +49,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     add('problem', `config ${e.message.replace(/^configuration refused \(([^)]*)\):/, '$1: refused, so sessions get no rules:')}`);
   }
 
-  // Installs.
+  // Installs: the machine-wide one, then every Claude Code configuration directory of this account.
   let installs = 0;
   let managed: InstallTarget | null = null;
   try {
@@ -56,17 +57,36 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   } catch (e) {
     add('warning', `machine-wide install: ${(e as Error).message}`);
   }
+  const managedInstalled = managed !== null && checkInstall(managed, version, cli, add, false);
   if (managed) {
-    const found = checkInstall(managed, version, cli, add, false);
-    if (found) installs++;
-    checkManagedPolicy(managed, env, add, found);
+    if (managedInstalled) installs++;
+    checkManagedPolicy(managed, env, add, managedInstalled);
   }
-  for (const dir of accountInstalls(stateDir(home))) {
-    if (checkInstall(accountTarget(dir, home), version, cli, add, true)) installs++;
+  const recorded = accountInstalls(stateDir(home));
+  const dirs = discoverConfigDirs(env, home, recorded);
+  const uncovered: string[] = [];
+  for (const dir of dirs) {
+    const target = accountTarget(dir, home);
+    const remote = readRemoteSettings(dir);
+    const managedReaches = managedInstalled && managedFilesApply(remote);
+    const hasAccountHooks = hasHooks(target.settingsFile);
+    if (recorded.includes(dir) || hasAccountHooks) {
+      if (checkInstall(target, version, cli, add, true)) installs++;
+      if (hasAccountHooks && managedReaches)
+        add('warning', `account install ${dir}: the machine-wide install reaches this login too, so its sessions receive the rules twice; remove one with \`sextant uninstall\``);
+    } else if (managedReaches) add('ok', `Claude Code configuration ${dir}: reached by the machine-wide install`);
+    else uncovered.push(dir);
+    checkRemotePolicy(dir, remote, hasAccountHooks, managedInstalled, add);
   }
-  if (installs === 0) add('problem', 'sextant is not installed: run `sextant install` (or `sextant install --account <dir>`)');
-  if (installs > 1 && managed && hasHooks(managed.settingsFile))
-    add('warning', 'sextant is installed both for the whole machine and for an account; sessions of that account receive the rules twice');
+  if (installs === 0) add('problem', 'sextant is not installed: run `sextant install`');
+  else
+    for (const dir of uncovered)
+      add(
+        'problem',
+        `Claude Code configuration ${dir}: no sextant hooks reach it` +
+          (managedInstalled ? ' (its login receives server-managed settings, so Claude Code ignores the machine-wide install there)' : '') +
+          '; run `sextant install`',
+      );
 
   // Claude Code.
   checkClaude(env, add);
@@ -95,6 +115,7 @@ function checkInstall(
   expected: boolean,
 ): boolean {
   const label = target.kind === 'managed' ? 'machine-wide install' : `account install ${target.configDir}`;
+  const again = target.kind === 'managed' ? '`sextant install --managed` again, as an administrator,' : '`sextant install` again';
   let settings: Record<string, unknown> | null;
   try {
     settings = readSettings(target.settingsFile);
@@ -111,20 +132,20 @@ function checkInstall(
   const missing = Object.keys(HOOK_EVENTS).filter((event) => !found.some((f) => f.event === event));
   const stray = found.filter((f) => f.handler.command !== target.pointer);
   if (missing.length || stray.length || found.length !== Object.keys(HOOK_EVENTS).length)
-    add('problem', `${label}: the hooks in ${target.settingsFile} are incomplete or point elsewhere; run \`sextant install\` again to repair them`);
+    add('problem', `${label}: the hooks in ${target.settingsFile} are incomplete or point elsewhere; run ${again} to repair them`);
   else add('ok', `${label}: hooks in ${target.settingsFile} (${Object.keys(HOOK_EVENTS).join(', ')})`);
   if (target.kind === 'account' && settings?.disableAllHooks === true)
     add('problem', `${label}: ${target.settingsFile} sets disableAllHooks, so Claude Code runs none of this account's hooks`);
 
   const pointer = readPointer(target.pointer);
   if (!pointer) {
-    add('problem', `${label}: the hook pointer ${target.pointer} is missing or unreadable; run \`sextant install\` again`);
+    add('problem', `${label}: the hook pointer ${target.pointer} is missing or unreadable; run ${again}`);
     return true;
   }
   const unreachable = [reach(pointer.node, fs.constants.X_OK), reach(pointer.cli, fs.constants.R_OK)];
   const gone = [pointer.node, pointer.cli].filter((_, i) => unreachable[i] === 'ENOENT');
   if (gone.length) {
-    add('problem', `${label}: the hook pointer runs ${gone.join(' and ')}, which no longer exists; hooks do nothing. Run \`sextant install\` again`);
+    add('problem', `${label}: the hook pointer runs ${gone.join(' and ')}, which no longer exists; hooks do nothing. Run ${again}`);
     return true;
   }
   const denied = [pointer.node, pointer.cli].filter((_, i) => unreachable[i] !== null);
@@ -139,7 +160,7 @@ function checkInstall(
   const running = pointer.cli === cli ? version : versionOf(pointer.node, pointer.cli);
   if (running === null) add('problem', `${label}: the copy of sextant the hook pointer runs (${pointer.cli}) did not report its version`);
   else if (running !== version)
-    add('warning', `${label}: hooks run sextant ${running} (${pointer.cli}), but this copy is ${version}; run \`sextant install\` again to switch`);
+    add('warning', `${label}: hooks run sextant ${running} (${pointer.cli}), but this copy is ${version}; run ${again} to switch`);
   else add('ok', `${label}: hook pointer ${target.pointer} runs sextant ${running}`);
   return true;
 }
@@ -149,31 +170,9 @@ function checkInstall(
  * managed settings file and every drop-in file in alphabetical order; a later value wins.
  */
 function checkManagedPolicy(managed: InstallTarget, env: Env, add: (level: Level, text: string) => void, installed: boolean): void {
-  const dir = managed.managedDir ?? '';
-  const files = [path.join(dir, 'managed-settings.json')];
-  try {
-    const dropIns = path.join(dir, 'managed-settings.d');
-    files.push(
-      ...fs
-        .readdirSync(dropIns)
-        .filter((n) => n.endsWith('.json') && !n.startsWith('.'))
-        .sort()
-        .map((n) => path.join(dropIns, n)),
-    );
-  } catch {
-    // No drop-in directory.
-  }
-  const policy: Record<string, unknown> = {};
-  for (const f of files) {
-    if (!fs.existsSync(f)) continue;
-    try {
-      const value = JSON.parse(fs.readFileSync(f, 'utf8')) as unknown;
-      if (!isObject(value)) throw new Error('not a JSON object');
-      for (const key of ['disableAllHooks', 'allowManagedHooksOnly']) if (key in value) policy[key] = value[key];
-    } catch (e) {
-      add('problem', `managed settings ${f} cannot be read as a JSON object (${(e as Error).message}); Claude Code refuses to start while it is so`);
-    }
-  }
+  const { merged: policy, problems } = readManagedFiles(managed.managedDir ?? '');
+  for (const p of problems)
+    add('problem', `managed settings ${p.file} cannot be read as a JSON object (${p.message}); Claude Code refuses to start while it is so`);
   if (policy.disableAllHooks === true) add('problem', 'managed settings set disableAllHooks: Claude Code runs no hooks at all, sextant included');
   if (policy.allowManagedHooksOnly === true)
     add('warning', 'managed settings set allowManagedHooksOnly: only the machine-wide install runs; account installs are ignored');
@@ -186,9 +185,34 @@ function checkManagedPolicy(managed: InstallTarget, env: Env, add: (level: Level
       add(
         'warning',
         `an MDM profile for Claude Code is present (${profile}); unless it sets managedSourcesBehavior to "merge", ` +
-          'Claude Code ignores the managed settings files and the machine-wide hooks do not run. Use `sextant install --account <dir>` instead.',
+          'Claude Code ignores the managed settings files and the machine-wide hooks do not run. Use `sextant install` (without --managed) instead.',
       );
   }
+}
+
+/**
+ * Server-managed settings, which Claude Code caches per login in its configuration directory. They
+ * outrank the managed settings files, and can turn hooks off for that login.
+ */
+function checkRemotePolicy(
+  dir: string,
+  remote: RemoteSettings | null,
+  accountHooks: boolean,
+  managedInstalled: boolean,
+  add: (level: Level, text: string) => void,
+): void {
+  if (!remote?.deliversPolicy) return;
+  const label = `Claude Code configuration ${dir}`;
+  if (remote.settings.disableAllHooks === true)
+    add('problem', `${label}: the server-managed settings of this login (${remote.file}) set disableAllHooks, so Claude Code runs no hooks there`);
+  else if (remote.settings.allowManagedHooksOnly === true && !(remote.merges && managedInstalled))
+    add(
+      'problem',
+      `${label}: the server-managed settings of this login (${remote.file}) set allowManagedHooksOnly, ` +
+        'so Claude Code runs only the hooks the organization delivers, and no sextant install reaches it',
+    );
+  else if (accountHooks && !remote.merges)
+    add('ok', `${label}: this login receives server-managed settings, which shadow the managed settings files; the account install reaches it`);
 }
 
 function checkClaude(env: Env, add: (level: Level, text: string) => void): void {
@@ -210,6 +234,13 @@ function checkClaude(env: Env, add: (level: Level, text: string) => void): void 
   if (short.length)
     for (const f of short) add('problem', `claude: installed ${found}; ${f.feature} needs ${f.version} or later (upgrade: claude update)`);
   else add('ok', `claude: ${found}`);
+  const aliases = MODEL_ALIASES.reduce((v, a) => ((compareVersions(a.since, v) ?? 0) > 0 ? a.since : v), '0.0.0');
+  if ((compareVersions(found, aliases) ?? 0) < 0)
+    add(
+      'warning',
+      `claude: installed ${found}; when a session without a reported model, such as \`claude -p\`, names it by an alias, ` +
+        `sextant assumes what the aliases select from Claude Code ${aliases} on (upgrade: claude update)`,
+    );
 }
 
 /** Why this account cannot use a file in the given mode, as an error code, or null when it can. */

@@ -6,8 +6,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { modelArgument, optionCandidates } from '../src/adapters/claude-code/launch.js';
+import { managedTarget } from '../src/adapters/claude-code/locations.js';
 import { RULES_TEXT_LIMIT } from '../src/core/types.js';
-import { FIXTURES, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
+import { CLI, FIXTURES, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
 
 const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
 
@@ -20,7 +22,8 @@ interface Home {
 
 function home(config: string = LAB_CONFIG): Home {
   const dir = tempTree({});
-  const env = { HOME: dir, SEXTANT_CONFIG: config, SEXTANT_PRESETS_DIR: LAB_PRESETS };
+  // The system root keeps this machine's own managed settings out of the model lookup.
+  const env = { HOME: dir, SEXTANT_CONFIG: config, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) };
   return {
     env,
     dir,
@@ -313,4 +316,174 @@ test('the documented resume input, cost fields and all, finds the rules already 
   assert.match(h.hook('session-start', hookInput('session-start-startup')).out?.hookSpecificOutput.additionalContext, /HAIKU-GEN-9047/);
   assert.equal(h.hook('session-start', hookInput('session-start-resume')).raw, '');
   assert.deepEqual(h.log().map((l) => [l.source, l.delivered]), [['startup', 'rules'], ['resume', 'already-delivered']]);
+});
+
+// claude -p: the SessionStart input names no model (recorded in session-start-print.json), so the hook
+// takes it from what the session was started with. Each run below is the child of a stand-in for the
+// claude process, started with the claude arguments the test gives.
+
+const FAKE_CLAUDE = path.join(FIXTURES, 'fake-claude.cjs');
+const print = (id: string): string => hookInput('session-start-print', { session_id: id });
+const context = (r: { out: Record<string, any> | null }): string => r.out?.hookSpecificOutput?.additionalContext ?? '';
+
+function underClaude(h: Home, claudeArgs: readonly string[], input: string, extra: Record<string, string> = {}) {
+  const hook = [process.execPath, ...NO_NETWORK, CLI, 'hook', 'session-start'];
+  const r = runProgram(process.execPath, [FAKE_CLAUDE, ...claudeArgs], { ...h.env, ...extra, SEXTANT_FAKE_HOOK: JSON.stringify(hook) }, input);
+  assert.equal(r.status, 0);
+  assert.equal(r.stderr, '', r.stderr);
+  return { out: r.stdout ? (JSON.parse(r.stdout) as Record<string, any>) : null, raw: r.stdout };
+}
+
+const launchLog = (h: Home): unknown[][] =>
+  h.log().map((l) => [l.model, l.model_source, l.model_from ?? null, l.model_alias ?? null, l.alias_from ?? null, l.delivered]);
+
+test('claude -p: with nothing naming the model, the hook warns and delivers nothing', () => {
+  const h = home();
+  const r = underClaude(h, ['-p', 'hello'], hookInput('session-start-print'));
+  assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
+  assert.match(r.out?.systemMessage, /did not report this session's model, and neither its command line, ANTHROPIC_MODEL nor a model setting names one/);
+  assert.deepEqual(h.log().map((l) => [l.status, l.reason, l.model_source, l.delivered, l.warned]), [['undeclared', 'model-not-reported', null, 'nothing', true]]);
+});
+
+test('claude -p: the --model argument of the Claude Code process names the model, by alias or full name', () => {
+  const h = home();
+  assert.match(context(underClaude(h, ['-p', 'hello', '--model', 'claude-sonnet-5-5'], print('full'))), /SONNET-GEN-3306/);
+  assert.match(context(underClaude(h, ['--model=haiku', '-p', 'hello'], print('alias'))), /HAIKU-GEN-9047/);
+  // An alias follows the variable that pins it.
+  const pinned = { ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-sonnet-5-5' };
+  assert.match(context(underClaude(h, ['-p', '--model', 'haiku', 'hello'], print('pinned'), pinned)), /SONNET-GEN-3306/);
+  // The argument outranks ANTHROPIC_MODEL, as it does in Claude Code.
+  assert.match(context(underClaude(h, ['-p', '--model', 'sonnet[1m]', 'hello'], print('over-env'), { ANTHROPIC_MODEL: 'claude-haiku-5-5' })), /SONNET-GEN-3306/);
+  // A prompt that mentions the option is not the option where arguments keep their boundaries; where
+  // they do not, as on macOS, the hook cannot tell them apart and warns instead of guessing.
+  const prompt = underClaude(h, ['-p', 'what does --model nope do?'], print('prompt'));
+  assert.equal(context(prompt), '');
+  assert.match(prompt.out?.systemMessage, process.platform === 'darwin' ? /set to "nope" \(--model\)/ : /did not report/);
+  assert.deepEqual(launchLog(h), [
+    ['claude-sonnet-5-5', 'claude-args', '--model', null, null, 'rules'],
+    ['claude-haiku-5-5', 'claude-args', '--model', 'haiku', 'built-in', 'rules'],
+    ['claude-sonnet-5-5', 'claude-args', '--model', 'haiku', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'rules'],
+    ['claude-sonnet-5-5', 'claude-args', '--model', 'sonnet[1m]', 'built-in', 'rules'],
+    [null, null, process.platform === 'darwin' ? '--model' : null, null, null, 'nothing'],
+  ]);
+});
+
+test('claude -p: without --model, ANTHROPIC_MODEL in the environment Claude Code passes to hooks names the model', () => {
+  const h = home();
+  assert.match(context(underClaude(h, ['-p', 'hello'], print('env'), { ANTHROPIC_MODEL: 'claude-sonnet-5-5' })), /SONNET-GEN-3306/);
+  assert.equal(underClaude(h, ['-p', 'hello'], print('env-alias'), { ANTHROPIC_MODEL: 'opus' }).raw, '');
+  assert.deepEqual(launchLog(h), [
+    ['claude-sonnet-5-5', 'env', 'ANTHROPIC_MODEL', null, null, 'rules'],
+    ['claude-opus-5-5', 'env', 'ANTHROPIC_MODEL', 'opus', 'built-in', 'nothing'],
+  ]);
+});
+
+test('claude -p: without --model or ANTHROPIC_MODEL, the highest-ranked settings file that sets a model names it', () => {
+  const h = home();
+  const claudeDir = tempTree({ 'settings.json': { model: 'haiku' } });
+  const project = tempTree({});
+  const env = { CLAUDE_CONFIG_DIR: claudeDir, CLAUDE_PROJECT_DIR: project };
+  const run = (id: string, args: readonly string[] = ['-p', 'hello'], extra: Record<string, string> = {}) =>
+    underClaude(h, args, print(id), { ...env, ...extra });
+  const write = (file: string, value: unknown): void => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(value));
+  };
+
+  run('user');
+  write(path.join(project, '.claude', 'settings.json'), { model: 'claude-sonnet-5-5' });
+  run('project');
+  write(path.join(project, '.claude', 'settings.local.json'), { model: 'claude-opus-5-5' });
+  run('local');
+  run('sources', ['-p', 'hello', '--setting-sources', 'user']);
+  run('inline', ['-p', 'hello', '--settings', '{"model":"claude-sonnet-5-5"}']);
+  const managedDir = managedTarget(h.env).managedDir ?? '';
+  write(path.join(managedDir, 'managed-settings.d', '50-models.json'), { model: 'claude-haiku-5-5' });
+  run('managed');
+  // Server-managed settings cached for this login outrank the managed settings files.
+  write(path.join(claudeDir, 'remote-settings.json'), { model: 'claude-sonnet-5-5', permissions: { allow: [] } });
+  run('remote');
+  // The environment outranks every settings file.
+  run('env', ['-p', 'hello'], { ANTHROPIC_MODEL: 'claude-opus-5-5' });
+
+  const P = (rel: string): string => path.join(project, '.claude', rel);
+  assert.deepEqual(launchLog(h), [
+    ['claude-haiku-5-5', 'settings', path.join(claudeDir, 'settings.json'), 'haiku', 'built-in', 'rules'],
+    ['claude-sonnet-5-5', 'settings', P('settings.json'), null, null, 'rules'],
+    ['claude-opus-5-5', 'settings', P('settings.local.json'), null, null, 'nothing'],
+    ['claude-haiku-5-5', 'settings', path.join(claudeDir, 'settings.json'), 'haiku', 'built-in', 'rules'],
+    ['claude-sonnet-5-5', 'settings', '--settings', null, null, 'rules'],
+    ['claude-haiku-5-5', 'settings', path.join(managedDir, 'managed-settings.d', '50-models.json'), null, null, 'rules'],
+    ['claude-sonnet-5-5', 'settings', path.join(claudeDir, 'remote-settings.json'), null, null, 'rules'],
+    ['claude-opus-5-5', 'env', 'ANTHROPIC_MODEL', null, null, 'nothing'],
+  ]);
+});
+
+test('claude -p: a model setting sextant cannot pin down warns with what was set and where, and delivers nothing', () => {
+  const h = home();
+  const plan = underClaude(h, ['-p', '--model', 'opusplan', 'hello'], print('plan'));
+  assert.match(plan.out?.systemMessage, /model is set to "opusplan" \(--model\), and sextant cannot tell which model that is \(Claude Code chooses that model while the session runs\)/);
+  const bedrock = underClaude(h, ['-p', 'hello'], print('bedrock'), { ANTHROPIC_MODEL: 'haiku', CLAUDE_CODE_USE_BEDROCK: '1' });
+  assert.match(bedrock.out?.systemMessage, /set to "haiku" \(ANTHROPIC_MODEL\).*when CLAUDE_CODE_USE_BEDROCK is set; set ANTHROPIC_DEFAULT_HAIKU_MODEL/);
+  // Pinning the alias settles it on any provider.
+  const pinned = { ANTHROPIC_MODEL: 'haiku', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'us.anthropic.claude-haiku-5-5-v1:0' };
+  assert.match(context(underClaude(h, ['-p', 'hello'], print('pinned'), pinned)), /HAIKU-GEN-9047/);
+  assert.deepEqual(
+    h.log().map((l) => [l.status, l.model, l.model_from ?? null, l.model_unresolved ?? null, l.delivered]),
+    [
+      ['undeclared', null, '--model', 'opusplan', 'nothing'],
+      ['undeclared', null, 'ANTHROPIC_MODEL', 'haiku', 'nothing'],
+      ['matched', 'claude-haiku-5-5', 'ANTHROPIC_MODEL', null, 'rules'],
+    ],
+  );
+});
+
+test('a reported model, or the record of the session, always outranks the launch settings', () => {
+  const h = home();
+  const r = underClaude(h, ['-p', '--model', 'claude-haiku-5-5'], start('claude-sonnet-5-5', { session_id: 'reported' }));
+  assert.match(context(r), /SONNET-GEN-3306/);
+  assert.equal(underClaude(h, ['-p', '--model', 'claude-haiku-5-5'], start(null, { session_id: 'reported', source: 'resume' })).raw, '');
+  assert.deepEqual(h.log().map((l) => [l.model, l.model_source, l.delivered]), [
+    ['claude-sonnet-5-5', 'hook-input', 'rules'],
+    ['claude-sonnet-5-5', 'session-record', 'already-delivered'],
+  ]);
+});
+
+test('a command line read without argument boundaries, as on macOS, reports a --model it cannot read instead of falling through', () => {
+  const joined = (line: string) => modelArgument({ args: line.split(' '), exact: false }, {});
+  assert.equal(joined('claude -p hello'), null);
+  assert.deepEqual(joined('claude -p hi --model claude-opus-5-5'), { kind: 'found', model: 'claude-opus-5-5', source: 'claude-args', from: '--model' });
+  // A custom model identifier, as behind a gateway, cannot be told from prompt text; a lower source must not decide.
+  assert.deepEqual(joined('claude -p --model my-gateway-opus hi')?.kind, 'unresolved');
+  // A prompt that mentions --model warns rather than letting ANTHROPIC_MODEL or a settings file decide.
+  assert.equal(joined('claude -p explain --model flags')?.kind, 'unresolved');
+  assert.equal(joined('claude -p use --model haiku --model claude-opus-5-5')?.kind, 'unresolved');
+  const exact = modelArgument({ args: ['claude', '-p', 'use --model haiku', '--model', 'sonnet'], exact: true }, {});
+  assert.equal(exact?.kind === 'found' && exact.model, 'claude-sonnet-5-5');
+});
+
+test('claude -p: a --model naming a custom model identifier decides, so a lower settings file never delivers its model\'s rules', () => {
+  const h = home();
+  const env = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'haiku' } }), ANTHROPIC_MODEL: 'claude-sonnet-5-5' };
+  const r = underClaude(h, ['-p', '--model', 'my-gateway-opus', 'hello'], print('gateway'), env);
+  assert.doesNotMatch(context(r), /HAIKU-GEN-9047|SONNET-GEN-3306/);
+  assert.deepEqual(h.log().map((l) => [l.model_from ?? null, l.delivered]), [['--model', 'nothing']]);
+});
+
+test('a command line without argument boundaries: a --setting-sources value that is no list of settings files warns instead of skipping every file', () => {
+  const h = home();
+  const env = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'claude-haiku-5-5' } }) };
+  const r = underClaude(h, ['-p', 'what does --setting-sources do'], print('sources-prompt'), env);
+  if (process.platform === 'darwin') {
+    assert.match(r.out?.systemMessage, /set to "do" \(--setting-sources\)/);
+    assert.deepEqual(h.log().map((l) => [l.model_from ?? null, l.delivered]), [['--setting-sources', 'nothing']]);
+  } else {
+    assert.match(context(r), /HAIKU-GEN-9047/);
+  }
+});
+
+test('an option given more than one value on a command line without argument boundaries has every value as a candidate', () => {
+  assert.deepEqual(optionCandidates({ args: 'claude -p read --settings foo --settings /tmp/s.json'.split(' '), exact: false }, '--settings'), ['foo', '/tmp/s.json']);
+  assert.deepEqual(optionCandidates({ args: ['claude', '-p', 'read --settings foo', '--settings', '/tmp/s.json'], exact: true }, '--settings'), ['/tmp/s.json']);
+  assert.deepEqual(optionCandidates({ args: 'claude -p hello'.split(' '), exact: false }, '--settings'), []);
 });

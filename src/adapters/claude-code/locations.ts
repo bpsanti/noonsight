@@ -3,6 +3,7 @@
 // managed-settings.json and every *.json file in managed-settings.d/ from one system directory per
 // operating system, and merges them.
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { dataDir, type Env } from '../../config/paths.js';
@@ -74,6 +75,59 @@ export function managedTarget(env: Env, platform: NodeJS.Platform = process.plat
 export function accountTarget(configDir: string, home: string = os.homedir()): InstallTarget {
   const dir = path.resolve(expandHome(configDir, home));
   return { kind: 'account', configDir: dir, settingsFile: path.join(dir, 'settings.json'), pointer: path.join(dataDir(home), POINTER_NAME) };
+}
+
+/**
+ * The file Claude Code keeps in a configuration directory it was started with through
+ * CLAUDE_CONFIG_DIR (the default directory keeps it in the home directory instead).
+ */
+export const CONFIG_MARKER = '.claude.json';
+
+/**
+ * Every Claude Code configuration directory of this account that exists, each once: ~/.claude, the
+ * directory in CLAUDE_CONFIG_DIR, every directory directly in the home directory that holds a Claude
+ * Code configuration (such as ~/.claude-work, made for a second login), and the extra directories
+ * given, such as the ones sextant installed into before. Each login keeps its own settings in its
+ * own directory, so these are the places a per-account hook must be to reach every login.
+ */
+export function discoverConfigDirs(env: Env, home: string = os.homedir(), extra: readonly string[] = []): string[] {
+  const candidates = [path.join(home, '.claude')];
+  if (env.CLAUDE_CONFIG_DIR) candidates.push(path.resolve(expandHome(env.CLAUDE_CONFIG_DIR, home)));
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(home).sort();
+  } catch {
+    // No readable home directory.
+  }
+  for (const name of names) {
+    const dir = path.join(home, name);
+    if (isFile(path.join(dir, CONFIG_MARKER))) candidates.push(dir);
+  }
+  candidates.push(...extra.map((d) => path.resolve(d)));
+
+  const seen = new Set<string>();
+  const found: string[] = [];
+  for (const dir of candidates) {
+    let real: string;
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+      real = fs.realpathSync(dir);
+    } catch {
+      continue;
+    }
+    if (seen.has(real)) continue;
+    seen.add(real);
+    found.push(dir);
+  }
+  return found;
+}
+
+function isFile(file: string): boolean {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** The Claude Code configuration directory this shell uses, for messages that suggest --account. */

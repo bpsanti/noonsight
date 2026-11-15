@@ -154,7 +154,7 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
   fs.writeFileSync(path.join(managedDir, 'managed-settings.json'), itPolicy);
   fs.writeFileSync(path.join(managedDir, 'managed-settings.d', '10-it.json'), otherDropIn);
 
-  const first = runCli(['install'], env);
+  const first = runCli(['install', '--managed'], env);
   assert.equal(first.status, 0, first.stderr);
   assert.match(first.stdout, /managed-settings\.d\/sextant-ai\.json: created \(SessionStart, PostModelSwitch\)/);
   assert.match(first.stdout, /built-in guard for the mods users install: https:\/\/code\.claude\.com\/docs\/en\/plugins\/mods\/admin/);
@@ -173,7 +173,7 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
   assert.equal(fs.statSync(target.pointer).mode & 0o777, 0o755);
   assert.equal(fs.statSync(target.settingsFile).mode & 0o777, 0o644);
 
-  const second = runCli(['install'], env);
+  const second = runCli(['install', '--managed'], env);
   assert.equal(second.status, 0, second.stderr);
   assert.match(second.stdout, /sextant-ai\.json: unchanged/);
   assert.equal(fs.readFileSync(target.settingsFile, 'utf8'), dropIn);
@@ -181,7 +181,7 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
   assert.equal(fs.readFileSync(path.join(managedDir, 'managed-settings.d', '10-it.json'), 'utf8'), otherDropIn);
   assert.deepEqual(fs.readdirSync(path.join(managedDir, 'managed-settings.d')).sort(), ['10-it.json', 'sextant-ai.json']);
 
-  const removed = runCli(['uninstall'], env);
+  const removed = runCli(['uninstall', '--managed'], env);
   assert.equal(removed.status, 0, removed.stderr);
   assert.match(removed.stdout, /removed the file/);
   assert.equal(fs.existsSync(target.settingsFile), false);
@@ -191,20 +191,20 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
   assert.ok(fs.existsSync(root));
 });
 
-test('machine-wide without administrator rights: says so plainly, offers --account, changes nothing', { skip: !supported || process.getuid?.() === 0 }, () => {
+test('machine-wide without administrator rights: says so plainly, offers the install that needs none, changes nothing', { skip: !supported || process.getuid?.() === 0 }, () => {
   const { root, env, target } = machine();
   fs.chmodSync(root, 0o555);
   try {
-    const r = runCli(['install'], { ...env, CLAUDE_CONFIG_DIR: '/somewhere/claude-work' });
+    const r = runCli(['install', '--managed'], { ...env, CLAUDE_CONFIG_DIR: '/somewhere/claude-work' });
     assert.equal(r.status, 1);
     assert.equal(r.stdout, '');
     assert.match(r.stderr, /needs administrator rights\. Nothing was changed\./);
     assert.ok(r.stderr.includes(target.settingsFile) && r.stderr.includes(target.pointer), r.stderr);
-    assert.match(r.stderr, /\n  sudo \S+node\S* \S+cli\.js install\n/);
-    assert.match(r.stderr, /sextant install --account \/somewhere\/claude-work/);
+    assert.match(r.stderr, /\n  sudo \S+node\S* \S+cli\.js install --managed\n/);
+    assert.match(r.stderr, /for every Claude Code configuration directory of this account:\n  sextant install$/m);
     assert.deepEqual(fs.readdirSync(root), []);
 
-    const un = runCli(['uninstall'], env);
+    const un = runCli(['uninstall', '--managed'], env);
     assert.equal(un.status, 0, 'nothing installed means nothing to remove, even without rights');
   } finally {
     fs.chmodSync(root, 0o755);
@@ -216,7 +216,7 @@ test('machine-wide without administrator rights: says so plainly, offers --accou
   fs.mkdirSync(managedDir, { recursive: true });
   fs.chmodSync(managedDir, 0o555);
   try {
-    const r = runCli(['install'], second.env);
+    const r = runCli(['install', '--managed'], second.env);
     assert.equal(r.status, 1);
     assert.equal(fs.existsSync(second.target.pointer), false);
   } finally {
@@ -226,10 +226,10 @@ test('machine-wide without administrator rights: says so plainly, offers --accou
 
 test('a per-account install next to a machine-wide one warns that the rules would arrive twice', { skip: !supported }, () => {
   const { env } = machine();
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--managed'], env).status, 0);
   const r = runCli(['install', '--account', tempTree({})], env);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /warning: sextant is also installed for the whole machine .*receives the rules twice/);
+  assert.match(r.stdout, /warning: sextant is also installed for the whole machine .*sessions that use .* receive the rules twice/);
 });
 
 test('install says what to do next about the configuration', () => {
@@ -256,7 +256,7 @@ test('two account installs share one pointer, which stays until the last one is 
 });
 
 test('install and uninstall usage errors exit 2', () => {
-  for (const args of [['install', '--bogus'], ['install', '--account'], ['install', 'x'], ['uninstall', '--account=']]) {
+  for (const args of [['install', '--bogus'], ['install', '--account'], ['install', 'x'], ['uninstall', '--account='], ['install', '--managed', '--account', '/x']]) {
     const r = runCli(args);
     assert.equal(r.status, 2, args.join(' '));
     assert.match(r.stderr, /usage: sextant install/);
@@ -266,7 +266,7 @@ test('install and uninstall usage errors exit 2', () => {
 
 test('machine-wide under a strict umask: every account can still read the directories and run the pointer', { skip: !supported }, () => {
   const { root, env, target } = machine();
-  const r = runProgram('/bin/sh', ['-c', 'umask 077; exec "$0" "$@"', process.execPath, CLI, 'install'], env);
+  const r = runProgram('/bin/sh', ['-c', 'umask 077; exec "$0" "$@"', process.execPath, CLI, 'install', '--managed'], env);
   assert.equal(r.status, 0, r.stderr);
   for (let d = path.dirname(target.pointer); d.startsWith(root) && d !== root; d = path.dirname(d))
     assert.equal(fs.statSync(d).mode & 0o777, 0o755, d);
@@ -274,4 +274,157 @@ test('machine-wide under a strict umask: every account can still read the direct
     assert.equal(fs.statSync(d).mode & 0o777, 0o755, d);
   assert.equal(fs.statSync(target.pointer).mode & 0o777, 0o755);
   assert.equal(fs.statSync(target.settingsFile).mode & 0o777, 0o644);
+});
+
+/** A home directory with three Claude Code configuration directories, one per login, and a project. */
+function logins() {
+  const home = tempTree({
+    '.claude/settings.json': THIRD_PARTY,
+    '.claude-work/.claude.json': {},
+    'second-login/.claude.json': {},
+    'second-login/settings.json': { theme: 'dark' },
+    'code/project/.claude/settings.json': { model: 'sonnet' },
+  });
+  const outside = tempTree({ '.claude.json': {} });
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: outside, SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) };
+  const dirs = [path.join(home, '.claude'), outside, path.join(home, '.claude-work'), path.join(home, 'second-login')];
+  return { home, outside, env, dirs };
+}
+
+const readJson = (file: string): any => JSON.parse(fs.readFileSync(file, 'utf8'));
+
+test('by default: install reaches every Claude Code configuration directory of the account, twice changes nothing, uninstall removes them all', () => {
+  const { home, env, dirs } = logins();
+  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
+
+  const first = runCli(['install'], env);
+  assert.equal(first.status, 0, first.stderr);
+  for (const dir of dirs) {
+    assert.ok(first.stdout.includes(`hooks ${path.join(dir, 'settings.json')}: `), `${dir}\n${first.stdout}`);
+    assert.deepEqual(sextantHandlers(readJson(path.join(dir, 'settings.json'))).map((h) => [h.event, h.command]), [
+      ['SessionStart', pointer],
+      ['PostModelSwitch', pointer],
+    ]);
+  }
+  const kept = readJson(path.join(home, '.claude', 'settings.json'));
+  assert.deepEqual(kept.permissions, THIRD_PARTY.permissions);
+  assert.deepEqual(kept.hooks.PreToolUse, THIRD_PARTY.hooks.PreToolUse);
+  assert.deepEqual(kept.hooks.SessionStart[0], THIRD_PARTY.hooks.SessionStart[0]);
+  assert.equal(readJson(path.join(home, 'second-login', 'settings.json')).theme, 'dark');
+  assert.deepEqual(readJson(path.join(home, 'code', 'project', '.claude', 'settings.json')), { model: 'sonnet' }, 'a project is not a login');
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts.sort(), [...dirs].sort());
+
+  const before = dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
+  const second = runCli(['install'], env);
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal((second.stdout.match(/: unchanged/g) ?? []).length, dirs.length * 2, second.stdout);
+  assert.deepEqual(dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8')), before);
+
+  // A directory that is no longer found, such as one whose CLAUDE_CONFIG_DIR is not set now, is still removed.
+  const removed = runCli(['uninstall'], { ...env, CLAUDE_CONFIG_DIR: '' });
+  assert.equal(removed.status, 0, removed.stderr);
+  for (const dir of dirs) assert.deepEqual(sextantHandlers(readJson(path.join(dir, 'settings.json'))), [], dir);
+  assert.deepEqual(readJson(path.join(home, '.claude', 'settings.json')), THIRD_PARTY);
+  assert.equal(fs.existsSync(pointer), false);
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
+});
+
+test('by default: a login deleted since install does not keep the hook pointer, and uninstall forgets it', () => {
+  const { home, env } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  fs.rmSync(path.join(home, 'second-login'), { recursive: true });
+  const r = runCli(['uninstall'], env);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, new RegExp(`account install ${path.join(home, 'second-login')}: forgotten`));
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
+});
+
+test('uninstall --managed leaves the list of account installs alone, even for a login deleted since', { skip: !supported }, () => {
+  const { home, env } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  const installs = path.join(home, '.local', 'state', 'sextant', 'installs.json');
+  fs.rmSync(path.join(home, 'second-login'), { recursive: true });
+  const before = fs.readFileSync(installs, 'utf8');
+  const r = runCli(['uninstall', '--managed'], env);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /forgotten/);
+  assert.equal(fs.readFileSync(installs, 'utf8'), before);
+});
+
+test('by default: install creates ~/.claude when Claude Code has not run yet', () => {
+  const home = tempTree({});
+  const r = runCli(['install'], { HOME: home });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sextantHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 2);
+});
+
+test('by default: one broken settings file refuses the whole install and leaves every directory as it was', () => {
+  const { home, env, dirs } = logins();
+  fs.writeFileSync(path.join(home, 'second-login', 'settings.json'), '{ broken');
+  const before = dirs.map((d) => (fs.existsSync(path.join(d, 'settings.json')) ? fs.readFileSync(path.join(d, 'settings.json'), 'utf8') : null));
+  const r = runCli(['install'], env);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /second-login\/settings\.json is not valid JSON .*nothing was changed/);
+  assert.deepEqual(dirs.map((d) => (fs.existsSync(path.join(d, 'settings.json')) ? fs.readFileSync(path.join(d, 'settings.json'), 'utf8') : null)), before);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
+});
+
+test('by default: one broken settings file refuses the whole uninstall and leaves every directory as it was', () => {
+  const { home, env, dirs } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  fs.writeFileSync(path.join(home, 'second-login', 'settings.json'), '{ broken');
+  const read = () => dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
+  const before = read();
+  const r = runCli(['uninstall'], env);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /second-login\/settings\.json is not valid JSON .*nothing was changed/);
+  assert.doesNotMatch(r.stdout, /: removed/);
+  assert.deepEqual(read(), before);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), true);
+});
+
+test('by default: a hook pointer this account cannot remove refuses the whole uninstall and leaves every directory as it was', { skip: process.getuid?.() === 0 }, () => {
+  const { home, env, dirs } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  const pointerDir = path.join(home, '.local', 'share', 'sextant');
+  const read = () => dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
+  const before = read();
+  fs.chmodSync(pointerDir, 0o555);
+  try {
+    const r = runCli(['uninstall'], env);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /sextant-hook\. Nothing was changed\./);
+    assert.doesNotMatch(r.stdout, /: removed/);
+    assert.deepEqual(read(), before);
+  } finally {
+    fs.chmodSync(pointerDir, 0o755);
+  }
+});
+
+test('--managed warns about each login whose server-managed settings make Claude Code ignore the managed files', { skip: !supported }, () => {
+  const { home, env } = logins();
+  fs.writeFileSync(path.join(home, '.claude', 'remote-settings.json'), JSON.stringify({ permissions: { deny: ['WebFetch'] } }));
+  fs.writeFileSync(path.join(home, '.claude-work', 'remote-settings.json'), JSON.stringify({ managedSourcesBehavior: 'merge', permissions: {} }));
+  fs.writeFileSync(path.join(home, 'second-login', 'remote-settings.json'), JSON.stringify({ managedSourcesBehavior: 'first-wins' }));
+  const r = runCli(['install', '--managed'], env);
+  assert.equal(r.status, 0, r.stderr);
+  const warned = r.stdout.split('\n').filter((l) => l.startsWith('warning: the login in '));
+  assert.equal(warned.length, 1, r.stdout);
+  assert.ok(warned[0]?.includes(path.join(home, '.claude')) && /Run `sextant install`, without --managed/.test(warned[0] ?? ''), r.stdout);
+
+  // The default install next to it: only logins the machine-wide install still reaches get the rules twice.
+  const both = runCli(['install'], env);
+  assert.equal(both.status, 0, both.stderr);
+  const twice = /sessions that use (.*) receive the rules twice/.exec(both.stdout)?.[1] ?? '';
+  assert.ok(!twice.split(', ').includes(path.join(home, '.claude')) && twice.includes(path.join(home, '.claude-work')), both.stdout);
+});
+
+test('by default under sudo for another account\'s home: refused, nothing written', { skip: process.getuid?.() !== 0 }, () => {
+  const home = tempTree({});
+  fs.chownSync(home, 1, 1);
+  const r = runCli(['install'], { HOME: home });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /belongs to another account/);
+  assert.deepEqual(fs.readdirSync(home), []);
 });
