@@ -31,7 +31,7 @@ Claude Code keeps each login's settings in its own configuration directory: `~/.
 It needs no administrator rights.
 It adds one entry per event to each settings file, in a matcher group of its own, and keeps everything else in the file, other hooks included.
 The two tool events match only the agent tool, under both of its names (`"matcher": "Agent|Task"`), so sextant runs for no other tool call.
-Running it again changes nothing and writes no file, and it repairs an entry of its own that was moved, duplicated, points at an old place or has another matcher.
+Running it again changes nothing, and it repairs an entry of its own that was moved, duplicated, points at an old place or has another matcher.
 On an install from before the subagent hooks, running it again adds them.
 Every settings file is checked before any is written: one that is not valid JSON, or whose `hooks` do not have the documented shape, refuses the whole install, and every directory is left as it was.
 The hook pointer goes to `~/.local/share/sextant/sextant-hook`, and each directory is recorded in `~/.local/state/sextant/installs.json`.

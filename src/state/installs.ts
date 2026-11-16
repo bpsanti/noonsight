@@ -17,13 +17,9 @@ export function accountInstalls(stateDir: string): string[] {
   }
 }
 
-/**
- * Add or remove one directory. The file is written only when the list changes, so running install
- * again writes nothing, and a process that watches the home directory is not woken by it.
- */
+/** Add or remove one directory, and write the list. */
 export function recordAccountInstall(stateDir: string, configDir: string, installed: boolean): string[] {
   const current = accountInstalls(stateDir);
-  if (current.includes(configDir) === installed) return current;
   const others = current.filter((d) => d !== configDir);
   const accounts = installed ? [...others, configDir] : others;
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });

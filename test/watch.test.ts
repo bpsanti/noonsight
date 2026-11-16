@@ -142,9 +142,9 @@ test('the watcher is off by default: install writes no service, and check says i
   const r = runCli(['install'], env);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(fs.existsSync(service.file), false);
+  assert.deepEqual(calls(), [], 'install asks the service manager nothing');
   const check = runCli(['check'], env);
   assert.match(check.stdout, /^ok: watcher: off; `sextant watch enable`/m);
-  assert.deepEqual(calls(), [], 'nothing asked the service manager');
 });
 
 test('watch enable writes only its service file and starts it; again changes nothing; disable removes exactly that file', { skip: !supported }, () => {
@@ -164,8 +164,8 @@ test('watch enable writes only its service file and starts it; again changes not
   assert.deepEqual(
     calls(),
     process.platform === 'darwin'
-      ? [`launchctl bootstrap gui/${process.getuid?.()} ${service.file}`]
-      : ['systemctl --user daemon-reload', `systemctl --user enable --now ${SERVICE_UNIT}`],
+      ? [`launchctl print gui/${process.getuid?.()}/${SERVICE_LABEL}`, `launchctl bootstrap gui/${process.getuid?.()} ${service.file}`]
+      : [`systemctl --user is-active --quiet ${SERVICE_UNIT}`, 'systemctl --user daemon-reload', `systemctl --user enable --now ${SERVICE_UNIT}`],
   );
 
   const again = runCli(['watch', 'enable'], env);
@@ -221,9 +221,31 @@ test('watch enable that replaces a running service and is then refused leaves th
   fs.writeFileSync(path.join(managerDir, 'refuse'), '');
   const r = runCli(['watch', 'enable'], env);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /could not start the watcher .*refused by the test.*put back as it was, but the watcher is stopped; run `sextant watch enable` again/s);
+  assert.match(r.stderr, /could not start the watcher .*refused by the test.*the watcher is stopped, and the service file was put back as it was; run `sextant watch enable` again/s);
   assert.equal(fs.readFileSync(service.file, 'utf8'), other);
   assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'off\n');
+});
+
+test('a running watcher whose service file was removed by hand is reported by check, and enable and disable still reach it', { skip: !supported }, () => {
+  const { env, service, managerDir } = machine();
+  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['watch', 'enable'], env).status, 0);
+  fs.rmSync(service.file);
+  const check = runCli(['check'], env);
+  assert.equal(check.status, 1, check.stdout);
+  assert.match(check.stdout, /^problem: watcher: running without .*; run `sextant watch disable` to stop it$/m);
+
+  const again = runCli(['watch', 'enable'], env);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'on\n');
+  assert.ok(fs.existsSync(service.file));
+  fs.rmSync(service.file);
+
+  const off = runCli(['watch', 'disable'], env);
+  assert.equal(off.status, 0, off.stderr);
+  assert.match(off.stdout, /^watcher: off; it was running without /m);
+  assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'off\n');
+  assert.match(runCli(['check'], env).stdout, /^ok: watcher: off/m);
 });
 
 test('watch enable that the service manager refuses leaves no service file behind', { skip: !supported }, () => {

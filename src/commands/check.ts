@@ -250,7 +250,8 @@ function checkWatcher(env: Env, home: string, cli: string, add: (level: Level, t
     return;
   }
   if (content === null) {
-    add('ok', 'watcher: off; `sextant watch enable` installs into each new Claude Code configuration directory as it appears');
+    if (manager.running(service) === true) add('problem', `watcher: running without ${service.file}; run \`sextant watch disable\` to stop it`);
+    else add('ok', 'watcher: off; `sextant watch enable` installs into each new Claude Code configuration directory as it appears');
     return;
   }
   if (!isOurs(content)) {

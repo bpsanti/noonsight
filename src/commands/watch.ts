@@ -67,8 +67,8 @@ function enable(service: WatchService, io: Io): number {
     io.out(`watcher: already on (${service.file})`);
     return 0;
   }
-  // A service file from another copy of sextant or another Node.js is replaced; stop what it runs first.
-  if (old !== null && manager.running(service) === true) {
+  // A running watcher is stopped before its service file is replaced or started again.
+  if (manager.running(service) === true) {
     const stopped = manager.unload(service);
     if (!stopped.ok) {
       io.err(`sextant: could not stop the watcher to update it (${stopped.detail}); nothing was changed`);
@@ -86,8 +86,8 @@ function enable(service: WatchService, io: Io): number {
       fs.rmSync(service.file, { force: true });
       manager.forget(service);
     } else if (old !== content) writeFileAtomic(service.file, old, 0o644);
-    const restored = old === null ? 'the service file was removed again' : 'the service file was put back as it was, but the watcher is stopped; run `sextant watch enable` again once the cause is fixed';
-    io.err(`sextant: could not start the watcher (${started.detail}); ${restored}`);
+    const restored = old === null ? 'the service file was removed again' : 'the service file was put back as it was; run `sextant watch enable` again once the cause is fixed';
+    io.err(`sextant: could not start the watcher (${started.detail}); the watcher is stopped, and ${restored}`);
     return 1;
   }
   io.out(
@@ -103,13 +103,13 @@ function enable(service: WatchService, io: Io): number {
 
 function disable(service: WatchService, io: Io): number {
   const old = readServiceFile(service);
-  if (old === null) {
-    io.out(`watcher: already off (no ${service.file})`);
-    return 0;
-  }
-  if (!isOurs(old)) {
+  if (old !== null && !isOurs(old)) {
     io.err(`sextant: ${service.file} was not written by sextant, so it is left alone; nothing was changed`);
     return 1;
+  }
+  if (old === null && manager.running(service) !== true) {
+    io.out(`watcher: already off (no ${service.file})`);
+    return 0;
   }
   const stopped = manager.unload(service);
   // launchctl refuses to stop a service that is not loaded; that is already the state we want.
@@ -119,7 +119,7 @@ function disable(service: WatchService, io: Io): number {
   }
   fs.rmSync(service.file, { force: true });
   manager.forget(service);
-  io.out(`watcher: off; removed ${service.file}`);
+  io.out(old === null ? `watcher: off; it was running without ${service.file}` : `watcher: off; removed ${service.file}`);
   return 0;
 }
 
