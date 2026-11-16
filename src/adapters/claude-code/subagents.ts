@@ -12,7 +12,7 @@
 
 import { normalizeModel } from '../../core/normalize.js';
 import { resolve } from '../../core/resolve.js';
-import { taskScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
+import { taskScope, taskTextCut, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import {
   agentCallFile,
@@ -78,6 +78,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const prompt = typeof ti.prompt === 'string' ? ti.prompt : null;
   // The subagent's own task decides its scope; the session's scope does not carry over.
   const scope = taskScope(config, { description: str(ti.description), prompt });
+  const cut = taskTextCut(str(ti.description), prompt);
   const decision = resolve(config, { model: prediction.model, scope: scope.scope, place: 'subagent' });
 
   let delivered: AgentCall['delivered'] = 'nothing';
@@ -117,6 +118,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       parent_source: parent.source,
       ...decisionFields(decision),
       ...choiceFields(scope),
+      ...(cut ? { task_text_cut: true } : {}),
       model_source: prediction.source,
       ...(prediction.value !== undefined ? { model_value: prediction.value } : {}),
       ...(prediction.definition !== undefined ? { definition: prediction.definition } : {}),

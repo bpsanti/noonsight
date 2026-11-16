@@ -98,7 +98,10 @@ A subagent's scope comes from its own task and is never taken from the session.
 A session that investigates can start a subagent that summarizes, and each gets the rules of its own scope.
 
 Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware (flags `iu`).
-They read the subagent's whole `description`, then its whole `prompt`, joined; any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
+They read the subagent's `description`, then its `prompt`, joined, up to the first 100,000 characters.
+The bound keeps the time a matcher can take inside the hook, which runs before every agent call, limited, so a longer task is cut there, and the decision log records `task_text_cut` for it.
+A matcher whose time grows faster than the text, such as one starting with `.*`, can still be slow on a long task, so word-boundary matchers like `\binvestigat` are preferred.
+Any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
 When several scopes match, the one whose matcher matches earliest in the text wins, and two that match at the same place go to the scope declared first: the preset's scopes in the preset's order, then the user's new ones in the file's order.
 The check tries each matcher against six probe texts: `"a"`, `"Z"`, `"0"`, `" a "`, `"A B"` and `"x_1 y"`, which are plain task texts.
 A matcher that matches all six is refused as a catch-all (such as `.`, `\b` or `\w`).

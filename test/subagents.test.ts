@@ -460,6 +460,20 @@ test('a subagent\'s scope comes from its own task text, so two tasks on one mode
   );
 });
 
+test('a task text longer than the matchers read is logged as cut, so a scope missing for that reason can be traced', () => {
+  const h = hookHome(SCOPED());
+  startOn(h, 'claude-haiku-5-5');
+  h.hook('agent-call', call({ model: undefined, prompt: `${'x '.repeat(50_000)}Investigate the logs.` }), {});
+  h.hook('agent-call', call({ model: undefined, prompt: 'Investigate the logs.' }, { tool_use_id: 'toolu_short' }), {});
+  assert.deepEqual(
+    agentLines(h).map((l) => [l.scope, l.task_text_cut ?? null]),
+    [
+      [null, true],
+      ['investigate', null],
+    ],
+  );
+});
+
 test('the session\'s SEXTANT_SCOPE never carries over to a subagent, whose scope comes from its own task only', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');

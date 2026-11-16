@@ -8,7 +8,7 @@ import { loadConfig } from '../src/config/load.js';
 import { scopeOverlaps } from '../src/core/overlap.js';
 import { regexSamples } from '../src/core/regex-sample.js';
 import { resolve } from '../src/core/resolve.js';
-import { sessionPlace, sessionScope, taskScope, taskText } from '../src/core/scope.js';
+import { sessionPlace, sessionScope, taskScope, taskText, taskTextCut } from '../src/core/scope.js';
 import { MATCHER_FLAGS, type Config, type Decision, type MatchedDecision } from '../src/core/types.js';
 import { LAB_PRESETS, labPresetWith, tempTree } from './helpers.js';
 
@@ -147,14 +147,26 @@ test('task scope: rules a parent copied into the task do not pick the scope', ()
   assert.equal(scopeOf(cfg, `${note} Rename it.`), null);
 });
 
-test('task scope: the whole task text is read, so a matcher that matches only at the end of a 100,000-character task picks the scope', () => {
+test('task scope: a matcher that matches only at the very end of a 100,000-character task picks the scope', () => {
+  const cfg = scoped();
+  const word = ' investigate';
+  const filler = 'The function reads the file and writes the result. ';
+  const body = filler.repeat(Math.ceil((100_000 - word.length) / filler.length)).slice(0, 100_000 - word.length);
+  const task = `${body}${word}`;
+  assert.equal(task.length, 100_000);
+  assert.equal(scopeOf(cfg, body), null, 'the filler matches no scope');
+  assert.deepEqual(taskScope(cfg, { prompt: task }), { scope: 'investigate', source: 'task-text', matcher: '\\binvestigat' });
+  assert.equal(taskTextCut(null, task), false);
+});
+
+test('task scope: a match past the 100,000th character is not read, and the task is marked cut', () => {
   const cfg = scoped();
   const filler = 'The function reads the file and writes the result. ';
   const body = filler.repeat(Math.ceil(100_000 / filler.length)).slice(0, 100_000);
-  assert.equal(scopeOf(cfg, body), null, 'the filler matches no scope');
   const task = `${body} Then investigate`;
   assert.ok(task.length > 100_000);
-  assert.deepEqual(taskScope(cfg, { prompt: task }), { scope: 'investigate', source: 'task-text', matcher: '\\binvestigat' });
+  assert.deepEqual(taskScope(cfg, { prompt: task }), { scope: null, source: null });
+  assert.equal(taskTextCut(null, task), true);
 });
 
 test('task scope: a configuration with no matchers gives every subagent no scope', () => {
