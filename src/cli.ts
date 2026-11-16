@@ -35,7 +35,7 @@ Commands:
   check                             check the configuration, the installs, the watcher and Claude Code
   models [--json]                   list the declared models and their rules, with source and cost
   resolve <model> [scope] [place]   show the rules a model receives
-  report [--json] [--since <date>] [--log <file>]
+  report [--json] [--log <file>]
                                     report from the decision log how often each rule was delivered,
                                     and to which models, scopes and places
   run [--scope <scope>] [--] [claude arguments...]

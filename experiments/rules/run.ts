@@ -119,6 +119,17 @@ const TOOLS = 'Bash,Read,Grep,Glob,Edit,Write';
 const ALLOWED = 'Read,Grep,Glob,Edit,Write,Bash(npm test),Bash(npm test:*),Bash(npm run test:*),Bash(node:*),Bash(ls:*),Bash(cat:*)';
 const RUN_TIMEOUT_MS = 15 * 60 * 1000;
 
+/** A run that ended but cannot be recorded; it still spent its cost. */
+class RunFailed extends Error {
+  constructor(
+    message: string,
+    readonly cost_usd: number,
+  ) {
+    super(message);
+    this.name = 'RunFailed';
+  }
+}
+
 /** One run of one cell: a fresh lab and project, one `claude -p` session, then the signals. */
 async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: string): Promise<RunRecord> {
   const model = plan.models[cell.model];
@@ -161,7 +172,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   // Without the hook's decision, the run cannot say what it received, so it is not recorded and a resume runs it again.
   if (!log.some((d) => d.event === 'session-start')) {
     fs.rmSync(l.root, { recursive: true, force: true });
-    throw new Error(`sextant logged no session start, so the hook did not run or failed; ${path.join(dir, 'stream.jsonl')} holds its output`);
+    throw new RunFailed(`sextant logged no session start, so the hook did not run or failed; ${path.join(dir, 'stream.jsonl')} holds its output`, Number(result.total_cost_usd ?? 0));
   }
   fs.appendFileSync(path.join(out, 'decisions.jsonl'), log.map((d) => `${JSON.stringify({ ...d, experiment_run: cellKey(cell) })}\n`).join(''));
 
@@ -178,11 +189,12 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   let check: { check_passed?: boolean; suite_passed?: boolean } = {};
   if (task.check) {
     fs.writeFileSync(path.join(dir, 'changes.diff'), diff(fixture, l.project));
+    const node = (files: string[]): boolean => spawnSync(process.execPath, ['--test', ...files], { cwd: l.project, encoding: 'utf8', timeout: 60_000 }).status === 0;
+    const suitePassed = node([]);
     const hidden = path.join(l.project, 'check');
     fs.mkdirSync(hidden, { recursive: true });
     fs.copyFileSync(path.join(EXPERIMENT_DIR, task.check), path.join(hidden, path.basename(task.check)));
-    const node = (files: string[]): boolean => spawnSync(process.execPath, ['--test', ...files], { cwd: l.project, encoding: 'utf8', timeout: 60_000 }).status === 0;
-    check = { check_passed: node([path.join('check', path.basename(task.check))]), suite_passed: node([]) };
+    check = { check_passed: node([path.join('check', path.basename(task.check))]), suite_passed: suitePassed };
   }
 
   const session = log.find((d) => d.event === 'session-start') ?? {};
@@ -328,7 +340,8 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
         fs.appendFileSync(path.join(o.out, 'runs.jsonl'), `${JSON.stringify(record)}\n`);
         log(`done  ${cellKey(cell)}: ${record.outcome}, $${record.cost_usd.toFixed(3)}, ${record.tokens.output} output tokens, finished=${record.signals.finished}; spent $${spent.toFixed(2)}`);
       } catch (e) {
-        log(`fail  ${cellKey(cell)}: ${(e as Error).message}`);
+        if (e instanceof RunFailed) spent += e.cost_usd;
+        log(`fail  ${cellKey(cell)}: ${(e as Error).message}${e instanceof RunFailed ? `; $${e.cost_usd.toFixed(3)}, spent $${spent.toFixed(2)}` : ''}`);
       } finally {
         reserved -= budget;
         const wake = waiting;

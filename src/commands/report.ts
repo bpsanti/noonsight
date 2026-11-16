@@ -12,15 +12,14 @@ import { ANY_SCOPE, type Config, type Place } from '../core/types.js';
 import { LOG_FILE, readDecisionFile, readDecisions, ROTATED_LOG_FILE } from '../state/log.js';
 import { UsageError } from './usage.js';
 
-export const REPORT_USAGE = `usage: sextant report [--json] [--since <date>] [--log <file>]
+export const REPORT_USAGE = `usage: sextant report [--json] [--log <file>]
 
 Report what the decision log records: for each rule, how often it was delivered and to which
 models, scopes, places and events, with the length of its text; the rules the configuration has on
 that the log never shows delivered; and the decisions that delivered nothing, by why.
 
-  --since <date>  only decisions at or after this date (YYYY-MM-DD) or time (ISO 8601)
-  --log <file>    read this log file instead of the account's decision log
-  --json          print the same as JSON
+  --log <file>  read this log file instead of the account's decision log
+  --json        print the same as JSON
 
 Exits 0, or 2 for a usage error.`;
 
@@ -62,7 +61,6 @@ export interface IdleRule {
 
 export interface Report {
   readonly log: readonly string[];
-  readonly since: string | null;
   readonly decisions: number;
   readonly first: string | null;
   readonly last: string | null;
@@ -81,7 +79,6 @@ export interface Report {
 
 interface Options {
   readonly json: boolean;
-  readonly since: string | null;
   readonly log: string | null;
 }
 
@@ -94,34 +91,24 @@ export function runReport(args: readonly string[], env: Env, out: (text: string)
 
 function parseArgs(args: readonly string[]): Options {
   let json = false;
-  let since: string | null = null;
   let log: string | null = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i] as string;
     if (a === '--json') json = true;
-    else if (a === '--since' || a === '--log') {
+    else if (a === '--log') {
       const value = args[++i];
       if (value === undefined || value === '') throw new UsageError(`${a} needs a value`, REPORT_USAGE);
-      if (a === '--since') since = sinceValue(value);
-      else log = value;
+      log = value;
     } else throw new UsageError(a.startsWith('-') ? `unknown option ${a}` : `unexpected argument "${a}"`, REPORT_USAGE);
   }
-  return { json, since, log };
+  return { json, log };
 }
 
-/** A date or an ISO time, as the ISO time the log's `ts` values are compared with. */
-function sinceValue(value: string): string {
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const time = day ? Date.parse(`${value}T00:00:00Z`) : /^\d{4}-\d{2}-\d{2}T/.test(value) ? Date.parse(value) : NaN;
-  if (Number.isNaN(time)) throw new UsageError(`--since takes a date (YYYY-MM-DD) or an ISO 8601 time, not "${value}"`, REPORT_USAGE);
-  return new Date(time).toISOString();
-}
-
-export function buildReport(env: Env, options: Pick<Options, 'since' | 'log'>, home: string = os.homedir()): Report {
+export function buildReport(env: Env, options: Pick<Options, 'log'>, home: string = os.homedir()): Report {
   const dir = stateDir(home);
   const files = options.log !== null ? [path.resolve(options.log)] : [path.join(dir, ROTATED_LOG_FILE), path.join(dir, LOG_FILE)];
-  const all = options.log !== null ? readDecisionFile(path.resolve(options.log)) : readDecisions(dir);
-  const records = options.since === null ? all : all.filter((r) => typeof r.ts === 'string' && r.ts >= (options.since as string));
+  if (options.log !== null && !readableFile(files[0] as string)) throw new UsageError(`cannot read the log file ${options.log}`, REPORT_USAGE);
+  const records = options.log !== null ? readDecisionFile(files[0] as string) : readDecisions(dir);
 
   const delivering: Record<string, number> = {};
   const notDelivering: Record<string, number> = {};
@@ -206,7 +193,6 @@ export function buildReport(env: Env, options: Pick<Options, 'since' | 'log'>, h
 
   return {
     log: files,
-    since: options.since,
     decisions: records.length,
     first,
     last,
@@ -261,6 +247,15 @@ function ruleLengths(config: Config): Map<string, Map<string, number>> {
   return lengths;
 }
 
+function readableFile(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.R_OK);
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 function text(v: unknown): string | null {
   return typeof v === 'string' && v !== '' ? v : null;
 }
@@ -276,7 +271,7 @@ function sorted(tally: Record<string, number>): Tally {
 
 export function renderReport(r: Report): string {
   const lines: string[] = [];
-  lines.push(`log ${r.log.join(', ')}` + (r.since ? `, since ${r.since}` : ''));
+  lines.push(`log ${r.log.join(', ')}`);
   if (r.decisions === 0) {
     lines.push('No decisions in the log.');
   } else {

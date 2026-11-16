@@ -100,29 +100,24 @@ test('report counts each rule\'s deliveries by model, scope, place and event, an
   assert.doesNotMatch(r.stderr, /NETWORK-ATTEMPT/);
 });
 
-test('report --since keeps the decisions from that date on, and --json prints the same as JSON', () => {
+test('report --json prints the same as JSON', () => {
   const home = tempTree({});
   writeLog(home, LOG);
-  const r = runCli(['report', '--since', '2026-11-15', '--json'], { HOME: home, SEXTANT_CONFIG: path.join(configTree(), 'sextant.json') });
+  const r = runCli(['report', '--json'], { HOME: home, SEXTANT_CONFIG: path.join(configTree(), 'sextant.json') });
   assert.equal(r.status, 0, r.stderr);
   const report = JSON.parse(r.stdout) as Record<string, any>;
-  assert.equal(report.since, '2026-11-15T00:00:00.000Z');
-  assert.equal(report.decisions, 8);
-  assert.deepEqual(report.delivering, { launch: 1, 'model-switch': 1, 'session-start': 1 });
+  assert.equal(report.decisions, LOG.length);
   assert.deepEqual(
-    report.rules.map((x: Record<string, any>) => [x.id, x.deliveries, x.models]),
-    [['team/general', 3, { 'claude-haiku-5-5': 1, 'claude-sonnet-5-5': 2 }]],
+    report.rules.map((x: Record<string, any>) => [x.id, x.deliveries]),
+    [
+      ['team/general', 5],
+      ['team/investigate', 1],
+    ],
   );
   assert.deepEqual(
     report.never_delivered.map((x: Record<string, any>) => [x.id, x.model]),
-    [
-      ['team/investigate', 'claude-sonnet-5-5'],
-      ['team/review', 'claude-sonnet-5-5'],
-    ],
+    [['team/review', 'claude-sonnet-5-5']],
   );
-
-  const time = runCli(['report', '--since', '2026-11-16T08:15:00Z', '--json'], { HOME: home });
-  assert.equal(JSON.parse(time.stdout).decisions, 2);
 });
 
 test('report reads the moved-away log before the current one, and --log reads one file instead', () => {
@@ -160,13 +155,14 @@ test('report with an empty log says so', () => {
   assert.match(r.stdout, /^log .*\nNo decisions in the log\.\n/);
 });
 
-test('report refuses an unknown option, a stray argument and a --since it cannot read', () => {
+test('report refuses an unknown option, a stray argument and a --log it cannot read', () => {
+  const dir = tempTree({});
   for (const [args, message] of [
     [['report', '--all'], /unknown option --all/],
     [['report', 'today'], /unexpected argument "today"/],
-    [['report', '--since'], /--since needs a value/],
-    [['report', '--since', 'yesterday'], /--since takes a date \(YYYY-MM-DD\) or an ISO 8601 time, not "yesterday"/],
     [['report', '--log'], /--log needs a value/],
+    [['report', '--log', path.join(dir, 'missing.jsonl')], /cannot read the log file .*missing\.jsonl/],
+    [['report', '--log', dir], /cannot read the log file/],
   ] as const) {
     const r = runCli([...args], {});
     assert.equal(r.status, 2, args.join(' '));

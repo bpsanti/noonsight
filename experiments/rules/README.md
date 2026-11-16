@@ -47,7 +47,7 @@ The cost of a rule is the difference between the arms' means; it holds both the 
 
 Each run gets the lab the live tests use (`test/live/login.ts`): a temporary home for sextant, its own configuration, and sextant's hook entries in a `--settings` file.
 `--setting-sources project,local` keeps the person's own settings and `CLAUDE.md` out, `--strict-mcp-config` their MCP servers, `--disable-slash-commands` their skills, and `--no-session-persistence` keeps the runs out of their session history.
-The tools are limited to `Bash`, `Read`, `Grep`, `Glob`, `Edit` and `Write`, and `Bash` is allowed only for `npm test`, `node`, `ls` and `cat`, so a session cannot start subagents or reach the network.
+The tools are limited to `Bash`, `Read`, `Grep`, `Glob`, `Edit` and `Write`, and `Bash` is allowed only for `npm test`, `node`, `ls` and `cat`, so a session cannot start subagents and has none of the usual shell network tools (a `node` script could still open a connection).
 
 ## Running it
 
@@ -67,7 +67,8 @@ A run that stops can be started again with the same `--out`: the runs already re
 
 Each run passes `--max-budget-usd` with its model's budget from `plan.json`.
 A run starts only while the money already spent in `<dir>`, plus the budgets of the runs in flight, plus its own budget stays within `--cap-usd`.
-Claude Code checks a run's budget between turns, so a run can pass its own budget by the cost of its last turn; the cap holds otherwise.
+Claude Code checks a run's budget between turns, so a run can pass its own budget by the cost of its last turn.
+A run that is not recorded, such as one whose hook logged no session start, counts toward the cap for the rest of that `run`, but a resume does not count it again; the cap holds otherwise.
 Cost is what Claude Code reports, which is the API list price whatever the login pays.
 
 ## What it does not measure
