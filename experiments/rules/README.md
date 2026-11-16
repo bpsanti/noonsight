@@ -68,6 +68,7 @@ A run that stops can be started again with the same `--out`: the runs already re
 Each run passes `--max-budget-usd` with its model's budget from `plan.json`.
 A run starts only while the money already spent in `<dir>`, plus the budgets of the runs in flight, plus its own budget stays within `--cap-usd`.
 Claude Code checks a run's budget between turns, so a run can pass its own budget by the cost of its last turn.
+A run that ends with no cost reported, such as one stopped at its time limit, counts its whole budget toward the cap.
 A run that is not recorded, such as one whose hook logged no session start, counts toward the cap for the rest of that `run`, but a resume does not count it again; the cap holds otherwise.
 Cost is what Claude Code reports, which is the API list price whatever the login pays.
 

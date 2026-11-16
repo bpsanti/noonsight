@@ -119,11 +119,11 @@ const TOOLS = 'Bash,Read,Grep,Glob,Edit,Write';
 const ALLOWED = 'Read,Grep,Glob,Edit,Write,Bash(npm test),Bash(npm test:*),Bash(npm run test:*),Bash(node:*),Bash(ls:*),Bash(cat:*)';
 const RUN_TIMEOUT_MS = 15 * 60 * 1000;
 
-/** A run that ended but cannot be recorded; it still spent its cost. */
+/** A run that ended but cannot be recorded; it still spent its cost, null when Claude Code reported none. */
 class RunFailed extends Error {
   constructor(
     message: string,
-    readonly cost_usd: number,
+    readonly cost_usd: number | null,
   ) {
     super(message);
     this.name = 'RunFailed';
@@ -172,7 +172,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   // Without the hook's decision, the run cannot say what it received, so it is not recorded and a resume runs it again.
   if (!log.some((d) => d.event === 'session-start')) {
     fs.rmSync(l.root, { recursive: true, force: true });
-    throw new RunFailed(`sextant logged no session start, so the hook did not run or failed; ${path.join(dir, 'stream.jsonl')} holds its output`, Number(result.total_cost_usd ?? 0));
+    throw new RunFailed(`sextant logged no session start, so the hook did not run or failed; ${path.join(dir, 'stream.jsonl')} holds its output`, result.total_cost_usd === undefined ? null : Number(result.total_cost_usd));
   }
   fs.appendFileSync(path.join(out, 'decisions.jsonl'), log.map((d) => `${JSON.stringify({ ...d, experiment_run: cellKey(cell) })}\n`).join(''));
 
@@ -306,7 +306,9 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
   fs.mkdirSync(o.out, { recursive: true });
   const version = spawnSync('claude', ['--version'], { encoding: 'utf8', env: baseEnv() }).stdout.trim().split(' ')[0] ?? 'unknown';
   const done = new Set(readRuns(o.out).map(cellKey));
-  let spent = readRuns(o.out).reduce((s, r) => s + r.cost_usd, 0);
+  // A run with no result event reported no cost, so the cap counts its whole budget.
+  const charged = (r: Pick<RunRecord, 'model' | 'outcome' | 'cost_usd'>): number => (r.outcome === 'no-result' ? (plan.models[r.model]?.budget_usd ?? 0) : r.cost_usd);
+  let spent = readRuns(o.out).reduce((s, r) => s + charged(r), 0);
   const queue = cells(plan, o.models, o.tasks, o.arms, o.reps).filter((c) => !done.has(cellKey(c)));
   let reserved = 0;
   let skipped = 0;
@@ -336,12 +338,13 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
       log(`start ${cellKey(cell)}`);
       try {
         const record = await runCell(plan, cell, o.out, version);
-        spent += record.cost_usd;
+        spent += charged(record);
         fs.appendFileSync(path.join(o.out, 'runs.jsonl'), `${JSON.stringify(record)}\n`);
         log(`done  ${cellKey(cell)}: ${record.outcome}, $${record.cost_usd.toFixed(3)}, ${record.tokens.output} output tokens, finished=${record.signals.finished}; spent $${spent.toFixed(2)}`);
       } catch (e) {
-        if (e instanceof RunFailed) spent += e.cost_usd;
-        log(`fail  ${cellKey(cell)}: ${(e as Error).message}${e instanceof RunFailed ? `; $${e.cost_usd.toFixed(3)}, spent $${spent.toFixed(2)}` : ''}`);
+        const cost = e instanceof RunFailed && e.cost_usd !== null ? e.cost_usd : budget;
+        spent += cost;
+        log(`fail  ${cellKey(cell)}: ${(e as Error).message}; $${cost.toFixed(3)} counted, spent $${spent.toFixed(2)}`);
       } finally {
         reserved -= budget;
         const wake = waiting;
