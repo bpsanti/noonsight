@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { CLI_FILE, stateDir, type Env } from '../config/paths.js';
 import { writeFileAtomic } from '../state/files.js';
-import { isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
+import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { startWatcher } from '../watch/watcher.js';
 import { runInstall } from './install.js';
 import { UsageError } from './usage.js';
@@ -63,12 +63,12 @@ function enable(service: WatchService, io: Io): number {
     io.err(`sextant: ${service.file} was not written by sextant, so it is left alone; nothing was changed`);
     return 1;
   }
-  if (old === content && manager.running(service) === true) {
+  if (old === content && manager.running(service) === 'running') {
     io.out(`watcher: already on (${service.file})`);
     return 0;
   }
   // A running watcher is stopped before its service file is replaced or started again.
-  if (manager.running(service) === true) {
+  if (isLoaded(manager.running(service))) {
     const stopped = manager.unload(service);
     if (!stopped.ok) {
       io.err(`sextant: could not stop the watcher to update it (${stopped.detail}); nothing was changed`);
@@ -107,13 +107,13 @@ function disable(service: WatchService, io: Io): number {
     io.err(`sextant: ${service.file} was not written by sextant, so it is left alone; nothing was changed`);
     return 1;
   }
-  if (old === null && manager.running(service) !== true) {
+  if (old === null && !isLoaded(manager.running(service))) {
     io.out(`watcher: already off (no ${service.file})`);
     return 0;
   }
   const stopped = manager.unload(service);
   // launchctl refuses to stop a service that is not loaded; that is already the state we want.
-  if (!stopped.ok && !(service.platform === 'darwin' && manager.running(service) === false)) {
+  if (!stopped.ok && !(service.platform === 'darwin' && manager.running(service) === 'off')) {
     io.err(`sextant: could not stop the watcher (${stopped.detail}); nothing was changed`);
     return 1;
   }

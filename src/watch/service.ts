@@ -106,6 +106,13 @@ export function isOurs(content: string): boolean {
   return content.includes(MARKER);
 }
 
+export type WatcherState = 'running' | 'loaded' | 'off';
+
+/** Whether the service manager has the service loaded, whether or not a process runs. */
+export function isLoaded(state: WatcherState | null): boolean {
+  return state === 'running' || state === 'loaded';
+}
+
 export interface ManagerResult {
   readonly ok: boolean;
   readonly detail: string;
@@ -137,16 +144,22 @@ export const manager = {
     if (service.platform === 'darwin') return { ok: true, detail: '' };
     return run('systemctl', ['--user', 'daemon-reload']);
   },
-  /** Whether the service is loaded and running, or null when the service manager cannot say. */
-  running(service: WatchService): boolean | null {
+  /** Whether the service is running, loaded without a process, or off; null when the service manager cannot say. */
+  running(service: WatchService): WatcherState | null {
     const r =
       service.platform === 'darwin'
         ? spawnSync('launchctl', ['print', `${domain()}/${SERVICE_LABEL}`], { encoding: 'utf8', timeout: 10000 })
         : spawnSync('systemctl', ['--user', 'is-active', '--quiet', SERVICE_UNIT], { encoding: 'utf8', timeout: 10000 });
     if (r.error) return null;
-    // launchctl print exits 113 for an unknown service; systemctl is-active exits 3 for an inactive unit.
-    if (r.status === 0) return true;
-    if (service.platform === 'darwin' ? r.status === 113 : r.status === 3) return false;
+    if (service.platform === 'darwin') {
+      // launchctl print exits 113 for an unknown service; a loaded job prints its state, and a pid only while it runs.
+      if (r.status === 113) return 'off';
+      if (r.status !== 0) return null;
+      return /^\s*state = running$/m.test(r.stdout) && /^\s*pid = \d+$/m.test(r.stdout) ? 'running' : 'loaded';
+    }
+    // systemctl is-active exits 3 for an inactive unit.
+    if (r.status === 0) return 'running';
+    if (r.status === 3) return 'off';
     return null;
   },
 };

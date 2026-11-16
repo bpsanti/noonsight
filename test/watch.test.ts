@@ -27,13 +27,18 @@ case "$call" in
     if [ -f "$dir/refuse" ]; then echo "refused by the test" >&2; exit 5; fi
     echo on > "$dir/state";;
   "launchctl bootout "*)
-    [ "$state" = on ] || { echo "Boot-out failed: 3: No such process" >&2; exit 3; }
+    [ "$state" = off ] && { echo "Boot-out failed: 3: No such process" >&2; exit 3; }
     echo off > "$dir/state";;
   "systemctl --user disable --now "*)
     if [ ! -f "$SEXTANT_TEST_UNIT_FILE" ]; then echo "Failed to disable unit: Unit file does not exist." >&2; exit 1; fi
     echo off > "$dir/state";;
   "systemctl --user stop "*) echo off > "$dir/state";;
-  "launchctl print "*) [ "$state" = on ] || exit 113;;
+  "launchctl print "*)
+    case "$state" in
+      on) echo "state = running"; echo "pid = 4242";;
+      loaded) echo "state = not running";;
+      *) exit 113;;
+    esac;;
   "systemctl --user is-active "*) [ "$state" = on ] || exit 3;;
   "systemctl --user daemon-reload") ;;
   *) echo "unexpected call: $call" >&2; exit 64;;
@@ -92,7 +97,7 @@ function unitModel(text: string): Record<string, Record<string, string[]> | unde
 
 /** The words of an ExecStart= value as systemd splits them: whitespace separates, double quotes group, a backslash escapes inside quotes, and %% is a literal %. */
 function systemdWords(value: string): string[] {
-  return [...value.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map((m) => (m[1] ?? m[2] ?? '').replace(/\\(.)/g, '$1').replace(/%%/g, '%'));
+  return [...value.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map((m) => (m[1] ?? m[2] ?? '').replace(/\\(.)/g, '$1').replace(/%%/g, '%').replace(/\$\$/g, '$'));
 }
 
 /** The command line a service file runs, read through the service manager's own format. */
@@ -116,7 +121,7 @@ function files(root: string): Map<string, string> {
 }
 
 test('the launchd service file runs this copy of sextant at login and keeps it running', { skip: process.platform !== 'darwin' }, () => {
-  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant/dist/src/cli.js' };
+  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant$/dist/src/cli.js' };
   const mac = watchService({}, '/Users/u', 'darwin');
   assert.equal(mac.file, `/Users/u/Library/LaunchAgents/${SERVICE_LABEL}.plist`);
   const plist = plistModel(serviceContent(mac, runtime));
@@ -128,7 +133,7 @@ test('the launchd service file runs this copy of sextant at login and keeps it r
 });
 
 test('the systemd unit runs this copy of sextant at login and keeps it running', () => {
-  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant/dist/src/cli.js' };
+  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant$/dist/src/cli.js' };
   const linux = watchService({}, '/home/u', 'linux');
   assert.equal(linux.file, `/home/u/.config/systemd/user/${SERVICE_UNIT}`);
   assert.equal(watchService({ XDG_CONFIG_HOME: '/xdg' }, '/home/u', 'linux').file, `/xdg/systemd/user/${SERVICE_UNIT}`);
@@ -237,7 +242,7 @@ test('a running watcher whose service file was removed by hand is reported by ch
   fs.rmSync(service.file);
   const check = runCli(['check'], env);
   assert.equal(check.status, 1, check.stdout);
-  assert.match(check.stdout, /^problem: watcher: running without .*; run `sextant watch disable` to stop it$/m);
+  assert.match(check.stdout, /^problem: watcher: loaded without .*; run `sextant watch disable` to stop it$/m);
 
   const again = runCli(['watch', 'enable'], env);
   assert.equal(again.status, 0, again.stderr);
@@ -396,4 +401,39 @@ test('a marker written after the fast window is still picked up', async (t) => {
   fs.writeFileSync(path.join(login, '.claude.json'), '{}');
   await until(() => installed.length > 0, () => `nothing installed into ${login}`);
   assert.deepEqual(installed, [login]);
+});
+
+test('macOS: a loaded job without a running process is a warning, and enable and disable still reach it', { skip: process.platform !== 'darwin' }, () => {
+  const { env, managerDir } = machine();
+  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['watch', 'enable'], env).status, 0);
+  assert.match(runCli(['check'], env).stdout, /^ok: watcher: on \(/m);
+
+  fs.writeFileSync(path.join(managerDir, 'state'), 'loaded\n');
+  const loaded = runCli(['check'], env);
+  assert.match(loaded.stdout, /^warning: watcher: on in .*, but loaded without a running process/m);
+  assert.doesNotMatch(loaded.stdout, /^ok: watcher: on \(/m);
+
+  assert.equal(runCli(['watch', 'enable'], env).status, 0);
+  assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'on\n');
+
+  fs.writeFileSync(path.join(managerDir, 'state'), 'loaded\n');
+  const off = runCli(['watch', 'disable'], env);
+  assert.equal(off.status, 0, off.stderr);
+  assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'off\n');
+});
+
+test('a watcher install that fails leaves a problem line as its last log line, and check reports it as a warning', { skip: !supported }, async (t) => {
+  const { home, env, service } = machine();
+  assert.equal(runCli(['watch', 'enable'], env).status, 0);
+  const watcher = await startWatcher({ ...env, PATH: process.env.PATH ?? '' });
+  t.after(() => watcher.child.kill());
+  const login = path.join(home, '.claude-broken');
+  fs.mkdirSync(login);
+  fs.writeFileSync(path.join(login, 'settings.json'), '{ not json');
+  fs.writeFileSync(path.join(login, '.claude.json'), '{}');
+  await until(() => watcher.output().includes('failed; see the lines above'), () => watcher.output());
+  fs.writeFileSync(service.log, watcher.output());
+  const check = runCli(['check'], env);
+  assert.match(check.stdout, /^warning: watcher log .*: \S+ problem: install into .* failed; see the lines above$/m);
 });

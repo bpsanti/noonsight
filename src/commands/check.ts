@@ -16,7 +16,7 @@ import { findSextantHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from 
 import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
-import { isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
+import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { lastDecision } from '../state/log.js';
 import { compareVersions, packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
@@ -250,7 +250,7 @@ function checkWatcher(env: Env, home: string, cli: string, add: (level: Level, t
     return;
   }
   if (content === null) {
-    if (manager.running(service) === true) add('problem', `watcher: running without ${service.file}; run \`sextant watch disable\` to stop it`);
+    if (isLoaded(manager.running(service))) add('problem', `watcher: loaded without ${service.file}; run \`sextant watch disable\` to stop it`);
     else add('ok', 'watcher: off; `sextant watch enable` installs into each new Claude Code configuration directory as it appears');
     return;
   }
@@ -259,7 +259,8 @@ function checkWatcher(env: Env, home: string, cli: string, add: (level: Level, t
     return;
   }
   const running = manager.running(service);
-  if (running === false) add('problem', `watcher: on in ${service.file}, but not running; run \`sextant watch enable\` again`);
+  if (running === 'off') add('problem', `watcher: on in ${service.file}, but not running; run \`sextant watch enable\` again`);
+  else if (running === 'loaded') add('warning', `watcher: on in ${service.file}, but loaded without a running process; run \`sextant watch enable\` again`);
   else add('ok', `watcher: on (${service.file})${running === null ? '; whether it runs now could not be checked' : ''}`);
   if (content !== serviceContent(service, { node: process.execPath, cli }))
     add('warning', `watcher: ${service.file} runs another copy of sextant or another Node.js; run \`sextant watch enable\` again to switch to this one`);
