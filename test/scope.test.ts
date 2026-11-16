@@ -8,7 +8,7 @@ import { loadConfig } from '../src/config/load.js';
 import { scopeOverlaps } from '../src/core/overlap.js';
 import { regexSamples } from '../src/core/regex-sample.js';
 import { resolve } from '../src/core/resolve.js';
-import { sessionPlace, sessionScope, taskScope, taskText, taskTextCut } from '../src/core/scope.js';
+import { sessionPlace, sessionScope, taskScope, taskText } from '../src/core/scope.js';
 import { MATCHER_FLAGS, type Config, type Decision, type MatchedDecision } from '../src/core/types.js';
 import { LAB_PRESETS, labPresetWith, tempTree } from './helpers.js';
 
@@ -45,7 +45,7 @@ const SCOPES = {
   summarize: { match: ['\\bsummar', '\\bdigest\\b'] },
 };
 const scoped = (extra: Record<string, unknown> = {}): Config => load({ models: SONNET, scopes: SCOPES, ...extra }, RULES);
-const scopeOf = (cfg: Config, prompt: string, description: string | null = null): string | null => taskScope(cfg, { description, prompt }).scope;
+const scopeOf = (cfg: Config, prompt: string, description: string | null = null): string | null => taskScope(cfg, taskText(description, prompt).text).scope;
 
 test('scope: two scopes on the same model deliver different rules, and no scope delivers only the general ones', () => {
   const cfg = scoped();
@@ -91,7 +91,7 @@ test('session place: unattended when a variable of session.unattended_when_env i
 
 test('task scope: the matcher that matches earliest in the text wins, case-insensitively', () => {
   const cfg = scoped();
-  assert.deepEqual(taskScope(cfg, { prompt: 'Find the ROOT CAUSE of the failure.' }), {
+  assert.deepEqual(taskScope(cfg, taskText(null, 'Find the ROOT CAUSE of the failure.').text), {
     scope: 'investigate',
     source: 'task-text',
     matcher: '\\broot cause\\b',
@@ -107,8 +107,8 @@ test('task scope: the description is read before the task text', () => {
   const cfg = scoped();
   assert.equal(scopeOf(cfg, 'Investigate the logs and write it up.', 'Summarize release logs'), 'summarize');
   assert.equal(scopeOf(cfg, 'Investigate the logs.', 'Read logs'), 'investigate');
-  assert.equal(taskText('a', 'b'), 'a\n\nb');
-  assert.equal(taskText(null, 'b'), 'b');
+  assert.equal(taskText('a', 'b').text, 'a\n\nb');
+  assert.equal(taskText(null, 'b').text, 'b');
 });
 
 test('task scope: two scopes that match at the same place go to the one declared first, the preset\'s before the user\'s', () => {
@@ -155,8 +155,8 @@ test('task scope: a matcher that matches only at the very end of a 100,000-chara
   const task = `${body}${word}`;
   assert.equal(task.length, 100_000);
   assert.equal(scopeOf(cfg, body), null, 'the filler matches no scope');
-  assert.deepEqual(taskScope(cfg, { prompt: task }), { scope: 'investigate', source: 'task-text', matcher: '\\binvestigat' });
-  assert.equal(taskTextCut(null, task), false);
+  assert.deepEqual(taskScope(cfg, taskText(null, task).text), { scope: 'investigate', source: 'task-text', matcher: '\\binvestigat' });
+  assert.equal(taskText(null, task).cut, false);
 });
 
 test('task scope: a match past the 100,000th character is not read, and the task is marked cut', () => {
@@ -165,8 +165,8 @@ test('task scope: a match past the 100,000th character is not read, and the task
   const body = filler.repeat(Math.ceil(100_000 / filler.length)).slice(0, 100_000);
   const task = `${body} Then investigate`;
   assert.ok(task.length > 100_000);
-  assert.deepEqual(taskScope(cfg, { prompt: task }), { scope: null, source: null });
-  assert.equal(taskTextCut(null, task), true);
+  assert.deepEqual(taskScope(cfg, taskText(null, task).text), { scope: null, source: null });
+  assert.equal(taskText(null, task).cut, true);
 });
 
 test('task scope: a configuration with no matchers gives every subagent no scope', () => {

@@ -6,7 +6,7 @@
 // matches. A matcher whose examples are incomplete cannot be fully tested, so it is reported.
 
 import { regexSamples } from './regex-sample.js';
-import { taskScope } from './scope.js';
+import { taskScope, taskText } from './scope.js';
 import { MATCHER_FLAGS, type Config, type Scope } from './types.js';
 
 export interface Overlap {
@@ -45,7 +45,7 @@ export function scopeOverlaps(config: Config): OverlapReport {
     for (const b of scopes.slice(i + 1)) {
       const text = witness(samples.get(a) ?? [], b) ?? witness(samples.get(b) ?? [], a);
       if (text === undefined) continue;
-      overlaps.push({ scopes: [a.name, b.name], text, winner: taskScope(config, { prompt: text }).scope });
+      overlaps.push({ scopes: [a.name, b.name], text, winner: taskScope(config, taskText(null, text).text).scope });
     }
   });
 

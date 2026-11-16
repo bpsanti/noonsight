@@ -48,19 +48,11 @@ export function sessionPlace(config: Config, env: Readonly<Record<string, string
   return because !== undefined ? { place: 'unattended', because } : { place: 'session' };
 }
 
-export interface Task {
-  /** The call's short description. */
-  readonly description?: string | null;
-  /** The call's task text. */
-  readonly prompt?: string | null;
-}
-
 /**
- * The scope whose matcher matches earliest in a subagent's description and task text. Two scopes
- * that match at the same place go to the one declared first: the preset's scopes before the user's.
+ * The scope whose matcher matches earliest in a subagent's task text. Two scopes that match at the
+ * same place go to the one declared first: the preset's scopes before the user's.
  */
-export function taskScope(config: Config, task: Task): ScopeChoice {
-  const text = taskText(task.description ?? null, task.prompt ?? null);
+export function taskScope(config: Config, text: string): ScopeChoice {
   let best: { scope: string; matcher: string; at: number } | null = null;
   for (const scope of config.scopes.values())
     for (const m of scope.match) {
@@ -70,23 +62,21 @@ export function taskScope(config: Config, task: Task): ScopeChoice {
   return best === null ? NO_SCOPE : { scope: best.scope, source: 'task-text', matcher: best.matcher };
 }
 
+/** The text the matchers read, and whether the task text was longer than that and so cut. */
+export interface TaskText {
+  readonly text: string;
+  readonly cut: boolean;
+}
+
 /**
  * The text the matchers read: the description, then the task text, without any sextant envelope a
  * parent copied into it (the rules' own words must not pick the scope), cut to TASK_TEXT_LIMIT.
  */
-export function taskText(description: string | null, prompt: string | null): string {
-  return fullTaskText(description, prompt).slice(0, TASK_TEXT_LIMIT);
-}
-
-/** Whether the matchers read less than the whole task text, because it is longer than TASK_TEXT_LIMIT. */
-export function taskTextCut(description: string | null, prompt: string | null): boolean {
-  return fullTaskText(description, prompt).length > TASK_TEXT_LIMIT;
-}
-
-function fullTaskText(description: string | null, prompt: string | null): string {
+export function taskText(description: string | null, prompt: string | null): TaskText {
   const strip = (s: string): string => s.replace(/<sextant-rules(-change)?\b[^>]*>[\s\S]*?<\/sextant-rules\1>/g, '');
-  return [description, prompt]
+  const whole = [description, prompt]
     .filter((s): s is string => s !== null && s !== '')
     .map(strip)
     .join('\n\n');
+  return { text: whole.slice(0, TASK_TEXT_LIMIT), cut: whole.length > TASK_TEXT_LIMIT };
 }
