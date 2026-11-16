@@ -407,6 +407,18 @@ test('launcher: the prompt after -p is classified, and the scope is passed to th
   assert.ok(launch?.rules.includes('sonnet/investigate'));
 });
 
+test('launcher: with no model named before the session starts, the task is classified, as the session learns its model only then', () => {
+  const s = launcherStandIn();
+  const h = hookHome(config({ classifier: { mode: 'fallback' } }));
+  const r = runCli(['run', '--', '-p', 'Why does the nightly export write an empty file?'], { ...h.env, ...s.env('answer:investigate') }, NO_NETWORK);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(s.started().length, 1);
+  assert.deepEqual(s.session()?.env, { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'inferred' });
+  const launch = h.log().find((l) => l.event === 'launch');
+  assert.equal(launch?.classifier, 'scoped');
+  assert.equal(launch?.scope, 'investigate');
+});
+
 test('launcher: --scope is never classified, and a launch without a task text records no-task', () => {
   const s = launcherStandIn();
   const h = hookHome(config({ classifier: { mode: 'always' } }));

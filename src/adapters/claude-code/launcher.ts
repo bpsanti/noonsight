@@ -103,7 +103,7 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
     matters: () => {
       if (routeReadsScope(config, { target: 'launcher', env: req.env, held })) return true;
       const before = launchModelFrom(given, { env: explicitEnv, home: req.home, cwd: req.cwd });
-      return scopeChangesRules(config, before.kind === 'found' ? before.model : null, sessionPlace(config, explicitEnv).place);
+      return before.kind !== 'found' || scopeChangesRules(config, before.model, sessionPlace(config, explicitEnv).place);
     },
     env: req.env,
   });

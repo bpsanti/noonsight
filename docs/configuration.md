@@ -190,6 +190,7 @@ An explicit scope, from `SEXTANT_SCOPE` or `sextant run --scope`, is never repla
 A session started without `sextant run` has no task text when it starts, so its scope still comes from `SEXTANT_SCOPE` alone.
 
 The classifier is asked only when the scope can change something for the task: the model the task runs on receives, in that place, a rule written for a list of scopes, or routing would read the scope (it is on for the target, does not yield, and no model the caller chose holds the call).
+For `sextant run` with no model it can read before the session starts, the classifier is asked, since the session learns its model only once it starts.
 Otherwise the task does not wait for it, and the decision log records `classifier: "not-needed"`.
 
 ### What it is asked
