@@ -56,29 +56,33 @@ export function backtrackingRisk(source: string, flags: string): BacktrackingRis
   }
   for (const branch of tree) {
     const leading = leadingAny(branch);
-    if (leading !== null) return { kind: 'leading-any', parts: [leading] };
+    if (leading.kind === 'found') return { kind: 'leading-any', parts: [leading.part] };
   }
   return nestedOrAdjacent(tree);
 }
 
+type Lead = { kind: 'found'; part: string } | { kind: 'anchored' } | { kind: 'open' };
+
 /**
- * An unbounded repeat of any character that opens a branch with no "^" before it, looking past
- * parts that can match nothing and into the groups, repeats and lookarounds it passes.
+ * Whether a branch opens with an unbounded repeat of any character with no "^" before it, looking
+ * past parts that can match nothing and into the groups, repeats and lookarounds it passes. A part
+ * whose every alternative starts with "^" anchors what follows it, unless the part can be skipped.
  */
-function leadingAny(branch: readonly Node[]): string | null {
+function leadingAny(branch: readonly Node[]): Lead {
   for (const node of branch) {
     if (node.kind === 'zero') {
-      if (node.anchor) return null;
+      if (node.anchor) return { kind: 'anchored' };
       continue;
     }
-    if (node.kind === 'repeat' && node.max === Infinity && anyChar(charsOf(node.node))) return node.source;
-    for (const inner of innerBranches(node)) {
-      const found = leadingAny(inner);
-      if (found !== null) return found;
-    }
-    if (!canBeEmpty(node)) return null;
+    if (node.kind === 'repeat' && node.max === Infinity && anyChar(charsOf(node.node))) return { kind: 'found', part: node.source };
+    const leads = innerBranches(node).map(leadingAny);
+    const found = leads.find((l) => l.kind === 'found');
+    if (found !== undefined) return found;
+    const skippable = node.kind === 'repeat' && node.min === 0;
+    if (!skippable && leads.length > 0 && leads.every((l) => l.kind === 'anchored')) return { kind: 'anchored' };
+    if (!canBeEmpty(node)) return { kind: 'open' };
   }
-  return null;
+  return { kind: 'open' };
 }
 
 function nestedOrAdjacent(branches: readonly Node[][]): BacktrackingRisk | null {

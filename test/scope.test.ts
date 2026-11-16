@@ -274,11 +274,13 @@ test('backtracking shapes: a leading unbounded repeat of any character, nested u
   const kind = (p: string): string | null => backtrackingRisk(p, MATCHER_FLAGS)?.kind ?? null;
   for (const p of ['.*investigat', '.+x', '[\\s\\S]*x', '(?:.|\\n)*x', 'foo|.*bar', '\\b.*x']) assert.equal(kind(p), 'leading-any', p);
   // Parts that can match nothing do not anchor the repeat after them, and a lookaround opens its own alternatives.
-  for (const p of ['a?.*x', '(?:foo)?.*x', '\\s?.*x', '(?:.*x)?y', '(?=.*.*x)', '(?=.*deploy)(?=.*prod)', '(?<=.*x)y']) assert.equal(kind(p), 'leading-any', p);
+  for (const p of ['a?.*x', '(?:foo)?.*x', '\\s?.*x', '(?:.*x)?y', '(?=.*.*x)', '(?=.*deploy)(?=.*prod)', '(?<=.*x)y', '(?:^|\\s).*x', '(^\\s*)?.*x']) assert.equal(kind(p), 'leading-any', p);
+  // A "^" inside a group or lookaround still anchors what follows it.
+  assert.equal(kind('(?:^\\s*).*hotfix'), 'adjacent', 'anchored, so only the repeats in a row are reported');
   for (const p of ['(a+)+', '(a*)*', '(?:\\w+\\s?)*x', '(?:x(?:ab)+)*', '^(?=(a+)+x)']) assert.equal(kind(p), 'nested', p);
   for (const p of ['^.*.*x', '\\w+\\w+', '\\w+\\s*\\w+', 'a+(?:b?)a*', '^(?=.*.*x)', '\\w+(?:-|\\w+)', '(?:-|\\w+)\\w+', '\\w+(?:x\\w+)?\\w+']) assert.equal(kind(p), 'adjacent', p);
   assert.equal(kind('.*.*x'), 'leading-any', 'the first shape found is reported');
-  const common = ['\\bdeploy\\b', 'review|revis', '^fix\\b', '^.*hotfix', '^(?=.*deploy)(?=.*prod)', '\\s?fix\\b', 'foo.*bar', '\\binvestigat', '\\w+\\s+investigat', '\\d+\\.\\d+', 'x+y+', 'a.*b.*c', '(ab|cd){2}e', '(a+){2}', 'change\\s*log'];
+  const common = ['\\bdeploy\\b', 'review|revis', '^fix\\b', '^.*hotfix', '(?:^).*x', '(?=^).*x', '(?:^\\s?).*hotfix', '^(?=.*deploy)(?=.*prod)', '\\s?fix\\b', 'foo.*bar', '\\binvestigat', '\\w+\\s+investigat', '\\d+\\.\\d+', 'x+y+', 'a.*b.*c', '(ab|cd){2}e', '(a+){2}', 'change\\s*log'];
   for (const p of common) assert.equal(kind(p), null, p);
   assert.equal(kind('(unclosed'), null, 'an unreadable pattern is never reported');
 });

@@ -120,6 +120,7 @@ sextant refuses a matcher with one of these three shapes, naming the scope, the 
 
 - **It starts with an unbounded repeat of any character** (`.*`, `.+`, `[\s\S]*` and the like), in the whole pattern or in one of its alternatives, with no `^` before it.
   Parts that can match nothing, such as `a?`, `(?:foo)?` or `\b`, do not count as a start, so `a?.*x` is refused too.
+  A group or lookaround whose every alternative starts with `^` counts as a `^`, so `(?:^).*x` is accepted, while `(?:^|\s).*x` and `(^\s*)?.*x` are refused.
   A lookaround at the start opens its own alternatives the same way, so `(?=.*deploy)(?=.*prod)` is refused, and `^(?=.*deploy)(?=.*prod)` is accepted.
   The engine retries the repeat from every position of the task text.
   `^.*hotfix` is accepted; `.*investigat` is refused, and `\binvestigat` matches the same tasks.
