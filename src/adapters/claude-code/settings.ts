@@ -68,10 +68,14 @@ export function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function isNoonsightHandler(handler: unknown): boolean {
+/**
+ * Whether a handler runs the hook pointer: a file of that name, wherever it lives. pointerName is
+ * noonsight's own pointer, unless the migration from an earlier name asks for the earlier one.
+ */
+export function isNoonsightHandler(handler: unknown, pointerName: string = POINTER_NAME): boolean {
   if (!isObject(handler) || typeof handler.command !== 'string') return false;
   const base = handler.command.split(/[\\/]/).pop();
-  return base === POINTER_NAME;
+  return base === pointerName;
 }
 
 export interface FoundHandler {
@@ -81,7 +85,7 @@ export interface FoundHandler {
 }
 
 /** Every noonsight handler in the file, in order. Parts of the file with an unexpected shape are skipped. */
-export function findNoonsightHandlers(settings: unknown): FoundHandler[] {
+export function findNoonsightHandlers(settings: unknown, pointerName: string = POINTER_NAME): FoundHandler[] {
   const found: FoundHandler[] = [];
   if (!isObject(settings) || !isObject(settings.hooks)) return found;
   for (const [event, groups] of Object.entries(settings.hooks)) {
@@ -89,7 +93,7 @@ export function findNoonsightHandlers(settings: unknown): FoundHandler[] {
     for (const group of groups) {
       if (!isObject(group) || !Array.isArray(group.hooks)) continue;
       for (const handler of group.hooks)
-        if (isNoonsightHandler(handler)) found.push({ event, matcher: group.matcher, handler: handler as JsonObject });
+        if (isNoonsightHandler(handler, pointerName)) found.push({ event, matcher: group.matcher, handler: handler as JsonObject });
     }
   }
   return found;
@@ -136,7 +140,7 @@ export function withNoonsightHooks(settings: unknown, pointer: string): Edit {
  * The settings with every noonsight handler removed. A matcher group, an event or the hooks object is
  * removed only when removing noonsight's handlers is what left it empty.
  */
-export function withoutNoonsightHooks(settings: unknown): Edit {
+export function withoutNoonsightHooks(settings: unknown, pointerName: string = POINTER_NAME): Edit {
   const next = checkShape(settings);
   if (!isObject(next.hooks)) return { settings: next, changed: false };
   let changed = false;
@@ -149,7 +153,7 @@ export function withoutNoonsightHooks(settings: unknown): Edit {
         kept.push(group);
         continue;
       }
-      const handlers = group.hooks.filter((h) => !isNoonsightHandler(h));
+      const handlers = group.hooks.filter((h) => !isNoonsightHandler(h, pointerName));
       if (handlers.length === group.hooks.length) {
         kept.push(group);
         continue;

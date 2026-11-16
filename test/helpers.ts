@@ -113,3 +113,34 @@ export function hookHome(config: string = LAB_CONFIG, extraEnv: Record<string, s
     },
   };
 }
+
+/** A stand-in for launchctl and systemctl that records its calls and remembers whether the service runs. */
+export const FAKE_MANAGER = `#!/bin/sh
+# Shell builtins only: PATH holds nothing but the stand-ins.
+dir="$NOONSIGHT_TEST_SERVICE_DIR"
+call="\${0##*/} $*"
+echo "$call" >> "$dir/calls"
+state=off
+[ -f "$dir/state" ] && read -r state < "$dir/state"
+case "$call" in
+  "launchctl bootstrap "*|"systemctl --user enable --now "*)
+    if [ -f "$dir/refuse" ]; then echo "refused by the test" >&2; exit 5; fi
+    echo on > "$dir/state";;
+  "launchctl bootout "*)
+    [ "$state" = off ] && { echo "Boot-out failed: 3: No such process" >&2; exit 3; }
+    echo off > "$dir/state";;
+  "systemctl --user disable --now "*)
+    if [ ! -f "$NOONSIGHT_TEST_UNIT_FILE" ]; then echo "Failed to disable unit: Unit file does not exist." >&2; exit 1; fi
+    echo off > "$dir/state";;
+  "systemctl --user stop "*) echo off > "$dir/state";;
+  "launchctl print "*)
+    case "$state" in
+      on) echo "state = running"; echo "pid = 4242";;
+      loaded) echo "state = not running";;
+      *) exit 113;;
+    esac;;
+  "systemctl --user is-active "*) [ "$state" = on ] || exit 3;;
+  "systemctl --user daemon-reload") ;;
+  *) echo "unexpected call: $call" >&2; exit 64;;
+esac
+`;

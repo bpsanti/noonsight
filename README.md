@@ -40,6 +40,7 @@ Turn a preset rule on or off with `enable` and `disable`, add your own rule file
 User settings reach every login, including one whose organization delivers server-managed settings, where Claude Code ignores machine-wide managed settings files.
 `noonsight install --account <dir>` installs into one directory, and `sudo ... noonsight install --managed` once for every account through Claude Code's managed settings files.
 [docs/install.md](docs/install.md) covers the three installs, what they write, why the default is the default, and how to remove them.
+noonsight was called sextant before; an install made under that name is migrated by `noonsight install` ([docs/install.md](docs/install.md#moving-from-sextant)).
 [docs/hooks.md](docs/hooks.md) describes what the hooks deliver, the decision log, and how to turn noonsight off for a session (`NOONSIGHT_DISABLE=1`).
 
 `noonsight report` reads the decision log and tells, for each rule, how often it was delivered and to which models, scopes and places, and which rules are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).

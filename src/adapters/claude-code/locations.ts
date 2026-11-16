@@ -60,15 +60,18 @@ export class UnsupportedPlatformError extends Error {
 export function managedTarget(env: Env, platform: NodeJS.Platform = process.platform): InstallTarget {
   const dirs = SYSTEM_DIRS[platform];
   if (!dirs) throw new UnsupportedPlatformError(platform);
-  const root = env.NOONSIGHT_SYSTEM_ROOT ? path.resolve(env.NOONSIGHT_SYSTEM_ROOT) : null;
-  const system = (p: string): string => (root ? path.join(root, p) : p);
-  const managedDir = system(dirs.claudeCode);
+  const managedDir = systemPath(env, dirs.claudeCode);
   return {
     kind: 'managed',
     managedDir,
     settingsFile: path.join(managedDir, 'managed-settings.d', DROP_IN_NAME),
-    pointer: path.join(system(dirs.noonsight), POINTER_NAME),
+    pointer: path.join(systemPath(env, dirs.noonsight), POINTER_NAME),
   };
+}
+
+/** A system-wide path, under NOONSIGHT_SYSTEM_ROOT when the tests set it. */
+export function systemPath(env: Env, p: string): string {
+  return env.NOONSIGHT_SYSTEM_ROOT ? path.join(path.resolve(env.NOONSIGHT_SYSTEM_ROOT), p) : p;
 }
 
 /** A per-account install into one Claude Code configuration directory, such as ~/.claude. */
