@@ -76,7 +76,7 @@ function enable(service: WatchService, io: Io): number {
     }
   }
 
-  // The log's directory, made here so the watcher itself never creates an entry in the home directory.
+  // The log's directory, made before the service starts and writes to it.
   fs.mkdirSync(stateDir(home), { recursive: true, mode: 0o700 });
   fs.mkdirSync(path.dirname(service.file), { recursive: true, mode: 0o755 });
   if (old !== content) writeFileAtomic(service.file, content, 0o644);
@@ -119,7 +119,12 @@ function disable(service: WatchService, io: Io): number {
   }
   fs.rmSync(service.file, { force: true });
   manager.forget(service);
-  io.out(old === null ? `watcher: off; it was running without ${service.file}` : `watcher: off; removed ${service.file}`);
+  if (old !== null) io.out(`watcher: off; removed ${service.file}`);
+  else if (service.platform === 'linux')
+    io.out(
+      `watcher: off; it was running without ${service.file}; a link to it may remain in ${path.join(path.dirname(service.file), 'default.target.wants')}, which can be removed by hand`,
+    );
+  else io.out(`watcher: off; it was running without ${service.file}`);
   return 0;
 }
 

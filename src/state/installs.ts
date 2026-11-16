@@ -17,10 +17,8 @@ export function accountInstalls(stateDir: string): string[] {
   }
 }
 
-/** Add or remove one directory, and write the list. */
 export function recordAccountInstall(stateDir: string, configDir: string, installed: boolean): string[] {
-  const current = accountInstalls(stateDir);
-  const others = current.filter((d) => d !== configDir);
+  const others = accountInstalls(stateDir).filter((d) => d !== configDir);
   const accounts = installed ? [...others, configDir] : others;
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   writeFileAtomic(path.join(stateDir, FILE), `${JSON.stringify({ schema: 1, accounts }, null, 2)}\n`, 0o600);

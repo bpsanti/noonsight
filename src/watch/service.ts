@@ -123,9 +123,13 @@ export const manager = {
     if (!reload.ok) return reload;
     return run('systemctl', ['--user', 'enable', '--now', SERVICE_UNIT]);
   },
-  /** Stop the service and keep it from starting at login. */
+  /**
+   * Stop the service and keep it from starting at login. Without its unit file systemd cannot
+   * disable the unit, so only the stop is done, and a link to the file may remain.
+   */
   unload(service: WatchService): ManagerResult {
     if (service.platform === 'darwin') return run('launchctl', ['bootout', `${domain()}/${SERVICE_LABEL}`]);
+    if (!fs.existsSync(service.file)) return run('systemctl', ['--user', 'stop', SERVICE_UNIT]);
     return run('systemctl', ['--user', 'disable', '--now', SERVICE_UNIT]);
   },
   /** Make the service manager forget a unit file that was removed; macOS has nothing to forget. */

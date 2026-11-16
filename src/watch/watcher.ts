@@ -3,11 +3,10 @@
 // running `sextant install` again.
 //
 // It watches only the entries directly in the home directory, without recursion, so writes below
-// them never wake it. When a new directory appears there, it waits a few seconds for the file that
-// marks a Claude Code configuration directory, then runs the same install as
-// `sextant install --account <dir>` for that directory alone. It never writes to the home
-// directory itself: install writes inside the new directory and under ~/.local, which the watcher
-// only uses once it exists.
+// them never wake it. When a new directory appears there, it waits for the file that marks a Claude
+// Code configuration directory, then runs the same install as `sextant install --account <dir>` for
+// that directory alone. The wait is kept up for as long as the directory stays there, so a marker
+// written late is still picked up.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,18 +17,24 @@ export interface WatcherOptions {
   /** Install sextant's hooks into one configuration directory, as `sextant install --account <dir>` does. */
   readonly install: (dir: string) => void;
   readonly log: (text: string) => void;
+  /** How long the marker is checked every POLL_MS before it is checked every slowPollMs. */
+  readonly fastWindowMs?: number;
+  readonly slowPollMs?: number;
 }
 
 /**
- * Claude Code writes the marker shortly after it creates a configuration directory; the wait covers
- * a slower disk without keeping a directory that never becomes one in view for long.
+ * Claude Code writes the marker shortly after it creates a configuration directory; the fast window
+ * covers that, and the slow poll keeps a late marker in view at almost no cost.
  */
-const MARKER_WAIT_MS = 10_000;
 const POLL_MS = 100;
+const FAST_WINDOW_MS = 10_000;
+const SLOW_POLL_MS = 5_000;
 
 /** Start watching; the watch keeps the process alive, and the process ends if the watch fails. */
 export function startWatcher(options: WatcherOptions): () => void {
   const { home, log } = options;
+  const fastWindowMs = options.fastWindowMs ?? FAST_WINDOW_MS;
+  const slowPollMs = options.slowPollMs ?? SLOW_POLL_MS;
   const timers = new Set<NodeJS.Timeout>();
 
   // The entries already there are not new; a directory made while the watcher was not running is
@@ -50,29 +55,27 @@ export function startWatcher(options: WatcherOptions): () => void {
     }
     if (known.get(name) === ino) return;
     known.set(name, ino);
-    if (isDirectory(entry)) awaitMarker(entry, name, ino, Date.now() + MARKER_WAIT_MS);
+    if (isDirectory(entry)) awaitMarker(entry, name, ino, Date.now());
   };
 
-  const awaitMarker = (dir: string, name: string, ino: bigint, deadline: number): void => {
+  const awaitMarker = (dir: string, name: string, ino: bigint, since: number): void => {
     // ~/.claude is Claude Code's default configuration directory; its marker lives in the home directory instead.
     if (name === '.claude' || isFile(path.join(dir, CONFIG_MARKER))) {
       installInto(dir);
       return;
     }
-    if (Date.now() >= deadline || known.get(name) !== ino) return;
-    const timer = setTimeout(() => {
-      timers.delete(timer);
-      awaitMarker(dir, name, ino, deadline);
-    }, POLL_MS);
+    if (known.get(name) !== ino) return;
+    const timer = setTimeout(
+      () => {
+        timers.delete(timer);
+        awaitMarker(dir, name, ino, since);
+      },
+      Date.now() - since < fastWindowMs ? POLL_MS : slowPollMs,
+    );
     timers.add(timer);
   };
 
   const installInto = (dir: string): void => {
-    // The install creates what is missing under ~/.local; the watcher never makes an entry in the home directory.
-    if (!fs.existsSync(path.join(home, '.local'))) {
-      log(`problem: new Claude Code configuration ${dir} not installed: ${path.join(home, '.local')} does not exist; run \`sextant install\``);
-      return;
-    }
     log(`new Claude Code configuration ${dir}: installing`);
     try {
       options.install(dir);

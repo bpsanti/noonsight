@@ -29,7 +29,10 @@ case "$call" in
   "launchctl bootout "*)
     [ "$state" = on ] || { echo "Boot-out failed: 3: No such process" >&2; exit 3; }
     echo off > "$dir/state";;
-  "systemctl --user disable --now "*) echo off > "$dir/state";;
+  "systemctl --user disable --now "*)
+    if [ ! -f "$SEXTANT_TEST_UNIT_FILE" ]; then echo "Failed to disable unit: Unit file does not exist." >&2; exit 1; fi
+    echo off > "$dir/state";;
+  "systemctl --user stop "*) echo off > "$dir/state";;
   "launchctl print "*) [ "$state" = on ] || exit 113;;
   "systemctl --user is-active "*) [ "$state" = on ] || exit 3;;
   "systemctl --user daemon-reload") ;;
@@ -46,6 +49,7 @@ function machine() {
     HOME: home,
     PATH: bin,
     SEXTANT_TEST_SERVICE_DIR: managerDir,
+    SEXTANT_TEST_UNIT_FILE: path.join(home, '.config', 'systemd', 'user', SERVICE_UNIT),
     SEXTANT_CONFIG: LAB_CONFIG,
     SEXTANT_PRESETS_DIR: LAB_PRESETS,
     SEXTANT_SYSTEM_ROOT: tempTree({}),
@@ -373,15 +377,23 @@ test('a watcher install that throws logs its failure on one line that says probl
   assert.deepEqual(logged.filter((line) => line.startsWith('problem:')), [`problem: install into ${login} failed: disk full`]);
 });
 
-test('the watcher does not create ~/.local itself; it says to run sextant install', async (t) => {
-  const home = tempTree({});
-  const env = { HOME: home, PATH: process.env.PATH ?? '', SEXTANT_SYSTEM_ROOT: tempTree({}) };
-  const watcher = await startWatcher(env);
-  t.after(() => watcher.child.kill());
-  const login = path.join(home, '.claude-new');
+test('a marker written after the fast window is still picked up', async (t) => {
+  const home = tempTree({ '.local/.keep': '' });
+  const installed: string[] = [];
+  const close = runWatcher({
+    home,
+    log: () => {},
+    install: (dir) => {
+      installed.push(dir);
+    },
+    fastWindowMs: 100,
+    slowPollMs: 50,
+  });
+  t.after(close);
+  const login = path.join(home, '.claude-late');
   fs.mkdirSync(login);
+  await new Promise((r) => setTimeout(r, 400));
   fs.writeFileSync(path.join(login, '.claude.json'), '{}');
-  await until(() => / problem: .* does not exist; run `sextant install`/.test(watcher.output()), () => watcher.output());
-  assert.deepEqual(fs.readdirSync(home), ['.claude-new']);
-  assert.deepEqual(fs.readdirSync(login), ['.claude.json']);
+  await until(() => installed.length > 0, () => `nothing installed into ${login}`);
+  assert.deepEqual(installed, [login]);
 });

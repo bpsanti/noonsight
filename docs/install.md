@@ -82,7 +82,7 @@ sextant watch disable   # turn it off
 The watcher is off by default.
 Neither `sextant install` nor anything else turns it on; only `sextant watch enable` does.
 When it is on, a Claude Code configuration directory made in your home directory gets sextant's hooks without anyone running `sextant install` again.
-The watcher sees a new directory as soon as it appears, then checks for its marker every 100 ms, for up to ten seconds, before it installs.
+The watcher sees a new directory as soon as it appears, then checks for its marker every 100 ms for ten seconds, and every five seconds after that for as long as the directory stays there without one.
 
 ### What it does
 
@@ -102,13 +102,14 @@ The process watches only the entries directly in the home directory, without rec
 Writes below them, in a project, in `~/Library` or inside a Claude Code configuration directory, never wake it.
 Claude Code rewrites `~/.claude.json` often; each rewrite wakes the watcher for one check of that entry, and nothing is written.
 
-When a new directory appears directly in the home directory, the watcher waits up to ten seconds for the `.claude.json` file that marks a Claude Code configuration directory, the same marker the default install looks for, because Claude Code writes it just after it creates the directory.
+When a new directory appears directly in the home directory, the watcher waits for the `.claude.json` file that marks a Claude Code configuration directory, the same marker the default install looks for, because Claude Code writes it just after it creates the directory.
+It checks every 100 ms for the first ten seconds, then every five seconds, until the marker appears or the directory goes away.
 It then installs into that directory alone, exactly as `sextant install --account <dir>` does, so a broken settings file in another login does not hold it back.
 `~/.claude` is installed into without a marker, because Claude Code keeps that directory's marker in the home directory.
-A directory that never gets the marker is left alone.
+A directory that never gets the marker is checked every five seconds for as long as it stays, which costs almost nothing; a marker written later still gets it installed.
 
-It never writes to the home directory itself: an install writes the new directory's `settings.json`, and the hook pointer and the list of installs under `~/.local`.
-`enable` creates `~/.local/state/sextant` if it is missing; should `~/.local` disappear later, the watcher installs nothing and logs a problem instead of creating it.
+An install writes the new directory's `settings.json`, and the hook pointer and the list of installs under `~/.local`, which it creates when it is missing.
+`enable` creates `~/.local/state/sextant` if it is missing, for the log.
 
 What happens is appended to `~/.local/state/sextant/watch.log`, and `sextant check` shows its last line.
 
