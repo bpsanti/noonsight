@@ -138,14 +138,20 @@ function run(env: Env, io: Io): number {
         .join('\n'),
     );
   };
-  startWatcher({
-    home: os.homedir(),
-    log,
-    install: (dir) => {
-      const status = runInstall('install', ['--account', dir], env, { out: log, err: log });
-      // A summary last, so the last line of the log, which `sextant check` shows, says how it went.
-      log(status === 0 ? `new Claude Code configuration ${dir}: installed` : `problem: install into ${dir} failed; see the lines above`);
-    },
-  });
+  const home = os.homedir();
+  try {
+    startWatcher({
+      home,
+      log,
+      install: (dir) => {
+        const status = runInstall('install', ['--account', dir], env, { out: log, err: log });
+        // A summary last, so the last line of the log, which `sextant check` shows, says how it went.
+        log(status === 0 ? `new Claude Code configuration ${dir}: installed` : `problem: install into ${dir} failed; see the lines above`);
+      },
+    });
+  } catch (e) {
+    log(`problem: watching ${home} did not start: ${e instanceof Error ? e.message : String(e)}`);
+    return 1;
+  }
   return 0;
 }

@@ -93,7 +93,7 @@ The watcher sees a new directory as soon as it appears, then checks for its mark
 | macOS | `~/Library/LaunchAgents/io.github.bpsanti.sextant-ai.watch.plist` | launchd, with `RunAtLoad` and `KeepAlive` |
 | Linux | `~/.config/systemd/user/sextant-watch.service` (under `$XDG_CONFIG_HOME` when it is set) | the systemd user manager, enabled for `default.target`, with `Restart=always` |
 
-The service starts at every login and runs `sextant watch run`: one resident Node.js process for the account, which uses no CPU while nothing changes in the home directory.
+The service starts at every login and runs `sextant watch run`: one resident Node.js process for the account, which is idle while nothing changes in the home directory, apart from one check every five seconds for each new directory that has no marker yet.
 Like the hook pointer, it runs the Node.js and the copy of sextant that ran `enable`, by absolute paths.
 After moving or upgrading either one, run `sextant watch enable` again; `sextant check` warns until then.
 The service file records the sextant version, so an upgrade at the same path counts too: `enable` restarts the watcher on the new code.
@@ -120,10 +120,9 @@ One that was already there, made while the watcher was off, or kept outside the 
 ### What it cannot cover
 
 Claude Code decides early which hooks the first session of a new login starts with, and in two cases that is before the watcher can write them.
-Both were measured with Claude Code 2.1.325.
 
 - **The first `claude -p` with a new configuration directory.**
-  Claude Code runs `SessionStart` a fraction of a second after it creates the directory, before the watcher has written the hooks.
+  Claude Code runs `SessionStart` right after it creates the directory, which can be before the watcher has written the hooks.
   That first session starts without the rules.
 - **The first interactive session, when the theme is confirmed first.**
   The session starts with the hooks that were in `settings.json` when the theme is confirmed on Claude Code's first screen.

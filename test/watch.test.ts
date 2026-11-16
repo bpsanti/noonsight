@@ -469,3 +469,12 @@ test('an upgrade of sextant at the same path is noticed: check warns, and enable
   );
   assert.match(runCli(['check'], env).stdout, /^ok: watcher: on \(/m);
 });
+
+test('a watcher that cannot watch its home directory logs one problem line and exits 1', () => {
+  const missing = path.join(tempTree({}), 'no-such-home');
+  const r = runCli(['watch', 'run'], { HOME: missing, PATH: process.env.PATH ?? '', SEXTANT_SYSTEM_ROOT: tempTree({}), SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS });
+  assert.equal(r.status, 1, r.stderr);
+  const lines = r.stdout.trimEnd().split('\n');
+  assert.equal(lines.length, 1, r.stdout);
+  assert.match(lines[0] ?? '', /^\d{4}-\d{2}-\d{2}T\S+Z problem: watching .* did not start: ENOENT/);
+});
