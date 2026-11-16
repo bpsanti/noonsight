@@ -9,7 +9,6 @@ import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { isPermissionError } from '../state/files.js';
 import { accountInstalls, recordAccountInstall } from '../state/installs.js';
-import { watcherEnabled } from '../watch/service.js';
 import { packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
@@ -114,11 +113,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
   }
 
   if (command === 'install') lines.push(...installNotes(targets, env, home));
-  else {
-    if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
-    if (mode.kind === 'every' && watcherEnabled(env, home))
-      lines.push('note: the watcher is still on and installs into each new Claude Code configuration directory; turn it off with `sextant watch disable`.');
-  }
+  else if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
   io.out(lines.join('\n'));
   return 0;
 }

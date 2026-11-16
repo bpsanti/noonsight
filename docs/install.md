@@ -81,7 +81,8 @@ sextant watch disable   # turn it off
 
 The watcher is off by default.
 Neither `sextant install` nor anything else turns it on; only `sextant watch enable` does.
-When it is on, a Claude Code configuration directory made in your home directory gets sextant's hooks within moments, without anyone running `sextant install` again.
+When it is on, a Claude Code configuration directory made in your home directory gets sextant's hooks without anyone running `sextant install` again.
+The watcher sees a new directory as soon as it appears, then checks for its marker every 100 ms, for up to ten seconds, before it installs.
 
 ### What it does
 
@@ -137,7 +138,7 @@ sextant watch disable
 
 It stops the service and removes the one service file `enable` wrote, and nothing else; on Linux it also disables the unit, which removes its link in `default.target.wants`.
 A service file at that path that sextant did not write is left alone, and both commands refuse to touch it.
-The hooks the watcher installed stay, like any other install; `sextant uninstall` removes them, and reminds you when the watcher is still on.
+The hooks the watcher installed stay, like any other install; `sextant uninstall` removes them.
 The log stays in `~/.local/state/sextant/watch.log`.
 
 ## Machine-wide, for every account (--managed)

@@ -3,11 +3,12 @@
 // loaded, and the watcher itself runs as a child process watching a temporary home.
 
 import assert from 'node:assert/strict';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { serviceContent, SERVICE_LABEL, SERVICE_UNIT, watchService } from '../src/watch/service.js';
+import { serviceContent, SERVICE_LABEL, SERVICE_UNIT, watchService, type WatchService } from '../src/watch/service.js';
+import { startWatcher as runWatcher } from '../src/watch/watcher.js';
 import { CLI, fakeClaude, LAB_CONFIG, LAB_PRESETS, runCli, tempTree } from './helpers.js';
 
 const supported = process.platform === 'darwin' || process.platform === 'linux';
@@ -59,6 +60,45 @@ function machine() {
   return { home, env, service, managerDir, calls };
 }
 
+/** The launchd property list as plutil, the real consumer, reads it. */
+function plistModel(text: string): Record<string, unknown> {
+  const r = spawnSync('plutil', ['-convert', 'json', '-o', '-', '-'], { input: text, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout) as Record<string, unknown>;
+}
+
+/** A systemd unit as systemd reads it: for each section, the values of each key in order. */
+function unitModel(text: string): Record<string, Record<string, string[]> | undefined> {
+  const sections: Record<string, Record<string, string[]>> = {};
+  let section: Record<string, string[]> | undefined;
+  for (const line of text.split('\n')) {
+    if (line === '' || line.startsWith('#')) continue;
+    const head = /^\[(.+)\]$/.exec(line);
+    if (head) {
+      section = {};
+      sections[head[1] ?? ''] = section;
+      continue;
+    }
+    const eq = line.indexOf('=');
+    assert.ok(section && eq > 0, `not a unit line: ${line}`);
+    (section[line.slice(0, eq)] ??= []).push(line.slice(eq + 1));
+  }
+  return sections;
+}
+
+/** The words of an ExecStart= value as systemd splits them: whitespace separates, double quotes group, a backslash escapes inside quotes, and %% is a literal %. */
+function systemdWords(value: string): string[] {
+  return [...value.matchAll(/"((?:[^"\\]|\\.)*)"|(\S+)/g)].map((m) => (m[1] ?? m[2] ?? '').replace(/\\(.)/g, '$1').replace(/%%/g, '%'));
+}
+
+/** The command line a service file runs, read through the service manager's own format. */
+function serviceArgv(service: WatchService, content: string): string[] {
+  if (service.platform === 'darwin') return plistModel(content).ProgramArguments as string[];
+  const exec = unitModel(content).Service?.ExecStart?.[0];
+  assert.ok(exec !== undefined, 'the unit has an ExecStart');
+  return systemdWords(exec);
+}
+
 /** Every file below the directory, with its inode, modification time and content; directories are left out. */
 function files(root: string): Map<string, string> {
   const found = new Map<string, string>();
@@ -71,25 +111,28 @@ function files(root: string): Map<string, string> {
   return found;
 }
 
-test('the service file runs this copy of sextant at login and keeps it running', () => {
+test('the launchd service file runs this copy of sextant at login and keeps it running', { skip: process.platform !== 'darwin' }, () => {
   const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant/dist/src/cli.js' };
   const mac = watchService({}, '/Users/u', 'darwin');
   assert.equal(mac.file, `/Users/u/Library/LaunchAgents/${SERVICE_LABEL}.plist`);
-  const plist = serviceContent(mac, runtime);
-  assert.match(plist, /<key>ProgramArguments<\/key>\s*<array><string>\/opt\/node &amp; co\/bin\/node<\/string><string>\/opt\/100%\/sextant\/dist\/src\/cli\.js<\/string><string>watch<\/string><string>run<\/string><\/array>/);
-  assert.match(plist, /<key>RunAtLoad<\/key><true\/>/);
-  assert.match(plist, /<key>KeepAlive<\/key><true\/>/);
-  assert.match(plist, /<key>StandardErrorPath<\/key><string>\/Users\/u\/\.local\/state\/sextant\/watch\.log<\/string>/);
-  assert.doesNotMatch(plist, /WatchPaths/);
+  const plist = plistModel(serviceContent(mac, runtime));
+  assert.deepEqual(plist.ProgramArguments, [runtime.node, runtime.cli, 'watch', 'run']);
+  assert.equal(plist.RunAtLoad, true);
+  assert.equal(plist.KeepAlive, true);
+  assert.equal(plist.StandardErrorPath, '/Users/u/.local/state/sextant/watch.log');
+  assert.equal(plist.WatchPaths, undefined);
+});
 
+test('the systemd unit runs this copy of sextant at login and keeps it running', () => {
+  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant/dist/src/cli.js' };
   const linux = watchService({}, '/home/u', 'linux');
   assert.equal(linux.file, `/home/u/.config/systemd/user/${SERVICE_UNIT}`);
   assert.equal(watchService({ XDG_CONFIG_HOME: '/xdg' }, '/home/u', 'linux').file, `/xdg/systemd/user/${SERVICE_UNIT}`);
-  const unit = serviceContent(linux, runtime);
-  assert.match(unit, /^ExecStart="\/opt\/node & co\/bin\/node" "\/opt\/100%%\/sextant\/dist\/src\/cli\.js" "watch" "run"$/m);
-  assert.match(unit, /^Restart=always$/m);
-  assert.match(unit, /^WantedBy=default\.target$/m);
-  assert.match(unit, /^StandardOutput=append:\/home\/u\/\.local\/state\/sextant\/watch\.log$/m);
+  const unit = unitModel(serviceContent(linux, runtime));
+  assert.deepEqual(systemdWords(unit.Service?.ExecStart?.[0] ?? ''), [runtime.node, runtime.cli, 'watch', 'run']);
+  assert.deepEqual(unit.Service?.Restart, ['always']);
+  assert.deepEqual(unit.Service?.StandardOutput, ['append:/home/u/.local/state/sextant/watch.log']);
+  assert.deepEqual(unit.Install?.WantedBy, ['default.target']);
 
   assert.throws(() => watchService({}, 'C:\\Users\\u', 'win32'), /not supported/);
 });
@@ -115,9 +158,9 @@ test('watch enable writes only its service file and starts it; again changes not
   const after = files(home);
   assert.deepEqual([...after.keys()].filter((f) => !before.has(f)), [service.file], 'the service file is the only new file');
   for (const [file, state] of before) assert.equal(after.get(file), state, `${file} is unchanged`);
-  const content = fs.readFileSync(service.file, 'utf8');
-  assert.ok(content.includes(fs.realpathSync(CLI)), content);
-  assert.ok(content.includes(process.execPath), content);
+  const argv = serviceArgv(service, fs.readFileSync(service.file, 'utf8'));
+  assert.deepEqual(argv.slice(0, 2), [process.execPath, fs.realpathSync(CLI)]);
+  assert.deepEqual(argv.slice(2), ['watch', 'run']);
   assert.deepEqual(
     calls(),
     process.platform === 'darwin'
@@ -151,7 +194,7 @@ test('watch enable writes only its service file and starts it; again changes not
   assert.match(twice.stdout, /^watcher: already off/);
 });
 
-test('check reports a watcher whose service is in place but not running, and uninstall says the watcher is still on', { skip: !supported }, () => {
+test('check reports a watcher whose service is in place but not running', { skip: !supported }, () => {
   const { env, service, managerDir } = machine();
   assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
@@ -166,10 +209,21 @@ test('check reports a watcher whose service is in place but not running, and uni
   const again = runCli(['watch', 'enable'], env);
   assert.equal(again.status, 0, again.stderr);
   assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'on\n');
+});
 
-  const removed = runCli(['uninstall'], env);
-  assert.equal(removed.status, 0, removed.stderr);
-  assert.match(removed.stdout, /^note: the watcher is still on .*`sextant watch disable`/m);
+test('watch enable that replaces a running service and is then refused leaves the watcher stopped, and says so', { skip: !supported }, () => {
+  const { env, service, managerDir } = machine();
+  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['watch', 'enable'], env).status, 0);
+  // A copy of sextant that runs from another Node.js, as after an upgrade: enable replaces its service file.
+  const other = serviceContent(service, { node: '/usr/local/other/node', cli: fs.realpathSync(CLI) });
+  fs.writeFileSync(service.file, other);
+  fs.writeFileSync(path.join(managerDir, 'refuse'), '');
+  const r = runCli(['watch', 'enable'], env);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /could not start the watcher .*refused by the test.*put back as it was, but the watcher is stopped; run `sextant watch enable` again/s);
+  assert.equal(fs.readFileSync(service.file, 'utf8'), other);
+  assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'off\n');
 });
 
 test('watch enable that the service manager refuses leaves no service file behind', { skip: !supported }, () => {
@@ -228,9 +282,13 @@ async function until(done: () => boolean, message: () => string, timeoutMs = 10_
   }
 }
 
+/** Whether the directory's settings.json holds a hook whose command is sextant's hook pointer. */
 function hasSextantHooks(dir: string): boolean {
   try {
-    return fs.readFileSync(path.join(dir, 'settings.json'), 'utf8').includes('sextant-hook');
+    const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8')) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+    };
+    return Object.values(settings.hooks).some((groups) => groups.some((group) => group.hooks.some((hook) => hook.command.includes('sextant-hook'))));
   } catch {
     return false;
   }
@@ -273,6 +331,24 @@ test('the watcher installs into a new configuration directory in the home direct
   assert.deepEqual(fs.readdirSync(path.join(home, 'notes')), [], 'a directory that is not a configuration directory is left alone');
   assert.deepEqual(new Set(fs.readdirSync(home)), entries, 'the watcher made no entry in the home directory');
   assert.equal(watcher.child.exitCode, null, 'the watcher is still running');
+});
+
+test('a watcher install that throws logs its failure on one line that says problem', async (t) => {
+  const home = tempTree({ '.local/.keep': '' });
+  const logged: string[] = [];
+  const close = runWatcher({
+    home,
+    log: (text) => logged.push(text),
+    install: () => {
+      throw new Error('disk full');
+    },
+  });
+  t.after(close);
+  const login = path.join(home, '.claude-new');
+  fs.mkdirSync(login);
+  fs.writeFileSync(path.join(login, '.claude.json'), '{}');
+  await until(() => logged.some((line) => line.startsWith('problem:')), () => logged.join('\n'));
+  assert.deepEqual(logged.filter((line) => line.startsWith('problem:')), [`problem: install into ${login} failed: disk full`]);
 });
 
 test('the watcher does not create ~/.local itself; it says to run sextant install', async (t) => {

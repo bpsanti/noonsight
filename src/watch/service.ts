@@ -106,16 +106,6 @@ export function isOurs(content: string): boolean {
   return content.includes(MARKER);
 }
 
-/** Whether sextant's service file for the watcher is in place; false on a system without one. */
-export function watcherEnabled(env: Env, home: string): boolean {
-  try {
-    const content = readServiceFile(watchService(env, home));
-    return content !== null && isOurs(content);
-  } catch {
-    return false;
-  }
-}
-
 export interface ManagerResult {
   readonly ok: boolean;
   readonly detail: string;

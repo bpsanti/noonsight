@@ -21,14 +21,14 @@ export interface WatcherOptions {
 }
 
 /**
- * Claude Code writes the marker a few milliseconds after it creates a configuration directory; the
- * wait covers a slower disk without keeping a directory that never becomes one in view for long.
+ * Claude Code writes the marker shortly after it creates a configuration directory; the wait covers
+ * a slower disk without keeping a directory that never becomes one in view for long.
  */
 const MARKER_WAIT_MS = 10_000;
 const POLL_MS = 100;
 
 /** Start watching; the watch keeps the process alive, and the process ends if the watch fails. */
-export function startWatcher(options: WatcherOptions): void {
+export function startWatcher(options: WatcherOptions): () => void {
   const { home, log } = options;
   const timers = new Set<NodeJS.Timeout>();
 
@@ -77,28 +77,32 @@ export function startWatcher(options: WatcherOptions): void {
     try {
       options.install(dir);
     } catch (e) {
-      log(`problem: install into ${dir} failed: ${(e as Error).stack ?? String(e)}`);
+      log(`problem: install into ${dir} failed: ${e instanceof Error ? e.message : String(e)}`);
     }
+  };
+
+  // Without a name, look at every entry: new ones are considered, vanished ones forgotten.
+  const scan = (): void => {
+    let names: string[];
+    try {
+      names = fs.readdirSync(home);
+    } catch {
+      return;
+    }
+    for (const name of new Set([...names, ...known.keys()])) consider(name);
   };
 
   const watcher = fs.watch(home, { persistent: true, recursive: false }, (_event, filename) => {
     if (filename) consider(filename.toString());
-    // Without a name, look at every entry: new ones are considered, vanished ones forgotten.
-    else {
-      let names: string[];
-      try {
-        names = fs.readdirSync(home);
-      } catch {
-        return;
-      }
-      for (const name of new Set([...names, ...known.keys()])) consider(name);
-    }
+    else scan();
   });
   watcher.on('error', (e) => {
     log(`problem: watching ${home} stopped: ${e.message}`);
     close();
     process.exitCode = 1;
   });
+  // An entry made after the snapshot above and before the watch started has no event; the scan finds it.
+  scan();
 
   const close = (): void => {
     watcher.close();
@@ -106,6 +110,7 @@ export function startWatcher(options: WatcherOptions): void {
     timers.clear();
   };
   log(`watching ${home} for new Claude Code configuration directories (entries directly in it only)`);
+  return close;
 }
 
 /** The entry's own inode, not its target's; null when it does not exist. */

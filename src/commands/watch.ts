@@ -86,7 +86,8 @@ function enable(service: WatchService, io: Io): number {
       fs.rmSync(service.file, { force: true });
       manager.forget(service);
     } else if (old !== content) writeFileAtomic(service.file, old, 0o644);
-    io.err(`sextant: could not start the watcher (${started.detail}); ${old === null ? 'the service file was removed again' : 'the service file was put back as it was'}`);
+    const restored = old === null ? 'the service file was removed again' : 'the service file was put back as it was, but the watcher is stopped; run `sextant watch enable` again once the cause is fixed';
+    io.err(`sextant: could not start the watcher (${started.detail}); ${restored}`);
     return 1;
   }
   io.out(
