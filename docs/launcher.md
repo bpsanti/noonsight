@@ -24,7 +24,7 @@ sextant run [--scope <scope>] [--task <text>] [--] [claude arguments...]
 | Option | Effect |
 | --- | --- |
 | `--scope <scope>` | The task scope. It is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope. Without it, an explicit `SEXTANT_SCOPE` already in the environment applies |
-| `--task <text>` | The task text the scopes' matchers read when no scope is given. Without it, the prompt right after `-p` or `--print` |
+| `--task <text>` | The task text the scopes' matchers, and the classifier when it is on, read when no scope is given. Without it, the prompt right after `-p` or `--print` |
 | `--help` | Shows the usage |
 
 sextant's own options come first.
@@ -37,7 +37,8 @@ Ctrl-C and Ctrl-\ reach Claude Code from the terminal, and the launcher does not
 The launcher decides as the `SessionStart` hook does for a session that reports no model ([SessionStart](hooks.md#sessionstart)):
 
 1. The scope is `--scope`, else an explicit `SEXTANT_SCOPE`, else the scope whose matcher matches earliest in the task text: `--task`, else the argument right after `-p` or `--print` when it is not an option ([Scopes](configuration.md#scopes)).
-   A scope taken from the task text is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope.
+   With `classifier.mode` on, the classifier may place the task text instead, before the session starts ([The classifier](configuration.md#the-classifier)); when it fails or takes longer than `classifier.timeout_ms`, the session starts with no scope and the launcher says why.
+   A scope taken from the task text, by a matcher or the classifier, is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope.
    `SEXTANT_SCOPE_VIA` is set next to it and says where the scope came from: `explicit` for `--scope` or an explicit `SEXTANT_SCOPE`, `inferred` for the task text.
    A `SEXTANT_SCOPE` is explicit unless `SEXTANT_SCOPE_VIA` is `inferred`, so one a person or an orchestrator sets by hand counts.
    A `sextant run` started inside a launched session ignores a scope inherited as `inferred`: it takes the scope from its own task text, or has none, and removes the inherited one from the session it starts.
@@ -122,6 +123,7 @@ Each launch adds a line with `event: "launch"` to the [decision log](hooks.md#th
 | --- | --- |
 | `delivered` | `system-prompt` when the launcher added the rules, else `nothing` |
 | `routing`, `routing_reason` and the `route_*` fields | What routing did, as for an agent call ([The decision log](hooks.md#the-decision-log)) |
+| `classifier` and the `classifier_*` fields | What the classifier gave, as for an agent call; `no-task` for a launch with no task text to read |
 | `launch_file` | The file passed with `--append-system-prompt-file` |
 | `merged_file` | An `--append-system-prompt-file` someone else passed, now merged into `launch_file` |
 | `merge_failed` | One that could not be read, so the launcher added nothing |

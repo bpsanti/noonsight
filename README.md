@@ -8,6 +8,7 @@ So does each subagent a session starts: before it starts, sextant predicts the m
 Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `SEXTANT_SCOPE`, a subagent from matchers run over its task, and `sextant check` reports scopes that overlap.
 `sextant run` starts Claude Code with the rules in the system prompt instead, for sessions the hooks do not reach; with the hooks installed too, the rules still arrive once.
 Routing is optional and off by default: once turned on, a task's scope picks the model and effort for a session `sextant run` starts and for each subagent, from a table of preferences, and it yields to a model the caller chose and to an orchestrator's environment ([docs/configuration.md](docs/configuration.md#routing)).
+The classifier is optional and off by default too: once turned on, a small model places a task that no explicit scope and no matcher placed, and a task it cannot place in time gets no scope ([The classifier](#the-classifier)).
 The package ships a starting preset, `claude`: 16 rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each adapted from Anthropic's prompting guide for that exact model and listed with its source, the effect the guide reports and its cost ([presets/claude/SOURCES.md](presets/claude/SOURCES.md)).
 Eight of them are on by default; the rest have a high cost, a side effect or a narrow use, and the user turns them on.
 None is delivered where Claude Code already sends the same advice.
@@ -43,7 +44,32 @@ User settings reach every login, including one whose organization delivers serve
 
 `sextant run [--scope <scope>] -- <claude arguments>` starts `claude` with the rules for its model added through `--append-system-prompt-file`, keeping any `--append-system-prompt` someone else passes, and with routing on, the model and effort the scope's row gives; [docs/launcher.md](docs/launcher.md) explains it.
 
-The hooks read only local files: nothing leaves the machine.
+The hooks read only local files: nothing leaves the machine, unless the classifier is on, which sends the first 4,000 characters of a task's text to the classifier's model through Claude Code.
+
+## The classifier
+
+With `"classifier": { "mode": "fallback" }`, a task that no explicit scope and no matcher placed is placed by a small model, Haiku at low effort by default, through one `claude -p` call that uses the login Claude Code already has.
+It reads the descriptions of the declared scopes, and its answer is held to one of them or `none`.
+It acts in the agent call hook, for each subagent, and in `sextant run`, for the task text it is given, and only when the scope can change the task's rules or its route.
+A classification that fails, or takes longer than `classifier.timeout_ms` (8 seconds by default and at most), leaves the task with no scope, warns the person, and is recorded in the decision log.
+The classifier's own session runs with `SEXTANT_DISABLE=1` and `--safe-mode`, so sextant's hooks never act inside it.
+[docs/configuration.md](docs/configuration.md#the-classifier) covers the modes, what it is asked, and what it costs.
+
+How often it agrees with a person: `test/fixtures/classifier/tasks.json` holds 45 task texts, each labeled by hand with one of the `claude` preset's five scopes or `none`, by the rule written in `test/fixtures/classifier/README.md`.
+On 2026-11-16, with Claude Code 2.1.325 and the classifier's defaults (Haiku 5.5 at low effort), the live test `classifier-agreement` ran over all 45 twice, and the classifier agreed with the hand label on 44 of them in the first run (98%) and on 43 in the second (96%).
+No classification failed or ran out of time in either run.
+
+| Label | Tasks | Agreed, run 1 | Agreed, run 2 |
+| --- | --- | --- | --- |
+| `investigate` | 9 | 9 | 9 |
+| `build` | 9 | 9 | 8 |
+| `review` | 8 | 8 | 8 |
+| `routine` | 9 | 9 | 8 |
+| `digest` | 7 | 7 | 7 |
+| `none` | 3 | 2 | 3 |
+
+The disagreements: a request for a short poem, labeled `none`, placed in `digest` (run 1); a race condition to fix whose cause is not yet clear, labeled `build`, placed in `investigate` (run 2); and a `--json` flag whose output format is already specified, labeled `routine`, placed in `build` (run 2).
+The answers vary from run to run, so the agreement is a measure of these tasks on that day, not a guarantee; `SEXTANT_LIVE_LOGIN=1 npm run test:live` measures it again.
 
 ## Try the core
 
@@ -63,7 +89,7 @@ npm test             # builds, then runs every test with node --test
 npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
 
-`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session), the scope cases (two sessions on one model in two scopes through `SEXTANT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) the preset cases (what Claude Code's own system prompt already sends each model, compared with the preset, and the real preset reaching a session and a subagent with the hash `sextant resolve` gives) the launcher cases (`sextant run` with an explicit model, with and without the hooks, next to another `--append-system-prompt` or `--append-system-prompt-file`, and routed without `--model`) and the routing cases (`route-subagents`, `explicit-model` and `orchestrator-env`) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage, Fable 5.2 included.
+`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session), the scope cases (two sessions on one model in two scopes through `SEXTANT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) the preset cases (what Claude Code's own system prompt already sends each model, compared with the preset, and the real preset reaching a session and a subagent with the hash `sextant resolve` gives) the launcher cases (`sextant run` with an explicit model, with and without the hooks, next to another `--append-system-prompt` or `--append-system-prompt-file`, and routed without `--model`) the routing cases (`route-subagents`, `explicit-model` and `orchestrator-env`) and the classifier cases (`classifier-agreement` over the hand-labeled tasks, `classifier-subagent` and `classifier-timeout`) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage, Fable 5.2 included.
 `SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` asks the session models which rules they received; the token stays in the environment.
 See [docs/verification/claude-code.md](docs/verification/claude-code.md).
 

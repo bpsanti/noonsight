@@ -4,6 +4,8 @@
 //                place "subagent", and returns the call with the rules added at the end of its task
 //                text, with the permission decision the configuration asks for. A call it does not
 //                change gets no decision. It records the prediction under the call's tool_use_id.
+//                With classifier.mode on, a task its matchers did not place may wait for the
+//                classifier (classifier.ts), up to classifier.timeout_ms.
 //   PostToolUse  compares the prediction with the model the subagent started on (resolvedModel in the
 //                tool's response), logs match or MISMATCH, and warns on a mismatch. It records the
 //                subagent's model under its agent id, for the calls that subagent makes in turn.
@@ -11,8 +13,8 @@
 // Like the session hooks, neither ever blocks a call: an undeclared or unknown model only warns.
 
 import { normalizeModel } from '../../core/normalize.js';
-import { resolve } from '../../core/resolve.js';
-import { route, routingGate } from '../../core/route.js';
+import { resolve, scopeChangesRules } from '../../core/resolve.js';
+import { route, routeReadsScope, routingGate } from '../../core/route.js';
 import { taskScope, taskText, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import {
@@ -26,6 +28,7 @@ import {
 } from '../../state/agents.js';
 import { readState, sessionFile } from '../../state/sessions.js';
 import type { Env } from '../../config/paths.js';
+import { classifiedScope } from './classifier.js';
 import { launchModel } from './launch.js';
 import { defaultAccountDir } from './locations.js';
 import { definitionFinder, predict, subagentTranscript, transcriptModel, type Definition, type Prediction } from './predict.js';
@@ -79,19 +82,32 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const predictWith = (model: string | null): Prediction =>
     predict({ subagentType, requested: model, parent: parent.model, env: ctx.env, findDefinition });
   const prompt = typeof ti.prompt === 'string' ? ti.prompt : null;
-  // The subagent's own task decides its scope; the session's scope does not carry over.
-  const task = taskText(str(ti.description), prompt);
-  const scope = taskScope(config, task.text);
-
   // The route is decided from the model the call would get as it stands, and the rules for the model it
   // gets once routed.
   const asCalled = predictWith(requested);
+  const held = subagentHeld(asCalled);
+  // The subagent's own task decides its scope; the session's scope does not carry over.
+  const task = taskText(str(ti.description), prompt);
+  const classified = classifiedScope(config, {
+    chosen: taskScope(config, task.text),
+    text: task.text,
+    matters: () =>
+      routeReadsScope(config, { target: 'subagents', env: ctx.env, held }) ||
+      (config.subagents.delivery !== 'off' && scopeChangesRules(config, asCalled.model, 'subagent')),
+    env: ctx.env,
+  });
+  const scope = classified.scope;
+  const unplaced =
+    classified.failure !== null
+      ? [`sextant: the classifier could not place the task of subagent ${subagentType} (${classified.failure}), so it has no scope.`]
+      : [];
+
   const definitionEffort = subagentType.includes(':') ? null : (findDefinition(subagentType)?.effort ?? null);
   const routed = route(config, {
     target: 'subagents',
     scope: scope.scope,
     env: ctx.env,
-    held: subagentHeld(asCalled),
+    held,
     explicitEffort: str(ti.effort) !== null || definitionEffort !== null,
     translate: subagentTranslation((alias) => predictWith(alias).model),
   });
@@ -102,8 +118,16 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   if (config.subagents.delivery === 'off') {
     const specific = Object.keys(changes).length > 0 ? changed(config, { ...ti, ...changes }, changes, false) : null;
     return {
-      record: { ...base, ...choiceFields(scope), ...routing, delivered: 'off', ...(specific !== null ? { permission: config.subagents.permission } : {}), warned: false },
-      messages: [],
+      record: {
+        ...base,
+        ...choiceFields(scope),
+        ...classified.fields,
+        ...routing,
+        delivered: 'off',
+        ...(specific !== null ? { permission: config.subagents.permission } : {}),
+        warned: unplaced.length > 0,
+      },
+      messages: unplaced,
       specific,
     };
   }
@@ -123,7 +147,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const rewritten = delivered === 'rules' || Object.keys(changes).length > 0;
   const specific = rewritten ? changed(config, { ...ti, ...changes, ...(newPrompt !== null ? { prompt: newPrompt } : {}) }, changes, delivered === 'rules') : null;
 
-  const messages = undeclaredMessages(decision, prediction, subagentType, ctx.file);
+  const messages = [...unplaced, ...undeclaredMessages(decision, prediction, subagentType, ctx.file)];
   const call: AgentCall = {
     session_id: str(input.session_id),
     subagent_type: subagentType,
@@ -147,6 +171,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       parent_source: parent.source,
       ...decisionFields(decision),
       ...choiceFields(scope),
+      ...classified.fields,
       ...(task.cut ? { task_text_cut: true } : {}),
       model_source: prediction.source,
       ...(prediction.value !== undefined ? { model_value: prediction.value } : {}),

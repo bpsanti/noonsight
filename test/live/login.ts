@@ -13,7 +13,9 @@
 // temporary project there.
 //
 // sextant's own state goes to a temporary home: the hook entries run a copy of the hook pointer that
-// sets HOME for sextant alone.
+// sets HOME for sextant alone. A claude the hook starts, the classifier's, would inherit that HOME and
+// miss the login, so the pointer puts first on PATH a claude that starts the real one with the
+// person's HOME.
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -88,11 +90,17 @@ export function lab(name: string, config: Record<string, unknown>, rules: Record
   for (const [file, text] of Object.entries(rules)) fs.writeFileSync(path.join(rulesDir, file), text);
   fs.writeFileSync(path.join(rulesDir, 'sextant.json'), JSON.stringify(config));
 
+  // The claude the hook starts: the real one, with the person's HOME.
+  const claudeBin = path.join(root, 'claude-bin');
+  fs.mkdirSync(claudeBin);
+  const realClaude = spawnSync('/bin/sh', ['-c', 'command -v claude'], { encoding: 'utf8' }).stdout.trim();
+  fs.writeFileSync(path.join(claudeBin, 'claude'), `#!/bin/sh\nHOME=${quote(os.homedir())} exec ${quote(realClaude)} "$@"\n`, { mode: 0o755 });
+
   // The hook pointer as install writes it, except that sextant's home is the lab's.
   const pointer = path.join(bin, 'sextant-hook');
   fs.writeFileSync(
     pointer,
-    `#!/bin/sh\nHOME=${quote(home)} SEXTANT_CONFIG=${quote(path.join(rulesDir, 'sextant.json'))} exec ${quote(process.execPath)} ${quote(fs.realpathSync(CLI_FILE))} hook --install account "$@"\n`,
+    `#!/bin/sh\nHOME=${quote(home)} PATH=${quote(claudeBin)}:"$PATH" SEXTANT_CONFIG=${quote(path.join(rulesDir, 'sextant.json'))} exec ${quote(process.execPath)} ${quote(fs.realpathSync(CLI_FILE))} hook --install account "$@"\n`,
     { mode: 0o755 },
   );
   const stop = { type: 'command', command: '/bin/sh', args: ['-c', 'cat > "$0/stop-$$.json"', probe], timeout: 10 };

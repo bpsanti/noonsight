@@ -58,6 +58,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     );
     checkScopes(config, env, add);
     checkRouting(config, env, add);
+    checkClassifier(config, add);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     add('problem', `config ${e.message.replace(/^configuration refused \(([^)]*)\):/, '$1: refused, so sessions get no rules:')}`);
@@ -180,6 +181,17 @@ function checkRouting(config: Config, env: Env, add: (level: Level, text: string
     const yieldEnv = r.yieldWhenEnv.find((name) => (env[name] ?? '') !== '');
     if (yieldEnv !== undefined) add('ok', `routing yields for sessions started from this environment (${yieldEnv} is set)`);
   }
+}
+
+/** Whether the classifier is on, for which tasks, and what one classification may cost in time. */
+function checkClassifier(config: Config, add: (level: Level, text: string) => void): void {
+  const c = config.classifier;
+  if (c.mode === 'off') {
+    add('ok', 'classifier: off, so a task without an explicit scope takes its scope from the matchers alone');
+    return;
+  }
+  const which = c.mode === 'fallback' ? 'for a task no explicit scope and no matcher placed' : 'for every task without an explicit scope, over the matchers';
+  add('ok', `classifier: ${c.mode}, ${which}; ${c.model} at ${c.effort} effort, at most ${c.timeoutMs} ms per task`);
 }
 
 function describeRow(row: RouteRow): string {

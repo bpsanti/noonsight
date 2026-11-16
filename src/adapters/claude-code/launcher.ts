@@ -8,7 +8,8 @@
 // and does not deliver them a second time (launcherPrompt below).
 //
 // Without SEXTANT_SCOPE, the scope comes from the task text, --task or the prompt after -p, through
-// the scopes' matchers, and is passed on to the session as SEXTANT_SCOPE so its hooks decide alike.
+// the scopes' matchers or, with classifier.mode on, the classifier (classifier.ts), and is passed on
+// to the session as SEXTANT_SCOPE so its hooks decide alike.
 // SEXTANT_SCOPE_VIA says where the scope came from: a sextant run started inside that session reads an
 // inherited scope that was inferred from the outer task as no scope, and takes one from its own task.
 // With routing on for the launcher, the scope's row adds --model and --effort before anything else is
@@ -22,10 +23,11 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Env } from '../../config/paths.js';
-import { resolve } from '../../core/resolve.js';
-import { route, type RouteDecision } from '../../core/route.js';
+import { resolve, scopeChangesRules } from '../../core/resolve.js';
+import { route, routeReadsScope, type Held, type RouteDecision } from '../../core/route.js';
 import { sessionPlace, sessionScope, SCOPE_ENV, taskScope, taskText, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
+import { classifiedScope } from './classifier.js';
 import { launchFields, launchModelFrom, modelArgument, optionCandidates, type CommandLine } from './launch.js';
 import { launcherTranslation, routeFields } from './routing.js';
 import { choiceFields, decisionFields } from './subagents.js';
@@ -88,21 +90,36 @@ export function passThrough(args: readonly string[], scope: string | null, env: 
   return { args: [...args], env: { [LAUNCH_FILE_ENV]: undefined, ...scopeEnv } };
 }
 
-/** Decide what the launcher adds to a claude command line. Reads only local files; writes nothing. */
+/** Decide what the launcher adds to a claude command line. Reads only local files, and may ask the classifier; writes nothing. */
 export function planLaunch(config: Config, configFile: string, req: LaunchRequest): LaunchPlan {
   const given: CommandLine = { args: req.args, exact: true };
-  const scope = launchScope(config, applyEnv(req.env, passThrough(req.args, req.scope, req.env).env), req.task, given);
+  const held: Held | null = modelArgument(given, req.env) !== null ? { reason: 'explicit-model', explicit: true } : null;
+  const explicitEnv = applyEnv(req.env, passThrough(req.args, req.scope, req.env).env);
+  const chosen = launchScope(config, explicitEnv, req.task, given);
+  const taskInput = chosen.source === 'env' ? null : (req.task ?? printPrompt(req.args));
+  const classified = classifiedScope(config, {
+    chosen,
+    text: taskInput !== null ? taskText(null, taskInput).text : null,
+    matters: () => {
+      if (routeReadsScope(config, { target: 'launcher', env: req.env, held })) return true;
+      const before = launchModelFrom(given, { env: explicitEnv, home: req.home, cwd: req.cwd });
+      return before.kind !== 'found' || scopeChangesRules(config, before.model, sessionPlace(config, explicitEnv).place);
+    },
+    env: req.env,
+  });
+  const scope = classified.scope;
   const routed = route(config, {
     target: 'launcher',
     scope: scope.scope,
     env: req.env,
-    held: modelArgument(given, req.env) !== null ? { reason: 'explicit-model', explicit: true } : null,
+    held,
     explicitEffort: optionCandidates(given, EFFORT_OPTION).length > 0,
     translate: launcherTranslation(req.env),
   });
   const args = routedArgs(req.args, routed);
-  // A scope from the task text is passed on, so the session's hooks decide with the same scope.
-  const base = scope.source === 'task-text' ? passThrough(args, scope.scope, req.env, 'inferred') : passThrough(args, req.scope, req.env);
+  // A scope from the task text, by a matcher or the classifier, is passed on, so the session's hooks decide with the same scope.
+  const inferred = scope.source === 'task-text' || scope.source === 'classifier';
+  const base = inferred ? passThrough(args, scope.scope, req.env, 'inferred') : passThrough(args, req.scope, req.env);
   const env = applyEnv(req.env, base.env);
   const place = sessionPlace(config, env);
   const cmd: CommandLine = { args, exact: true };
@@ -111,11 +128,15 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
   const fields = {
     ...decisionFields(decision),
     ...choiceFields(scope, place),
+    ...classified.fields,
     model_source: launch.kind === 'found' ? launch.source : null,
     ...launchFields(launch),
     ...routeFields(routed, env),
   };
-  const messages = undeclaredMessages(decision, configFile);
+  const messages = [
+    ...(classified.failure !== null ? [`sextant: the classifier could not place the task (${classified.failure}), so the session has no scope.`] : []),
+    ...undeclaredMessages(decision, configFile),
+  ];
   const nothing = (extra: Record<string, unknown> = {}, more: readonly string[] = []): LaunchPlan => ({
     ...base,
     fallback: base,

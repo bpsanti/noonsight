@@ -2,9 +2,11 @@
 // PreToolUse and PostToolUse on the agent tool for the subagents it starts (subagents.ts).
 //
 // Contract (docs/hooks.md has the full table):
-//   - Always exits 0 and never holds the session: it reads local files only and never the network.
-//     It starts no process, except `ps` on macOS to read the Claude Code command line when nothing
-//     else names the session's model (launch.ts), or when `sextant run` started the session (launcher.ts).
+//   - Always exits 0 and never holds the session beyond a bound: it reads local files only and never
+//     the network itself. It starts no process, except `ps` on macOS to read the Claude Code command
+//     line when nothing else names the session's model (launch.ts), or when `sextant run` started the
+//     session (launcher.ts); and, with classifier.mode on, the classifier for an agent call, stopped
+//     after classifier.timeout_ms (classifier.ts).
 //   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session context, or a
 //     subagent call with its task text extended), systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.

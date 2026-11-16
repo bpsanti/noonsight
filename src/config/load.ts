@@ -6,10 +6,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { backtrackingRisk, type BacktrackingRisk } from '../core/backtracking.js';
+import { NO_SCOPE_ANSWER } from '../core/classify.js';
 import { normalizeModel } from '../core/normalize.js';
 import { envelope, joinRules, selectRules } from '../core/resolve.js';
 import {
   ANY_SCOPE,
+  DEFAULT_CLASSIFIER_SETTINGS,
   DEFAULT_ROUTING_SETTINGS,
   DEFAULT_SESSION_SETTINGS,
   DEFAULT_SUBAGENT_SETTINGS,
@@ -22,6 +24,7 @@ import {
   SWITCH_NOTE_RESERVE,
 } from '../core/types.js';
 import type {
+  ClassifierMode,
   Config,
   Effort,
   ModelEntry,
@@ -93,6 +96,7 @@ interface RawConfig {
     table?: Record<string, RawRouteRow>;
     default?: 'inherit' | RawRouteRow;
   };
+  classifier?: { mode?: ClassifierMode; model?: string; effort?: Effort; timeout_ms?: number };
 }
 interface RawPresetRule {
   id: string;
@@ -278,6 +282,15 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   };
   const session = { unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv };
   const routing = loadRouting(cfg.routing ?? {}, preset, scopes, exact, report);
+  const c = cfg.classifier ?? {};
+  const classifier = {
+    mode: c.mode ?? DEFAULT_CLASSIFIER_SETTINGS.mode,
+    model: c.model ?? DEFAULT_CLASSIFIER_SETTINGS.model,
+    effort: c.effort ?? DEFAULT_CLASSIFIER_SETTINGS.effort,
+    timeoutMs: c.timeout_ms ?? DEFAULT_CLASSIFIER_SETTINGS.timeoutMs,
+  };
+  if (classifier.mode !== 'off' && scopes.has(NO_SCOPE_ANSWER))
+    report(`/scopes/${NO_SCOPE_ANSWER}`, `the classifier answers "${NO_SCOPE_ANSWER}" for a task that fits no scope, so no scope can have that name while classifier.mode is on`);
   if (problems.length) refuse();
   const declared = new Map<string, DeclaredModel>(
     Object.entries(models).map(([key, entry]) => [
@@ -289,7 +302,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       },
     ]),
   );
-  return { config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents, routing }, preset, declared };
+  return { config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents, routing, classifier }, preset, declared };
 }
 
 function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {

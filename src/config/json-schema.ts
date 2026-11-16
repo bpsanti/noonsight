@@ -13,6 +13,8 @@ const ASSERTIONS = new Set([
   'enum',
   'pattern',
   'minLength',
+  'minimum',
+  'maximum',
   'properties',
   'patternProperties',
   'additionalProperties',
@@ -74,6 +76,11 @@ function check(root: Schema, schema: Schema, value: unknown, at: string, errors:
   if ('const' in schema && !deepEqual(schema.const, value)) fail(`must be ${JSON.stringify(schema.const)}`);
   if (Array.isArray(schema.enum) && !schema.enum.some((e) => deepEqual(e, value)))
     fail(`must be one of ${schema.enum.map((e) => JSON.stringify(e)).join(', ')}`);
+
+  if (typeof value === 'number') {
+    if (typeof schema.minimum === 'number' && value < schema.minimum) fail(`must be at least ${schema.minimum}`);
+    if (typeof schema.maximum === 'number' && value > schema.maximum) fail(`must be at most ${schema.maximum}`);
+  }
 
   if (typeof value === 'string') {
     if (typeof schema.minLength === 'number' && [...value].length < schema.minLength)

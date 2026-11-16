@@ -5,6 +5,9 @@
 //              place: unattended when a variable named in session.unattended_when_env is set; else session.
 //   Subagent   scope: the scope whose matcher matches earliest in the task text; else none. Never
 //              inherited from the session.
+//
+// With the classifier on, a task without an explicit scope may take its scope from the classifier
+// instead (classify.ts).
 //              place: always subagent.
 
 import type { Config, Place } from './types.js';
@@ -18,7 +21,7 @@ export const SCOPE_ENV = 'SEXTANT_SCOPE';
  */
 export const TASK_TEXT_LIMIT = 100_000;
 
-export type ScopeSource = 'env' | 'task-text';
+export type ScopeSource = 'env' | 'task-text' | 'classifier';
 
 export interface ScopeChoice {
   /** The scope to resolve with, or null for none. From the environment it may be undeclared. */
