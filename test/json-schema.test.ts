@@ -13,7 +13,7 @@ test('the shipped schemas only use keywords the validator implements', () => {
 });
 
 test('a schema keyword outside the implemented subset is refused instead of skipped', () => {
-  assert.throws(() => assertSupported({ type: 'object', properties: { a: { maximum: 3 } } }), /unsupported schema keyword "maximum" at \/properties\/a/);
+  assert.throws(() => assertSupported({ type: 'object', properties: { a: { exclusiveMaximum: 3 } } }), /unsupported schema keyword "exclusiveMaximum" at \/properties\/a/);
   assert.throws(() => assertSupported({ oneOf: [] }), /unsupported schema keyword "oneOf"/);
 });
 
@@ -73,4 +73,13 @@ test('validator: key names, pattern keys, if/then and false', () => {
   ]);
   assert.deepEqual(validateSchema(false, 1), ['(top level): not allowed here']);
   assert.deepEqual(validateSchema({ properties: { a: false } }, { a: 1 }), ['/a: not allowed here']);
+});
+
+test('validator: integer bounds', () => {
+  const schema = { type: 'object', properties: { n: { type: 'integer', minimum: 2, maximum: 5 } } };
+  assert.deepEqual(validateSchema(schema, { n: 2 }), []);
+  assert.deepEqual(validateSchema(schema, { n: 5 }), []);
+  assert.deepEqual(validateSchema(schema, { n: 1 }), ['/n: must be at least 2']);
+  assert.deepEqual(validateSchema(schema, { n: 6 }), ['/n: must be at most 5']);
+  assert.deepEqual(validateSchema(schema, { n: 2.5 }), ['/n: must be an integer']);
 });

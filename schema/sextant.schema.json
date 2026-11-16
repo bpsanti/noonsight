@@ -143,6 +143,37 @@
         }
       },
       "default": {}
+    },
+    "classifier": {
+      "description": "Optional: a small model, asked through `claude -p` with the login Claude Code already has, picks the scope of a task that no explicit scope placed. Off unless a mode is set. A classification that fails, takes longer than timeout_ms, or answers outside the declared scopes gives the task no scope, and the decision log records why.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "off: never classify. fallback: classify a task that no explicit scope and no matcher placed. always: classify every task without an explicit scope, over the matchers; meant for comparing the two.",
+          "enum": ["off", "fallback", "always"],
+          "default": "off"
+        },
+        "model": {
+          "description": "The model the classifier runs on, as claude --model takes it: an alias such as haiku, or a model identifier.",
+          "type": "string",
+          "minLength": 1,
+          "default": "haiku"
+        },
+        "effort": {
+          "description": "The effort level the classifier runs at.",
+          "enum": ["low", "medium", "high", "xhigh", "max"],
+          "default": "low"
+        },
+        "timeout_ms": {
+          "description": "How long, in milliseconds, a classification may take before the task gets no scope. At most 8000, so that the agent call hook, which Claude Code stops after 10 seconds, still answers in time.",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 8000,
+          "default": 8000
+        }
+      },
+      "default": {}
     }
   },
   "$defs": {

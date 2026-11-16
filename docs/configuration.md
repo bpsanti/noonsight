@@ -85,6 +85,10 @@ The preset also suggests a routing table, which applies only when the user turns
 | `routing.yield_when_env` | Environment variable names | Empty | When any of these is set and not empty, routing yields; the rules are still delivered. |
 | `routing.table` | Scope name to a row | The preset's | Options in order of preference for each scope. A row replaces the preset's row for the same scope. |
 | `routing.default` | `inherit`, or a row | `inherit` | The row for a task with no scope, or whose scope has no row for the target. `inherit` changes nothing. |
+| `classifier.mode` | `off`, `fallback`, `always` | `off` | Whether a small model places a task that no explicit scope placed: never, only when no matcher did either, or over the matchers. See [The classifier](#the-classifier). |
+| `classifier.model` | A model alias or identifier | `haiku` | The model the classifier runs on, as `claude --model` takes it. |
+| `classifier.effort` | `low`, `medium`, `high`, `xhigh`, `max` | `low` | The effort the classifier runs at. |
+| `classifier.timeout_ms` | 1000 to 8000 | 8000 | How long one classification may take before the task gets no scope. |
 
 A user rule has these keys:
 
@@ -114,8 +118,8 @@ A decision has at most one scope, and where it comes from depends on who reads t
 
 | Reader | Scope | Place |
 | --- | --- | --- |
-| A session | `SEXTANT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it; else none | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
-| A subagent | The scope whose matcher matches earliest in its description and task text; else none | Always `subagent` |
+| A session | `SEXTANT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it, as `sextant run` does with the scope it finds ([launcher.md](launcher.md#what-it-adds)); else none | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
+| A subagent | The scope whose matcher matches earliest in its description and task text; else, with the classifier on, the scope the classifier gives ([The classifier](#the-classifier)); else none | Always `subagent` |
 
 A subagent's scope comes from its own task and is never taken from the session.
 A session that investigates can start a subagent that summarizes, and each gets the rules of its own scope.
@@ -158,6 +162,83 @@ The last two shapes are also looked for inside lookarounds, so `^(?=.*.*x)` is r
 Characters are compared over a fixed set of sample characters (printable ASCII, whitespace and a few letters beyond it).
 The check recognizes these shapes only: a matcher that passes it is not proven fast, and other slow shapes, such as alternatives that match the same text inside a repeat (`(a|a)*`), are not detected.
 Matchers that start with a word and a word boundary, such as `\bdeploy\b`, `review|revis` or `^fix\b`, pass it.
+
+## The classifier
+
+The classifier is a small model that places a task in one of the declared scopes when nothing explicit did.
+It is off unless `classifier.mode` turns it on, and with it off, sextant decides every scope as it would without the key.
+
+```json
+{
+  "classifier": { "mode": "fallback", "model": "haiku", "effort": "low", "timeout_ms": 8000 }
+}
+```
+
+| Mode | The tasks it places |
+| --- | --- |
+| `off` (default) | None: a scope comes only from `SEXTANT_SCOPE`, `sextant run --scope` and the matchers |
+| `fallback` | A task that no explicit scope and no matcher placed, so the matchers a user declares still decide first |
+| `always` | Every task without an explicit scope, over the matchers; the decision log keeps the matcher's scope as `matcher_scope`, so the two can be compared |
+
+An explicit scope, from `SEXTANT_SCOPE` or `sextant run --scope`, is never replaced.
+
+### Where it acts
+
+- **The agent call hook**, for a subagent: it reads the call's `description` and `prompt`, the same text the matchers read ([hooks.md](hooks.md#pretooluse-the-rules-go-with-the-call)).
+- **`sextant run`**, for a session: it reads `--task`, or the prompt right after `-p`, and passes the scope to the session as `SEXTANT_SCOPE` ([launcher.md](launcher.md#what-it-adds)).
+
+A session started without `sextant run` has no task text when it starts, so its scope still comes from `SEXTANT_SCOPE` alone.
+
+The classifier is asked only when the scope can change something for the task: the model the task runs on receives, in that place, a rule written for a list of scopes, or routing would read the scope (it is on for the target, does not yield, and no model the caller chose holds the call).
+Otherwise the task does not wait for it, and the decision log records `classifier: "not-needed"`.
+
+### What it is asked
+
+Each classification is one `claude -p` call on `classifier.model` at `classifier.effort`, through the login Claude Code already has: sextant reads no credential and stores none.
+The instructions list every declared scope with its `description` (its name, for a scope without one) and the answer `none`, for a request that fits no scope.
+The answer must be a JSON object whose `scope` is one of those words, and Claude Code holds the model to that shape (`--json-schema`).
+The task text is the first 4,000 characters of what the matchers read, without any sextant rules a parent copied into it.
+So a scope's description is what the classifier goes by: a scope of your own needs a description that tells it apart from the others.
+
+### When it gives no scope
+
+| `classifier` in the log | What happened | The task |
+| --- | --- | --- |
+| `scoped` | It answered a declared scope | Gets that scope |
+| `none` | It answered that no scope fits | No scope, no warning |
+| `timeout` | No answer within `classifier.timeout_ms`; the call is stopped | No scope, and the person is warned |
+| `failed` | The call failed, for example with `claude` missing from `PATH`, a lost login or an API error | No scope, and the person is warned |
+| `invalid` | It answered something other than a declared scope | No scope, and the person is warned |
+
+A task with no scope gets the rules for every scope and, with routing on, `routing.default`, as it would with the classifier off.
+`classifier_error` records why, and `classifier_ms` how long the call took.
+
+`classifier.timeout_ms` is at most 8,000: Claude Code stops a hook after 10 seconds, and the agent call hook must still answer, with the rules, after a classification it had to give up on.
+
+### Its own session
+
+The classifier's session is kept apart from the session that asked:
+
+- It runs with `SEXTANT_DISABLE=1`, so sextant's hooks, installed for the account or machine-wide, do nothing in it and never start a classifier of their own.
+- `--safe-mode` leaves out the person's hooks, plugins, MCP servers and `CLAUDE.md`; `--tools ""` leaves it no tool, so it cannot start a subagent; `--no-session-persistence` keeps it out of the session history.
+- `CLAUDE_CODE_EFFORT_LEVEL` is left out of its environment, since that variable would win over `classifier.effort`.
+
+It runs the `claude` found on `PATH`, as Claude Code's hooks see it.
+
+### What it costs
+
+Each classification takes a few seconds and a small charge on the person's usage, which the decision log records as `classifier_ms` and `classifier_cost_usd`.
+In the agent call hook, the subagent waits for it before it starts, so turning the classifier on adds that wait to every agent call it places.
+
+### How well it agrees
+
+The README reports how often the classifier agrees with hand labels on the tasks in `test/fixtures/classifier/tasks.json`, whose labeling rule is in that directory's `README.md` ([README](../README.md#the-classifier)).
+
+### With the `claude` preset
+
+The preset's scopes declare no matchers ([SOURCES.md](../presets/claude/SOURCES.md#detecting-a-scope)), so with the classifier off, a preset rule written for a list of scopes reaches only a task whose scope comes from `SEXTANT_SCOPE` or `sextant run --scope`.
+With `fallback`, those rules start to reach the tasks the classifier places, subagents included, with no change to the preset: a Fable 5.2 subagent whose task it places in `investigate` or `build` receives `fable-5-2/finish-work`, for example.
+A task it cannot place still receives the rules for every scope.
 
 ## Routing
 

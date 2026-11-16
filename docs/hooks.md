@@ -6,10 +6,10 @@ Four hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, 
 
 ## Rules every hook follows
 
-- **It never holds the session, or a subagent call.**
-  It always exits 0, reads only local files and never uses the network.
-  It starts no other process, with one exception: on macOS, when nothing else names the session's model, or when `sextant run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)).
-  Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second.
+- **It never holds the session, or a subagent call, beyond a bound.**
+  It always exits 0, reads only local files and never uses the network itself.
+  It starts no other process, with two exceptions: on macOS, when nothing else names the session's model, or when `sextant run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
+  Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
 - **It never blocks anything.**
   An undeclared model, or a subagent whose model sextant cannot tell, gets a warning, never a refusal; sextant never denies a call.
 - **A configuration with any problem is refused whole.**
@@ -138,6 +138,7 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    For a call made inside a subagent, it comes from sextant's record of that subagent, written when the result of the call that started it named its model, which happens at once for a subagent started in the background (`agent-record`); else from the model of that subagent's own transcript (`agent-transcript`).
    When neither knows, sextant does not guess the session's model: the subagent gets no rules, and the person is warned.
 3. The subagent's task scope comes from its own call, never from the session: the scope whose matcher matches earliest in its `description` and `prompt` ([Scopes](configuration.md#scopes)).
+   With `classifier.mode` on, the classifier may place a task instead, when the scope can change the subagent's rules or its route; a classification that fails, takes too long, or answers outside the declared scopes leaves the task with no scope, and the person is warned ([The classifier](configuration.md#the-classifier)).
 4. With routing on for subagents, the scope may set the call's `model` and `effort` ([Routing](#routing)); the prediction is then made again with the routed model.
    The rules are resolved for the scope, the place `subagent` and the model the subagent will run on.
 5. With rules to deliver, the hook returns the call with its `prompt` extended by a blank line and the rules, in the same envelope as the session's.
@@ -229,8 +230,11 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |
 | `reason`, `key`, `rules`, `sha256` | As in `sextant resolve` ([configuration.md](configuration.md)) |
 | `scope`, `place`, `unknown_scope` | The declared scope and the place the rules were resolved for, and a scope that was asked for but is not declared |
-| `scope_source` | `env` (`SEXTANT_SCOPE`), `task-text`, or null when there was no scope |
+| `scope_source` | `env` (`SEXTANT_SCOPE`), `task-text`, `classifier`, or null when there was no scope |
 | `scope_matcher` | For a scope taken from the task text: the matcher that decided, as the configuration writes it |
+| `classifier` | With `classifier.mode` on, for a task the classifier was meant to place: `scoped` (it gave a declared scope), `none` (it found that no scope fits), `failed`, `timeout`, `invalid` (it answered outside the declared scopes), `not-needed` (the scope could change neither the rules nor the route, so it was not asked) or `no-task` (a launch with no task text). Absent when no classification was due ([The classifier](configuration.md#the-classifier)) |
+| `classifier_ms`, `classifier_error`, `classifier_cost_usd` | For a task the classifier was asked about: how long it took, why it gave no scope, and the cost Claude Code reported for the call |
+| `matcher_scope` | With `classifier.mode` set to `always`: the scope a matcher had chosen before the classifier decided |
 | `unattended_env` | For a session in the place `unattended`: the variable that put it there |
 | `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`; `launcher` for a session start that found the rules in the system prompt `sextant run` gave; `system-prompt` for a launch that added them; and for a subagent with `subagents.delivery` set to `off`, `off` |
@@ -245,7 +249,7 @@ The subagent records in `agent-calls/` and `agents/` are removed after 7 days; a
 
 | Way | Reach |
 | --- | --- |
-| `SEXTANT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line |
+| `SEXTANT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line. The classifier's own session runs with it, so sextant's hooks never act there |
 | `SEXTANT_ROUTING=off` in the environment that starts Claude Code or `sextant run` | Routing only, for that session and its subagents; the rules are still delivered |
 | `"subagents": { "delivery": "off" }` in the configuration | Subagents only: calls are left alone and their results are not checked; each call still gets a log line |
 | No configuration file for the account | Every session of that account, silently |

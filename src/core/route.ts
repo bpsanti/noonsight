@@ -101,12 +101,25 @@ export function routingGate(config: Config, target: RouteTarget, env: Readonly<R
   return null;
 }
 
+/** Whether a model the call already has keeps routing out. */
+function holds(config: Config, held: Held | null): boolean {
+  return held !== null && (!held.explicit || config.routing.respectExplicit);
+}
+
+/**
+ * Whether routing would read the task's scope for a call: it may act for the target in the
+ * environment, and no model the call already has keeps it out.
+ */
+export function routeReadsScope(config: Config, request: Pick<RouteRequest, 'target' | 'env' | 'held'>): boolean {
+  return routingGate(config, request.target, request.env) === null && !holds(config, request.held);
+}
+
 /** Decide the model and effort a task is routed to, or why it is left as it is. */
 export function route(config: Config, request: RouteRequest): RouteDecision {
   const r = config.routing;
   const gate = routingGate(config, request.target, request.env);
   if (gate !== null) return gate;
-  if (request.held !== null && (!request.held.explicit || r.respectExplicit)) return { routing: 'yielded', reason: request.held.reason };
+  if (request.held !== null && holds(config, request.held)) return { routing: 'yielded', reason: request.held.reason };
 
   const fromTable = request.scope !== null ? rowFor(r.table.get(request.scope), request.target) : undefined;
   const fromDefault = rowFor(r.default ?? undefined, request.target);

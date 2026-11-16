@@ -43,7 +43,7 @@ All read on 2026-11-16.
 ## Scopes
 
 A scope names a kind of task.
-A session takes its scope from `SEXTANT_SCOPE`, which `sextant run` sets from `--scope` or from its task text; a subagent from the matchers a scope declares.
+A session takes its scope from `SEXTANT_SCOPE`, which `sextant run` sets from `--scope` or from its task text; a subagent from the matchers a scope declares; and with the classifier on, a task neither placed can take its scope from the classifier, which reads the descriptions below.
 The preset's scopes declare no matchers; [Detecting a scope](#detecting-a-scope) says why, and what the user can do instead.
 
 | Scope | Covers | Source |
@@ -133,8 +133,9 @@ Until a scope is detected some other way, the rules with a list are dormant in e
 Of the rules on by default, that is `fable-5-2/finish-work`, `sonnet-5-5/stay-in-scope`, `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes`; of those off by default, `fable-5-2/code-ownership`, `sonnet-5-5/no-self-review-rounds`, `sonnet-5-5/check-current-facts` and `haiku-5-5/search-recent-facts`.
 Meanwhile, a user who wants one of them in every task can leave the preset's rule off (`disable` turns off one that ships on) and add the same text as their own rule with `"scopes": ["*"]` (`add`, [configuration.md](../../docs/configuration.md#keys)).
 
-The classifier planned in [#11](https://github.com/bpsanti/sextant-ai/issues/11) is the way the preset waits for: it is to give a scope to tasks that no explicit scope and no matcher placed, and to fall back to no scope when it fails or takes too long.
-With it on, the dormant rules start to reach the tasks it places, with no change to the preset, and a task it cannot place still receives the `*` rules.
+The classifier ([configuration.md](../../docs/configuration.md#the-classifier)) is the way the preset waits for.
+It is off by default; with `classifier.mode` set to `fallback`, a small model gives a scope to tasks that no explicit scope and no matcher placed, reading the descriptions of the preset's scopes, and the task gets no scope when it fails or takes too long.
+With it on, the dormant rules start to reach the tasks it places, subagents included, with no change to the preset, and a task it cannot place still receives the `*` rules.
 That fallback is why the `*` rules are held to principle 1: they are what a task of unknown kind receives, with or without the classifier.
 
 ### Measuring a change of scopes

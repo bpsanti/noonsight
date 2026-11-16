@@ -55,6 +55,17 @@ export function resolve(config: Config, request: ResolveRequest): Decision {
   };
 }
 
+/**
+ * Whether the scope of a task can change the rules a model receives in a place: some rule the model
+ * receives there is for a list of scopes rather than every scope. Without one, every scope gives the
+ * same rules.
+ */
+export function scopeChangesRules(config: Config, model: string | null, place: Place): boolean {
+  const normalized = normalizeModel(model);
+  const entry = normalized ? matchModel(config, normalized)?.entry : undefined;
+  return entry?.use === 'rules' && entry.rules.some((r) => !r.scopes.includes(ANY_SCOPE) && r.where.includes(place));
+}
+
 /** The rules of a rule list that apply to a scope and a place, in declaration order. */
 export function selectRules(rules: readonly Rule[], scope: string | null, place: Place): Rule[] {
   return rules.filter(

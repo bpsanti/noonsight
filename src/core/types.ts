@@ -131,6 +131,27 @@ export const DEFAULT_ROUTING_SETTINGS: RoutingSettings = {
   default: null,
 };
 
+/**
+ * When the classifier, a small model asked through `claude -p`, picks a task's scope.
+ *   off       never: a scope comes only from SEXTANT_SCOPE, --scope or the matchers.
+ *   fallback  only for a task no explicit scope and no matcher placed.
+ *   always    for every task without an explicit scope, over the matchers.
+ */
+export const CLASSIFIER_MODES = ['off', 'fallback', 'always'] as const;
+export type ClassifierMode = (typeof CLASSIFIER_MODES)[number];
+
+/** The keys under "classifier" in the configuration. */
+export interface ClassifierSettings {
+  readonly mode: ClassifierMode;
+  /** The model the classifier runs on, as claude --model takes it: an alias or an identifier. */
+  readonly model: string;
+  readonly effort: Effort;
+  /** How long a classification may take before the task gets no scope. */
+  readonly timeoutMs: number;
+}
+
+export const DEFAULT_CLASSIFIER_SETTINGS: ClassifierSettings = { mode: 'off', model: 'haiku', effort: 'low', timeoutMs: 8000 };
+
 export interface Config {
   /** Exact model keys, each a full normalized identifier such as claude-fable-5-2. */
   readonly exact: ReadonlyMap<string, ModelEntry>;
@@ -145,6 +166,7 @@ export interface Config {
   readonly session: SessionSettings;
   readonly subagents: SubagentSettings;
   readonly routing: RoutingSettings;
+  readonly classifier: ClassifierSettings;
 }
 
 interface DecisionBase {
