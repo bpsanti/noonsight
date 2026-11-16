@@ -107,7 +107,7 @@ class Parser {
       case '$':
         return { kind: 'empty' };
       case '.':
-        return { kind: 'text', value: 'a' };
+        return this.pick('.');
       case '[':
         return this.characterClass();
       case '(':
@@ -199,7 +199,7 @@ class Parser {
     return String.fromCodePoint(parseInt(m[1] ?? m[0], 16));
   }
 
-  /** A character class: its source is handed to the engine, which picks a character it accepts. */
+  /** A character class: its source is handed to the engine, which keeps every candidate character it accepts. */
   private characterClass(): Node {
     const start = this.i - 1;
     let depth = 1;
@@ -218,8 +218,9 @@ class Parser {
 
   private pick(classSource: string, extra: readonly string[] = []): Node {
     const test = new RegExp(`^(?:${classSource})$`, this.flags.replace(/[gy]/g, ''));
-    const ch = [...CANDIDATES, ...extra].find((candidate) => test.test(candidate));
-    return ch === undefined ? { kind: 'none' } : { kind: 'text', value: ch };
+    const chars = [...new Set([...CANDIDATES, ...extra])].filter((candidate) => test.test(candidate));
+    if (chars.length === 0) return { kind: 'none' };
+    return { kind: 'alt', branches: chars.map((ch) => [{ kind: 'text', value: ch }]) };
   }
 }
 

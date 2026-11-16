@@ -75,10 +75,18 @@ export function taskScope(config: Config, task: Task): ScopeChoice {
  * parent copied into it (the rules' own words must not pick the scope), cut to TASK_TEXT_LIMIT.
  */
 export function taskText(description: string | null, prompt: string | null): string {
+  return fullTaskText(description, prompt).slice(0, TASK_TEXT_LIMIT);
+}
+
+/** Whether the matchers read less than the whole task text, because it is longer than TASK_TEXT_LIMIT. */
+export function taskTextCut(description: string | null, prompt: string | null): boolean {
+  return fullTaskText(description, prompt).length > TASK_TEXT_LIMIT;
+}
+
+function fullTaskText(description: string | null, prompt: string | null): string {
   const strip = (s: string): string => s.replace(/<sextant-rules(-change)?\b[^>]*>[\s\S]*?<\/sextant-rules\1>/g, '');
   return [description, prompt]
     .filter((s): s is string => s !== null && s !== '')
     .map(strip)
-    .join('\n\n')
-    .slice(0, TASK_TEXT_LIMIT);
+    .join('\n\n');
 }

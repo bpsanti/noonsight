@@ -241,3 +241,10 @@ test('overlaps: a repeat range wider than two counts makes its matchers untested
     { scope: 'b', matcher: b },
   ]);
 });
+
+test('overlaps: two scopes that accept the same character of a class overlap, with that character as the text', () => {
+  const cfg = load({ scopes: { a: { match: ['^[qz]$'] }, b: { match: ['^[xz]$'] } } });
+  const [overlap] = scopeOverlaps(cfg).overlaps;
+  assert.deepEqual(overlap?.scopes, ['a', 'b']);
+  assert.ok(/^[qz]$/iu.test(overlap?.text ?? '') && /^[xz]$/iu.test(overlap?.text ?? ''), 'the reported text matches both scopes');
+});
