@@ -12,6 +12,8 @@ There are three ways to install:
 | `sextant install --account <dir>` | One Claude Code configuration directory | None |
 | `sudo ... sextant install --managed` | Every account on the machine, except logins whose organization delivers server-managed settings | Administrator |
 
+An optional watcher, off unless you turn it on, adds the per-account hooks to each new login as it appears; see [New logins as they appear](#new-logins-as-they-appear-optional).
+
 ## Every login of your account (the default)
 
 ```bash
@@ -29,12 +31,12 @@ Claude Code keeps each login's settings in its own configuration directory: `~/.
 It needs no administrator rights.
 It adds one entry per event to each settings file, in a matcher group of its own, and keeps everything else in the file, other hooks included.
 The two tool events match only the agent tool, under both of its names (`"matcher": "Agent|Task"`), so sextant runs for no other tool call.
-Running it again changes nothing, and it repairs an entry of its own that was moved, duplicated, points at an old place or has another matcher.
+Running it again changes nothing and writes no file, and it repairs an entry of its own that was moved, duplicated, points at an old place or has another matcher.
 On an install from before the subagent hooks, running it again adds them.
 Every settings file is checked before any is written: one that is not valid JSON, or whose `hooks` do not have the documented shape, refuses the whole install, and every directory is left as it was.
 The hook pointer goes to `~/.local/share/sextant/sextant-hook`, and each directory is recorded in `~/.local/state/sextant/installs.json`.
 
-A configuration directory made later is not reached until `sextant install` runs again; `sextant check` lists it as a problem until then.
+A configuration directory made later is not reached until `sextant install` runs again, or until the [watcher](#new-logins-as-they-appear-optional) installs into it; `sextant check` lists it as a problem until then.
 A directory kept somewhere other than directly in the home directory is found only while `CLAUDE_CONFIG_DIR` names it, or with `--account`.
 
 The default install covers the account that runs it.
@@ -69,6 +71,74 @@ sextant install --account ~/.claude-work
 
 `--account` installs into one Claude Code configuration directory only, with no administrator rights, exactly as the default install does for each directory it finds.
 It is the way to reach a directory kept outside the home directory without setting `CLAUDE_CONFIG_DIR`.
+
+## New logins as they appear (optional)
+
+```bash
+sextant watch enable    # turn the watcher on
+sextant watch disable   # turn it off
+```
+
+The watcher is off by default.
+Neither `sextant install` nor anything else turns it on; only `sextant watch enable` does.
+When it is on, a Claude Code configuration directory made in your home directory gets sextant's hooks within moments, without anyone running `sextant install` again.
+
+### What it does
+
+`sextant watch enable` writes one per-user service file and starts it:
+
+| System | Service file | Kept running by |
+| --- | --- | --- |
+| macOS | `~/Library/LaunchAgents/io.github.bpsanti.sextant-ai.watch.plist` | launchd, with `RunAtLoad` and `KeepAlive` |
+| Linux | `~/.config/systemd/user/sextant-watch.service` (under `$XDG_CONFIG_HOME` when it is set) | the systemd user manager, enabled for `default.target`, with `Restart=always` |
+
+The service starts at every login and runs `sextant watch run`: one resident Node.js process for the account, which uses no CPU while nothing changes in the home directory.
+Like the hook pointer, it runs the Node.js and the copy of sextant that ran `enable`, by absolute paths.
+After moving or upgrading either one, run `sextant watch enable` again; `sextant check` warns until then.
+Running `enable` again with nothing changed writes nothing.
+
+The process watches only the entries directly in the home directory, without recursion.
+Writes below them, in a project, in `~/Library` or inside a Claude Code configuration directory, never wake it.
+Claude Code rewrites `~/.claude.json` often; each rewrite wakes the watcher for one check of that entry, and nothing is written.
+
+When a new directory appears directly in the home directory, the watcher waits up to ten seconds for the `.claude.json` file that marks a Claude Code configuration directory, the same marker the default install looks for, because Claude Code writes it just after it creates the directory.
+It then installs into that directory alone, exactly as `sextant install --account <dir>` does, so a broken settings file in another login does not hold it back.
+`~/.claude` is installed into without a marker, because Claude Code keeps that directory's marker in the home directory.
+A directory that never gets the marker is left alone.
+
+It never writes to the home directory itself: an install writes the new directory's `settings.json`, and the hook pointer and the list of installs under `~/.local`.
+`enable` creates `~/.local/state/sextant` if it is missing; should `~/.local` disappear later, the watcher installs nothing and logs a problem instead of creating it.
+
+What happens is appended to `~/.local/state/sextant/watch.log`, and `sextant check` shows its last line.
+
+The watcher reacts only to directories made after it started.
+One that was already there, made while the watcher was off, or kept outside the home directory or deeper in it, is left to `sextant install`, and `sextant check` lists it until then.
+
+### What it cannot cover
+
+Claude Code decides early which hooks the first session of a new login starts with, and in two cases that is before the watcher can write them.
+Both were measured with Claude Code 2.1.325.
+
+- **The first `claude -p` with a new configuration directory.**
+  Claude Code runs `SessionStart` a fraction of a second after it creates the directory, before the watcher has written the hooks.
+  That first session starts without the rules.
+- **The first interactive session, when the theme is confirmed first.**
+  The session starts with the hooks that were in `settings.json` when the theme is confirmed on Claude Code's first screen.
+  If that happens before the watcher has written them, the session starts without the rules, and receives them after `/clear` or `/model`.
+
+Every later session of that login receives the rules from its start.
+To close the gap entirely, for instance when logins are made by a script, create the configuration directory and run `sextant install --account <dir>` before the first `claude` that uses it.
+
+### Turning it off
+
+```bash
+sextant watch disable
+```
+
+It stops the service and removes the one service file `enable` wrote, and nothing else; on Linux it also disables the unit, which removes its link in `default.target.wants`.
+A service file at that path that sextant did not write is left alone, and both commands refuse to touch it.
+The hooks the watcher installed stay, like any other install; `sextant uninstall` removes them, and reminds you when the watcher is still on.
+The log stays in `~/.local/state/sextant/watch.log`.
 
 ## Machine-wide, for every account (--managed)
 
@@ -165,8 +235,9 @@ Rules a running session already received stay in that session.
 - server-managed settings that turn hooks off for a login (`disableAllHooks`, `allowManagedHooksOnly`);
 - managed settings files that stop hooks from running (`disableAllHooks`), that make per-account hooks ignored (`allowManagedHooksOnly`), or that Claude Code cannot read;
 - logins that would receive the rules twice;
+- whether the watcher is off or on, whether its service runs, whether it runs this copy of sextant, and the last line of its log;
 - whether the installed `claude` is recent enough;
 - the last decision in the log.
 
 It exits 0 when there is no problem, 1 when there is one, and 2 when the configuration is missing or refused.
-It reads local files and runs `claude --version`; it never uses the network and changes nothing.
+It reads local files, runs `claude --version`, and, when the watcher is on, asks launchd or systemd whether its service runs; it never uses the network and changes nothing.

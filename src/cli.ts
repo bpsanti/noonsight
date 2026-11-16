@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // sextant command line. Exit codes: 0 for success and for every decision (matched, none,
-// undeclared); 1 when install, uninstall or check finds a problem; 2 for a usage error or a refused
-// configuration. `sextant hook` always exits 0.
+// undeclared); 1 when install, uninstall, watch or check finds a problem; 2 for a usage error or a
+// refused configuration. `sextant hook` always exits 0, and `sextant watch run` keeps running.
 
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { HOOK_USAGE, runHookCommand } from './commands/hook.js';
 import { INSTALL_USAGE, runInstall } from './commands/install.js';
 import { RESOLVE_USAGE, runResolve } from './commands/resolve.js';
 import { UsageError } from './commands/usage.js';
+import { runWatch, WATCH_USAGE } from './commands/watch.js';
 import { ConfigError } from './config/load.js';
 import type { Env } from './config/paths.js';
 import { packageVersion } from './version.js';
@@ -22,7 +23,9 @@ Commands:
                                     login of this account, or for one directory, or machine-wide
   uninstall [--account <dir>|--managed]
                                     remove them
-  check                             check the configuration, the installs and Claude Code
+  watch enable|disable              turn on or off the watcher that installs the hooks into each
+                                    new Claude Code login as it appears; off unless turned on
+  check                             check the configuration, the installs, the watcher and Claude Code
   resolve <model> [scope] [place]   show the rules a model receives
   hook <event>                      the hook adapter that Claude Code runs; not run by hand
 
@@ -42,6 +45,7 @@ const COMMAND_USAGE: Record<string, string> = {
   install: INSTALL_USAGE,
   uninstall: INSTALL_USAGE,
   check: CHECK_USAGE,
+  watch: WATCH_USAGE,
   hook: HOOK_USAGE,
 };
 
@@ -73,6 +77,8 @@ export function main(argv: readonly string[], env: Env, io: Io): number {
         return runInstall(command, rest, env, io);
       case 'check':
         return runCheck(rest, env, io.out);
+      case 'watch':
+        return runWatch(rest, env, io);
       case undefined:
         throw new UsageError('missing the command', USAGE);
       default:

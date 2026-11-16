@@ -23,6 +23,8 @@ sextant install    # every Claude Code login of this account, no administrator r
 sextant check      # configuration, installs, Claude Code version
 ```
 
+`sextant watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `sextant watch disable` turns it off.
+
 `sextant install` adds sextant's hooks to the user settings of every Claude Code configuration directory it finds (`~/.claude`, the one in `CLAUDE_CONFIG_DIR`, and every other one in the home directory), keeping every other setting and hook.
 User settings reach every login, including one whose organization delivers server-managed settings, where Claude Code ignores machine-wide managed settings files.
 `sextant install --account <dir>` installs into one directory, and `sudo ... sextant install --managed` once for every account through Claude Code's managed settings files.
