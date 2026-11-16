@@ -274,7 +274,7 @@ test('backtracking shapes: a leading unbounded repeat of any character, nested u
   const kind = (p: string): string | null => backtrackingRisk(p, MATCHER_FLAGS)?.kind ?? null;
   for (const p of ['.*investigat', '.+x', '[\\s\\S]*x', '(?:.|\\n)*x', 'foo|.*bar', '\\b.*x']) assert.equal(kind(p), 'leading-any', p);
   // Parts that can match nothing do not anchor the repeat after them, and a lookaround opens its own alternatives.
-  for (const p of ['a?.*x', '(?:foo)?.*x', '\\s?.*x', '(?:.*x)?y', '(?=.*.*x)', '(?=.*deploy)(?=.*prod)', '(?<=.*x)y', '(?:^|\\s).*x', '(^\\s*)?.*x']) assert.equal(kind(p), 'leading-any', p);
+  for (const p of ['a?.*x', '(?:foo)?.*x', '\\s?.*x', '(?:.*x)?y', '(?=.*.*x)', '(?=.*deploy)(?=.*prod)', '(?<=.*x)y', '(?:^|\\s).*x', '(^\\s*)?.*x', '(?!^).*x', '(?<!^).*x']) assert.equal(kind(p), 'leading-any', p);
   // A "^" inside a group or lookaround still anchors what follows it.
   assert.equal(kind('(?:^\\s*).*hotfix'), 'adjacent', 'anchored, so only the repeats in a row are reported');
   for (const p of ['(a+)+', '(a*)*', '(?:\\w+\\s?)*x', '(?:x(?:ab)+)*', '^(?=(a+)+x)']) assert.equal(kind(p), 'nested', p);

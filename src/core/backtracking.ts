@@ -40,7 +40,7 @@ type Node =
   | { kind: 'atom'; source: string; chars: ReadonlySet<string> }
   | { kind: 'zero'; anchor: boolean }
   | { kind: 'group'; source: string; branches: Node[][] }
-  | { kind: 'look'; branches: Node[][] }
+  | { kind: 'look'; negative: boolean; branches: Node[][] }
   | { kind: 'repeat'; source: string; node: Node; min: number; max: number };
 
 /**
@@ -66,7 +66,8 @@ type Lead = { kind: 'found'; part: string } | { kind: 'anchored' } | { kind: 'op
 /**
  * Whether a branch opens with an unbounded repeat of any character with no "^" before it, looking
  * past parts that can match nothing and into the groups, repeats and lookarounds it passes. A part
- * whose every alternative starts with "^" anchors what follows it, unless the part can be skipped.
+ * whose every alternative starts with "^" anchors what follows it, unless the part can be skipped
+ * or is a negative lookaround.
  */
 function leadingAny(branch: readonly Node[]): Lead {
   for (const node of branch) {
@@ -78,8 +79,8 @@ function leadingAny(branch: readonly Node[]): Lead {
     const leads = innerBranches(node).map(leadingAny);
     const found = leads.find((l) => l.kind === 'found');
     if (found !== undefined) return found;
-    const skippable = node.kind === 'repeat' && node.min === 0;
-    if (!skippable && leads.length > 0 && leads.every((l) => l.kind === 'anchored')) return { kind: 'anchored' };
+    const anchors = !(node.kind === 'repeat' && node.min === 0) && !(node.kind === 'look' && node.negative);
+    if (anchors && leads.length > 0 && leads.every((l) => l.kind === 'anchored')) return { kind: 'anchored' };
     if (!canBeEmpty(node)) return { kind: 'open' };
   }
   return { kind: 'open' };
@@ -268,16 +269,18 @@ class Parser {
 
   private group(start: number): Node {
     let lookaround = false;
+    let negative = false;
     if (this.s[this.i] === '?') {
       const m = /^\?(?::|=|!|<=|<!|<[A-Za-z_$][\w$]*>|[ims]*-?[ims]*:)/.exec(this.s.slice(this.i));
       if (!m) throw new Unreadable('group');
       lookaround = /^\?(?:=|!|<=|<!)$/.test(m[0]);
+      negative = m[0].endsWith('!');
       this.i += m[0].length;
     }
     const branches = this.alternation();
     if (this.s[this.i] !== ')') throw new Unreadable('unclosed group');
     this.i++;
-    return lookaround ? { kind: 'look', branches } : { kind: 'group', source: this.s.slice(start, this.i), branches };
+    return lookaround ? { kind: 'look', negative, branches } : { kind: 'group', source: this.s.slice(start, this.i), branches };
   }
 
   private escape(start: number): Node {
