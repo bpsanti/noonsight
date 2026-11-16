@@ -19,8 +19,9 @@ With no option, install sextant's hooks into the user settings of every Claude C
 directory of this account: ~/.claude, the directory in CLAUDE_CONFIG_DIR, and every other directory
 in the home directory that holds a Claude Code configuration, one per login. It needs no
 administrator rights, and it reaches every login, including one whose organization delivers
-server-managed settings. Run it again after adding a Claude Code configuration directory;
-\`sextant check\` lists any directory it does not reach.
+server-managed settings. Run it again after adding a Claude Code configuration directory, or run
+\`sextant watch enable\` once to have each new one installed as it appears; \`sextant check\`
+lists any directory it does not reach.
 
   --account <dir>  only this Claude Code configuration directory
   --managed        once for every account on the machine, in Claude Code's managed settings files;

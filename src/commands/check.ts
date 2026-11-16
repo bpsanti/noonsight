@@ -1,6 +1,7 @@
-// sextant check: the configuration, every install this account can see, the Claude Code version and
-// the last decision, one line each. It reads local files and runs `claude --version`; it never uses
-// the network and never changes anything.
+// sextant check: the configuration, every install this account can see, the watcher, the Claude
+// Code version and the last decision, one line each. It reads local files, runs `claude --version`,
+// and, when the watcher is on, asks the service manager whether it runs; it never uses the network
+// and never changes anything.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,14 +16,15 @@ import { findSextantHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from 
 import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
+import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { lastDecision } from '../state/log.js';
 import { compareVersions, packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
 export const CHECK_USAGE = `usage: sextant check
 
-Check the configuration, the installed hooks and the Claude Code version, and show the last decision.
-Each line starts with ok, warning or problem. Exits 0 when there is no problem, 1 when there is one,
+Check the configuration, the installed hooks, the watcher and the Claude Code version, and show
+the last decision. Each line starts with ok, warning or problem. Exits 0 when there is no problem, 1 when there is one,
 and 2 when the configuration is missing or refused.`;
 
 type Level = 'ok' | 'warning' | 'problem';
@@ -93,6 +95,9 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
           (managedInstalled ? ' (its login receives server-managed settings, so Claude Code ignores the machine-wide install there)' : '') +
           '; run `sextant install`',
       );
+
+  // The watcher.
+  checkWatcher(env, home, cli, add);
 
   // Claude Code.
   checkClaude(env, add);
@@ -225,6 +230,60 @@ function checkRemotePolicy(
     );
   else if (accountHooks && !remote.merges)
     add('ok', `${label}: this login receives server-managed settings, which shadow the managed settings files; the account install reaches it`);
+}
+
+/** Whether the opt-in watcher is on, whether it runs, and what it last logged. */
+function checkWatcher(env: Env, home: string, cli: string, add: (level: Level, text: string) => void): void {
+  let service: WatchService;
+  try {
+    service = watchService(env, home);
+  } catch (e) {
+    if (!(e instanceof WatchUnsupported)) throw e;
+    add('ok', `watcher: off (${e.message})`);
+    return;
+  }
+  let content: string | null;
+  try {
+    content = readServiceFile(service);
+  } catch (e) {
+    add('warning', `watcher: cannot read ${service.file} (${(e as Error).message})`);
+    return;
+  }
+  if (content === null) {
+    if (isLoaded(manager.running(service))) add('problem', `watcher: loaded without ${service.file}; run \`sextant watch disable\` to stop it`);
+    else add('ok', 'watcher: off; `sextant watch enable` installs into each new Claude Code configuration directory as it appears');
+    return;
+  }
+  if (!isOurs(content)) {
+    add('warning', `watcher: ${service.file} is in sextant's place but was not written by sextant`);
+    return;
+  }
+  const running = manager.running(service);
+  if (running === 'off') add('problem', `watcher: on in ${service.file}, but not running; run \`sextant watch enable\` again`);
+  else if (running === 'loaded') add('warning', `watcher: on in ${service.file}, but loaded without a running process; run \`sextant watch enable\` again`);
+  else add('ok', `watcher: on (${service.file})${running === null ? '; whether it runs now could not be checked' : ''}`);
+  if (content !== serviceContent(service, { node: process.execPath, cli }))
+    add('warning', `watcher: ${service.file} runs another copy of sextant or another Node.js; run \`sextant watch enable\` again to switch to this one`);
+  const last = lastLine(service.log);
+  if (last !== null) add(/ (problem|sextant): /.test(last) ? 'warning' : 'ok', `watcher log ${service.log}: ${last}`);
+}
+
+/** The last line of a small log file, or null when there is none. */
+function lastLine(file: string): string | null {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const size = fs.fstatSync(fd).size;
+      const length = Math.min(size, 16 * 1024);
+      const buffer = Buffer.alloc(length);
+      fs.readSync(fd, buffer, 0, length, size - length);
+      return buffer.toString('utf8').trimEnd().split('\n').pop() || null;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
 }
 
 function checkClaude(env: Env, add: (level: Level, text: string) => void): void {
