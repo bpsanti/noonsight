@@ -251,8 +251,9 @@ function toScope(name: string, raw: RawScope, at: string, report: (at: string, m
 const CATCH_ALL_PROBES = ['a', 'Z', '0', ' a ', 'A B', 'x_1 y'];
 
 /**
- * Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware. One that
- * matches every plain task text (CATCH_ALL_PROBES) would put every task in its scope, so it is refused.
+ * Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware. A matcher
+ * that matches every probe text in CATCH_ALL_PROBES is a catch-all, so it is refused. Passing the
+ * probes does not prove a matcher is not broad; it only catches the obvious catch-alls.
  */
 function compileMatchers(sources: readonly string[], at: string, report: (at: string, message: string) => void): ScopeMatcher[] {
   const out: ScopeMatcher[] = [];
