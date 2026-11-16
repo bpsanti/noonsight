@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { backtrackingRisk, type BacktrackingRisk } from '../core/backtracking.js';
 import { normalizeModel } from '../core/normalize.js';
 import { envelope, joinRules, selectRules } from '../core/resolve.js';
 import {
@@ -243,7 +244,7 @@ function toScope(name: string, raw: RawScope, at: string, report: (at: string, m
   return {
     name,
     ...(description !== undefined ? { description } : {}),
-    match: raw.match !== undefined ? compileMatchers(raw.match, `${at}/match`, report) : (base?.match ?? []),
+    match: raw.match !== undefined ? compileMatchers(name, raw.match, `${at}/match`, report) : (base?.match ?? []),
   };
 }
 
@@ -253,9 +254,16 @@ const CATCH_ALL_PROBES = ['a', 'Z', '0', ' a ', 'A B', 'x_1 y'];
 /**
  * Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware. A matcher
  * that matches every probe text in CATCH_ALL_PROBES is a catch-all, so it is refused. Passing the
- * probes does not prove a matcher is not broad; it only catches the obvious catch-alls.
+ * probes does not prove a matcher is not broad; it only catches the obvious catch-alls. A matcher with
+ * one of the shapes backtracking.ts recognizes is refused too, since the hook runs it over every
+ * subagent's task text before the subagent starts.
  */
-function compileMatchers(sources: readonly string[], at: string, report: (at: string, message: string) => void): ScopeMatcher[] {
+function compileMatchers(
+  scope: string,
+  sources: readonly string[],
+  at: string,
+  report: (at: string, message: string) => void,
+): ScopeMatcher[] {
   const out: ScopeMatcher[] = [];
   sources.forEach((source, i) => {
     let regex: RegExp;
@@ -270,9 +278,30 @@ function compileMatchers(sources: readonly string[], at: string, report: (at: st
       report(`${at}/${i}`, `"${source}" matches each of the probe texts ${probes}, which are plain task texts used to detect catch-all matchers`);
       return;
     }
+    const risk = backtrackingRisk(source, MATCHER_FLAGS);
+    if (risk !== null) {
+      report(`${at}/${i}`, `scope "${scope}": "${source}" ${describeRisk(risk)}`);
+      return;
+    }
     out.push({ source, regex });
   });
   return out;
+}
+
+function describeRisk(risk: BacktrackingRisk): string {
+  // Quoted as the pattern itself is quoted: as the configuration writes it.
+  const [a = '', b = ''] = risk.parts.map((p) => `"${p}"`);
+  switch (risk.kind) {
+    case 'leading-any':
+      return (
+        `starts with ${a}, an unbounded repeat of any character with no "^" before it, so matching retries it from every position of the task text; ` +
+        'start with a word instead (such as "\\binvestigat"), or anchor it with "^"'
+      );
+    case 'nested':
+      return `has the unbounded quantifier ${b} inside the unbounded quantifier ${a}, a shape whose matching time can grow exponentially with the task text`;
+    case 'adjacent':
+      return `has the unbounded quantifiers ${a} and ${b} in a row, able to match the same characters with nothing required between them, a shape whose matching time can grow much faster than the task text`;
+  }
 }
 
 function checkScopes(

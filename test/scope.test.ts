@@ -7,6 +7,7 @@ import test from 'node:test';
 import { loadConfig } from '../src/config/load.js';
 import { scopeOverlaps } from '../src/core/overlap.js';
 import { regexSamples } from '../src/core/regex-sample.js';
+import { backtrackingRisk } from '../src/core/backtracking.js';
 import { resolve } from '../src/core/resolve.js';
 import { sessionPlace, sessionScope, taskScope, taskText } from '../src/core/scope.js';
 import { MATCHER_FLAGS, type Config, type Decision, type MatchedDecision } from '../src/core/types.js';
@@ -267,4 +268,27 @@ test('overlaps: two scopes that accept the same character of a class overlap, wi
   const [overlap] = scopeOverlaps(cfg).overlaps;
   assert.deepEqual(overlap?.scopes, ['a', 'b']);
   assert.ok(/^[qz]$/iu.test(overlap?.text ?? '') && /^[xz]$/iu.test(overlap?.text ?? ''), 'the reported text matches both scopes');
+});
+
+test('backtracking shapes: a leading unbounded repeat of any character, nested unbounded quantifiers, and overlapping ones in a row', () => {
+  const kind = (p: string): string | null => backtrackingRisk(p, MATCHER_FLAGS)?.kind ?? null;
+  for (const p of ['.*investigat', '.+x', '[\\s\\S]*x', '(?:.|\\n)*x', 'foo|.*bar', '\\b.*x']) assert.equal(kind(p), 'leading-any', p);
+  for (const p of ['(a+)+', '(a*)*', '(?:\\w+\\s?)*x', '(?:x(?:ab)+)*']) assert.equal(kind(p), 'nested', p);
+  for (const p of ['^.*.*x', '\\w+\\w+', '\\w+\\s*\\w+', 'a+(?:b?)a*']) assert.equal(kind(p), 'adjacent', p);
+  assert.equal(kind('.*.*x'), 'leading-any', 'the first shape found is reported');
+  const common = ['\\bdeploy\\b', 'review|revis', '^fix\\b', '^.*hotfix', '\\binvestigat', '\\w+\\s+investigat', '\\d+\\.\\d+', 'x+y+', 'a.*b.*c', '(ab|cd){2}e', '(a+){2}', 'change\\s*log'];
+  for (const p of common) assert.equal(kind(p), null, p);
+  assert.equal(kind('(unclosed'), null, 'an unreadable pattern is never reported');
+});
+
+test('matchers that pass the backtracking check run fast over a 100,000-character task text with no match', () => {
+  const filler = 'The function reads the file and writes the result. ';
+  const text = filler.repeat(Math.ceil(100_000 / filler.length)).slice(0, 100_000);
+  const accepted = ['\\bdeploy\\b', 'review|revis', '^fix\\b', '\\binvestigat', '\\w+\\s+investigat', '\\b(?:summar(?:y|ize|ise)|digest)\\b', 'foo.*bar'];
+  const cfg = load({ scopes: { a: { match: accepted } } });
+  const started = process.hrtime.bigint();
+  for (let i = 0; i < 10; i++) assert.equal(taskScope(cfg, taskText(null, text).text).scope, null);
+  const perCall = Number(process.hrtime.bigint() - started) / 10 / 1e6;
+  // A generous ceiling: the point is that time stays small, not a benchmark.
+  assert.ok(perCall < 250, `one scope decision took ${perCall.toFixed(1)} ms`);
 });

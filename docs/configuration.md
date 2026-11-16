@@ -99,8 +99,8 @@ A session that investigates can start a subagent that summarizes, and each gets 
 
 Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware (flags `iu`).
 They read the subagent's `description`, then its `prompt`, joined, up to the first 100,000 characters.
-The bound keeps the time a matcher can take inside the hook, which runs before every agent call, limited, so a longer task is cut there, and the decision log records `task_text_cut` for it.
-A matcher whose time grows faster than the text, such as one starting with `.*`, can still be slow on a long task, so word-boundary matchers like `\binvestigat` are preferred.
+The bound keeps the text a matcher reads inside the hook, which runs before every agent call, limited, so a longer task is cut there, and the decision log records `task_text_cut` for it.
+A length bound alone does not keep matching fast: a matcher whose time grows much faster than the text can still hold an agent call on a long task, so such matchers are refused (see [Matchers that backtrack](#matchers-that-backtrack)).
 Any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
 When several scopes match, the one whose matcher matches earliest in the text wins, and two that match at the same place go to the scope declared first: the preset's scopes in the preset's order, then the user's new ones in the file's order.
 The check tries each matcher against six probe texts: `"a"`, `"Z"`, `"0"`, `" a "`, `"A B"` and `"x_1 y"`, which are plain task texts.
@@ -112,6 +112,23 @@ A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, onl
 To find such texts, sextant builds short example texts from each matcher and runs the other scopes' matchers over them, so every overlap it reports comes with a text that really matches both.
 Two scopes can still overlap on a text the examples do not reach, so "no two scopes overlap" means no overlap was found.
 A matcher whose examples are incomplete, such as one with a back reference, or one with more texts than sextant keeps, is named on the scopes line, which then does not claim that no two scopes overlap.
+
+### Matchers that backtrack
+
+When a regular expression can match the same stretch of text in many ways, the engine tries them all before it gives up, and the time it takes can grow with the square of the text length, or faster.
+sextant refuses a matcher with one of these three shapes, naming the scope, the pattern and the shape:
+
+- **It starts with an unbounded repeat of any character** (`.*`, `.+`, `[\s\S]*` and the like), in the whole pattern or in one of its top-level alternatives, with no `^` before it.
+  The engine retries the repeat from every position of the task text.
+  `^.*hotfix` is accepted; `.*investigat` is refused, and `\binvestigat` matches the same tasks.
+- **It nests an unbounded quantifier inside another**, such as `(a+)+` or `(?:\w+\s?)*`.
+- **It has two unbounded quantifiers in a row that can match the same characters, with nothing required between them**, such as `\w+\w+` or `\w+\s*\w+`.
+  `\w+\s+\w+` is accepted, because the required space separates the two repeats.
+
+"Unbounded" means `*`, `+` or `{n,}`.
+Characters are compared over a fixed set of sample characters (printable ASCII, whitespace and a few letters beyond it).
+The check recognizes these shapes only: a matcher that passes it is not proven fast, and other slow shapes, such as alternatives that match the same text inside a repeat (`(a|a)*`), are not detected.
+Matchers that start with a word and a word boundary, such as `\bdeploy\b`, `review|revis` or `^fix\b`, pass it.
 
 ## How a rule is chosen
 
@@ -139,7 +156,7 @@ Beyond the schema, sextant checks that:
 - every rule file exists and is not empty;
 - rule ids are unique for each model;
 - every scope a rule names is declared;
-- every matcher is a valid regular expression and does not match all six probe texts listed under [Scopes](#scopes);
+- every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).

@@ -237,3 +237,41 @@ test('the preset\'s matchers are checked with the preset, even when the user rep
   const problems = problemsOf({ version: 1, preset: 'lab', scopes: { investigate: { match: ['\\bdiagnos'] } } }, {}, bad);
   assertProblem(problems, /^preset .*preset\.json: \/scopes\/investigate\/match\/0: not a valid regular expression/);
 });
+
+test('matchers with a catastrophic-backtracking shape are refused, naming the scope, the pattern and the shape found', () => {
+  const problems = problemsOf({
+    version: 1,
+    scopes: {
+      investigate: { match: ['.*investigat', '\\binvestigat'] },
+      loop: { match: ['.*.*x', '(a+)+', '\\w+\\s*\\w+'] },
+    },
+  });
+  assertProblem(
+    problems,
+    /^\/scopes\/investigate\/match\/0: scope "investigate": "\.\*investigat" starts with "\.\*", an unbounded repeat of any character with no "\^" before it, so matching retries it from every position of the task text; start with a word instead \(such as "\\binvestigat"\), or anchor it with "\^"$/,
+  );
+  assertProblem(problems, /^\/scopes\/loop\/match\/0: scope "loop": "\.\*\.\*x" starts with "\.\*", an unbounded repeat of any character/);
+  assertProblem(problems, /^\/scopes\/loop\/match\/1: scope "loop": "\(a\+\)\+" has the unbounded quantifier "a\+" inside the unbounded quantifier "\(a\+\)\+", a shape whose matching time can grow exponentially with the task text$/);
+  assertProblem(problems, /^\/scopes\/loop\/match\/2: scope "loop": "\\w\+\\s\*\\w\+" has the unbounded quantifiers "\\w\+" and "\\w\+" in a row, able to match the same characters with nothing required between them/);
+  assert.ok(!problems.some((p) => p.startsWith('/scopes/investigate/match/1')), problems.join('\n'));
+});
+
+test('common matchers pass the backtracking check', () => {
+  const dir = tempTree({
+    'sextant.json': {
+      version: 1,
+      scopes: {
+        deploy: { match: ['\\bdeploy\\b', 'review|revis', '^fix\\b', '^.*hotfix', '\\b(?:summar(?:y|ize|ise)|digest)\\b', '\\w+\\s+investigat', 'foo.*bar', 'release[- ]notes?'] },
+      },
+    },
+  });
+  const cfg = loadConfig(path.join(dir, 'sextant.json'), { presetsDir: LAB_PRESETS });
+  assert.equal(cfg.scopes.get('deploy')?.match.length, 8);
+});
+
+test('the preset\'s matchers get the backtracking check too', () => {
+  const bad = labPresetWith((p) => {
+    p.scopes.investigate.match = ['(?:\\w+\\s?)*done'];
+  });
+  assertProblem(problemsOf({ version: 1, preset: 'lab' }, {}, bad), /^preset .*preset\.json: \/scopes\/investigate\/match\/0: scope "investigate": .* has the unbounded quantifier "\\w\+" inside the unbounded quantifier/);
+});
