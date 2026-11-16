@@ -12,12 +12,6 @@ import type { Config, Place } from './types.js';
 /** The environment variable that names a session's task scope. */
 export const SCOPE_ENV = 'SEXTANT_SCOPE';
 
-/**
- * How much of a subagent's task text the matchers read. A task states what it is about near its
- * start, and the bound keeps the time any matcher can take on a long task text small.
- */
-export const TASK_TEXT_LIMIT = 4000;
-
 export type ScopeSource = 'env' | 'task-text';
 
 export interface ScopeChoice {
@@ -71,19 +65,10 @@ export function taskScope(config: Config, task: Task): ScopeChoice {
 }
 
 /**
- * The text the matchers read: the description, then the task text, without any sextant envelope a
- * parent copied into it (the rules' own words must not pick the scope), cut to TASK_TEXT_LIMIT.
+ * The text the matchers read, whole: the description, then the task text, without any sextant
+ * envelope a parent copied into it (the rules' own words must not pick the scope).
  */
 export function taskText(description: string | null, prompt: string | null): string {
-  return fullTaskText(description, prompt).slice(0, TASK_TEXT_LIMIT);
-}
-
-/** Whether the matchers read less than the whole task text, because it is longer than TASK_TEXT_LIMIT. */
-export function taskTextCut(description: string | null, prompt: string | null): boolean {
-  return fullTaskText(description, prompt).length > TASK_TEXT_LIMIT;
-}
-
-function fullTaskText(description: string | null, prompt: string | null): string {
   const strip = (s: string): string => s.replace(/<sextant-rules(-change)?\b[^>]*>[\s\S]*?<\/sextant-rules\1>/g, '');
   return [description, prompt]
     .filter((s): s is string => s !== null && s !== '')

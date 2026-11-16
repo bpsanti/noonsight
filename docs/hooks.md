@@ -204,7 +204,6 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `scope_source` | `env` (`SEXTANT_SCOPE`), `task-text`, or null when there was no scope |
 | `scope_matcher` | For a scope taken from the task text: the matcher that decided, as the configuration writes it |
 | `unattended_env` | For a session in the place `unattended`: the variable that put it there |
-| `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |
