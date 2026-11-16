@@ -200,6 +200,10 @@ Claude Code applies the call's `effort` only from version 2.1.292 ([Choose an ef
 Every decision adds one JSON line to `~/.local/state/sextant/decisions.jsonl`, in the home of the account that ran the session.
 Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a new log starts.
 
+`sextant report` reads both files and prints, for each rule, how often it was delivered and to which models, scopes, places and events, with the length of its text; then the rules on in the configuration that the log never shows delivered, and the decisions that delivered no rules, by why.
+A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-prompt`; a session start that found the rules already in the launcher's system prompt (`launcher`) is counted once, under `launch`.
+`--since <date>` keeps the lines from that date or time on, `--log <file>` reads another log, such as one copied from another machine, and `--json` prints the same as JSON.
+
 ```json
 {"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/sextant/sextant.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"session","scope_source":null,"model_source":"hook-input","delivered":"rules","warned":false}
 ```

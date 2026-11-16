@@ -15,5 +15,5 @@
     "types": ["node"],
     "sourceMap": true
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "experiments"]
 }

@@ -1,0 +1,43 @@
+{
+  "effort": "medium",
+  "reps": 3,
+  "cap_usd": 10,
+  "unattended_env": "SEXTANT_EXPERIMENT",
+  "default_models": ["fable", "sonnet"],
+  "models": {
+    "fable": { "id": "claude-fable-5-2", "budget_usd": 1.5 },
+    "opus": { "id": "claude-opus-5-5", "budget_usd": 1 },
+    "sonnet": { "id": "claude-sonnet-5-5", "budget_usd": 0.6 },
+    "haiku": { "id": "claude-haiku-5-5", "budget_usd": 0.3 }
+  },
+  "arms": {
+    "rules": { "use": "preset" },
+    "none": { "use": "none" }
+  },
+  "tasks": {
+    "question": {
+      "scope": "investigate",
+      "prompt": "This is a read-only question about the code in this directory: change no file except report.md. Which of the scheduled jobs honor the pause switch and the quiet hours, and does any job ignore either one? Give file and line evidence for each job. Write a short report in report.md, and make its last line exactly \"Ignores a control: \" followed by the names of the jobs that ignore the pause switch or the quiet hours, separated by commas, or \"none\".",
+      "report": "report.md",
+      "answer_prefix": "Ignores a control:",
+      "expected": ["digest", "metrics", "sync"],
+      "allowed_changes": ["report.md"]
+    },
+    "fix": {
+      "scope": "routine",
+      "prompt": "The digest job sends its digest during quiet hours. Change src/jobs/digest.js so that it also stays silent during quiet hours, the same way src/jobs/backup.js does. Then reply with a short report of what you changed.",
+      "check": "check/digest.test.js",
+      "allowed_changes": ["src/jobs/digest.js"]
+    }
+  },
+  "signals": {
+    "fable-5-2/low-context-report": ["words_per_sentence", "semicolons_per_1k_words", "parentheses_per_1k_words"],
+    "fable-5-2/finish-work": ["finished"],
+    "opus-5-5/unattended-run": ["finished"],
+    "sonnet-5-5/carry-through": ["finished"],
+    "sonnet-5-5/verify-changes": ["verified"],
+    "sonnet-5-5/stay-in-scope": ["extra_files"],
+    "haiku-5-5/carry-through": ["finished", "extra_files"],
+    "haiku-5-5/verify-changes": ["verified"]
+  }
+}
