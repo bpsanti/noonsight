@@ -5,7 +5,7 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 
 `npm run test:live` drives real interactive sessions through a terminal and sends no prompt and no request to Anthropic: a placeholder token gets Claude Code past sign-in, and `ANTHROPIC_BASE_URL` points at a closed local port.
 `SEXTANT_LIVE_TOKENS=1` adds the checks that ask a model, which need a real token in `CLAUDE_CODE_OAUTH_TOKEN`.
-`SEXTANT_LIVE_LOGIN=1` adds the subagent checks (`test/live/subagents.test.ts`), which send prompts from the Claude Code login of whoever runs them: they read no token, give sextant's hook entries through `--settings`, and leave the person's own settings out with `--setting-sources project,local`, so nothing is installed into that account.
+`SEXTANT_LIVE_LOGIN=1` adds the subagent and scope checks (`test/live/subagents.test.ts`, `test/live/scopes.test.ts`), which send prompts from the Claude Code login of whoever runs them: they read no token, give sextant's hook entries through `--settings`, and leave the person's own settings out with `--setting-sources project,local`, so nothing is installed into that account.
 
 ## Checked live
 
@@ -31,6 +31,8 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 | When a subagent makes its first agent call, its transcript is at `<session transcript dir>/<session id>/subagents/agent-<agent id>.jsonl` and names its model; with `--no-session-persistence` there is no transcript | 2.1.325 | 2026-11-15 | Checked by hand with a hook that read the file |
 | The built-in Explore subagent under a Sonnet parent runs on Sonnet | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (inherit-explore) |
 | A plugin's subagent with `model: haiku` runs on Haiku whatever the session's model | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (mismatch) |
+| A hook inherits the environment Claude Code was started with, so `SEXTANT_SCOPE` set for `claude` reaches `SessionStart` | 2.1.325 | 2026-11-16 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (scopes) |
+| A model reads two different scoped rule sets for the same model, from `SessionStart` context and from the end of a subagent's `prompt`, and quotes only the one it was given | 2.1.325 | 2026-11-16 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (scopes) |
 | A `systemMessage` from `PreToolUse` or `PostToolUse` reaches `claude -p --output-format stream-json` as a `system` event of subtype `informational` | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` |
 | In auto mode, the classifier reviews an agent call that no hook allowed, and can deny it | 2.1.325 | 2026-11-15 | Seen in an interactive session started in auto mode; the live tests pin `--permission-mode default` |
 

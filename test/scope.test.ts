@@ -1,0 +1,225 @@
+// Scope and place: where a decision's scope and place come from, how a task picks its scope, and
+// which scopes overlap. Pure core functions over configurations loaded from temporary directories.
+
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import test from 'node:test';
+import { loadConfig } from '../src/config/load.js';
+import { scopeOverlaps } from '../src/core/overlap.js';
+import { regexSamples } from '../src/core/regex-sample.js';
+import { resolve } from '../src/core/resolve.js';
+import { sessionPlace, sessionScope, taskScope, taskText, TASK_TEXT_LIMIT } from '../src/core/scope.js';
+import { MATCHER_FLAGS, type Config, type Decision, type MatchedDecision } from '../src/core/types.js';
+import { LAB_PRESETS, labPresetWith, tempTree } from './helpers.js';
+
+const matched = (d: Decision): MatchedDecision => {
+  assert.equal(d.status, 'matched', JSON.stringify(d));
+  return d as MatchedDecision;
+};
+
+function load(config: Record<string, unknown>, files: Record<string, string> = {}, presetsDir = LAB_PRESETS): Config {
+  const dir = tempTree({ 'sextant.json': { version: 1, ...config }, ...files });
+  return loadConfig(path.join(dir, 'sextant.json'), { presetsDir });
+}
+
+/** Sonnet with one rule for every scope and one rule each for two scopes, in every place. */
+const RULES = {
+  'general.md': 'GENERAL-1000',
+  'investigate.md': 'INVESTIGATE-2000',
+  'summarize.md': 'SUMMARIZE-3000',
+  'unattended.md': 'UNATTENDED-4000',
+};
+const SONNET = {
+  'claude-sonnet-5-5': {
+    use: 'custom',
+    add: [
+      { id: 'general', file: 'general.md' },
+      { id: 'investigate', file: 'investigate.md', scopes: ['investigate'] },
+      { id: 'summarize', file: 'summarize.md', scopes: ['summarize'] },
+      { id: 'unattended', file: 'unattended.md', where: ['unattended'] },
+    ],
+  },
+};
+const SCOPES = {
+  investigate: { match: ['\\binvestigat', '\\broot cause\\b'] },
+  summarize: { match: ['\\bsummar', '\\bdigest\\b'], agent_types: ['digest-writer'] },
+};
+const scoped = (extra: Record<string, unknown> = {}): Config => load({ models: SONNET, scopes: SCOPES, ...extra }, RULES);
+const scopeOf = (cfg: Config, prompt: string, agentType: string | null = 'general-purpose', description: string | null = null): string | null =>
+  taskScope(cfg, { agentType, description, prompt }).scope;
+
+test('scope: two scopes on the same model deliver different rules, and no scope delivers only the general ones', () => {
+  const cfg = scoped();
+  const rules = (scope: string | null): readonly string[] => matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope, place: 'session' })).rules;
+  assert.deepEqual(rules('investigate'), ['general', 'investigate']);
+  assert.deepEqual(rules('summarize'), ['general', 'summarize']);
+  assert.deepEqual(rules(null), ['general']);
+  const a = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' }));
+  const b = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'summarize', place: 'session' }));
+  assert.notEqual(a.sha256, b.sha256);
+  assert.match(a.text, /INVESTIGATE-2000/);
+  assert.doesNotMatch(a.text, /SUMMARIZE-3000/);
+});
+
+test('session scope: SEXTANT_SCOPE names it, trimmed; unset or empty means none', () => {
+  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: 'investigate' }), { scope: 'investigate', source: 'env' });
+  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: '  summarize\n' }), { scope: 'summarize', source: 'env' });
+  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: ' ' }), { scope: null, source: null });
+  assert.deepEqual(sessionScope({}), { scope: null, source: null });
+});
+
+test('session scope: an undeclared SEXTANT_SCOPE only means the general rules, never a warning', () => {
+  const d = matched(resolve(scoped(), { model: 'claude-sonnet-5-5', scope: sessionScope({ SEXTANT_SCOPE: 'release' }).scope, place: 'session' }));
+  assert.deepEqual(d.rules, ['general']);
+  assert.equal(d.unknown_scope, 'release');
+});
+
+test('session place: unattended when a variable of session.unattended_when_env is set and not empty', () => {
+  const cfg = scoped({ session: { unattended_when_env: ['CI', 'FM_TASK_ID'] } });
+  assert.deepEqual(sessionPlace(cfg, {}), { place: 'session' });
+  assert.deepEqual(sessionPlace(cfg, { CI: '' }), { place: 'session' });
+  assert.deepEqual(sessionPlace(cfg, { FM_TASK_ID: 'task-7' }), { place: 'unattended', because: 'FM_TASK_ID' });
+  assert.deepEqual(sessionPlace(cfg, { CI: 'true', FM_TASK_ID: 'x' }), { place: 'unattended', because: 'CI' }, 'the first one listed is named');
+  assert.deepEqual(sessionPlace(scoped(), { CI: 'true' }), { place: 'session' }, 'no variable is listed by default');
+
+  const rules = (env: Record<string, string>): readonly string[] =>
+    matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: null, place: sessionPlace(cfg, env).place })).rules;
+  assert.deepEqual(rules({}), ['general']);
+  assert.deepEqual(rules({ CI: '1' }), ['general', 'unattended']);
+});
+
+test('task scope: the subagent type decides first, whatever the task text says', () => {
+  const cfg = scoped();
+  assert.deepEqual(taskScope(cfg, { agentType: 'digest-writer', prompt: 'Investigate the root cause.' }), { scope: 'summarize', source: 'agent-type' });
+  assert.equal(scopeOf(cfg, 'Investigate the root cause.', 'Digest-Writer'), 'investigate', 'types are compared exactly');
+});
+
+test('task scope: the matcher that matches earliest in the text wins, case-insensitively', () => {
+  const cfg = scoped();
+  assert.deepEqual(taskScope(cfg, { agentType: 'general-purpose', prompt: 'Find the ROOT CAUSE of the failure.' }), {
+    scope: 'investigate',
+    source: 'task-text',
+    matcher: '\\broot cause\\b',
+  });
+  assert.equal(scopeOf(cfg, 'Summarize what you find while you investigate.'), 'summarize');
+  assert.equal(scopeOf(cfg, 'Investigate, then summarize.'), 'investigate');
+  assert.equal(scopeOf(cfg, 'Rename the variable.'), null);
+  assert.equal(scopeOf(cfg, 'reinvestigate'), null, 'a word boundary in the matcher holds');
+  assert.equal(scopeOf(load({ scopes: { analysis: { match: ['análise'] } } }), 'ANÁLISE do log'), 'analysis', 'case folds beyond ASCII');
+});
+
+test('task scope: the description is read before the task text', () => {
+  const cfg = scoped();
+  assert.equal(scopeOf(cfg, 'Investigate the logs and write it up.', 'general-purpose', 'Summarize release logs'), 'summarize');
+  assert.equal(scopeOf(cfg, 'Investigate the logs.', 'general-purpose', 'Read logs'), 'investigate');
+  assert.equal(taskText('a', 'b'), 'a\n\nb');
+  assert.equal(taskText(null, 'b'), 'b');
+});
+
+test('task scope: two scopes that match at the same place go to the one declared first, the preset\'s before the user\'s', () => {
+  const both = { first: { match: ['\\bcheck'] }, second: { match: ['\\bcheck the'] } };
+  assert.equal(scopeOf(load({ scopes: both }), 'check the build'), 'first');
+  assert.equal(scopeOf(load({ scopes: { second: both.second, first: both.first } }), 'check the build'), 'second');
+
+  const presets = labPresetWith((p) => {
+    p.scopes.investigate.match = ['\\bcheck'];
+  });
+  const cfg = load({ preset: 'lab', scopes: { audit: { match: ['\\bcheck'] } } }, {}, presets);
+  assert.deepEqual([...cfg.scopes.keys()], ['investigate', 'audit']);
+  assert.equal(scopeOf(cfg, 'check the build'), 'investigate');
+});
+
+test('task scope: a user scope named like a preset scope keeps its place and replaces only the keys it gives', () => {
+  const presets = labPresetWith((p) => {
+    p.scopes.investigate = { description: 'Preset description.', match: ['\\binvestigat'], agent_types: ['debugger'] };
+    p.scopes.review = { match: ['\\breview'] };
+  });
+  const cfg = load({ preset: 'lab', scopes: { audit: { match: ['\\baudit'] }, investigate: { match: ['\\bdiagnos'] } } }, {}, presets);
+  assert.deepEqual([...cfg.scopes.keys()], ['investigate', 'review', 'audit']);
+  const investigate = cfg.scopes.get('investigate');
+  assert.equal(investigate?.description, 'Preset description.');
+  assert.deepEqual(investigate?.match.map((m) => m.source), ['\\bdiagnos']);
+  assert.deepEqual(investigate?.agentTypes, ['debugger']);
+  assert.equal(scopeOf(cfg, 'investigate this'), null);
+  assert.equal(scopeOf(cfg, 'diagnose this'), 'investigate');
+  assert.equal(scopeOf(cfg, 'anything', 'debugger'), 'investigate');
+});
+
+test('task scope: rules a parent copied into the task do not pick the scope, and only the start of a long task is read', () => {
+  const cfg = scoped();
+  const envelope = '<sextant-rules model="claude-sonnet-5-5" scope="investigate">\nInvestigate with care.\n</sextant-rules>';
+  assert.equal(scopeOf(cfg, `Rename the variable.\n\n${envelope}`), null);
+  assert.equal(scopeOf(cfg, `${envelope}\n\nSummarize the log.`), 'summarize');
+  const note = '<sextant-rules-change from="a" to="b">\nThe digest no longer applies.\n</sextant-rules-change>';
+  assert.equal(scopeOf(cfg, `${note} Rename it.`), null);
+  assert.equal(scopeOf(cfg, `${'x '.repeat(TASK_TEXT_LIMIT)} investigate`), null);
+  assert.equal(scopeOf(cfg, `${'x '.repeat(TASK_TEXT_LIMIT / 2 - 10)} investigate`), 'investigate');
+});
+
+test('task scope: a configuration with no matchers gives every subagent no scope', () => {
+  assert.equal(scopeOf(load({ scopes: { investigate: {} } }), 'Investigate the root cause.'), null);
+});
+
+test('example texts: each one matches its expression, for the syntax matchers use', () => {
+  const patterns = [
+    '\\binvestigat',
+    '\\broot cause\\b',
+    '\\b(?:summar(?:y|ize|ise)|digest)\\b',
+    'release[- ]notes?',
+    '^fix\\b',
+    '\\bv\\d+\\.\\d+',
+    '[A-Z]{2,4}-\\d{1,5}',
+    'change\\s*log',
+    '[^a-z]todo',
+    '(?<!re)write',
+    'review(?= the)',
+    '\\p{L}+ report',
+    'caf\\u00e9|\\x41BC',
+    'a.c',
+    '(ab|cd){2}e',
+  ];
+  for (const p of patterns) {
+    const samples = regexSamples(p, MATCHER_FLAGS);
+    assert.ok(samples.length > 0, `no example for ${p}`);
+    const regex = new RegExp(p, MATCHER_FLAGS);
+    for (const s of samples) assert.ok(regex.test(s), `${JSON.stringify(s)} does not match ${p}`);
+  }
+  assert.ok(regexSamples('\\b(?:summar(?:y|ize|ise)|digest)\\b', MATCHER_FLAGS).map((s) => s.trim()).includes('digest'));
+  assert.deepEqual(regexSamples('(a)\\1', MATCHER_FLAGS), [], 'a back reference gives no example');
+});
+
+test('overlaps: a text one scope matches that another scope also matches, with the scope it goes to', () => {
+  const cfg = load({
+    scopes: {
+      investigate: { match: ['\\bdiagnos', '\\broot cause\\b'] },
+      triage: { match: ['\\bdiagnosis\\b'] },
+      summarize: { match: ['\\bsummar'] },
+    },
+  });
+  const report = scopeOverlaps(cfg);
+  assert.deepEqual(report.overlaps, [{ kind: 'match', scopes: ['investigate', 'triage'], text: 'diagnosis', winner: 'investigate' }]);
+  assert.equal(report.matchers, 4);
+  assert.deepEqual(report.untested, []);
+});
+
+test('overlaps: the later scope\'s text is tried too, and the same subagent type under two scopes is reported', () => {
+  const cfg = load({
+    scopes: {
+      wide: { match: ['notes'], agent_types: ['writer', 'Explore'] },
+      narrow: { match: ['\\brelease notes\\b'], agent_types: ['writer'] },
+      other: { agent_types: ['Explore'] },
+    },
+  });
+  assert.deepEqual(scopeOverlaps(cfg).overlaps, [
+    { kind: 'agent-type', agentType: 'writer', scopes: ['wide', 'narrow'] },
+    { kind: 'agent-type', agentType: 'Explore', scopes: ['wide', 'other'] },
+    { kind: 'match', scopes: ['wide', 'narrow'], text: 'release notes', winner: 'narrow' },
+  ]);
+});
+
+test('overlaps: scopes that never match the same text, and a matcher that cannot be tested', () => {
+  const cfg = load({ scopes: { a: { match: ['\\bcat\\b', '(x)\\1'] }, b: { match: ['\\bcatalog\\b'] } } });
+  const report = scopeOverlaps(cfg);
+  assert.deepEqual(report.overlaps, []);
+  assert.deepEqual(report.untested, [{ scope: 'a', matcher: '(x)\\1' }]);
+});

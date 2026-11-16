@@ -88,7 +88,19 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "description": { "type": "string", "minLength": 1 }
+        "description": { "type": "string", "minLength": 1 },
+        "match": {
+          "description": "Regular expressions (JavaScript syntax, case-insensitive, Unicode-aware) matched against a subagent's description and task text.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "agent_types": {
+          "description": "Subagent types that always run in this scope.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^\\S+$" }
+        }
       }
     }
   }

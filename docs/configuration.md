@@ -35,8 +35,13 @@ Presets are read from the installed package, so a preset always follows the pack
     "claude-opus-4-*": { "use": "none" }
   },
   "scopes": {
-    "routine": { "description": "A well-scoped change that can be described precisely." }
+    "routine": { "description": "A well-scoped change that can be described precisely." },
+    "investigate": {
+      "match": ["\\binvestigat", "\\broot cause\\b", "\\bdiagnos"],
+      "agent_types": ["debugger"]
+    }
   },
+  "session": { "unattended_when_env": ["CI"] },
   "subagents": { "permission": "allow", "on_mismatch": "warn" }
 }
 ```
@@ -53,7 +58,11 @@ Presets are read from the installed package, so a preset always follows the pack
 | `models.<id>.disable` | Rule ids | Empty | Preset rules that ship on and should be off. Only with `preset`. |
 | `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules. Required, with at least one rule, for `custom`. |
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
-| `scopes` | Scope name to `{ "description" }` | Empty | Task scopes, added to the preset's. |
+| `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
+| `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
+| `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. |
+| `scopes.<name>.agent_types` | Subagent types | Empty | Subagent types that always run in this scope, compared exactly, such as `Explore` or `my-plugin:reviewer`. |
+| `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text sextant changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
@@ -77,6 +86,34 @@ Rules always need the exact identifier, so a new model version never inherits ru
 
 An exact key always wins over a wildcard.
 Between wildcards, the one with more literal text wins, and a tie goes to the key that sorts first.
+
+## Scopes
+
+A scope names a kind of task, such as `investigate` or `summarize`.
+A rule names the scopes it applies to (`"scopes": ["investigate"]`), or every scope (`["*"]`, the default).
+A decision has at most one scope, and where it comes from depends on who reads the rules:
+
+| Reader | Scope | Place |
+| --- | --- | --- |
+| A session | `SEXTANT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it; else none | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
+| A subagent | The scope that lists its type under `agent_types`; else the scope whose matcher matches earliest in its description and task text; else none | Always `subagent` |
+
+A subagent's scope comes from its own task and is never taken from the session.
+A session that investigates can start a subagent that summarizes, and each gets the rules of its own scope.
+
+Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware (flags `iu`).
+They read the subagent's `description`, then its `prompt`, joined, up to the first 4,000 characters; any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
+When several scopes match, the one whose matcher matches earliest in the text wins, and two that match at the same place go to the scope declared first: the preset's scopes in the preset's order, then the user's new ones in the file's order.
+When several scopes list the same subagent type, the one declared first wins.
+A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, only means "rules for every scope"; it never blocks and never warns in a session, and the decision log records it as `unknown_scope`.
+
+`sextant check` reports scopes that overlap, as warnings:
+
+- two scopes that list the same subagent type;
+- two scopes whose matchers match the same text, with an example text that both match and the scope a task with that text gets.
+
+To find matchers that overlap, sextant builds short example texts from each matcher and runs every other scope's matchers over them, so every overlap it reports comes with a text that really matches both.
+A matcher it cannot build an example for, such as one with a back reference, is named on the scopes line instead.
 
 ## How a rule is chosen
 
@@ -104,6 +141,7 @@ Beyond the schema, sextant checks that:
 - every rule file exists and is not empty;
 - rule ids are unique for each model;
 - every scope a rule names is declared;
+- every matcher is a valid regular expression and does not match an empty text, since such a matcher would put every task in its scope;
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).

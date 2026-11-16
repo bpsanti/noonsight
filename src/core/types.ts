@@ -55,14 +55,47 @@ export interface SubagentSettings {
 
 export const DEFAULT_SUBAGENT_SETTINGS: SubagentSettings = { delivery: 'prompt', permission: 'allow', onMismatch: 'warn' };
 
+/** One way a task names its scope: a case-insensitive regular expression run over the task text. */
+export interface ScopeMatcher {
+  /** The expression as the configuration writes it. */
+  readonly source: string;
+  /** Compiled with the flags in MATCHER_FLAGS. */
+  readonly regex: RegExp;
+}
+
+/** Flags every scope matcher is compiled with: case-insensitive, Unicode-aware. */
+export const MATCHER_FLAGS = 'iu';
+
+/** A declared task scope, with the preset's keys and the user's merged. */
+export interface Scope {
+  readonly name: string;
+  readonly description?: string;
+  /** Matched against a subagent's task text. */
+  readonly match: readonly ScopeMatcher[];
+  /** Subagent types that always run in this scope, compared exactly. */
+  readonly agentTypes: readonly string[];
+}
+
+/** How a session's place is told; the keys under "session" in the configuration. */
+export interface SessionSettings {
+  /** Environment variables that, when any is set and not empty, mark a session as unattended. */
+  readonly unattendedWhenEnv: readonly string[];
+}
+
+export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [] };
+
 export interface Config {
   /** Exact model keys, each a full normalized identifier such as claude-fable-5-2. */
   readonly exact: ReadonlyMap<string, ModelEntry>;
   /** Wildcard keys, sorted by precedence (most literal first, then by key). */
   readonly wildcards: readonly WildcardKey[];
   readonly onUndeclared: 'warn' | 'ignore';
-  /** Every declared scope name: the preset's and the user's. */
-  readonly scopes: ReadonlySet<string>;
+  /**
+   * Every declared scope, the preset's and the user's, in declaration order: the preset's first,
+   * then the user's new ones. The order breaks ties when a task matches more than one scope.
+   */
+  readonly scopes: ReadonlyMap<string, Scope>;
+  readonly session: SessionSettings;
   readonly subagents: SubagentSettings;
 }
 

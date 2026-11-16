@@ -234,6 +234,7 @@ Rules a running session already received stay in that session.
 `sextant check` prints one line per finding, each starting with `ok`, `warning` or `problem`:
 
 - whether the configuration is valid;
+- the declared scopes, with a warning for each pair that overlaps (the same subagent type, or matchers that match the same text), and the scope and place a session started from the same environment gets ([Scopes](configuration.md#scopes));
 - the machine-wide install and every configuration directory of this account: whether all four entries are there with their matchers (an install from before the subagent hooks is reported, with what is missing), their hook pointers, whether the Node.js and the copy of sextant they run still exist and this account can run them, and the version of sextant they run;
 - each configuration directory no install reaches, including a login whose server-managed settings make Claude Code ignore the machine-wide install;
 - server-managed settings that turn hooks off for a login (`disableAllHooks`, `allowManagedHooksOnly`);
