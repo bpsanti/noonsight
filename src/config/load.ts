@@ -5,10 +5,20 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { backtrackingRisk, type BacktrackingRisk } from '../core/backtracking.js';
 import { normalizeModel } from '../core/normalize.js';
 import { envelope, joinRules, selectRules } from '../core/resolve.js';
-import { ANY_SCOPE, DEFAULT_SUBAGENT_SETTINGS, DELIVERY_TEXT_LIMIT, PLACES, RULES_TEXT_LIMIT, SWITCH_NOTE_RESERVE } from '../core/types.js';
-import type { Config, ModelEntry, Place, Rule, WildcardKey } from '../core/types.js';
+import {
+  ANY_SCOPE,
+  DEFAULT_SESSION_SETTINGS,
+  DEFAULT_SUBAGENT_SETTINGS,
+  DELIVERY_TEXT_LIMIT,
+  MATCHER_FLAGS,
+  PLACES,
+  RULES_TEXT_LIMIT,
+  SWITCH_NOTE_RESERVE,
+} from '../core/types.js';
+import type { Config, ModelEntry, Place, Rule, Scope, ScopeMatcher, WildcardKey } from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
 import { presetsDir as defaultPresetsDir, SCHEMA_DIR, type Env } from './paths.js';
 
@@ -40,12 +50,17 @@ interface RawModelEntry {
   disable?: string[];
   add?: RawUserRule[];
 }
+interface RawScope {
+  description?: string;
+  match?: string[];
+}
 interface RawConfig {
   version: 1;
   preset?: string;
   models?: Record<string, RawModelEntry>;
   on_undeclared?: 'warn' | 'ignore';
-  scopes?: Record<string, { description?: string }>;
+  scopes?: Record<string, RawScope>;
+  session?: { unattended_when_env?: string[] };
   subagents?: { delivery?: 'prompt' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
 }
 interface RawPresetRule {
@@ -58,7 +73,7 @@ interface RawPresetRule {
 interface RawPreset {
   id: string;
   version: string;
-  scopes?: Record<string, { description?: string }>;
+  scopes?: Record<string, RawScope>;
   models: Record<string, { rules: RawPresetRule[] }>;
 }
 
@@ -66,7 +81,8 @@ interface PresetRule extends Rule {
   readonly enabled: boolean;
 }
 interface Preset {
-  readonly scopes: ReadonlySet<string>;
+  /** The preset's scopes, in its order. */
+  readonly scopes: ReadonlyMap<string, Scope>;
   readonly models: ReadonlyMap<string, readonly PresetRule[]>;
 }
 
@@ -95,7 +111,7 @@ export function loadConfig(file: string, options: LoadOptions = {}, env: Env = p
   const preset = loadPreset(presetName, options.presetsDir ?? defaultPresetsDir(env), presetNeeded, problems);
   if (problems.length) refuse();
 
-  const scopes = new Set<string>([...(preset?.scopes ?? []), ...Object.keys(cfg.scopes ?? {})]);
+  const scopes = mergeScopes(preset?.scopes ?? new Map(), cfg.scopes ?? {}, report);
   const configDir = path.dirname(configFile);
   const exact = new Map<string, ModelEntry>();
   const wildcards: WildcardKey[] = [];
@@ -160,7 +176,8 @@ export function loadConfig(file: string, options: LoadOptions = {}, env: Env = p
     permission: sub.permission ?? DEFAULT_SUBAGENT_SETTINGS.permission,
     onMismatch: sub.on_mismatch ?? DEFAULT_SUBAGENT_SETTINGS.onMismatch,
   };
-  return { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, subagents };
+  const session = { unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv };
+  return { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents };
 }
 
 function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {
@@ -183,7 +200,7 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
 
   const p = raw as RawPreset;
   if (p.id !== name) report('/id', `is "${p.id}", but the preset is installed as "${name}"`);
-  const scopes = new Set(Object.keys(p.scopes ?? {}));
+  const scopes = new Map(Object.entries(p.scopes ?? {}).map(([name, raw]) => [name, toScope(name, raw, `/scopes/${name}`, report)]));
   const models = new Map<string, PresetRule[]>();
   for (const [key, entry] of Object.entries(p.models)) {
     const at = `/models/${key}`;
@@ -208,9 +225,88 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
   return { scopes, models };
 }
 
+/**
+ * The declared scopes: the preset's, in its order, then the user's new ones, in theirs. A user scope
+ * with a preset scope's name keeps that scope's place and replaces only the keys it gives.
+ */
+function mergeScopes(
+  preset: ReadonlyMap<string, Scope>,
+  user: Readonly<Record<string, RawScope>>,
+  report: (at: string, message: string) => void,
+): Map<string, Scope> {
+  const scopes = new Map(preset);
+  for (const [name, raw] of Object.entries(user)) scopes.set(name, toScope(name, raw, `/scopes/${name}`, report, scopes.get(name)));
+  return scopes;
+}
+
+function toScope(name: string, raw: RawScope, at: string, report: (at: string, message: string) => void, base?: Scope): Scope {
+  const description = raw.description ?? base?.description;
+  return {
+    name,
+    ...(description !== undefined ? { description } : {}),
+    match: raw.match !== undefined ? compileMatchers(name, raw.match, `${at}/match`, report) : (base?.match ?? []),
+  };
+}
+
+/** Plain task texts. A matcher that matches every one of them is a catch-all, such as `.`, `\b` or `\w`. */
+const CATCH_ALL_PROBES = ['a', 'Z', '0', ' a ', 'A B', 'x_1 y'];
+
+/**
+ * Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware. A matcher
+ * that matches every probe text in CATCH_ALL_PROBES is a catch-all, so it is refused. Passing the
+ * probes does not prove a matcher is not broad; it only catches the obvious catch-alls. A matcher with
+ * one of the shapes backtracking.ts recognizes is refused too, since the hook runs it over every
+ * subagent's task text before the subagent starts.
+ */
+function compileMatchers(
+  scope: string,
+  sources: readonly string[],
+  at: string,
+  report: (at: string, message: string) => void,
+): ScopeMatcher[] {
+  const out: ScopeMatcher[] = [];
+  sources.forEach((source, i) => {
+    let regex: RegExp;
+    try {
+      regex = new RegExp(source, MATCHER_FLAGS);
+    } catch (e) {
+      report(`${at}/${i}`, `not a valid regular expression (${(e as Error).message})`);
+      return;
+    }
+    if (CATCH_ALL_PROBES.every((text) => regex.test(text))) {
+      const probes = CATCH_ALL_PROBES.map((text) => JSON.stringify(text)).join(', ');
+      report(`${at}/${i}`, `"${source}" matches each of the probe texts ${probes}, which are plain task texts used to detect catch-all matchers`);
+      return;
+    }
+    const risk = backtrackingRisk(source, MATCHER_FLAGS);
+    if (risk !== null) {
+      report(`${at}/${i}`, `scope "${scope}": "${source}" ${describeRisk(risk)}`);
+      return;
+    }
+    out.push({ source, regex });
+  });
+  return out;
+}
+
+function describeRisk(risk: BacktrackingRisk): string {
+  // Quoted as the pattern itself is quoted: as the configuration writes it.
+  const [a = '', b = ''] = risk.parts.map((p) => `"${p}"`);
+  switch (risk.kind) {
+    case 'leading-any':
+      return (
+        `starts with ${a}, an unbounded repeat of any character with no "^" and only parts that can match nothing before it, so matching retries it from every position of the task text; ` +
+        'start with a word instead (such as "\\binvestigat"), or anchor it with "^"'
+      );
+    case 'nested':
+      return `has the unbounded quantifier ${b} inside the unbounded quantifier ${a}, a shape whose matching time can grow exponentially with the task text`;
+    case 'adjacent':
+      return `has the unbounded quantifiers ${a} and ${b} in a row, able to match the same characters with nothing required between them, a shape whose matching time can grow much faster than the task text`;
+  }
+}
+
 function checkScopes(
   ruleScopes: readonly string[],
-  declared: ReadonlySet<string>,
+  declared: { has(name: string): boolean },
   at: string,
   report: (at: string, message: string) => void,
 ): void {
@@ -226,11 +322,11 @@ function checkScopes(
 function checkDeliverySize(
   model: string,
   rules: readonly Rule[],
-  scopes: ReadonlySet<string>,
+  scopes: ReadonlyMap<string, Scope>,
   at: string,
   report: (at: string, message: string) => void,
 ): void {
-  for (const scope of [null, ...[...scopes].sort()])
+  for (const scope of [null, ...[...scopes.keys()].sort()])
     for (const place of PLACES) {
       const picked = selectRules(rules, scope, place);
       if (picked.length === 0) continue;

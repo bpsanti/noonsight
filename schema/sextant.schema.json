@@ -38,13 +38,32 @@
       "default": "warn"
     },
     "scopes": {
-      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here.",
+      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here. A session takes its scope from SEXTANT_SCOPE; a subagent from the scope whose matcher matches earliest in its task.",
       "type": "object",
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9-]*$",
         "x-hint": "a scope name is lowercase letters, digits and hyphens, starting with a letter"
       },
       "additionalProperties": { "$ref": "#/$defs/scope" },
+      "default": {}
+    },
+    "session": {
+      "description": "How a session, as opposed to a subagent, is told apart.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unattended_when_env": {
+          "description": "Environment variables that mark a session as unattended (the place \"unattended\") when any of them is set and not empty in the environment Claude Code runs in. With none set, a session is in the place \"session\".",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
+          },
+          "default": []
+        }
+      },
       "default": {}
     },
     "subagents": {
@@ -170,6 +189,12 @@
           "description": "What kind of task this scope covers.",
           "type": "string",
           "minLength": 1
+        },
+        "match": {
+          "description": "Regular expressions (JavaScript syntax, case-insensitive, Unicode-aware) matched against a subagent's description and task text. The scope whose matcher matches earliest wins; at the same place, the scope declared first.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
         }
       }
     },

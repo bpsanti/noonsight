@@ -456,3 +456,75 @@ test('an option given more than one value on a command line without argument bou
   assert.deepEqual(optionCandidates({ args: ['claude', '-p', 'read --settings foo', '--settings', '/tmp/s.json'], exact: true }, '--settings'), ['/tmp/s.json']);
   assert.deepEqual(optionCandidates({ args: 'claude -p hello'.split(' '), exact: false }, '--settings'), []);
 });
+
+/** The lab configuration with matchers on two scopes, and sessions marked unattended by CI. */
+function scopedConfig(): string {
+  const lab = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, any>;
+  const dir = tempTree({
+    'sextant.json': {
+      ...lab,
+      scopes: { ...lab.scopes, investigate: { match: ['\\binvestigat'] }, summarize: { match: ['\\bsummar'] } },
+      session: { unattended_when_env: ['CI'] },
+    },
+  });
+  fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
+  return path.join(dir, 'sextant.json');
+}
+
+test('SEXTANT_SCOPE gives the session the rules of that scope, and the log says where the scope came from', () => {
+  const h = home(scopedConfig());
+  const context = (env: Record<string, string>, model = 'claude-sonnet-5-5'): string =>
+    h.hook('session-start', start(model, { session_id: `s-${Object.values(env).join('-')}-${model}` }), env).out?.hookSpecificOutput.additionalContext ?? '';
+  const investigate = context({ SEXTANT_SCOPE: 'investigate' });
+  assert.match(investigate, /^<sextant-rules model="claude-sonnet-5-5" scope="investigate">\n/);
+  assert.match(investigate, /SONNET-GEN-3306[\s\S]*SONNET-INV-5182/);
+  const summarize = context({ SEXTANT_SCOPE: 'summarize' }, 'claude-haiku-5-5');
+  assert.match(summarize, /HAIKU-SUM-6610/);
+  assert.doesNotMatch(context({ SEXTANT_SCOPE: 'investigate' }, 'claude-haiku-5-5'), /HAIKU-SUM-6610/);
+  assert.doesNotMatch(context({}), /SONNET-INV-5182/);
+
+  assert.deepEqual(
+    h.log().map((l) => [l.model, l.scope, l.scope_source, l.place, l.unknown_scope ?? null]),
+    [
+      ['claude-sonnet-5-5', 'investigate', 'env', 'session', null],
+      ['claude-haiku-5-5', 'summarize', 'env', 'session', null],
+      ['claude-haiku-5-5', 'investigate', 'env', 'session', null],
+      ['claude-sonnet-5-5', null, null, 'session', null],
+    ],
+  );
+});
+
+test('an undeclared SEXTANT_SCOPE gets the rules for every scope, with no warning, and the log names it', () => {
+  const h = home(scopedConfig());
+  const r = h.hook('session-start', start('claude-sonnet-5-5'), { SEXTANT_SCOPE: 'release' });
+  assert.deepEqual(Object.keys(r.out ?? {}), ['hookSpecificOutput'], 'no systemMessage');
+  assert.match(r.out?.hookSpecificOutput.additionalContext, /^<sextant-rules model="claude-sonnet-5-5">\n/);
+  assert.deepEqual(h.log().map((l) => [l.scope, l.unknown_scope, l.scope_source, l.warned]), [[null, 'release', 'env', false]]);
+});
+
+test('a variable of session.unattended_when_env puts the session in the place unattended, for startup and /model alike', () => {
+  const h = home(scopedConfig());
+  const r = h.hook('session-start', start('claude-haiku-5-5', { session_id: SESSION }), { CI: 'true' });
+  assert.match(r.out?.hookSpecificOutput.additionalContext, /HAIKU-GEN-9047/);
+  const switched = h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5'), { CI: 'true', SEXTANT_SCOPE: 'investigate' });
+  const text: string = switched.out?.hookSpecificOutput.additionalContext;
+  assert.match(text, /SONNET-CARRY-4471/, 'the rule for unattended sessions is delivered');
+  assert.match(text, /SONNET-INV-5182/);
+  assert.match(text, /^<sextant-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">/);
+  assert.doesNotMatch(h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'attended' }), { CI: '' }).out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
+  assert.deepEqual(
+    h.log().map((l) => [l.event, l.place, l.unattended_env ?? null, l.scope]),
+    [
+      ['session-start', 'unattended', 'CI', null],
+      ['model-switch', 'unattended', 'CI', 'investigate'],
+      ['session-start', 'session', null, null],
+    ],
+  );
+});
+
+test('a resumed session whose scope changed gets the rules of the new scope', () => {
+  const h = home(scopedConfig());
+  h.hook('session-start', start('claude-sonnet-5-5'));
+  assert.equal(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' })).raw, '');
+  assert.match(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' }), { SEXTANT_SCOPE: 'investigate' }).out?.hookSpecificOutput.additionalContext, /SONNET-INV-5182/);
+});

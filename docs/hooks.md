@@ -80,7 +80,9 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
 - **MDM profiles.**
   A `model` set only in an MDM profile is not read.
 
-A session uses the place `session` for now, with no task scope, so it receives the rules that apply to every scope in a watched session.
+The session's task scope is the value of `SEXTANT_SCOPE` in the environment Claude Code runs in, which its hooks inherit, so whoever starts the session (a person, a script, an orchestrator) can name it; without it, the session receives only the rules for every scope.
+Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, and `session` otherwise ([Scopes](configuration.md#scopes)).
+A resumed session gets the rules again when a change of scope or place changed which rules apply.
 
 ## PostModelSwitch
 
@@ -93,6 +95,7 @@ The session's model changed from claude-sonnet-5-5 to claude-opus-5-5. The worki
 </sextant-rules-change>
 ```
 
+A switch keeps the session's scope and place.
 A switch to a model with no rules delivers the note alone.
 Resuming a session restores its model and reports it as a switch; when the session's record shows the same model and rules, nothing is delivered again.
 The configuration keeps room for the note: the rules for any model, scope and place must fit in 9,500 characters, so rules and note together stay within the 10,000 characters Claude Code accepts from a hook.
@@ -128,7 +131,8 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
 2. The parent's model, for a call the session makes, comes from sextant's record of the session, which `SessionStart` and `PostModelSwitch` keep current (`parent_source: session-record`); else from the session's transcript (`session-transcript`); else from the settings the session started with, as for `SessionStart`.
    For a call made inside a subagent, it comes from sextant's record of that subagent, written when the result of the call that started it named its model, which happens at once for a subagent started in the background (`agent-record`); else from the model of that subagent's own transcript (`agent-transcript`).
    When neither knows, sextant does not guess the session's model: the subagent gets no rules, and the person is warned.
-3. The rules are resolved for the place `subagent` ([configuration.md](configuration.md)), with no task scope.
+3. The subagent's task scope comes from its own call, never from the session: the scope whose matcher matches earliest in its `description` and `prompt` ([Scopes](configuration.md#scopes)).
+   The rules are resolved for that scope and the place `subagent`.
 4. With rules to deliver, the hook returns the call unchanged except for its `prompt`, which gains a blank line and the rules in the same envelope as the session's.
    sextant never changes the model, the effort or any other field.
    A task text that already holds the exact rules is left alone.
@@ -174,7 +178,7 @@ Every decision adds one JSON line to `~/.local/state/sextant/decisions.jsonl`, i
 Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a new log starts.
 
 ```json
-{"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/sextant/sextant.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","model_source":"hook-input","delivered":"rules","warned":false}
+{"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/sextant/sextant.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"session","scope_source":null,"model_source":"hook-input","delivered":"rules","warned":false}
 ```
 
 | Field | Values |
@@ -196,6 +200,11 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model sextant cannot tell: the value, and why |
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |
 | `reason`, `key`, `rules`, `sha256` | As in `sextant resolve` ([configuration.md](configuration.md)) |
+| `scope`, `place`, `unknown_scope` | The declared scope and the place the rules were resolved for, and a scope that was asked for but is not declared |
+| `scope_source` | `env` (`SEXTANT_SCOPE`), `task-text`, or null when there was no scope |
+| `scope_matcher` | For a scope taken from the task text: the matcher that decided, as the configuration writes it |
+| `unattended_env` | For a session in the place `unattended`: the variable that put it there |
+| `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |

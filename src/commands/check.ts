@@ -14,6 +14,9 @@ import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSet
 import { readPointer } from '../adapters/claude-code/pointer.js';
 import { findSextantHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfig } from '../config/load.js';
+import { scopeOverlaps } from '../core/overlap.js';
+import { SCOPE_ENV, sessionPlace, sessionScope } from '../core/scope.js';
+import type { Config } from '../core/types.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
@@ -52,6 +55,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
         (sub.delivery === 'off' ? 'off' : `rules in the task text, permission ${sub.permission}, on mismatch ${sub.onMismatch}`) +
         ')',
     );
+    checkScopes(config, env, add);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     add('problem', `config ${e.message.replace(/^configuration refused \(([^)]*)\):/, '$1: refused, so sessions get no rules:')}`);
@@ -115,6 +119,47 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   out(lines.map(([level, text]) => `${level}: ${text}`).join('\n'));
   if (!configOk) return 2;
   return lines.some(([level]) => level === 'problem') ? 1 : 0;
+}
+
+/**
+ * The declared scopes: scopes a single task can fall in, matchers that could not be tested for that,
+ * and the scope and place sessions started from this environment get.
+ */
+function checkScopes(config: Config, env: Env, add: (level: Level, text: string) => void): void {
+  const report = scopeOverlaps(config);
+  if (config.scopes.size > 0) {
+    const untested = report.untested.map((u) => `scope "${u.scope}": ${JSON.stringify(u.matcher)}`);
+    add(
+      'ok',
+      `scopes: ${plural(config.scopes.size, 'scope')} declared, ${plural(report.matchers, 'matcher')}` +
+        (report.overlaps.length === 0 && untested.length === 0 && report.matchers > 0 ? '; no two scopes overlap' : '') +
+        (untested.length ? `; not all example texts could be built for ${untested.join(', ')}, so their overlaps are not fully checked` : ''),
+    );
+  }
+  for (const o of report.overlaps)
+    add(
+      'warning',
+      `scopes "${o.scopes[0]}" and "${o.scopes[1]}" overlap: the task text ${JSON.stringify(o.text)} matches both` +
+        (o.winner !== null ? `, and a task with only that text gets "${o.winner}"` : '') +
+        '; the scope whose matcher matches earliest in a task wins, and at the same place the one declared first',
+    );
+
+  const scope = sessionScope(env).scope;
+  const place = sessionPlace(config, env);
+  if (scope !== null && !config.scopes.has(scope))
+    add('warning', `${SCOPE_ENV} is "${scope}" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope`);
+  else if (scope !== null || place.because !== undefined)
+    add(
+      'ok',
+      'sessions started from this environment get ' +
+        (scope !== null ? `scope "${scope}" (${SCOPE_ENV})` : 'no scope') +
+        `, place "${place.place}"` +
+        (place.because !== undefined ? ` (${place.because} is set)` : ''),
+    );
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
 }
 
 /** Report one install; returns whether its hook entries are there. */

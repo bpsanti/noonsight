@@ -16,13 +16,14 @@ import { ConfigError, loadConfig } from '../../config/load.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { normalizeModel } from '../../core/normalize.js';
 import { joinDelivery, resolve, switchNote } from '../../core/resolve.js';
+import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
 import { launchModel, type LaunchModel } from './launch.js';
 import type { InstallKind } from './locations.js';
 import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
-import { agentCall, agentResult, decisionFields } from './subagents.js';
+import { agentCall, agentResult, choiceFields, decisionFields } from './subagents.js';
 
 export interface HookContext {
   readonly env: Env;
@@ -104,12 +105,14 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     const sessionId = str(input.session_id) ?? '';
     const sessionState = sessionFile(state, sessionId);
     const processState = processFile(state, ctx.parentPid);
+    // Both come from the environment Claude Code runs in, which its hooks inherit.
+    const where: Where = { scope: sessionScope(ctx.env), place: sessionPlace(config, ctx.env) };
     const result =
       event === 'SessionStart'
-        ? sessionStart(input, config, file, readState(sessionState), readState(processState), () =>
+        ? sessionStart(input, config, file, where, readState(sessionState), readState(processState), () =>
             launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd) }),
           )
-        : modelSwitch(input, config, file, readState(sessionState));
+        : modelSwitch(input, config, file, where, readState(sessionState));
     log(result.record);
     if (result.state) {
       const saved: DeliveryState = { ...result.state, at: ctx.now.toISOString() };
@@ -131,6 +134,12 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     log({ status: 'error', error: message, delivered: 'nothing', warned: true });
     return output([`sextant: the hook failed (${message}), so no rules were delivered.`], null);
   }
+}
+
+/** A session's scope and place. */
+interface Where {
+  readonly scope: ScopeChoice;
+  readonly place: PlaceChoice;
 }
 
 interface Outcome {
@@ -156,6 +165,7 @@ function sessionStart(
   input: Record<string, unknown>,
   config: Config,
   file: string,
+  where: Where,
   session: DeliveryState | null,
   process: DeliveryState | null,
   readLaunch: () => LaunchModel,
@@ -175,7 +185,7 @@ function sessionStart(
       : launch?.kind === 'found'
         ? launch.source
         : null;
-  const decision = resolve(config, { model, scope: null, place: 'session' });
+  const decision = resolve(config, { model, scope: where.scope.scope, place: where.place.place });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
   const repeat = (source === 'resume' || source === 'fork') && session !== null && session.model === decision.model && session.sha256 === sha;
 
@@ -184,6 +194,7 @@ function sessionStart(
   return {
     record: {
       ...decisionFields(decision),
+      ...choiceFields(where.scope, where.place),
       model_source: modelSource,
       ...launchFields(launch),
       delivered: repeat ? 'already-delivered' : context ? 'rules' : 'nothing',
@@ -199,12 +210,13 @@ function sessionStart(
  * PostModelSwitch: deliver the new model's rules. The rules delivered for the previous model stay in
  * the conversation, so when the previous model had rules, a note says they no longer apply.
  */
-function modelSwitch(input: Record<string, unknown>, config: Config, file: string, session: DeliveryState | null): Outcome {
+function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null): Outcome {
   const to = normalizeModel(str(input.to_model));
   const from = normalizeModel(str(input.from_model));
-  const decision = resolve(config, { model: to, scope: null, place: 'session' });
+  const request = { scope: where.scope.scope, place: where.place.place };
+  const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const base = { ...decisionFields(decision), model_source: 'hook-input', from_model: from || null };
+  const base = { ...decisionFields(decision), ...choiceFields(where.scope, where.place), model_source: 'hook-input', from_model: from || null };
   const state = decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha };
 
   // Resuming a session restores its model and reports it as a switch; the rules may already be there.
@@ -214,7 +226,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
   const previous = session ? session.model : from || null;
   const previousHadRules = session
     ? session.status === 'matched'
-    : previous !== null && resolve(config, { model: previous, scope: null, place: 'session' }).status === 'matched';
+    : previous !== null && resolve(config, { model: previous, ...request }).status === 'matched';
   const note = previous !== null && previousHadRules && previous !== decision.model ? switchNote(previous, to) : null;
   const parts = [...(note ? [note] : []), ...(decision.status === 'matched' ? [decision.text] : [])];
   const messages = undeclaredMessages(decision, file);

@@ -5,7 +5,8 @@ Take a fix before you set the course: pick the right model for each agent task, 
 **Status: early development.** Nothing is published yet.
 Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
 So does each subagent a session starts: before it starts, sextant predicts the model it will run on and adds that model's rules to the end of its task, then checks the model it actually started on and warns on a difference.
-Task scopes and the starting preset come next.
+Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `SEXTANT_SCOPE`, a subagent from matchers run over its task, and `sextant check` reports scopes that overlap.
+The starting preset comes next.
 
 ## What it will do
 
@@ -51,7 +52,7 @@ npm test             # builds, then runs every test with node --test
 npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
 
-`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage.
+`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session) and the scope cases (two sessions on one model in two scopes through `SEXTANT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage.
 `SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` asks the session models which rules they received; the token stays in the environment.
 See [docs/verification/claude-code.md](docs/verification/claude-code.md).
 

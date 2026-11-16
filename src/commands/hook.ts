@@ -34,12 +34,27 @@ export function runHookCommand(args: readonly string[], env: Env, out: (text: st
   return 0;
 }
 
+const RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
+
+/** The whole hook input. A pipe that is not yet written makes a read fail with EAGAIN, so it is retried. */
 function readStdin(): string {
-  try {
-    // A terminal would block the read; hooks always get a pipe.
-    return process.stdin.isTTY ? '' : fs.readFileSync(0, 'utf8');
-  } catch {
-    return '';
+  // A terminal would block the read; hooks always get a pipe.
+  if (process.stdin.isTTY) return '';
+  const chunks: Buffer[] = [];
+  const chunk = Buffer.alloc(64 * 1024);
+  for (;;) {
+    let n: number;
+    try {
+      n = fs.readSync(0, chunk, 0, chunk.length, null);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EAGAIN') {
+        Atomics.wait(RETRY_WAIT, 0, 0, 1);
+        continue;
+      }
+      return '';
+    }
+    if (n === 0) return Buffer.concat(chunks).toString('utf8');
+    chunks.push(Buffer.from(chunk.subarray(0, n)));
   }
 }
 

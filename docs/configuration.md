@@ -35,8 +35,10 @@ Presets are read from the installed package, so a preset always follows the pack
     "claude-opus-4-*": { "use": "none" }
   },
   "scopes": {
-    "routine": { "description": "A well-scoped change that can be described precisely." }
+    "routine": { "description": "A well-scoped change that can be described precisely." },
+    "investigate": { "match": ["\\binvestigat", "\\broot cause\\b", "\\bdiagnos"] }
   },
+  "session": { "unattended_when_env": ["CI"] },
   "subagents": { "permission": "allow", "on_mismatch": "warn" }
 }
 ```
@@ -53,7 +55,10 @@ Presets are read from the installed package, so a preset always follows the pack
 | `models.<id>.disable` | Rule ids | Empty | Preset rules that ship on and should be off. Only with `preset`. |
 | `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules. Required, with at least one rule, for `custom`. |
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
-| `scopes` | Scope name to `{ "description" }` | Empty | Task scopes, added to the preset's. |
+| `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
+| `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
+| `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches all six probe texts is refused; see [Scopes](#scopes). |
+| `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text sextant changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
@@ -77,6 +82,59 @@ Rules always need the exact identifier, so a new model version never inherits ru
 
 An exact key always wins over a wildcard.
 Between wildcards, the one with more literal text wins, and a tie goes to the key that sorts first.
+
+## Scopes
+
+A scope names a kind of task, such as `investigate` or `summarize`.
+A rule names the scopes it applies to (`"scopes": ["investigate"]`), or every scope (`["*"]`, the default).
+A decision has at most one scope, and where it comes from depends on who reads the rules:
+
+| Reader | Scope | Place |
+| --- | --- | --- |
+| A session | `SEXTANT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it; else none | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
+| A subagent | The scope whose matcher matches earliest in its description and task text; else none | Always `subagent` |
+
+A subagent's scope comes from its own task and is never taken from the session.
+A session that investigates can start a subagent that summarizes, and each gets the rules of its own scope.
+
+Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware (flags `iu`).
+They read the subagent's `description`, then its `prompt`, joined, up to the first 100,000 characters.
+The bound keeps the text a matcher reads inside the hook, which runs before every agent call, limited, so a longer task is cut there, and the decision log records `task_text_cut` for it.
+A length bound alone does not keep matching fast: a matcher whose time grows much faster than the text can still hold an agent call on a long task, so such matchers are refused (see [Matchers that backtrack](#matchers-that-backtrack)).
+Any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
+When several scopes match, the one whose matcher matches earliest in the text wins, and two that match at the same place go to the scope declared first: the preset's scopes in the preset's order, then the user's new ones in the file's order.
+The check tries each matcher against six probe texts: `"a"`, `"Z"`, `"0"`, `" a "`, `"A B"` and `"x_1 y"`, which are plain task texts.
+A matcher that matches all six is refused as a catch-all (such as `.`, `\b` or `\w`).
+A matcher that misses any of them is accepted, however broad it is.
+A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, only means "rules for every scope"; it never blocks and never warns in a session, and the decision log records it as `unknown_scope`.
+
+`sextant check` reports two scopes whose matchers match the same text, as a warning with an example text that both match and the scope a task with that text gets.
+To find such texts, sextant builds short example texts from each matcher and runs the other scopes' matchers over them, so every overlap it reports comes with a text that really matches both.
+Two scopes can still overlap on a text the examples do not reach, so "no two scopes overlap" means no overlap was found.
+A matcher whose examples are incomplete, such as one with a back reference, or one with more texts than sextant keeps, is named on the scopes line, which then does not claim that no two scopes overlap.
+
+### Matchers that backtrack
+
+When a regular expression can match the same stretch of text in many ways, the engine tries them all before it gives up, and the time it takes can grow with the square of the text length, or faster.
+sextant refuses a matcher with one of these three shapes, naming the scope, the pattern and the shape:
+
+- **It starts with an unbounded repeat of any character** (`.*`, `.+`, `[\s\S]*` and the like), in the whole pattern or in one of its alternatives, with no `^` before it.
+  Parts that can match nothing, such as `a?`, `(?:foo)?` or `\b`, do not count as a start, so `a?.*x` is refused too.
+  A group or positive lookaround whose every alternative starts with `^` counts as a `^`, so `(?:^).*x` and `(?=^).*x` are accepted, while `(?:^|\s).*x`, `(^\s*)?.*x` and `(?!^).*x` are refused.
+  A lookaround at the start opens its own alternatives the same way, so `(?=.*deploy)(?=.*prod)` is refused, and `^(?=.*deploy)(?=.*prod)` is accepted.
+  The engine retries the repeat from every position of the task text.
+  `^.*hotfix` is accepted; `.*investigat` is refused, and `\binvestigat` matches the same tasks.
+- **It nests an unbounded quantifier inside another**, such as `(a+)+` or `(?:\w+\s?)*`.
+- **It has two unbounded quantifiers in a row that can match the same characters, with nothing required between them**, such as `\w+\w+` or `\w+\s*\w+`.
+  A repeat at the edge of a group's alternative counts, as in `\w+(?:-|\w+)`.
+  `\w+\s+\w+` is accepted, because the required space separates the two repeats.
+
+The last two shapes are also looked for inside lookarounds, so `^(?=.*.*x)` is refused.
+
+"Unbounded" means `*`, `+` or `{n,}`.
+Characters are compared over a fixed set of sample characters (printable ASCII, whitespace and a few letters beyond it).
+The check recognizes these shapes only: a matcher that passes it is not proven fast, and other slow shapes, such as alternatives that match the same text inside a repeat (`(a|a)*`), are not detected.
+Matchers that start with a word and a word boundary, such as `\bdeploy\b`, `review|revis` or `^fix\b`, pass it.
 
 ## How a rule is chosen
 
@@ -104,6 +162,7 @@ Beyond the schema, sextant checks that:
 - every rule file exists and is not empty;
 - rule ids are unique for each model;
 - every scope a rule names is declared;
+- every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).

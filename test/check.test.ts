@@ -248,3 +248,59 @@ test('a Claude Code older than the documented aliases is a warning', () => {
   assert.equal(r.status, 0, r.stdout);
   assert.match(r.stdout, /warning: claude: installed 2\.1\.300; when a session without a reported model, such as `claude -p`, names it by an alias, sextant assumes what the aliases select from Claude Code 2\.1\.321 on/);
 });
+
+test('check reports scopes whose matchers overlap as warnings that keep exit 0', () => {
+  const { env } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const dir = tempTree({
+    'sextant.json': {
+      version: 1,
+      scopes: {
+        investigate: { match: ['\\bdiagnos', '(x)\\1'] },
+        triage: { match: ['\\bdiagnosis\\b'] },
+        summarize: { match: ['\\bsummar'] },
+      },
+    },
+  });
+  const r = runCli(['check'], { ...env, SEXTANT_CONFIG: path.join(dir, 'sextant.json') });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(
+    r.stdout,
+    /^ok: scopes: 3 scopes declared, 4 matchers; not all example texts could be built for scope "investigate": "\(x\)\\\\1", so their overlaps are not fully checked$/m,
+  );
+  assert.match(
+    r.stdout,
+    /^warning: scopes "investigate" and "triage" overlap: the task text "diagnosis" matches both, and a task with only that text gets "investigate"; the scope whose matcher matches earliest in a task wins, and at the same place the one declared first$/m,
+  );
+  assert.doesNotMatch(r.stdout, /"summarize" overlap|and "summarize"/);
+});
+
+test('check does not claim that no two scopes overlap while a matcher has more examples than it keeps', () => {
+  const { env } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const words = Array.from({ length: 24 }, (_, i) => `w${String(i).padStart(2, '0')}`);
+  const dir = tempTree({
+    'sextant.json': {
+      version: 1,
+      scopes: { a: { match: [`\\b(?:${[...words, 'zeta'].join('|')})\\b`] }, b: { match: ['\\bz[a-z]{3}\\b'] } },
+    },
+  });
+  const r = runCli(['check'], { ...env, SEXTANT_CONFIG: path.join(dir, 'sextant.json') });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^ok: scopes: 2 scopes declared, 2 matchers; not all example texts could be built for scope "a": /m);
+  assert.doesNotMatch(r.stdout, /no two scopes overlap/);
+});
+
+test('check says which scope and place sessions started from its environment get, and warns about an undeclared SEXTANT_SCOPE', () => {
+  const { env } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const dir = tempTree({ 'sextant.json': { version: 1, scopes: { investigate: { match: ['\\binvestigat'] } }, session: { unattended_when_env: ['CI'] } } });
+  const scoped = { ...env, SEXTANT_CONFIG: path.join(dir, 'sextant.json') };
+  const quiet = runCli(['check'], scoped);
+  assert.match(quiet.stdout, /^ok: scopes: 1 scope declared, 1 matcher; no two scopes overlap$/m);
+  assert.doesNotMatch(quiet.stdout, /sessions started from this environment/);
+  assert.match(runCli(['check'], { ...scoped, SEXTANT_SCOPE: 'investigate', CI: '1' }).stdout, /^ok: sessions started from this environment get scope "investigate" \(SEXTANT_SCOPE\), place "unattended" \(CI is set\)$/m);
+  const unknown = runCli(['check'], { ...scoped, SEXTANT_SCOPE: 'release' });
+  assert.equal(unknown.status, 0);
+  assert.match(unknown.stdout, /^warning: SEXTANT_SCOPE is "release" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope$/m);
+});
