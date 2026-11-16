@@ -294,7 +294,7 @@ function describeRisk(risk: BacktrackingRisk): string {
   switch (risk.kind) {
     case 'leading-any':
       return (
-        `starts with ${a}, an unbounded repeat of any character with no "^" before it, so matching retries it from every position of the task text; ` +
+        `starts with ${a}, an unbounded repeat of any character with no "^" and only parts that can match nothing before it, so matching retries it from every position of the task text; ` +
         'start with a word instead (such as "\\binvestigat"), or anchor it with "^"'
       );
     case 'nested':

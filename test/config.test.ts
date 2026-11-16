@@ -248,7 +248,7 @@ test('matchers with a catastrophic-backtracking shape are refused, naming the sc
   });
   assertProblem(
     problems,
-    /^\/scopes\/investigate\/match\/0: scope "investigate": "\.\*investigat" starts with "\.\*", an unbounded repeat of any character with no "\^" before it, so matching retries it from every position of the task text; start with a word instead \(such as "\\binvestigat"\), or anchor it with "\^"$/,
+    /^\/scopes\/investigate\/match\/0: scope "investigate": "\.\*investigat" starts with "\.\*", an unbounded repeat of any character with no "\^" and only parts that can match nothing before it, so matching retries it from every position of the task text; start with a word instead \(such as "\\binvestigat"\), or anchor it with "\^"$/,
   );
   assertProblem(problems, /^\/scopes\/loop\/match\/0: scope "loop": "\.\*\.\*x" starts with "\.\*", an unbounded repeat of any character/);
   assertProblem(problems, /^\/scopes\/loop\/match\/1: scope "loop": "\(a\+\)\+" has the unbounded quantifier "a\+" inside the unbounded quantifier "\(a\+\)\+", a shape whose matching time can grow exponentially with the task text$/);

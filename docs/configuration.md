@@ -118,12 +118,17 @@ A matcher whose examples are incomplete, such as one with a back reference, or o
 When a regular expression can match the same stretch of text in many ways, the engine tries them all before it gives up, and the time it takes can grow with the square of the text length, or faster.
 sextant refuses a matcher with one of these three shapes, naming the scope, the pattern and the shape:
 
-- **It starts with an unbounded repeat of any character** (`.*`, `.+`, `[\s\S]*` and the like), in the whole pattern or in one of its top-level alternatives, with no `^` before it.
+- **It starts with an unbounded repeat of any character** (`.*`, `.+`, `[\s\S]*` and the like), in the whole pattern or in one of its alternatives, with no `^` before it.
+  Parts that can match nothing, such as `a?`, `(?:foo)?` or `\b`, do not count as a start, so `a?.*x` is refused too.
+  A lookaround at the start opens its own alternatives the same way, so `(?=.*deploy)(?=.*prod)` is refused, and `^(?=.*deploy)(?=.*prod)` is accepted.
   The engine retries the repeat from every position of the task text.
   `^.*hotfix` is accepted; `.*investigat` is refused, and `\binvestigat` matches the same tasks.
 - **It nests an unbounded quantifier inside another**, such as `(a+)+` or `(?:\w+\s?)*`.
 - **It has two unbounded quantifiers in a row that can match the same characters, with nothing required between them**, such as `\w+\w+` or `\w+\s*\w+`.
+  A repeat at the edge of a group's alternative counts, as in `\w+(?:-|\w+)`.
   `\w+\s+\w+` is accepted, because the required space separates the two repeats.
+
+The last two shapes are also looked for inside lookarounds, so `^(?=.*.*x)` is refused.
 
 "Unbounded" means `*`, `+` or `{n,}`.
 Characters are compared over a fixed set of sample characters (printable ASCII, whitespace and a few letters beyond it).
