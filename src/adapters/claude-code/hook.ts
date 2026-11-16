@@ -119,7 +119,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
             readState(sessionState),
             readState(processState),
             () => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }),
-            () => launcherPrompt(ctx.env, commandLine()),
+            () => launcherPrompt(ctx.env, commandLine),
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
     log(result.record);

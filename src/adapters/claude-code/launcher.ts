@@ -150,9 +150,11 @@ export interface LauncherPrompt {
  * alone is not enough: a claude started from inside a launched session inherits it without the
  * option, so the Claude Code command line must pass the same file.
  */
-export function launcherPrompt(env: Env, cmd: CommandLine | null): LauncherPrompt | null {
+export function launcherPrompt(env: Env, commandLine: () => CommandLine | null): LauncherPrompt | null {
   const file = env[LAUNCH_FILE_ENV];
-  if (!file || cmd === null) return null;
+  if (!file) return null;
+  const cmd = commandLine();
+  if (cmd === null) return null;
   const given = optionCandidates(cmd, APPEND_FILE_OPTION);
   if (given.length !== 1 || given[0] !== file) return null;
   let content: string;
