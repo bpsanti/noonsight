@@ -98,6 +98,23 @@ export function switchNote(fromModel: string, toModel: string): string {
   return note;
 }
 
+/**
+ * The note delivered when `sextant run` put one model's rules in the system prompt and the session
+ * runs on another model. Like switchNote, it states as a fact that those rules do not apply, and it
+ * always fits SWITCH_NOTE_RESERVE.
+ */
+export function launcherNote(promptModel: string, sessionModel: string): string {
+  const from = noteName(promptModel);
+  const to = noteName(sessionModel);
+  const note =
+    `<sextant-rules-change from="${from}" to="${to}">\n` +
+    `This session runs on ${to}. ` +
+    `The working rules for ${from} that sextant added to the system prompt when it started the session do not apply.\n` +
+    `</sextant-rules-change>`;
+  if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('launcherNote: the note outgrew its reserve');
+  return note;
+}
+
 /** Joins the model-change note and the new model's rules into one delivery. */
 export function joinDelivery(parts: readonly string[]): string {
   return parts.join('\n\n');

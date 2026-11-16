@@ -55,11 +55,19 @@ export interface LaunchContext {
   /** The session's working directory, from the hook input. */
   readonly cwd: string | null;
   readonly platform?: NodeJS.Platform;
+  /** Reads the Claude Code command line instead of reading it from the process, so a caller can share one read. */
+  readonly commandLine?: () => CommandLine | null;
 }
 
 export function launchModel(ctx: LaunchContext): LaunchModel {
-  const cmd = readCommandLine(ctx.pid, ctx.platform ?? process.platform);
+  return launchModelFrom(ctx.commandLine ? ctx.commandLine() : readCommandLine(ctx.pid, ctx.platform ?? process.platform), ctx);
+}
 
+/**
+ * The same choice for a known command line: the Claude Code arguments as the launcher is about to
+ * pass them, or null when they cannot be read.
+ */
+export function launchModelFrom(cmd: CommandLine | null, ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>): LaunchModel {
   const flag = cmd ? modelArgument(cmd, ctx.env) : null;
   if (flag !== null) return flag;
 
@@ -151,7 +159,7 @@ export function modelArgument(cmd: CommandLine, env: Env): LaunchModel | null {
  * (https://code.claude.com/docs/en/settings, "Settings precedence"): managed settings, then
  * --settings, then the project's local and shared settings, then the user's.
  */
-function settingsModel(ctx: LaunchContext, cmd: CommandLine | null): LaunchModel {
+function settingsModel(ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>, cmd: CommandLine | null): LaunchModel {
   const configDir = defaultAccountDir(ctx.env, ctx.home);
 
   // Managed: server-managed settings cached for this login, else the managed settings files.
@@ -236,6 +244,16 @@ export function resolveValue(value: string, source: LaunchSource, from: string, 
   const r = resolveModelValue(value, env);
   if (r.kind === 'unresolved') return { kind: 'unresolved', value, source, from, why: r.why };
   return { kind: 'found', model: r.model, source, from, ...(r.aliasFrom !== undefined ? { alias: value, aliasFrom: r.aliasFrom } : {}) };
+}
+
+/** What the decision log records about a model taken from the session's start. */
+export function launchFields(launch: LaunchModel | null): Record<string, unknown> {
+  if (launch === null || launch.kind === 'none') return {};
+  if (launch.kind === 'unresolved') return { model_from: launch.from, model_unresolved: launch.value, unresolved_why: launch.why };
+  return {
+    model_from: launch.from,
+    ...(launch.alias !== undefined ? { model_alias: launch.alias, alias_from: launch.aliasFrom } : {}),
+  };
 }
 
 export type ModelValue =

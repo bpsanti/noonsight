@@ -4,7 +4,7 @@
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session: it reads local files only and never the network.
 //     It starts no process, except `ps` on macOS to read the Claude Code command line when nothing
-//     else names the session's model (launch.ts).
+//     else names the session's model (launch.ts), or when `sextant run` started the session (launcher.ts).
 //   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session context, or a
 //     subagent call with its task text extended), systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.
@@ -15,12 +15,13 @@ import fs from 'node:fs';
 import { ConfigError, loadConfig } from '../../config/load.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { normalizeModel } from '../../core/normalize.js';
-import { joinDelivery, resolve, switchNote } from '../../core/resolve.js';
+import { joinDelivery, launcherNote, resolve, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
-import { launchModel, type LaunchModel } from './launch.js';
+import { launchFields, launchModel, readCommandLine, type LaunchModel } from './launch.js';
+import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
 import { agentCall, agentResult, choiceFields, decisionFields } from './subagents.js';
@@ -107,10 +108,18 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     const processState = processFile(state, ctx.parentPid);
     // Both come from the environment Claude Code runs in, which its hooks inherit.
     const where: Where = { scope: sessionScope(ctx.env), place: sessionPlace(config, ctx.env) };
+    const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
     const result =
       event === 'SessionStart'
-        ? sessionStart(input, config, file, where, readState(sessionState), readState(processState), () =>
-            launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd) }),
+        ? sessionStart(
+            input,
+            config,
+            file,
+            where,
+            readState(sessionState),
+            readState(processState),
+            () => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }),
+            () => launcherPrompt(ctx.env, commandLine),
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
     log(result.record);
@@ -160,6 +169,12 @@ interface Outcome {
  * The model comes from the input; when Claude Code leaves it out, from the record of the same
  * session or, after /clear and compaction, of the same Claude Code process; and when neither knows
  * it, as in every `claude -p` run, from what the session was started with (launch.ts).
+ *
+ * A session `sextant run` started already holds rules in its system prompt. Claude Code renders the
+ * system prompt from the current launch for a new conversation, after /clear and after compaction,
+ * so at those starts the rules are not delivered again when the launcher's text holds them. A resumed
+ * or forked conversation keeps the system prompt it was first sent with, so the session record decides.
+ * When the launcher's rules are for another model than the session's, a note says they do not apply.
  */
 function sessionStart(
   input: Record<string, unknown>,
@@ -169,6 +184,7 @@ function sessionStart(
   session: DeliveryState | null,
   process: DeliveryState | null,
   readLaunch: () => LaunchModel,
+  readLauncher: () => LauncherPrompt | null,
 ): Outcome {
   const source = str(input.source);
   const reported = normalizeModel(str(input.model));
@@ -189,18 +205,34 @@ function sessionStart(
   const sha = decision.status === 'matched' ? decision.sha256 : null;
   const repeat = (source === 'resume' || source === 'fork') && session !== null && session.model === decision.model && session.sha256 === sha;
 
-  const context = decision.status === 'matched' && !repeat ? decision.text : null;
-  const messages = repeat ? [] : undeclaredMessages(decision, file, launch);
+  const launcher = source === 'startup' || source === 'clear' || source === 'compact' ? readLauncher() : null;
+  const inPrompt = launcher !== null && decision.status === 'matched' && launcher.content.includes(decision.text);
+  const otherModel = launcher !== null && !inPrompt && launcher.model !== null && launcher.model !== decision.model ? launcher.model : null;
+  const rules = decision.status === 'matched' && !repeat && !inPrompt ? decision.text : null;
+  const note = otherModel !== null ? launcherNote(otherModel, decision.model ?? '') : null;
+  const parts = [...(note ? [note] : []), ...(rules ? [rules] : [])];
+  const messages = repeat
+    ? []
+    : [
+        ...(otherModel !== null
+          ? [
+              `sextant: sextant run put the rules for ${otherModel} in the system prompt, but this session runs on ${decision.model ?? 'a model Claude Code did not report'}; ` +
+                'the session was told that those rules do not apply.',
+            ]
+          : []),
+        ...undeclaredMessages(decision, file, launch),
+      ];
   return {
     record: {
       ...decisionFields(decision),
       ...choiceFields(where.scope, where.place),
       model_source: modelSource,
       ...launchFields(launch),
-      delivered: repeat ? 'already-delivered' : context ? 'rules' : 'nothing',
+      ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),
+      delivered: repeat ? 'already-delivered' : inPrompt ? 'launcher' : rules ? (note ? 'rules+note' : 'rules') : note ? 'note' : 'nothing',
       warned: messages.length > 0,
     },
-    context,
+    context: parts.length ? joinDelivery(parts) : null,
     messages,
     state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha },
   };
@@ -260,16 +292,6 @@ function undeclaredMessages(decision: Decision, file: string, launch: LaunchMode
   ];
 }
 
-/** What the decision log records about a model taken from the session's start. */
-function launchFields(launch: LaunchModel | null): Record<string, unknown> {
-  if (launch === null || launch.kind === 'none') return {};
-  if (launch.kind === 'unresolved') return { model_from: launch.from, model_unresolved: launch.value, unresolved_why: launch.why };
-  return {
-    model_from: launch.from,
-    ...(launch.alias !== undefined ? { model_alias: launch.alias, alias_from: launch.aliasFrom } : {}),
-  };
-}
-
 function output(messages: readonly string[], specific: Record<string, unknown> | null): string {
   if (!specific && messages.length === 0) return '';
   return JSON.stringify({
@@ -289,6 +311,11 @@ function parseInput(raw: string): Record<string, unknown> | null {
 
 function str(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function once<T>(read: () => T): () => T {
+  let cached: { value: T } | null = null;
+  return () => (cached ??= { value: read() }).value;
 }
 
 function plural(n: number, word: string): string {

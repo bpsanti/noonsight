@@ -66,6 +66,8 @@ export function pruneState(stateDir: string, now: number): void {
   for (const [sub, maxAge] of [
     ['sessions', MAX_AGE_MS],
     ['processes', MAX_AGE_MS],
+    // The system prompt files of `sextant run`, which every launch writes again.
+    ['launch', MAX_AGE_MS],
     ['agent-calls', AGENT_MAX_AGE_MS],
     ['agents', AGENT_MAX_AGE_MS],
   ] as const) {

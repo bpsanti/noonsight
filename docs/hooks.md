@@ -8,7 +8,7 @@ Four hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, 
 
 - **It never holds the session, or a subagent call.**
   It always exits 0, reads only local files and never uses the network.
-  It starts no other process, with one exception: on macOS, when nothing else names the session's model, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)).
+  It starts no other process, with one exception: on macOS, when nothing else names the session's model, or when `sextant run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second.
 - **It never blocks anything.**
   An undeclared model, or a subagent whose model sextant cannot tell, gets a warning, never a refusal; sextant never denies a call.
@@ -83,6 +83,11 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
 The session's task scope is the value of `SEXTANT_SCOPE` in the environment Claude Code runs in, which its hooks inherit, so whoever starts the session (a person, a script, an orchestrator) can name it; without it, the session receives only the rules for every scope.
 Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, and `session` otherwise ([Scopes](configuration.md#scopes)).
 A resumed session gets the rules again when a change of scope or place changed which rules apply.
+
+A session started by `sextant run` already holds its rules in the system prompt.
+At `startup`, `clear` and `compact`, when the Claude Code process was started with the launcher's file and the file holds exactly the rules decided here, the hook delivers nothing and logs `delivered: "launcher"`.
+When the launcher's rules are for another model, the hook delivers this model's rules with a note that the others do not apply.
+[launcher.md](launcher.md#with-the-hooks) has the details.
 
 ## PostModelSwitch
 
@@ -183,7 +188,7 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 
 | Field | Values |
 | --- | --- |
-| `event` | `session-start`, `model-switch`, `agent-call` (`PreToolUse`), `agent-result` (`PostToolUse`) |
+| `event` | `session-start`, `model-switch`, `agent-call` (`PreToolUse`), `agent-result` (`PostToolUse`), and `launch` for `sextant run` ([launcher.md](launcher.md#the-decision-log)) |
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
 | `tool_name`, `tool_use_id`, `permission_mode` | For the subagent events: the agent tool's name, the call's id and the session's permission mode |
 | `agent_id` | For a call made inside a subagent: that subagent's id |
@@ -205,11 +210,12 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `scope_matcher` | For a scope taken from the task text: the matcher that decided, as the configuration writes it |
 | `unattended_env` | For a session in the place `unattended`: the variable that put it there |
 | `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
-| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, and for a subagent with `subagents.delivery` set to `off`, `off` |
+| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`; `launcher` for a session start that found the rules in the system prompt `sextant run` gave; `system-prompt` for a launch that added them; and for a subagent with `subagents.delivery` set to `off`, `off` |
+| `launch_file`, `launch_model` | For a session start under `sextant run` with rules in the system prompt: the launcher's file, and the model its rules are for |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |
 
-What each session last received is kept in `~/.local/state/sextant/sessions/` and `processes/`, one small file per session id and per Claude Code process; files nobody wrote for 30 days are removed.
+What each session last received is kept in `~/.local/state/sextant/sessions/` and `processes/`, one small file per session id and per Claude Code process; files nobody wrote for 30 days are removed, and so are the system prompt files of `sextant run` in `launch/`.
 The subagent records in `agent-calls/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
 
 ## Turning sextant off

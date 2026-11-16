@@ -2,7 +2,8 @@
 // sextant command line. Exit codes: 0 for success and for every decision (matched, none,
 // undeclared); 1 when install, uninstall, watch or check finds a problem; 2 for a usage error or a
 // refused configuration. `sextant init` exits 1 when the configuration file already exists.
-// `sextant hook` always exits 0, and `sextant watch run` keeps running.
+// `sextant hook` always exits 0, `sextant watch run` keeps running, and `sextant run` exits with
+// claude's exit status.
 
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +13,7 @@ import { INIT_USAGE, runInit } from './commands/init.js';
 import { INSTALL_USAGE, runInstall } from './commands/install.js';
 import { MODELS_USAGE, runModels } from './commands/models.js';
 import { RESOLVE_USAGE, runResolve } from './commands/resolve.js';
+import { runRun } from './commands/run.js';
 import { UsageError } from './commands/usage.js';
 import { runWatch, WATCH_USAGE } from './commands/watch.js';
 import { ConfigError } from './config/load.js';
@@ -32,6 +34,8 @@ Commands:
   check                             check the configuration, the installs, the watcher and Claude Code
   models [--json]                   list the declared models and their rules, with source and cost
   resolve <model> [scope] [place]   show the rules a model receives
+  run [--scope <scope>] [--] [claude arguments...]
+                                    start claude with the rules for its model in the system prompt
   hook <event>                      the hook adapter that Claude Code runs; not run by hand
 
 Options:
@@ -56,11 +60,14 @@ const COMMAND_USAGE: Record<string, string> = {
   hook: HOOK_USAGE,
 };
 
-export function main(argv: readonly string[], env: Env, io: Io): number {
+export function main(argv: readonly string[], env: Env, io: Io): number | Promise<number> {
   const [command, ...rest] = argv;
   // The hook never prints usage or fails: Claude Code would show it as a hook error.
   if (command === 'hook') return runHookCommand(rest, env, io.out);
   try {
+    // Its arguments are claude's, so it reads --help itself, only among its own options.
+    if (command === 'run') return runRun(rest, env, io).catch((e: unknown) => handleError(e, io));
+
     const usage = command !== undefined ? COMMAND_USAGE[command] : undefined;
     if (usage !== undefined && (rest.includes('--help') || rest.includes('-h'))) {
       io.out(usage);
@@ -96,21 +103,30 @@ export function main(argv: readonly string[], env: Env, io: Io): number {
         throw new UsageError(`unknown command "${command}"`, USAGE);
     }
   } catch (e) {
-    if (e instanceof UsageError) {
-      io.err(`sextant: ${e.message}\n\n${e.usage}`);
-      return 2;
-    }
-    if (e instanceof ConfigError) {
-      io.err(`sextant: ${e.message}\nNothing from this configuration was applied.`);
-      return 2;
-    }
-    throw e;
+    return handleError(e, io);
   }
 }
 
+function handleError(e: unknown, io: Io): number {
+  if (e instanceof UsageError) {
+    io.err(`sextant: ${e.message}\n\n${e.usage}`);
+    return 2;
+  }
+  if (e instanceof ConfigError) {
+    io.err(`sextant: ${e.message}\nNothing from this configuration was applied.`);
+    return 2;
+  }
+  throw e;
+}
+
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exitCode = main(process.argv.slice(2), process.env, {
+  const code = main(process.argv.slice(2), process.env, {
     out: (t) => process.stdout.write(`${t}\n`),
     err: (t) => process.stderr.write(`${t}\n`),
   });
+  if (typeof code === 'number') process.exitCode = code;
+  else
+    void code.then((c) => {
+      process.exitCode = c;
+    });
 }
