@@ -155,6 +155,7 @@ The judgment calls with a cost the source measured come first: `fable-5-2/finish
 
 A rule applies to the scopes it lists, or to every scope, and to the places it lists: `session` (a session someone is watching), `unattended` (a session nobody is watching) and `subagent` (the task of a subagent).
 Each rule below gives its scopes, why, and the basis of that choice, by the principles in [How the rules are scoped](#how-the-rules-are-scoped).
+A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when sextant delivered it; those are small samples, so they give a direction, not a significant result.
 
 ### Claude Fable 5.2 (`claude-fable-5-2`)
 
@@ -164,6 +165,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Finish the whole task", read 2026-11-16.
 - Effect: In replays of recorded sessions from an agentic coding product at medium effort, a version of this text left about half as many sessions ending with work that could have been continued.
 - Cost: Output tokens rose by about 30 percent.
+- Measured: Not measured on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): it reaches subagents only, and the experiment starts none.
 - Places: Claude Code already sends a block with this advice to every Fable 5.2 session, so the preset only gives it to subagents, whose system prompt has none.
 - Scopes: `investigate`, `build`. Not `review`, `routine` or `digest`, nor a task whose scope is not known.
 - Why these scopes: the rule pays where a subagent owes many steps of work and can stop before the last one: an investigation, or an implementation that needs reasoning.
@@ -180,6 +182,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Make reports easy to follow", read 2026-11-16.
 - Effect: On agentic tasks, final reports were less dense and used fewer semicolons; on workflow automation tasks, sentences were shorter.
 - Cost: Not reported by the source.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered by sextant to unattended sessions, reports had shorter sentences (11.7 words against 15.3 on the question, 5 runs each) and almost no semicolons (0.8 per 1,000 words against 19.9), with no added cost.
 - Places: where the reader comes back to a finished report, rather than following the work as it happens.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: every kind of task ends in a report that someone reads after the fact, a summary or a review most of all, and the source reports no cost.
@@ -221,6 +224,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "Unattended agentic runs", read 2026-11-16.
 - Effect: Fewer turns that end early in unattended agent loops: the model carries on where it would otherwise stop to check in. The source says to leave it out where someone is there to answer.
 - Cost: Somewhat more tool calls and output tokens per task; the source gives no figure.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (6 of 6 each); about 30 to 90 more output tokens per run.
 - Places: only sessions nobody is watching, as the guide asks.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: in a session nobody watches, a turn that ends before the work is done halts the work until someone comes back, whatever the kind of task.
@@ -263,6 +267,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Carrying work through", read 2026-11-16.
 - Effect: At low and medium effort, the model carries more of the work through instead of checking in before it is done.
 - Cost: Sessions at low and medium effort run longer and cost more; the source gives no figure.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
 - Places: where nobody can answer a check-in. The guide's suggested prompt has a second paragraph, which is the rule `sonnet-5-5/stay-in-scope`.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: where nobody can answer a check-in, a stop before the end leaves the work undone in any kind of task.
@@ -277,6 +282,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Unrequested additions when coding", read 2026-11-16.
 - Effect: Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.
 - Cost: Not reported by the source.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on a one-file fix, no run changed another file, with or without it (0 of 10 each).
 - Scopes: `routine`. Not `investigate`, `build`, `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: a well-scoped change is where tests, documentation and files nobody asked for are least welcome.
   In an investigation or an implementation that needs reasoning, such additions are often wanted, and a review or a digest changes no files, so the rule has nothing to do there.
@@ -290,6 +296,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Verification on coding tasks", read 2026-11-16.
 - Effect: At low effort, skipped or superficial checks became rare, with no measurable change in task quality.
 - Cost: Slightly higher cost per task.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered with `carry-through` and `stay-in-scope` at medium effort, a one-file fix was followed by a test run in 10 of 10 runs, against 0 of 10 without the rules, for about 520 more output tokens and 46 percent more cost per run.
 - Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: the rule acts on a code change, and an investigation that ends in a fix, an implementation and a routine change all make one.
   A review and a digest change no code, so there the rule would only add text to read.
@@ -345,6 +352,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Prevent early stopping in long agent prompts", read 2026-11-16.
 - Effect: Fewer early stops that hand the task back to the user, which appear with a long coding-agent system prompt at low effort.
 - Cost: Not reported for the text. For comparison, raising effort from low to medium roughly halved early stopping and more than doubled output tokens.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: a subagent or an unattended session that hands the task back before the end leaves half a search or half a change, whatever the kind of task, and with routing on the preset's table sends digest subagents to Haiku 5.5.
   Its last sentences keep out work nobody asked for, as `sonnet-5-5/stay-in-scope` does in `routine` only; the Haiku 5.5 guide writes them into the same prompt, so they come with it in every scope.
@@ -357,6 +365,7 @@ Each rule below gives its scopes, why, and the basis of that choice, by the prin
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Tell coding agents to verify their changes", read 2026-11-16.
 - Effect: The model checked its changes more often, and its performance improved.
 - Cost: More tokens; the source gives no figure.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered with `carry-through` at medium effort, a one-file fix was followed by a test run in 8 of 10 runs, against 0 of 10 without the rules, for about 1,400 more output tokens per run.
 - Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: as for `sonnet-5-5/verify-changes`, the rule acts on a code change, which an investigation that ends in a fix, an implementation and a routine change all make, and a review or a digest does not.
 - Scope basis: sourced for `build`, `routine`; judgment for `investigate`.

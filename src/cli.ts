@@ -12,6 +12,7 @@ import { HOOK_USAGE, runHookCommand } from './commands/hook.js';
 import { INIT_USAGE, runInit } from './commands/init.js';
 import { INSTALL_USAGE, runInstall } from './commands/install.js';
 import { MODELS_USAGE, runModels } from './commands/models.js';
+import { REPORT_USAGE, runReport } from './commands/report.js';
 import { RESOLVE_USAGE, runResolve } from './commands/resolve.js';
 import { runRun } from './commands/run.js';
 import { UsageError } from './commands/usage.js';
@@ -34,6 +35,9 @@ Commands:
   check                             check the configuration, the installs, the watcher and Claude Code
   models [--json]                   list the declared models and their rules, with source and cost
   resolve <model> [scope] [place]   show the rules a model receives
+  report [--json] [--log <file>]
+                                    report from the decision log how often each rule was delivered,
+                                    and to which models, scopes and places
   run [--scope <scope>] [--] [claude arguments...]
                                     start claude with the rules for its model in the system prompt
   hook <event>                      the hook adapter that Claude Code runs; not run by hand
@@ -53,6 +57,7 @@ const COMMAND_USAGE: Record<string, string> = {
   init: INIT_USAGE,
   models: MODELS_USAGE,
   resolve: RESOLVE_USAGE,
+  report: REPORT_USAGE,
   install: INSTALL_USAGE,
   uninstall: INSTALL_USAGE,
   check: CHECK_USAGE,
@@ -90,6 +95,8 @@ export function main(argv: readonly string[], env: Env, io: Io): number | Promis
       case 'resolve':
         io.out(JSON.stringify(runResolve(rest, env), null, 2));
         return 0;
+      case 'report':
+        return runReport(rest, env, io.out);
       case 'install':
       case 'uninstall':
         return runInstall(command, rest, env, io);

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const LOG_FILE = 'decisions.jsonl';
-const ROTATED_LOG_FILE = 'decisions.1.jsonl';
+export const ROTATED_LOG_FILE = 'decisions.1.jsonl';
 
 /** Past this size the log is moved to decisions.1.jsonl (replacing an older one) and a new log starts. */
 export const LOG_MAX_BYTES = 20 * 1024 * 1024;
@@ -32,22 +32,25 @@ export function appendDecision(stateDir: string, record: Readonly<Record<string,
  * not a JSON object, such as a line torn by a full disk, are skipped.
  */
 export function readDecisions(stateDir: string): Record<string, unknown>[] {
+  return [path.join(stateDir, ROTATED_LOG_FILE), logFile(stateDir)].flatMap(readDecisionFile);
+}
+
+/** Every readable decision in one log file, oldest first; none when the file cannot be read. */
+export function readDecisionFile(file: string): Record<string, unknown>[] {
+  let text: string;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
   const records: Record<string, unknown>[] = [];
-  for (const file of [path.join(stateDir, ROTATED_LOG_FILE), logFile(stateDir)]) {
-    let text: string;
+  for (const line of text.split('\n')) {
+    if (!line) continue;
     try {
-      text = fs.readFileSync(file, 'utf8');
+      const value = JSON.parse(line) as unknown;
+      if (value && typeof value === 'object' && !Array.isArray(value)) records.push(value as Record<string, unknown>);
     } catch {
-      continue;
-    }
-    for (const line of text.split('\n')) {
-      if (!line) continue;
-      try {
-        const value = JSON.parse(line) as unknown;
-        if (value && typeof value === 'object' && !Array.isArray(value)) records.push(value as Record<string, unknown>);
-      } catch {
-        // A torn or foreign line.
-      }
+      // A torn or foreign line.
     }
   }
   return records;
