@@ -53,6 +53,8 @@ interface RawModelEntry {
 interface RawScope {
   description?: string;
   match?: string[];
+  /** Preset scopes only. */
+  source?: Source;
 }
 interface RawConfig {
   version: 1;
@@ -69,26 +71,85 @@ interface RawPresetRule {
   scopes: string[];
   where: Place[];
   enabled?: boolean;
+  source: Source;
+  effect: string;
+  cost: string;
 }
 interface RawPreset {
   id: string;
   version: string;
+  claude_code?: { version: string; checked: string };
   scopes?: Record<string, RawScope>;
   models: Record<string, { rules: RawPresetRule[] }>;
 }
 
-interface PresetRule extends Rule {
-  readonly enabled: boolean;
+/** Where a preset rule or scope comes from: the page, the section and the date it was read. */
+export interface Source {
+  readonly url: string;
+  readonly section: string;
+  readonly date: string;
 }
-interface Preset {
+
+/** A preset rule, with what the preset says about it beside its text. */
+export interface PresetRule extends Rule {
+  /** Whether the rule is on unless the user turns it off. */
+  readonly enabled: boolean;
+  /** The rule file, relative to the preset directory. */
+  readonly file: string;
+  readonly source: Source;
+  /** What the source reports the text changes. */
+  readonly effect: string;
+  /** What the source reports the text costs. */
+  readonly cost: string;
+}
+
+/** A preset as the package ships it, checked. */
+export interface Preset {
+  readonly name: string;
+  readonly version: string;
+  /** The Claude Code version whose system prompts the rules were compared with, and when. */
+  readonly claudeCode: { readonly version: string; readonly checked: string } | null;
   /** The preset's scopes, in its order. */
   readonly scopes: ReadonlyMap<string, Scope>;
+  readonly scopeSources: ReadonlyMap<string, Source>;
   readonly models: ReadonlyMap<string, readonly PresetRule[]>;
 }
 
-const DEFAULT_PRESET = 'claude';
+/** How the configuration file declares one model, as `sextant models` shows it. */
+export interface DeclaredModel {
+  readonly use: 'preset' | 'custom' | 'none';
+  readonly wildcard: boolean;
+  /** The user's own rules, with their files as the configuration writes them. */
+  readonly add: readonly { readonly id: string; readonly file: string }[];
+}
+
+/** The loaded configuration, plus what describes it: the preset it draws from and each model as declared. */
+export interface ConfigDetails {
+  readonly config: Config;
+  /** The preset, or null when it is not installed and nothing needs it. */
+  readonly preset: Preset | null;
+  /** The model keys in the order the file writes them. */
+  readonly declared: ReadonlyMap<string, DeclaredModel>;
+}
+
+/** The preset a configuration draws from when it names none. */
+export const DEFAULT_PRESET = 'claude';
+
+/** Read and check one installed preset on its own; a missing or failing preset throws a ConfigError. */
+export function readPreset(name: string, options: LoadOptions = {}, env: Env = process.env): Preset {
+  const dir = options.presetsDir ?? defaultPresetsDir(env);
+  const problems: string[] = [];
+  const preset = loadPreset(name, dir, true, problems);
+  if (preset === null || problems.length) throw new ConfigError(path.join(dir, name, 'preset.json'), problems);
+  return preset;
+}
 
 export function loadConfig(file: string, options: LoadOptions = {}, env: Env = process.env): Config {
+  return loadConfigDetails(file, options, env).config;
+}
+
+/** As loadConfig, and also returns the preset and each model as the file declares it. */
+export function loadConfigDetails(file: string, options: LoadOptions = {}, env: Env = process.env): ConfigDetails {
   const configFile = path.resolve(file);
   const problems: string[] = [];
   const report = (at: string, message: string): void => {
@@ -177,7 +238,17 @@ export function loadConfig(file: string, options: LoadOptions = {}, env: Env = p
     onMismatch: sub.on_mismatch ?? DEFAULT_SUBAGENT_SETTINGS.onMismatch,
   };
   const session = { unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv };
-  return { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents };
+  const declared = new Map<string, DeclaredModel>(
+    Object.entries(models).map(([key, entry]) => [
+      key,
+      {
+        use: entry.use,
+        wildcard: /[*?]/.test(key),
+        add: (entry.add ?? []).map((u) => ({ id: u.id, file: u.file })),
+      },
+    ]),
+  );
+  return { config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents }, preset, declared };
 }
 
 function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {
@@ -201,6 +272,7 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
   const p = raw as RawPreset;
   if (p.id !== name) report('/id', `is "${p.id}", but the preset is installed as "${name}"`);
   const scopes = new Map(Object.entries(p.scopes ?? {}).map(([name, raw]) => [name, toScope(name, raw, `/scopes/${name}`, report)]));
+  const scopeSources = new Map(Object.entries(p.scopes ?? {}).flatMap(([name, raw]) => (raw.source ? [[name, raw.source] as const] : [])));
   const models = new Map<string, PresetRule[]>();
   for (const [key, entry] of Object.entries(p.models)) {
     const at = `/models/${key}`;
@@ -214,15 +286,28 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
       checkScopes(r.scopes, scopes, `${ruleAt}/scopes`, report);
       const text = readRuleText(path.resolve(presetDir, r.file), `${ruleAt}/file`, report);
       if (text !== undefined)
-        rules.push({ id: r.id, origin: 'preset', scopes: r.scopes, where: r.where, text, enabled: r.enabled ?? true });
+        rules.push({
+          id: r.id,
+          origin: 'preset',
+          scopes: r.scopes,
+          where: r.where,
+          text,
+          enabled: r.enabled ?? true,
+          file: r.file,
+          source: r.source,
+          effect: r.effect,
+          cost: r.cost,
+        });
     });
+    // A user can turn on any preset rule, so the preset must fit with every rule on, not only as it ships.
+    if (rules.length === entry.rules.length) checkPresetSize(key, rules, scopes, at, report);
     models.set(key, rules);
   }
   if (own.length) {
     problems.push(...own.map((p) => `preset ${file}: ${p}`));
     return null;
   }
-  return { scopes, models };
+  return { name, version: p.version, claudeCode: p.claude_code ?? null, scopes, scopeSources, models };
 }
 
 /**
@@ -325,6 +410,7 @@ function checkDeliverySize(
   scopes: ReadonlyMap<string, Scope>,
   at: string,
   report: (at: string, message: string) => void,
+  prefix = '',
 ): void {
   for (const scope of [null, ...[...scopes.keys()].sort()])
     for (const place of PLACES) {
@@ -334,11 +420,37 @@ function checkDeliverySize(
       if (size > RULES_TEXT_LIMIT)
         report(
           at,
-          `the rules delivered for ${scope === null ? 'no scope' : `scope "${scope}"`} in place "${place}" ` +
-            `come to ${size} characters; the limit is ${RULES_TEXT_LIMIT} ` +
-            `(Claude Code's ${DELIVERY_TEXT_LIMIT}, less ${SWITCH_NOTE_RESERVE} kept for the model-change note)`,
+          `${prefix}the rules delivered for ${scope === null ? 'no scope' : `scope "${scope}"`} in place "${place}" ` +
+            `come to ${size} characters; ${LIMIT_TEXT}`,
         );
     }
+}
+
+const LIMIT_TEXT =
+  `the limit is ${RULES_TEXT_LIMIT} (Claude Code's ${DELIVERY_TEXT_LIMIT}, less ${SWITCH_NOTE_RESERVE} kept for the model-change note)`;
+
+/**
+ * A preset rule must fit on its own, and the preset's rules for a model must fit together with every
+ * rule on, since the user decides which of them are on.
+ */
+function checkPresetSize(
+  model: string,
+  rules: readonly PresetRule[],
+  scopes: ReadonlyMap<string, Scope>,
+  at: string,
+  report: (at: string, message: string) => void,
+): void {
+  let alone = true;
+  rules.forEach((r, i) => {
+    // The envelope names the scope, so the rule is measured under each scope it can be delivered in.
+    const under = r.scopes.includes(ANY_SCOPE) ? [null, ...scopes.keys()] : r.scopes;
+    const size = Math.max(...under.map((scope) => envelope(model, scope, [r.id], r.text).length));
+    if (size > RULES_TEXT_LIMIT) {
+      alone = false;
+      report(`${at}/rules/${i}/file`, `rule "${r.id}" comes to ${size} characters on its own, envelope included; ${LIMIT_TEXT}`);
+    }
+  });
+  if (alone) checkDeliverySize(model, rules, scopes, at, report, 'with every rule on, ');
 }
 
 function readRuleText(file: string, at: string, report: (at: string, message: string) => void): string | undefined {

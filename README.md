@@ -6,13 +6,15 @@ Take a fix before you set the course: pick the right model for each agent task, 
 Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
 So does each subagent a session starts: before it starts, sextant predicts the model it will run on and adds that model's rules to the end of its task, then checks the model it actually started on and warns on a difference.
 Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `SEXTANT_SCOPE`, a subagent from matchers run over its task, and `sextant check` reports scopes that overlap.
-The starting preset comes next.
+The package ships a starting preset, `claude`: 16 rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each adapted from Anthropic's prompting guide for that exact model and listed with its source, the effect the guide reports and its cost ([presets/claude/SOURCES.md](presets/claude/SOURCES.md)).
+Eight of them are on by default; the rest have a high cost, a side effect or a narrow use, and the user turns them on.
+None is delivered where Claude Code already sends the same advice.
 
 ## What it will do
 
 1. **Route (optional).** Choose the model and effort for a task from rules you declare, based on where each model is strong. Skip this part if an orchestrator already picks models for you.
 2. **Instruct.** Give each Claude Code session and subagent the rules for the model it runs on, through official Claude Code hooks: no network proxy, no credentials handled.
-   It ships a starting preset per current model, built from cited benchmarks and vendor prompting guides, and every rule is configurable.
+   It ships a starting preset per current model, built from the vendor's prompting guides with every source cited, and every rule is configurable.
 
 It works on its own and alongside agent orchestrators.
 One configuration file serves the whole machine, for every Claude Code account on it.
@@ -20,9 +22,14 @@ One configuration file serves the whole machine, for every Claude Code account o
 ## Install
 
 ```bash
+sextant init       # the configuration file, declaring every model the preset covers
+sextant models     # each model's rules, with their source, effect and cost
 sextant install    # every Claude Code login of this account, no administrator rights
 sextant check      # configuration, installs, watcher, Claude Code version
 ```
+
+`sextant init` writes `~/.config/sextant/sextant.json`, or the file `SEXTANT_CONFIG` names, and never replaces one that exists.
+Turn a preset rule on or off with `enable` and `disable`, add your own rule files, and declare the models you use; [docs/configuration.md](docs/configuration.md) explains each key.
 
 `sextant watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `sextant watch disable` turns it off.
 
@@ -52,7 +59,7 @@ npm test             # builds, then runs every test with node --test
 npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
 
-`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session) and the scope cases (two sessions on one model in two scopes through `SEXTANT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage.
+`SEXTANT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session), the scope cases (two sessions on one model in two scopes through `SEXTANT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) and the preset cases (what Claude Code's own system prompt already sends each model, compared with the preset, and the real preset reaching a session and a subagent with the hash `sextant resolve` gives) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage, Fable 5.2 included.
 `SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` asks the session models which rules they received; the token stays in the environment.
 See [docs/verification/claude-code.md](docs/verification/claude-code.md).
 

@@ -5,7 +5,9 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 
 `npm run test:live` drives real interactive sessions through a terminal and sends no prompt and no request to Anthropic: a placeholder token gets Claude Code past sign-in, and `ANTHROPIC_BASE_URL` points at a closed local port.
 `SEXTANT_LIVE_TOKENS=1` adds the checks that ask a model, which need a real token in `CLAUDE_CODE_OAUTH_TOKEN`.
-`SEXTANT_LIVE_LOGIN=1` adds the subagent and scope checks (`test/live/subagents.test.ts`, `test/live/scopes.test.ts`), which send prompts from the Claude Code login of whoever runs them: they read no token, give sextant's hook entries through `--settings`, and leave the person's own settings out with `--setting-sources project,local`, so nothing is installed into that account.
+`SEXTANT_LIVE_LOGIN=1` adds the subagent, scope and preset checks (`test/live/subagents.test.ts`, `test/live/scopes.test.ts`, `test/live/preset.test.ts`), which send prompts from the Claude Code login of whoever runs them: they read no token, give sextant's hook entries through `--settings`, and leave the person's own settings out with `--setting-sources project,local`, so nothing is installed into that account.
+The preset checks send one short request to each of the four current models, Fable 5.2 included; in `claude -p`, Claude Code bills Fable usage to usage credits without asking, on plans where Fable draws on them.
+Run them again whenever the preset changes or Claude Code is upgraded: the `system-prompt` check fails when what Claude Code sends each model changes.
 
 ## Checked live
 
@@ -35,6 +37,9 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 | A model reads two different scoped rule sets for the same model, from `SessionStart` context and from the end of a subagent's `prompt`, and quotes only the one it was given | 2.1.325 | 2026-11-16 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (scopes) |
 | A `systemMessage` from `PreToolUse` or `PostToolUse` reaches `claude -p --output-format stream-json` as a `system` event of subtype `informational` | 2.1.325 | 2026-11-15 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` |
 | In auto mode, the classifier reviews an agent call that no hook allowed, and can deny it | 2.1.325 | 2026-11-15 | Seen in an interactive session started in auto mode; the live tests pin `--permission-mode default` |
+| A session's transcript records each model request (`api-request`, with the model and a shape hash) and the system prompt sent with it (`api-request-shape`), for the session and for each subagent | 2.1.325 | 2026-11-16 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (system-prompt) |
+| The system prompt of a Fable 5.2 session holds a "Finishing work" section with the advice of the preset rule `fable-5-2/finish-work`; Opus 5.5, Sonnet 5.5 and Haiku 5.5 sessions, and general-purpose subagents on each of the four models, hold the advice of no preset rule | 2.1.325 | 2026-11-16 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (system-prompt); the figures are in `presets/claude/SOURCES.md` |
+| With the shipped preset, a session and a subagent read the rules delivered to them and name their ids, and the decision log records the hash `sextant resolve` gives for the same model, scope and place | 2.1.325 | 2026-11-16 | `SEXTANT_LIVE_LOGIN=1 npm run test:live` (preset-hash) |
 
 ## From the documentation, not checked live
 

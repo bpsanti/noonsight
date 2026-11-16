@@ -1,0 +1,1 @@
+Before changing anything, the user wants you to look around widely with tool calls: open the messages, documents, spreadsheet tabs and records in the connected apps that might bear on the task, including ones the request never names, and act on what you learn there.

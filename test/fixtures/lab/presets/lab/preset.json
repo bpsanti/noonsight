@@ -2,7 +2,10 @@
   "id": "lab",
   "version": "0.0.0",
   "scopes": {
-    "investigate": { "description": "Open-ended investigation or root-cause diagnosis of an unclear problem." }
+    "investigate": {
+      "description": "Open-ended investigation or root-cause diagnosis of an unclear problem.",
+      "source": { "url": "https://example.com/lab/scopes", "section": "Investigation", "date": "2026-11-14" }
+    }
   },
   "models": {
     "claude-sonnet-5-5": {
@@ -12,21 +15,27 @@
           "file": "rules/sonnet-general.md",
           "scopes": ["*"],
           "where": ["session", "unattended", "subagent"],
-          "source": { "url": "https://example.com/lab/sonnet", "section": "General", "date": "2026-11-14" }
+          "source": { "url": "https://example.com/lab/sonnet", "section": "General", "date": "2026-11-14" },
+          "effect": "Lab rule for the tests.",
+          "cost": "None."
         },
         {
           "id": "sonnet/investigate",
           "file": "rules/sonnet-investigate.md",
           "scopes": ["investigate"],
           "where": ["session", "unattended", "subagent"],
-          "source": { "url": "https://example.com/lab/sonnet", "section": "Investigation", "date": "2026-11-14" }
+          "source": { "url": "https://example.com/lab/sonnet", "section": "Investigation", "date": "2026-11-14" },
+          "effect": "Lab rule for the tests.",
+          "cost": "None."
         },
         {
           "id": "sonnet/carry-through",
           "file": "rules/sonnet-carry-through.md",
           "scopes": ["*"],
           "where": ["unattended", "subagent"],
-          "source": { "url": "https://example.com/lab/sonnet", "section": "Carrying work through", "date": "2026-11-14" }
+          "source": { "url": "https://example.com/lab/sonnet", "section": "Carrying work through", "date": "2026-11-14" },
+          "effect": "Lab rule for the tests.",
+          "cost": "None."
         },
         {
           "id": "sonnet/progress-updates",
@@ -34,7 +43,9 @@
           "scopes": ["*"],
           "where": ["session"],
           "enabled": false,
-          "source": { "url": "https://example.com/lab/sonnet", "section": "Progress updates", "date": "2026-11-14" }
+          "source": { "url": "https://example.com/lab/sonnet", "section": "Progress updates", "date": "2026-11-14" },
+          "effect": "Lab rule for the tests.",
+          "cost": "None."
         }
       ]
     },
@@ -45,7 +56,9 @@
           "file": "rules/haiku-general.md",
           "scopes": ["*"],
           "where": ["session", "unattended", "subagent"],
-          "source": { "url": "https://example.com/lab/haiku", "section": "General", "date": "2026-11-14" }
+          "source": { "url": "https://example.com/lab/haiku", "section": "General", "date": "2026-11-14" },
+          "effect": "Lab rule for the tests.",
+          "cost": "None."
         }
       ]
     }

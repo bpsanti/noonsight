@@ -127,8 +127,9 @@ test('task scope: two scopes that match at the same place go to the one declared
 
 test('task scope: a user scope named like a preset scope keeps its place and replaces only the keys it gives', () => {
   const presets = labPresetWith((p) => {
-    p.scopes.investigate = { description: 'Preset description.', match: ['\\binvestigat'] };
-    p.scopes.review = { match: ['\\breview'] };
+    const source = { url: 'https://example.com/lab/scopes', section: 'Scopes', date: '2026-11-14' };
+    p.scopes.investigate = { description: 'Preset description.', match: ['\\binvestigat'], source };
+    p.scopes.review = { description: 'Preset review.', match: ['\\breview'], source };
   });
   const cfg = load({ preset: 'lab', scopes: { audit: { match: ['\\baudit'] }, investigate: { match: ['\\bdiagnos'] } } }, {}, presets);
   assert.deepEqual([...cfg.scopes.keys()], ['investigate', 'review', 'audit']);
