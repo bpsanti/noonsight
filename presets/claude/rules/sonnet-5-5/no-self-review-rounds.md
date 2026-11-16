@@ -1,0 +1,1 @@
+Once the requested work is done and its checks pass, the user wants a report and a stop. Do not begin further review or hardening passes on your own initiative, and start reviewer subagents only if the user asked for a review. If a deeper review looks worthwhile, recommend it in the report.

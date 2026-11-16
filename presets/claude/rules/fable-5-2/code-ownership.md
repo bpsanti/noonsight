@@ -1,0 +1,1 @@
+The user has made you the owner and long-term maintainer of this code base, and its design is yours to decide. Improving its structure while you work, for example folding duplicated code into a single shared function, is part of the job.

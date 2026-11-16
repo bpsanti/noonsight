@@ -17,6 +17,19 @@ Paths inside the file (the `file` of a rule) are relative to the file itself.
 Presets are read from the installed package, so a preset always follows the package version.
 `SEXTANT_PRESETS_DIR` replaces that directory, for tests and for preset development.
 
+`sextant init` writes a first file there: it declares every model the preset has rules for with `"use": "preset"`, and it never replaces a file that exists.
+
+## The preset
+
+The package ships one preset, `claude`, in `presets/claude/`.
+It has rules for `claude-fable-5-2`, `claude-opus-5-5`, `claude-sonnet-5-5` and `claude-haiku-5-5`, each adapted from Anthropic's prompting guide for that exact model, and five scopes: `investigate`, `build`, `review`, `routine` and `digest`.
+Every rule names its source (the page, the section and the date it was read), the effect the source reports, and the cost it reports.
+Rules with a high cost, a described side effect or a narrow use ship off; `enable` turns one on for a model, and `disable` turns off one that ships on.
+No rule is delivered in a place where Claude Code already sends the same advice; the preset records, under `claude_code`, the Claude Code version it was compared with.
+[presets/claude/SOURCES.md](../presets/claude/SOURCES.md) lists every rule and scope with its source, and `sextant models` prints the rules of each declared model with their source, effect and cost.
+
+The preset's scopes declare no matchers, so a session takes one of them only from `SEXTANT_SCOPE`, and a subagent only once the user's file gives that scope a `match`.
+
 ## Example
 
 ```json
@@ -167,7 +180,25 @@ Beyond the schema, sextant checks that:
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
 
-The preset is checked the same way, and every preset rule must name its source: the page, the section and the date it was read.
+The preset is checked the same way, and more strictly:
+
+- every preset rule names its source (the page, the section and the date it was read), the effect the source reports and its cost, and every preset scope names its source;
+- every preset rule fits the limit on its own, and a model's preset rules fit it together with every rule on, for every combination of scope and place, since the user decides which of them are on.
+
+The installed preset is read whenever it is there, even when no model uses it, because its scopes are always declared; a preset that fails these checks refuses every configuration until it is fixed.
+
+## `sextant models`
+
+```text
+sextant models [--json]
+```
+
+Lists, for each declared model, how it is declared and the rules it receives.
+For `"use": "preset"` that is every preset rule of the model, on or off, with its scopes, places, source, effect and cost; the user's own rules follow, with their files.
+It also lists the preset's models that are not declared, and the models the decision log ([hooks.md](hooks.md#the-decision-log)) has seen that are not declared, which get a warning and no rules.
+A wildcard key lists the models from the log that it covers.
+`--json` prints the same as one JSON object.
+The command reads only local files.
 
 ## `sextant resolve`
 

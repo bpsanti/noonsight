@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // sextant command line. Exit codes: 0 for success and for every decision (matched, none,
 // undeclared); 1 when install, uninstall, watch or check finds a problem; 2 for a usage error or a
-// refused configuration. `sextant hook` always exits 0, and `sextant watch run` keeps running.
+// refused configuration. `sextant init` exits 1 when the configuration file already exists.
+// `sextant hook` always exits 0, and `sextant watch run` keeps running.
 
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CHECK_USAGE, runCheck } from './commands/check.js';
 import { HOOK_USAGE, runHookCommand } from './commands/hook.js';
+import { INIT_USAGE, runInit } from './commands/init.js';
 import { INSTALL_USAGE, runInstall } from './commands/install.js';
+import { MODELS_USAGE, runModels } from './commands/models.js';
 import { RESOLVE_USAGE, runResolve } from './commands/resolve.js';
 import { UsageError } from './commands/usage.js';
 import { runWatch, WATCH_USAGE } from './commands/watch.js';
@@ -18,6 +21,7 @@ import { packageVersion } from './version.js';
 const USAGE = `usage: sextant <command>
 
 Commands:
+  init                              create the configuration file from the preset
   install [--account <dir>|--managed]
                                     install the Claude Code hooks: by default for every Claude Code
                                     login of this account, or for one directory, or machine-wide
@@ -26,6 +30,7 @@ Commands:
   watch enable|disable              turn on or off the watcher that installs the hooks into each
                                     new Claude Code login as it appears; off unless turned on
   check                             check the configuration, the installs, the watcher and Claude Code
+  models [--json]                   list the declared models and their rules, with source and cost
   resolve <model> [scope] [place]   show the rules a model receives
   hook <event>                      the hook adapter that Claude Code runs; not run by hand
 
@@ -41,6 +46,8 @@ export interface Io {
 }
 
 const COMMAND_USAGE: Record<string, string> = {
+  init: INIT_USAGE,
+  models: MODELS_USAGE,
   resolve: RESOLVE_USAGE,
   install: INSTALL_USAGE,
   uninstall: INSTALL_USAGE,
@@ -69,6 +76,10 @@ export function main(argv: readonly string[], env: Env, io: Io): number {
       case 'help':
         io.out(USAGE);
         return 0;
+      case 'init':
+        return runInit(rest, env, io);
+      case 'models':
+        return runModels(rest, env, io.out);
       case 'resolve':
         io.out(JSON.stringify(runResolve(rest, env), null, 2));
         return 0;

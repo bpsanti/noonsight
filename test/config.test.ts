@@ -146,10 +146,12 @@ test('every combination of scope and place must fit the delivery limit, with roo
 test('a text exactly at the limit is accepted', () => {
   const dir = tempTree({ 'sextant.json': { version: 1, models: { 'claude-haiku-5-5': custom() } } });
   const envelopeSize = '<sextant-rules model="claude-haiku-5-5">\nWorking rules the user declared for claude-haiku-5-5 (delivered by sextant, rules r):\n\n</sextant-rules>'.length;
+  // No preset here, so no scope is declared and the envelope is the one without a scope.
+  const noPreset = { presetsDir: tempTree({}) };
   fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(9500 - envelopeSize));
-  loadConfig(path.join(dir, 'sextant.json'));
+  loadConfig(path.join(dir, 'sextant.json'), noPreset);
   fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(9501 - envelopeSize));
-  assert.throws(() => loadConfig(path.join(dir, 'sextant.json')), /come to 9501 characters/);
+  assert.throws(() => loadConfig(path.join(dir, 'sextant.json'), noPreset), /come to 9501 characters/);
 });
 
 test('every schema problem is reported together', () => {

@@ -123,10 +123,11 @@ function quote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-/** The claude options every session shares: the lab's hooks, none of the person's own settings files. */
+/** The claude options every session shares: the lab's hooks, none of the person's own settings files. Sonnet unless `extra` names a --model. */
 export function claudeArgs(l: Lab, extra: readonly string[] = []): string[] {
+  const model = extra.includes('--model') ? [] : ['--model', 'sonnet'];
   // A fixed permission mode: in auto mode a classifier reviews each agent call sextant leaves unchanged.
-  return ['--model', 'sonnet', '--permission-mode', 'default', '--setting-sources', 'project,local', '--settings', l.settings, '--allowedTools', 'Agent', ...extra];
+  return [...model, '--permission-mode', 'default', '--setting-sources', 'project,local', '--settings', l.settings, '--allowedTools', 'Agent', ...extra];
 }
 
 export interface PrintRun {
