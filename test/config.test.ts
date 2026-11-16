@@ -36,7 +36,7 @@ test('a missing file, unreadable JSON and a wrong version are refused', () => {
 });
 
 test('an unknown key is an error that names the key, at any depth', () => {
-  assertProblem(problemsOf({ version: 1, routing: { enabled: true } }), /^\/routing: unknown key$/);
+  assertProblem(problemsOf({ version: 1, routing: { enabled: true, classifier: {} } }), /^\/routing\/classifier: unknown key$/);
   assertProblem(problemsOf({ version: 1, models: { 'claude-sonnet-5-5': { use: 'none', pin: true } } }), /^\/models\/claude-sonnet-5-5\/pin: unknown key/);
   assertProblem(
     problemsOf({ version: 1, models: { 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'r', file: 'r.md', scope: ['x'] }] } } }, { 'r.md': 'x' }),

@@ -7,6 +7,11 @@
 // So when the hooks are installed too, SessionStart finds the same rules already in the system prompt
 // and does not deliver them a second time (launcherPrompt below).
 //
+// Without SEXTANT_SCOPE, the scope comes from the task text, --task or the prompt after -p, through
+// the scopes' matchers, and is passed on to the session as SEXTANT_SCOPE so its hooks decide alike.
+// With routing on for the launcher, the scope's row adds --model and --effort before anything else is
+// decided, so the rules are the routed model's.
+//
 // Claude Code keeps only the last --append-system-prompt-file it is given, while an
 // --append-system-prompt adds to it. So a file someone else passes is merged into the launcher's
 // file, ahead of the rules, and an --append-system-prompt is left as it is.
@@ -16,9 +21,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Env } from '../../config/paths.js';
 import { resolve } from '../../core/resolve.js';
-import { sessionPlace, sessionScope, SCOPE_ENV } from '../../core/scope.js';
+import { route, type RouteDecision } from '../../core/route.js';
+import { sessionPlace, sessionScope, SCOPE_ENV, taskScope, taskText, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
-import { launchFields, launchModelFrom, optionCandidates, type CommandLine } from './launch.js';
+import { launchFields, launchModelFrom, modelArgument, optionCandidates, type CommandLine } from './launch.js';
+import { launcherTranslation, routeFields } from './routing.js';
 import { choiceFields, decisionFields } from './subagents.js';
 
 /** Names, for the session and its hooks, the system prompt file the launcher passed. */
@@ -34,6 +41,8 @@ export interface LaunchRequest {
   readonly args: readonly string[];
   /** The --scope option, or null to keep the SEXTANT_SCOPE the launcher was started with. */
   readonly scope: string | null;
+  /** The --task option, or null to read the task from the prompt after -p. */
+  readonly task: string | null;
   readonly env: Env;
   readonly home: string;
   /** The directory Claude Code will start in. */
@@ -45,6 +54,8 @@ export interface LaunchRequest {
 export interface LaunchPlan {
   /** The arguments to start claude with. */
   readonly args: readonly string[];
+  /** What to start claude with if the system prompt file cannot be written: the route and the scope, no rules. */
+  readonly fallback: Pick<LaunchPlan, 'args' | 'env'>;
   /** Changes to the environment claude starts with: a value to set, or undefined to remove. */
   readonly env: Readonly<Record<string, string | undefined>>;
   /** The system prompt file to write before claude starts, when there are rules to add. */
@@ -62,17 +73,35 @@ export function passThrough(args: readonly string[], scope: string | null): Pick
 
 /** Decide what the launcher adds to a claude command line. Reads only local files; writes nothing. */
 export function planLaunch(config: Config, configFile: string, req: LaunchRequest): LaunchPlan {
-  const base = passThrough(req.args, req.scope);
+  const given: CommandLine = { args: req.args, exact: true };
+  const scope = launchScope(config, applyEnv(req.env, passThrough(req.args, req.scope).env), req.task, given);
+  const routed = route(config, {
+    target: 'launcher',
+    scope: scope.scope,
+    env: req.env,
+    held: modelArgument(given, req.env) !== null ? { reason: 'explicit-model', explicit: true } : null,
+    explicitEffort: optionCandidates(given, EFFORT_OPTION).length > 0,
+    translate: launcherTranslation(req.env),
+  });
+  const args = routedArgs(req.args, routed);
+  // A scope from the task text is passed on, so the session's hooks decide with the same scope.
+  const base = passThrough(args, scope.source === 'task-text' ? scope.scope : req.scope);
   const env = applyEnv(req.env, base.env);
-  const scope = sessionScope(env);
   const place = sessionPlace(config, env);
-  const cmd: CommandLine = { args: req.args, exact: true };
+  const cmd: CommandLine = { args, exact: true };
   const launch = launchModelFrom(cmd, { env, home: req.home, cwd: req.cwd });
   const decision = resolve(config, { model: launch.kind === 'found' ? launch.model : null, scope: scope.scope, place: place.place });
-  const fields = { ...decisionFields(decision), ...choiceFields(scope, place), model_source: launch.kind === 'found' ? launch.source : null, ...launchFields(launch) };
+  const fields = {
+    ...decisionFields(decision),
+    ...choiceFields(scope, place),
+    model_source: launch.kind === 'found' ? launch.source : null,
+    ...launchFields(launch),
+    ...routeFields(routed, env),
+  };
   const messages = undeclaredMessages(decision, configFile);
   const nothing = (extra: Record<string, unknown> = {}, more: readonly string[] = []): LaunchPlan => ({
     ...base,
+    fallback: base,
     file: null,
     record: { ...fields, ...extra, delivered: 'nothing', warned: messages.length + more.length > 0 },
     messages: [...messages, ...more],
@@ -95,12 +124,58 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
   const content = `${prefix ? `${prefix}\n\n` : ''}${decision.text}\n`;
   const file = path.join(req.state, LAUNCH_DIR, `${createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 16)}.md`);
   return {
-    args: [APPEND_FILE_OPTION, file, ...withoutOption(req.args, APPEND_FILE_OPTION)],
+    args: [APPEND_FILE_OPTION, file, ...withoutOption(args, APPEND_FILE_OPTION)],
     env: { ...base.env, [LAUNCH_FILE_ENV]: file },
+    fallback: base,
     file: { path: file, content },
     record: { ...fields, delivered: 'system-prompt', launch_file: file, ...(theirs !== undefined ? { merged_file: theirs } : {}), warned: messages.length > 0 },
     messages,
   };
+}
+
+const MODEL_OPTION = '--model';
+const EFFORT_OPTION = '--effort';
+
+/**
+ * The session's scope: SEXTANT_SCOPE (from --scope or the environment), else the scope whose matcher
+ * matches earliest in the task text, --task or the prompt after -p.
+ */
+function launchScope(config: Config, env: Env, task: string | null, cmd: CommandLine): ScopeChoice {
+  const explicit = sessionScope(env);
+  if (explicit.scope !== null) return explicit;
+  const text = task ?? printPrompt(cmd.args);
+  return text !== null ? taskScope(config, taskText(null, text).text) : explicit;
+}
+
+/**
+ * The prompt of `claude -p "<prompt>"`: the argument right after -p or --print, when it is not an
+ * option. A prompt written elsewhere on the command line, or given on standard input, is not read.
+ */
+export function printPrompt(args: readonly string[]): string | null {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? '';
+    if (a === '--') return null;
+    if (a === '-p' || a === '--print') {
+      const next = args[i + 1];
+      return next !== undefined && !next.startsWith('-') && next.trim() !== '' ? next : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * The claude arguments with a route applied: --model and --effort first, replacing any the command line
+ * gave, which happens only when routing.respect_explicit is false or the effort is not kept.
+ */
+function routedArgs(args: readonly string[], routed: RouteDecision): string[] {
+  if (routed.routing !== 'routed') return [...args];
+  let rest = withoutOption(args, MODEL_OPTION);
+  const added = [MODEL_OPTION, routed.value];
+  if (routed.effort !== undefined) {
+    rest = withoutOption(rest, EFFORT_OPTION);
+    added.push(EFFORT_OPTION, routed.effort);
+  }
+  return [...added, ...rest];
 }
 
 /** The arguments with every value of an option taken out, up to a "--" that ends the options. */

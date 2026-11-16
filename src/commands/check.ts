@@ -16,7 +16,8 @@ import { findSextantHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from 
 import { ConfigError, loadConfig } from '../config/load.js';
 import { scopeOverlaps } from '../core/overlap.js';
 import { SCOPE_ENV, sessionPlace, sessionScope } from '../core/scope.js';
-import type { Config } from '../core/types.js';
+import { ROUTING_ENV, routingEnvOff } from '../core/route.js';
+import { ROUTE_TARGETS, type Config, type RouteOption, type RouteRow } from '../core/types.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
@@ -56,6 +57,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
         ')',
     );
     checkScopes(config, env, add);
+    checkRouting(config, env, add);
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;
     add('problem', `config ${e.message.replace(/^configuration refused \(([^)]*)\):/, '$1: refused, so sessions get no rules:')}`);
@@ -156,6 +158,35 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
         `, place "${place.place}"` +
         (place.because !== undefined ? ` (${place.because} is set)` : ''),
     );
+}
+
+/** Whether routing is on, where it acts, its table, and whether sessions started from this environment are routed. */
+function checkRouting(config: Config, env: Env, add: (level: Level, text: string) => void): void {
+  const r = config.routing;
+  if (!r.enabled) {
+    add('ok', 'routing: off, so sextant never changes a model or an effort');
+    return;
+  }
+  const rows = [...r.table.entries()].map(([scope, row]) => `${scope} ${describeRow(row)}`);
+  add(
+    'ok',
+    `routing: on for ${r.targets.join(' and ')}` +
+      (r.respectExplicit ? ', a model the caller chose wins' : ', the table wins over a model the caller chose') +
+      (r.yieldWhenEnv.length ? `, yields when ${r.yieldWhenEnv.join(' or ')} is set` : '') +
+      `; table: ${rows.length ? rows.join('; ') : 'empty'}; default: ${r.default === null ? 'inherit' : describeRow(r.default)}`,
+  );
+  if (routingEnvOff(env)) add('ok', `${ROUTING_ENV} turns routing off for sessions started from this environment`);
+  else {
+    const yieldEnv = r.yieldWhenEnv.find((name) => (env[name] ?? '') !== '');
+    if (yieldEnv !== undefined) add('ok', `routing yields for sessions started from this environment (${yieldEnv} is set)`);
+  }
+}
+
+function describeRow(row: RouteRow): string {
+  const list = (options: readonly RouteOption[] | undefined): string =>
+    options === undefined ? 'default' : options.length === 0 ? 'none' : options.map((o) => (o.effort ? `${o.model} ${o.effort}` : o.model)).join(', ');
+  const [launcher, subagents] = ROUTE_TARGETS.map((t) => list(row[t]));
+  return launcher === subagents ? `[${launcher}]` : `[launcher: ${launcher}; subagents: ${subagents}]`;
 }
 
 function plural(n: number, word: string): string {

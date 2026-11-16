@@ -10,15 +10,30 @@ import { normalizeModel } from '../core/normalize.js';
 import { envelope, joinRules, selectRules } from '../core/resolve.js';
 import {
   ANY_SCOPE,
+  DEFAULT_ROUTING_SETTINGS,
   DEFAULT_SESSION_SETTINGS,
   DEFAULT_SUBAGENT_SETTINGS,
   DELIVERY_TEXT_LIMIT,
   MATCHER_FLAGS,
   PLACES,
+  ROUTE_ALIASES,
+  ROUTE_TARGETS,
   RULES_TEXT_LIMIT,
   SWITCH_NOTE_RESERVE,
 } from '../core/types.js';
-import type { Config, ModelEntry, Place, Rule, Scope, ScopeMatcher, WildcardKey } from '../core/types.js';
+import type {
+  Config,
+  Effort,
+  ModelEntry,
+  Place,
+  RouteRow,
+  RouteTarget,
+  RoutingSettings,
+  Rule,
+  Scope,
+  ScopeMatcher,
+  WildcardKey,
+} from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
 import { presetsDir as defaultPresetsDir, SCHEMA_DIR, type Env } from './paths.js';
 
@@ -56,6 +71,12 @@ interface RawScope {
   /** Preset scopes only. */
   source?: Source;
 }
+interface RawRouteOption {
+  model: string;
+  effort?: Effort;
+}
+/** A list for every target, or a list per target. */
+type RawRouteRow = RawRouteOption[] | Partial<Record<RouteTarget, RawRouteOption[]>>;
 interface RawConfig {
   version: 1;
   preset?: string;
@@ -64,6 +85,14 @@ interface RawConfig {
   scopes?: Record<string, RawScope>;
   session?: { unattended_when_env?: string[] };
   subagents?: { delivery?: 'prompt' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
+  routing?: {
+    enabled?: boolean;
+    targets?: RouteTarget[];
+    respect_explicit?: boolean;
+    yield_when_env?: string[];
+    table?: Record<string, RawRouteRow>;
+    default?: 'inherit' | RawRouteRow;
+  };
 }
 interface RawPresetRule {
   id: string;
@@ -80,6 +109,7 @@ interface RawPreset {
   version: string;
   claude_code?: { version: string; checked: string };
   scopes?: Record<string, RawScope>;
+  routing?: { table: Record<string, { route: RawRouteRow; basis: string; sources: Source[] }> };
   models: Record<string, { rules: RawPresetRule[] }>;
 }
 
@@ -103,6 +133,13 @@ export interface PresetRule extends Rule {
   readonly cost: string;
 }
 
+/** A row of a preset's routing table, with what it rests on. */
+export interface PresetRoute {
+  readonly row: RouteRow;
+  readonly basis: string;
+  readonly sources: readonly Source[];
+}
+
 /** A preset as the package ships it, checked. */
 export interface Preset {
   readonly name: string;
@@ -112,6 +149,8 @@ export interface Preset {
   /** The preset's scopes, in its order. */
   readonly scopes: ReadonlyMap<string, Scope>;
   readonly scopeSources: ReadonlyMap<string, Source>;
+  /** The preset's routing table, by scope, in its order. */
+  readonly routing: ReadonlyMap<string, PresetRoute>;
   readonly models: ReadonlyMap<string, readonly PresetRule[]>;
 }
 
@@ -238,6 +277,8 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     onMismatch: sub.on_mismatch ?? DEFAULT_SUBAGENT_SETTINGS.onMismatch,
   };
   const session = { unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv };
+  const routing = loadRouting(cfg.routing ?? {}, preset, scopes, exact, report);
+  if (problems.length) refuse();
   const declared = new Map<string, DeclaredModel>(
     Object.entries(models).map(([key, entry]) => [
       key,
@@ -248,7 +289,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       },
     ]),
   );
-  return { config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents }, preset, declared };
+  return { config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents, routing }, preset, declared };
 }
 
 function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {
@@ -273,6 +314,12 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
   if (p.id !== name) report('/id', `is "${p.id}", but the preset is installed as "${name}"`);
   const scopes = new Map(Object.entries(p.scopes ?? {}).map(([name, raw]) => [name, toScope(name, raw, `/scopes/${name}`, report)]));
   const scopeSources = new Map(Object.entries(p.scopes ?? {}).flatMap(([name, raw]) => (raw.source ? [[name, raw.source] as const] : [])));
+  const routing = new Map<string, PresetRoute>();
+  for (const [scope, entry] of Object.entries(p.routing?.table ?? {})) {
+    const at = `/routing/table/${scope}`;
+    if (!scopes.has(scope)) report(at, `scope "${scope}" is not one of the preset's scopes`);
+    routing.set(scope, { row: toRow(entry.route, `${at}/route`, report), basis: entry.basis, sources: entry.sources });
+  }
   const models = new Map<string, PresetRule[]>();
   for (const [key, entry] of Object.entries(p.models)) {
     const at = `/models/${key}`;
@@ -307,7 +354,7 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
     problems.push(...own.map((p) => `preset ${file}: ${p}`));
     return null;
   }
-  return { name, version: p.version, claudeCode: p.claude_code ?? null, scopes, scopeSources, models };
+  return { name, version: p.version, claudeCode: p.claude_code ?? null, scopes, scopeSources, routing, models };
 }
 
 /**
@@ -387,6 +434,68 @@ function describeRisk(risk: BacktrackingRisk): string {
     case 'adjacent':
       return `has the unbounded quantifiers ${a} and ${b} in a row, able to match the same characters with nothing required between them, a shape whose matching time can grow much faster than the task text`;
   }
+}
+
+/**
+ * The routing settings: the user's keys over the defaults, and the preset's table with each row the
+ * user writes for the same scope replacing the preset's. Every scope in the table must be declared,
+ * and every model an option names must be an alias or a model declared under an exact key.
+ */
+function loadRouting(
+  raw: NonNullable<RawConfig['routing']>,
+  preset: Preset | null,
+  scopes: ReadonlyMap<string, Scope>,
+  exact: ReadonlyMap<string, ModelEntry>,
+  report: (at: string, message: string) => void,
+): RoutingSettings {
+  const table = new Map<string, RouteRow>();
+  for (const [scope, entry] of preset?.routing ?? []) table.set(scope, entry.row);
+  for (const [scope, rawRow] of Object.entries(raw.table ?? {})) {
+    const at = `/routing/table/${scope}`;
+    if (!scopes.has(scope)) report(at, `scope "${scope}" is not declared`);
+    checkRouteModels(rawRow, at, exact, report);
+    table.set(scope, toRow(rawRow, at, report));
+  }
+  let fallback: RouteRow | null = null;
+  if (raw.default !== undefined && raw.default !== 'inherit') {
+    checkRouteModels(raw.default, '/routing/default', exact, report);
+    fallback = toRow(raw.default, '/routing/default', report);
+  }
+  return {
+    enabled: raw.enabled ?? DEFAULT_ROUTING_SETTINGS.enabled,
+    targets: raw.targets ?? DEFAULT_ROUTING_SETTINGS.targets,
+    respectExplicit: raw.respect_explicit ?? DEFAULT_ROUTING_SETTINGS.respectExplicit,
+    yieldWhenEnv: raw.yield_when_env ?? DEFAULT_ROUTING_SETTINGS.yieldWhenEnv,
+    table,
+    default: fallback,
+  };
+}
+
+/** A row as the core reads it: a list written for every target becomes the same list for each. */
+function toRow(raw: RawRouteRow, at: string, report: (at: string, message: string) => void): RouteRow {
+  if (Array.isArray(raw)) return Object.fromEntries(ROUTE_TARGETS.map((t) => [t, raw])) as RouteRow;
+  if (Object.keys(raw).length === 0)
+    report(at, `list the options for ${ROUTE_TARGETS.join(', ')} or both, or write the options as one list for every target`);
+  return raw;
+}
+
+function checkRouteModels(
+  raw: RawRouteRow,
+  at: string,
+  exact: ReadonlyMap<string, ModelEntry>,
+  report: (at: string, message: string) => void,
+): void {
+  const lists: [string, RawRouteOption[]][] = Array.isArray(raw)
+    ? [[at, raw]]
+    : ROUTE_TARGETS.flatMap((t) => (raw[t] !== undefined ? [[`${at}/${t}`, raw[t]] as [string, RawRouteOption[]]] : []));
+  for (const [listAt, options] of lists)
+    options.forEach((option, i) => {
+      if ((ROUTE_ALIASES as readonly string[]).includes(option.model) || exact.has(option.model)) return;
+      report(
+        `${listAt}/${i}/model`,
+        `"${option.model}" is neither a model alias (${ROUTE_ALIASES.join(', ')}) nor a model declared under "models" with its exact identifier`,
+      );
+    });
 }
 
 function checkScopes(

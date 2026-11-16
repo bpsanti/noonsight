@@ -21,6 +21,8 @@ export interface AgentCall {
   readonly status: 'matched' | 'none' | 'undeclared';
   readonly sha256: string | null;
   readonly delivered: 'rules' | 'already-delivered' | 'nothing';
+  /** What routing decided for the call; absent in a record an earlier version wrote. */
+  readonly routing?: string;
   readonly at: string;
 }
 
@@ -48,7 +50,8 @@ export function readAgentCall(file: string | null): AgentCall | null {
     (v.predicted === null || typeof v.predicted === 'string') &&
     (v.status === 'matched' || v.status === 'none' || v.status === 'undeclared') &&
     (v.sha256 === null || typeof v.sha256 === 'string') &&
-    (v.delivered === 'rules' || v.delivered === 'already-delivered' || v.delivered === 'nothing')
+    (v.delivered === 'rules' || v.delivered === 'already-delivered' || v.delivered === 'nothing') &&
+    (v.routing === undefined || typeof v.routing === 'string')
   )
     return v as unknown as AgentCall;
   return null;

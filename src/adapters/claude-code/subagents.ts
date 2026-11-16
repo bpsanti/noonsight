@@ -12,6 +12,7 @@
 
 import { normalizeModel } from '../../core/normalize.js';
 import { resolve } from '../../core/resolve.js';
+import { route, routingGate } from '../../core/route.js';
 import { taskScope, taskText, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import {
@@ -27,7 +28,8 @@ import { readState, sessionFile } from '../../state/sessions.js';
 import type { Env } from '../../config/paths.js';
 import { launchModel } from './launch.js';
 import { defaultAccountDir } from './locations.js';
-import { definitionFinder, predict, subagentTranscript, transcriptModel, type Prediction } from './predict.js';
+import { definitionFinder, predict, subagentTranscript, transcriptModel, type Definition, type Prediction } from './predict.js';
+import { notRouted, routeFields, subagentHeld, subagentTranslation } from './routing.js';
 
 export interface SubagentContext {
   readonly env: Env;
@@ -52,49 +54,74 @@ interface Parent {
   readonly source: string | null;
 }
 
-const PERMISSION_REASON = 'sextant added the working rules for the subagent\'s model to the end of its task text';
-
 export function agentCall(input: Record<string, unknown>, config: Config, ctx: SubagentContext): SubagentOutcome {
   const toolInput = input.tool_input;
   const callFile = agentCallFile(ctx.state, str(input.tool_use_id));
   if (typeof toolInput !== 'object' || toolInput === null || Array.isArray(toolInput))
-    return { record: { status: 'error', error: 'the call has no tool_input', delivered: 'nothing', warned: false }, messages: [], specific: null };
+    return {
+      record: { status: 'error', error: 'the call has no tool_input', ...notRouted('error'), delivered: 'nothing', warned: false },
+      messages: [],
+      specific: null,
+    };
   const ti = toolInput as Record<string, unknown>;
   const subagentType = str(ti.subagent_type) ?? 'general-purpose';
   const requested = str(ti.model);
-  const base = { subagent_type: subagentType, requested_model: requested };
+  const base = { subagent_type: subagentType, requested_model: requested, ...(str(ti.effort) !== null ? { requested_effort: str(ti.effort) } : {}) };
 
-  if (config.subagents.delivery === 'off') return { record: { ...base, delivered: 'off', warned: false }, messages: [], specific: null };
+  // With nothing to deliver and nothing to route, the call is left alone without reading anything.
+  const gate = routingGate(config, 'subagents', ctx.env);
+  if (config.subagents.delivery === 'off' && gate !== null)
+    return { record: { ...base, ...routeFields(gate, ctx.env), delivered: 'off', warned: false }, messages: [], specific: null };
 
   const parent = parentModel(input, ctx);
   const projectDir = ctx.env.CLAUDE_PROJECT_DIR || str(input.cwd);
-  const prediction = predict({
-    subagentType,
-    requested,
-    parent: parent.model,
-    env: ctx.env,
-    findDefinition: definitionFinder({ projectDir, configDir: defaultAccountDir(ctx.env, ctx.home) }),
-  });
+  const findDefinition = once(definitionFinder({ projectDir, configDir: defaultAccountDir(ctx.env, ctx.home) }));
+  const predictWith = (model: string | null): Prediction =>
+    predict({ subagentType, requested: model, parent: parent.model, env: ctx.env, findDefinition });
   const prompt = typeof ti.prompt === 'string' ? ti.prompt : null;
   // The subagent's own task decides its scope; the session's scope does not carry over.
   const task = taskText(str(ti.description), prompt);
   const scope = taskScope(config, task.text);
+
+  // The route is decided from the model the call would get as it stands, and the rules for the model it
+  // gets once routed.
+  const asCalled = predictWith(requested);
+  const definitionEffort = subagentType.includes(':') ? null : (findDefinition(subagentType)?.effort ?? null);
+  const routed = route(config, {
+    target: 'subagents',
+    scope: scope.scope,
+    env: ctx.env,
+    held: subagentHeld(asCalled),
+    explicitEffort: str(ti.effort) !== null || definitionEffort !== null,
+    translate: subagentTranslation((alias) => predictWith(alias).model),
+  });
+  const changes: Record<string, unknown> =
+    routed.routing === 'routed' ? { model: routed.value, ...(routed.effort !== undefined ? { effort: routed.effort } : {}) } : {};
+  const routing = routeFields(routed, ctx.env);
+
+  if (config.subagents.delivery === 'off') {
+    const specific = Object.keys(changes).length > 0 ? changed(config, { ...ti, ...changes }, changes, false) : null;
+    return {
+      record: { ...base, ...choiceFields(scope), ...routing, delivered: 'off', ...(specific !== null ? { permission: config.subagents.permission } : {}), warned: false },
+      messages: [],
+      specific,
+    };
+  }
+
+  const prediction = routed.routing === 'routed' ? predictWith(routed.value) : asCalled;
   const decision = resolve(config, { model: prediction.model, scope: scope.scope, place: 'subagent' });
 
   let delivered: AgentCall['delivered'] = 'nothing';
-  let specific: Record<string, unknown> | null = null;
+  let newPrompt = prompt;
   if (decision.status === 'matched' && prompt !== null) {
     if (prompt.includes(decision.text)) delivered = 'already-delivered';
     else {
       delivered = 'rules';
-      const permission = config.subagents.permission;
-      specific = {
-        hookEventName: 'PreToolUse',
-        ...(permission !== 'passthrough' ? { permissionDecision: permission, permissionDecisionReason: PERMISSION_REASON } : {}),
-        updatedInput: { ...ti, prompt: `${prompt}\n\n${decision.text}` },
-      };
+      newPrompt = `${prompt}\n\n${decision.text}`;
     }
   }
+  const rewritten = delivered === 'rules' || Object.keys(changes).length > 0;
+  const specific = rewritten ? changed(config, { ...ti, ...changes, ...(newPrompt !== null ? { prompt: newPrompt } : {}) }, changes, delivered === 'rules') : null;
 
   const messages = undeclaredMessages(decision, prediction, subagentType, ctx.file);
   const call: AgentCall = {
@@ -104,6 +131,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
     status: decision.status,
     sha256: decision.status === 'matched' ? decision.sha256 : null,
     delivered,
+    routing: routed.routing,
     at: ctx.now.toISOString(),
   };
   try {
@@ -123,13 +151,29 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       ...(prediction.value !== undefined ? { model_value: prediction.value } : {}),
       ...(prediction.definition !== undefined ? { definition: prediction.definition } : {}),
       ...(prediction.why !== undefined ? { unresolved_why: prediction.why } : {}),
+      ...routing,
       ...(prompt === null && decision.status === 'matched' ? { error: 'the call has no prompt' } : {}),
       delivered,
-      ...(delivered === 'rules' ? { permission: config.subagents.permission } : {}),
+      ...(rewritten ? { permission: config.subagents.permission } : {}),
       warned: messages.length > 0,
     },
     messages,
     specific,
+  };
+}
+
+/** The hookSpecificOutput for a call sextant changed, with the permission decision the configuration asks for. */
+function changed(config: Config, updatedInput: Record<string, unknown>, routed: Record<string, unknown>, rules: boolean): Record<string, unknown> {
+  const permission = config.subagents.permission;
+  const set = Object.entries(routed).map(([k, v]) => `${k} ${String(v)}`);
+  const what = [
+    ...(set.length > 0 ? [`set the subagent's ${set.join(' and ')} from its task scope`] : []),
+    ...(rules ? ["added the working rules for the subagent's model to the end of its task text"] : []),
+  ];
+  return {
+    hookEventName: 'PreToolUse',
+    ...(permission !== 'passthrough' ? { permissionDecision: permission, permissionDecisionReason: `sextant ${what.join(', and ')}` } : {}),
+    updatedInput,
   };
 }
 
@@ -165,6 +209,7 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
       ...(usedModels !== null ? { models_used: usedModels } : {}),
       result,
       delivered: call.delivered,
+      ...(call.routing !== undefined ? { routing: call.routing } : {}),
       warned: warn,
     },
     messages: warn
@@ -236,6 +281,15 @@ export function choiceFields(scope: ScopeChoice, place?: PlaceChoice): Record<st
     scope_source: scope.source,
     ...(scope.matcher !== undefined ? { scope_matcher: scope.matcher } : {}),
     ...(place?.because !== undefined ? { unattended_env: place.because } : {}),
+  };
+}
+
+/** A definition lookup that reads the definition directories once per name. */
+function once(find: (name: string) => Definition | null): (name: string) => Definition | null {
+  const seen = new Map<string, Definition | null>();
+  return (name) => {
+    if (!seen.has(name)) seen.set(name, find(name));
+    return seen.get(name) ?? null;
   };
 }
 

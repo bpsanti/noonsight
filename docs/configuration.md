@@ -30,6 +30,8 @@ No rule is delivered in a place where Claude Code already sends the same advice;
 
 The preset's scopes declare no matchers, so a session takes one of them only from `SEXTANT_SCOPE`, and a subagent only once the user's file gives that scope a `match`.
 
+The preset also suggests a routing table, which applies only when the user turns routing on ([Routing](#routing)).
+
 ## Example
 
 ```json
@@ -75,6 +77,12 @@ The preset's scopes declare no matchers, so a session takes one of them only fro
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text sextant changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
+| `routing.enabled` | `true`, `false` | `false` | Turns routing on. With `false`, sextant only delivers rules and never changes a model or an effort. See [Routing](#routing). |
+| `routing.targets` | `launcher`, `subagents` | Both | Where routing acts: `sextant run`, the agent call hook, or both. |
+| `routing.respect_explicit` | `true`, `false` | `true` | With `true`, a model the caller already chose wins over the table, and an effort the caller set is kept. |
+| `routing.yield_when_env` | Environment variable names | Empty | When any of these is set and not empty, routing yields; the rules are still delivered. |
+| `routing.table` | Scope name to a row | The preset's | Options in order of preference for each scope. A row replaces the preset's row for the same scope. |
+| `routing.default` | `inherit`, or a row | `inherit` | The row for a task with no scope, or whose scope has no row for the target. `inherit` changes nothing. |
 
 A user rule has these keys:
 
@@ -149,6 +157,103 @@ Characters are compared over a fixed set of sample characters (printable ASCII, 
 The check recognizes these shapes only: a matcher that passes it is not proven fast, and other slow shapes, such as alternatives that match the same text inside a repeat (`(a|a)*`), are not detected.
 Matchers that start with a word and a word boundary, such as `\bdeploy\b`, `review|revis` or `^fix\b`, pass it.
 
+## Routing
+
+Routing chooses the model and the effort for a task from its scope.
+It is off unless `routing.enabled` is `true`, and the scope and the rules never depend on it: they are decided the same way whether a route applies or not, and the rules always follow the model the task runs on.
+
+```json
+{
+  "routing": {
+    "enabled": true,
+    "targets": ["launcher", "subagents"],
+    "respect_explicit": true,
+    "yield_when_env": ["MY_ORCHESTRATOR_TASK"],
+    "table": {
+      "investigate": [
+        { "model": "fable", "effort": "high" },
+        { "model": "opus", "effort": "high" }
+      ],
+      "digest": {
+        "launcher": [{ "model": "sonnet", "effort": "medium" }],
+        "subagents": [{ "model": "haiku", "effort": "medium" }]
+      }
+    },
+    "default": "inherit"
+  }
+}
+```
+
+### Where it acts
+
+| Target | What it changes |
+| --- | --- |
+| `launcher` | `sextant run` adds `--model` and `--effort` to the claude command line, ahead of the other arguments ([launcher.md](launcher.md#routing)) |
+| `subagents` | The agent call hook sets the call's `model` and `effort` parameters before the subagent starts ([hooks.md](hooks.md#routing)) |
+
+No hook changes the model of a session that is already running.
+A session started without `sextant run` keeps the model it was started with, and `/model` works as always.
+
+### From the scope to the model
+
+1. The task's scope is decided as without routing: `SEXTANT_SCOPE` for a session, which `sextant run` can also take from the task text ([launcher.md](launcher.md#routing)); the matchers over its own task for a subagent.
+2. The scope's row for the target lists options in order of preference.
+   Without a scope, without a row for the scope, or with a row that leaves the target out, `routing.default` applies; `inherit`, the default, changes nothing.
+   A row with an empty list for the target means that target is not routed for that scope.
+3. The first option whose model is declared under `models` wins: an exact key, or a wildcard key.
+   So a configuration that does not declare `claude-fable-5-2` is never sent to Fable by a row that lists it first; the next option applies.
+   When no option's model is declared, nothing changes.
+4. The option's `effort`, when it gives one, is set with the model; left out, the effort is not changed.
+
+A row is a list of options, the same for both targets, or an object with a list for `launcher`, for `subagents`, or for both.
+An option is `{ "model": <model>, "effort": <effort> }`, where the model is an alias (`fable`, `opus`, `sonnet`, `haiku`) or a model identifier declared with its exact key under `models`, and the effort is `low`, `medium`, `high`, `xhigh` or `max`.
+The agent tool's `model` parameter takes an alias only ([Choose a model](https://code.claude.com/docs/en/sub-agents#choose-a-model)), so for a subagent an identifier is written as the alias that selects it, and an option whose identifier no alias selects is passed over.
+An alias selects for a subagent what it selects in Claude Code: the parent's own model when the parent is of that family, else the model it names.
+If the effort is one the model does not support, Claude Code falls back to the highest level it supports below it ([Adjust effort level](https://code.claude.com/docs/en/model-config)).
+
+### When routing yields
+
+Routing leaves a task as it is, and says why in the decision log, in each of these cases:
+
+| Case | `routing` | `routing_reason` |
+| --- | --- | --- |
+| `routing.enabled` is `false` | `off` | `disabled` |
+| The target is not in `routing.targets` | `yielded` | `target-off` |
+| `SEXTANT_ROUTING=off` in the environment Claude Code or `sextant run` starts with (also `0`, `false`, `no`) | `yielded` | `routing-env` |
+| A variable of `routing.yield_when_env` is set and not empty | `yielded` | `yield-env`, with the variable in `routing_env` |
+| The call names its model, under `respect_explicit`: `--model` on the claude command line, or the `model` parameter of an agent call | `yielded` | `explicit-model` |
+| The subagent's definition sets `model`, under `respect_explicit` | `yielded` | `definition-model` |
+| A built-in subagent with its own model rule (Explore, Plan, `statusline-setup`, `claude-code-guide`), under `respect_explicit` | `yielded` | `built-in-model` |
+| A plugin's subagent, whose definition sextant does not read, under `respect_explicit` | `yielded` | `plugin-definition` |
+| A fork, which always runs on its parent's model | `yielded` | `fork` |
+| `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, under which Claude Code ignores the call's model | `yielded` | `model-forced` |
+| No scope, or no row and `default` is `inherit` | `inherit` | `no-scope`, `no-row` |
+| The row lists no option for the target | `inherit` | `empty-row` |
+| No option's model is declared | `inherit` | `no-declared-option` |
+
+An effort the caller set (`--effort`, the call's `effort`, or a definition's `effort`) is kept under `respect_explicit`; only the model is routed, and the log records `route_effort_kept`.
+With `respect_explicit` set to `false`, the table replaces the caller's model and effort, but never a fork's model or a forced one.
+When `CLAUDE_CODE_EFFORT_LEVEL` is set, Claude Code uses it over any effort sextant sets, and the log records `route_effort_overridden_by`.
+
+### With an orchestrator
+
+An orchestrator that starts `claude --model <model> --effort <effort>` itself never goes through `sextant run`, and its subagents' calls name their model, so routing does not contradict it.
+For an orchestrator whose sessions still start subagents without a model, put one of its own environment variables in `yield_when_env`, or have it set `SEXTANT_ROUTING=off`: its sessions and their subagents are then never routed, and they still receive the rules.
+
+### The preset's table
+
+The `claude` preset suggests this table; [presets/claude/SOURCES.md](../presets/claude/SOURCES.md#routing-table) gives the sources of each row.
+
+| Scope | Launcher | Subagents |
+| --- | --- | --- |
+| `investigate` | Fable, `high`; else Opus, `high` | Fable, `high`; else Opus, `high` |
+| `build` | Opus, `high` | Opus, `high` |
+| `review` | Opus, `high` | Opus, `high` |
+| `routine` | Sonnet, `medium` | Sonnet, `medium` |
+| `digest` | Sonnet, `medium` | Haiku, `medium` |
+
+A user row replaces the preset's row for the same scope; to stop routing a scope, give it an empty list.
+
 ## How a rule is chosen
 
 1. The model picks the entry.
@@ -178,11 +283,14 @@ Beyond the schema, sextant checks that:
 - every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
+- every scope in `routing.table` is declared, and every model a routing option names is an alias or a model declared with its exact key;
+- a routing row written as an object lists at least one target;
 - the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
 
 The preset is checked the same way, and more strictly:
 
 - every preset rule names its source (the page, the section and the date it was read), the effect the source reports and its cost, and every preset scope names its source;
+- every row of the preset's routing table names a scope of the preset, models by alias only, and what it rests on with its sources;
 - every preset rule fits the limit on its own, and a model's preset rules fit it together with every rule on, for every combination of scope and place, since the user decides which of them are on.
 
 The installed preset is read whenever it is there, even when no model uses it, because its scopes are always declared; a preset that fails these checks refuses every configuration until it is fixed.

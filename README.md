@@ -7,6 +7,7 @@ Each Claude Code session already receives the rules declared for the model it ru
 So does each subagent a session starts: before it starts, sextant predicts the model it will run on and adds that model's rules to the end of its task, then checks the model it actually started on and warns on a difference.
 Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `SEXTANT_SCOPE`, a subagent from matchers run over its task, and `sextant check` reports scopes that overlap.
 `sextant run` starts Claude Code with the rules in the system prompt instead, for sessions the hooks do not reach; with the hooks installed too, the rules still arrive once.
+Routing is optional and off by default: once turned on, a task's scope picks the model and effort for a session `sextant run` starts and for each subagent, from a table of preferences, and it yields to a model the caller chose and to an orchestrator's environment ([docs/configuration.md](docs/configuration.md#routing)).
 The package ships a starting preset, `claude`: 16 rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each adapted from Anthropic's prompting guide for that exact model and listed with its source, the effect the guide reports and its cost ([presets/claude/SOURCES.md](presets/claude/SOURCES.md)).
 Eight of them are on by default; the rest have a high cost, a side effect or a narrow use, and the user turns them on.
 None is delivered where Claude Code already sends the same advice.
@@ -40,7 +41,7 @@ User settings reach every login, including one whose organization delivers serve
 [docs/install.md](docs/install.md) covers the three installs, what they write, why the default is the default, and how to remove them.
 [docs/hooks.md](docs/hooks.md) describes what the hooks deliver, the decision log, and how to turn sextant off for a session (`SEXTANT_DISABLE=1`).
 
-`sextant run [--scope <scope>] -- <claude arguments>` starts `claude` with the rules for its model added through `--append-system-prompt-file`, keeping any `--append-system-prompt` someone else passes; [docs/launcher.md](docs/launcher.md) explains it.
+`sextant run [--scope <scope>] -- <claude arguments>` starts `claude` with the rules for its model added through `--append-system-prompt-file`, keeping any `--append-system-prompt` someone else passes, and with routing on, the model and effort the scope's row gives; [docs/launcher.md](docs/launcher.md) explains it.
 
 The hooks read only local files: nothing leaves the machine.
 

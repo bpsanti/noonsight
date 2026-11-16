@@ -137,11 +137,12 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    For a call made inside a subagent, it comes from sextant's record of that subagent, written when the result of the call that started it named its model, which happens at once for a subagent started in the background (`agent-record`); else from the model of that subagent's own transcript (`agent-transcript`).
    When neither knows, sextant does not guess the session's model: the subagent gets no rules, and the person is warned.
 3. The subagent's task scope comes from its own call, never from the session: the scope whose matcher matches earliest in its `description` and `prompt` ([Scopes](configuration.md#scopes)).
-   The rules are resolved for that scope and the place `subagent`.
-4. With rules to deliver, the hook returns the call unchanged except for its `prompt`, which gains a blank line and the rules in the same envelope as the session's.
-   sextant never changes the model, the effort or any other field.
+4. With routing on for subagents, the scope may set the call's `model` and `effort` ([Routing](#routing)); the prediction is then made again with the routed model.
+   The rules are resolved for the scope, the place `subagent` and the model the subagent will run on.
+5. With rules to deliver, the hook returns the call with its `prompt` extended by a blank line and the rules, in the same envelope as the session's.
+   With routing off, that is the only change: sextant never changes the model, the effort or any other field.
    A task text that already holds the exact rules is left alone.
-5. With the changed call, it returns the permission decision `subagents.permission` names:
+6. With the changed call, it returns the permission decision `subagents.permission` names:
 
    | Value | What Claude Code does |
    | --- | --- |
@@ -150,7 +151,7 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    | `passthrough` | No decision: the session's permission mode decides. In auto mode Claude Code can deny a call a hook changed, because its classifier reviewed the call as Claude wrote it |
 
    A call sextant does not change gets no decision at all.
-6. An undeclared model warns the person, unless `on_undeclared` is `ignore`; the call goes ahead unchanged.
+7. An undeclared model warns the person, unless `on_undeclared` is `ignore`; the call goes ahead unchanged.
 
 The prediction is written to `~/.local/state/sextant/agent-calls/`, under the call's `tool_use_id`.
 
@@ -169,6 +170,20 @@ sextant compares it with the prediction for the same `tool_use_id` and logs the 
 The rules already delivered stay in the subagent's task; the check can only report.
 `models_used`, when Claude Code reports it, lists the models a subagent switched between while it ran.
 The result also records the subagent's model under its agent id, in `~/.local/state/sextant/agents/`, for the calls that subagent makes in turn.
+
+### Routing
+
+With `routing.enabled` and the target `subagents` ([Routing](configuration.md#routing)), the agent call hook chooses the subagent's model and effort from its scope before the subagent starts, and the rules it adds are the routed model's.
+
+1. sextant first predicts the model as the call stands.
+   When that model is fixed (a fork, or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`), or chosen by the caller under `routing.respect_explicit` (the call's `model`, the definition's `model`, a built-in subagent's own model, or a plugin's definition, which sextant does not read), the call keeps its model.
+2. Otherwise the scope's row, else `routing.default`, gives the options, and the first whose model is declared wins.
+   The hook sets the call's `model` to the option's alias and, when the option gives one, its `effort`; an effort the call or its definition already sets is kept under `respect_explicit`.
+3. The changed call is returned with the permission decision `subagents.permission` names, and its reason says what sextant set.
+   With `subagents.delivery` set to `off`, a routed call still gets its model and effort, and no rules.
+
+The check after the start compares the model the subagent started on with the routed model, so a route that Claude Code did not follow, such as one an installed mod replaced, shows as `MISMATCH`.
+Claude Code applies the call's `effort` only from version 2.1.292 ([Choose an effort level](https://code.claude.com/docs/en/sub-agents)), and `CLAUDE_CODE_EFFORT_LEVEL` wins over it.
 
 ### What the prediction does not see
 
@@ -195,7 +210,13 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `subagent_type`, `requested_model` | The call's subagent type (`general-purpose` when it names none) and `model` parameter |
 | `parent_model`, `parent_source` | The model of whoever made the call, and where it came from (see [Subagents](#subagents)) |
 | `model_value`, `definition`, `unresolved_why` | What the prediction's source named, the definition file that decided, and why a model could not be told |
+| `requested_effort` | For an agent call: the call's own `effort` parameter, when it sets one |
 | `permission` | For a call sextant changed: the permission decision returned |
+| `routing`, `routing_reason` | For `launch`, `agent-call` and `agent-result` lines: what routing did (`off`, `yielded`, `inherit`, `routed`) and why ([Routing](configuration.md#when-routing-yields)). A line for a refused configuration or a failed hook records `off` with `config-invalid` or `error` |
+| `routing_env` | For a route that yielded to the environment: the variable |
+| `route_model`, `route_value`, `route_effort`, `route_option` | For a routed task: the model the route selects, what sextant passed (an alias for a subagent), the effort it set, and the position of the chosen option in its row |
+| `route_effort_kept`, `route_effort_overridden_by` | `true` when the caller's own effort was kept; `CLAUDE_CODE_EFFORT_LEVEL` when that variable wins over the routed effort |
+| `route_from`, `route_skipped` | For a route that consulted a row: whether it was the scope's row (`table`) or `default`, and the options passed over, with why |
 | `subagent_id`, `predicted`, `models_used`, `result` | For `agent-result`: the subagent's agent id, the model predicted for it, the models it switched between, and the check's `result` |
 | `install` | `managed` or `account`: which install ran the hook |
 | `model`, `from_model` | The normalized model identifiers |
@@ -223,6 +244,7 @@ The subagent records in `agent-calls/` and `agents/` are removed after 7 days; a
 | Way | Reach |
 | --- | --- |
 | `SEXTANT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line |
+| `SEXTANT_ROUTING=off` in the environment that starts Claude Code or `sextant run` | Routing only, for that session and its subagents; the rules are still delivered |
 | `"subagents": { "delivery": "off" }` in the configuration | Subagents only: calls are left alone and their results are not checked; each call still gets a log line |
 | No configuration file for the account | Every session of that account, silently |
 | `sextant uninstall` | Every new session reached by that install |

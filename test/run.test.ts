@@ -255,6 +255,131 @@ test('launcher route with the hook: a claude started from inside a launched sess
   assert.equal(l.h.log().at(-1)?.delivered, 'rules');
 });
 
+// Routing in the launcher.
+
+/** The lab configuration with matchers for its scopes and a routing table, with `routing` merged over it. */
+function routingConfig(routing: Record<string, unknown> = {}): string {
+  const labConfig = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, any>;
+  const dir = tempTree({
+    'sextant.json': {
+      ...labConfig,
+      scopes: { ...labConfig.scopes, summarize: { match: ['\\bsummari[sz]e'] }, investigate: { match: ['\\binvestigat'] } },
+      routing: {
+        enabled: true,
+        table: {
+          summarize: [{ model: 'haiku', effort: 'low' }],
+          investigate: [
+            { model: 'fable', effort: 'high' },
+            { model: 'claude-sonnet-5-5', effort: 'high' },
+          ],
+        },
+        ...routing,
+      },
+    },
+  });
+  fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
+  return path.join(dir, 'sextant.json');
+}
+
+const routeOf = (d: Record<string, any> | undefined): unknown[] => [d?.routing, d?.routing_reason, d?.route_model, d?.route_effort, d?.model, d?.scope];
+
+test('launcher routing: the scope\'s row adds --model and --effort first, and the rules in the system prompt are the routed model\'s', () => {
+  const l = lab(routingConfig());
+  const r = l.run(['--scope', 'summarize', '-p', 'hi']);
+  const file = fileArg(r.started);
+  assert.deepEqual(r.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'hi']);
+  assert.match(fs.readFileSync(file, 'utf8'), /HAIKU-GEN-9047[\s\S]*HAIKU-SUM-6610/);
+  assert.equal(r.started?.env.SEXTANT_SCOPE, 'summarize');
+  const [launch] = launches(l.h);
+  assert.deepEqual(routeOf(launch), ['routed', 'table', 'claude-haiku-5-5', 'low', 'claude-haiku-5-5', 'summarize']);
+  assert.deepEqual([launch?.model_source, launch?.model_from, launch?.route_value, launch?.delivered], ['claude-args', '--model', 'haiku', 'system-prompt']);
+
+  // An identifier is passed as the table writes it, after an option whose model is not declared.
+  const investigate = l.run(['--scope', 'investigate', '-p', 'hi']);
+  assert.deepEqual(investigate.started?.args.slice(2), ['--model', 'claude-sonnet-5-5', '--effort', 'high', '-p', 'hi']);
+  assert.deepEqual(launches(l.h)[1]?.route_skipped, [{ model: 'fable', why: 'claude-fable-5-2 is not declared under "models"' }]);
+});
+
+test('launcher routing: without a scope, the task text of --task or of the prompt after -p picks one, which the session gets as SEXTANT_SCOPE', () => {
+  const l = lab(routingConfig());
+  const printed = l.run(['-p', 'Summarize the release notes', '--output-format', 'json']);
+  assert.deepEqual(printed.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'Summarize the release notes', '--output-format', 'json']);
+  assert.equal(printed.started?.env.SEXTANT_SCOPE, 'summarize');
+  const task = l.run(['--task', 'Investigate the outage', '--', '--resume', 'abc']);
+  assert.deepEqual(task.started?.args.slice(2), ['--model', 'claude-sonnet-5-5', '--effort', 'high', '--resume', 'abc']);
+  // A prompt that is not right after -p is not read, and an interactive session has no task.
+  const elsewhere = l.run(['-p', '--verbose', 'Summarize the notes']);
+  assert.deepEqual(elsewhere.started?.args, ['-p', '--verbose', 'Summarize the notes']);
+  assert.deepEqual(
+    launches(l.h).map((d) => [d.scope, d.scope_source, d.scope_matcher ?? null, d.routing, d.routing_reason]),
+    [
+      ['summarize', 'task-text', '\\bsummari[sz]e', 'routed', 'table'],
+      ['investigate', 'task-text', '\\binvestigat', 'routed', 'table'],
+      [null, null, null, 'inherit', 'no-scope'],
+    ],
+  );
+});
+
+test('explicit-model, launcher: a --model on the command line wins under respect_explicit, and an --effort is kept', () => {
+  const l = lab(routingConfig());
+  const kept = l.run(['--scope', 'summarize', '--model', 'sonnet', '-p', 'hi']);
+  assert.deepEqual(kept.started?.args.slice(2), ['--model', 'sonnet', '-p', 'hi']);
+  assert.match(fs.readFileSync(fileArg(kept.started), 'utf8'), /SONNET-GEN-3306/);
+  const effort = l.run(['--scope', 'summarize', '--effort', 'max', '-p', 'hi']);
+  assert.deepEqual(effort.started?.args.slice(2), ['--model', 'haiku', '--effort', 'max', '-p', 'hi']);
+  assert.deepEqual(
+    launches(l.h).map((d) => [d.routing, d.routing_reason, d.route_effort_kept ?? null]),
+    [
+      ['yielded', 'explicit-model', null],
+      ['routed', 'table', true],
+    ],
+  );
+
+  const table = lab(routingConfig({ respect_explicit: false }));
+  const replaced = table.run(['--scope', 'summarize', '--model=sonnet', '--effort', 'max', '-p', 'hi']);
+  assert.deepEqual(replaced.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'hi']);
+});
+
+test('orchestrator-env, launcher: a variable of yield_when_env, SEXTANT_ROUTING=off, or a targets list without the launcher leave the command line alone', () => {
+  for (const [config, env, reason] of [
+    [routingConfig({ yield_when_env: ['ORCH_TASK_ID'] }), { ORCH_TASK_ID: 't-1' }, 'yield-env'],
+    [routingConfig(), { SEXTANT_ROUTING: 'off' }, 'routing-env'],
+    [routingConfig({ targets: ['subagents'] }), {}, 'target-off'],
+  ] as const) {
+    const l = lab(config);
+    const r = l.run(['--scope', 'summarize', '-p', 'hi'], env);
+    assert.deepEqual(r.started?.args, ['-p', 'hi'], reason);
+    assert.deepEqual(routeOf(launches(l.h)[0]), ['yielded', reason, undefined, undefined, null, 'summarize'], reason);
+  }
+});
+
+test('launcher routing off: the command line is the one sextant run gives without a routing table, and the log says routing is off', () => {
+  for (const args of [['--scope', 'summarize', '--model', 'sonnet', '-p', 'hi'], ['-p', 'Summarize the notes'], ['--model', 'haiku']]) {
+    const plain = lab().run(args);
+    const off = lab(routingConfig({ enabled: false }));
+    const r = off.run(args);
+    assert.deepEqual(r.started?.args.slice(r.started.args[0] === '--append-system-prompt-file' ? 2 : 0), plain.started?.args.slice(plain.started.args[0] === '--append-system-prompt-file' ? 2 : 0));
+    assert.deepEqual([launches(off.h)[0]?.routing, launches(off.h)[0]?.routing_reason], ['off', 'disabled']);
+  }
+  const refused = lab(path.join(tempTree({ 'sextant.json': { version: 1, routing: { enabled: 1 } } }), 'sextant.json'));
+  refused.run(['-p', 'hi']);
+  assert.deepEqual([launches(refused.h)[0]?.status, launches(refused.h)[0]?.routing, launches(refused.h)[0]?.routing_reason], ['config-invalid', 'off', 'config-invalid']);
+});
+
+test('launcher routing with the hook: the hook finds the routed model\'s rules in the system prompt and does not deliver them again', () => {
+  const l = lab(routingConfig());
+  const r = l.run(['--scope', 'summarize', '-p', 'hi'], { FAKE_HOOK_INPUT: printStart('routed') });
+  assert.equal(r.stdout, '');
+  const start = l.h.log().find((d) => d.event === 'session-start');
+  assert.deepEqual([start?.model, start?.model_source, start?.scope, start?.delivered], ['claude-haiku-5-5', 'claude-args', 'summarize', 'launcher']);
+});
+
+test('launcher: --task needs a value', () => {
+  const usage = lab().run(['--task']);
+  assert.equal(usage.status, 2);
+  assert.match(usage.stderr, /--task needs a value/);
+});
+
 test('withoutOption takes out every value of an option, in both forms, and nothing after --', () => {
   assert.deepEqual(
     withoutOption(['a', '--x', '1', '--x=2', '--xy', '3', '--', '--x', '4'], '--x'),
