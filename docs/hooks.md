@@ -14,6 +14,7 @@ Four hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, 
   An undeclared model, or a subagent whose model sextant cannot tell, gets a warning, never a refusal; sextant never denies a call.
 - **A configuration with any problem is refused whole.**
   The hook delivers nothing, warns the person, and logs `config-invalid`; `sextant check` lists the problems.
+  The result of an agent call under a refused configuration is logged as `config-invalid` too, without a second warning.
 - **It decides from what Claude Code itself uses.**
   The model comes from the hook input Claude Code sends, from sextant's own record of the same session or of the same Claude Code process, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
   The decision log names the source every time.
@@ -168,6 +169,7 @@ sextant compares it with the prediction for the same `tool_use_id` and logs the 
 | `unknown` | The result names no model |
 
 The rules already delivered stay in the subagent's task; the check can only report.
+The line also repeats the `routing` and `routing_reason` recorded for the call.
 `models_used`, when Claude Code reports it, lists the models a subagent switched between while it ran.
 The result also records the subagent's model under its agent id, in `~/.local/state/sextant/agents/`, for the calls that subagent makes in turn.
 

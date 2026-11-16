@@ -9,6 +9,8 @@
 //
 // Without SEXTANT_SCOPE, the scope comes from the task text, --task or the prompt after -p, through
 // the scopes' matchers, and is passed on to the session as SEXTANT_SCOPE so its hooks decide alike.
+// SEXTANT_SCOPE_VIA says where the scope came from: a sextant run started inside that session reads an
+// inherited scope that was inferred from the outer task as no scope, and takes one from its own task.
 // With routing on for the launcher, the scope's row adds --model and --effort before anything else is
 // decided, so the rules are the routed model's.
 //
@@ -31,6 +33,11 @@ import { choiceFields, decisionFields } from './subagents.js';
 /** Names, for the session and its hooks, the system prompt file the launcher passed. */
 export const LAUNCH_FILE_ENV = 'SEXTANT_LAUNCH_FILE';
 
+/** Where the launcher's SEXTANT_SCOPE came from: explicit (--scope or an explicit SEXTANT_SCOPE) or inferred (the task text). */
+export const SCOPE_VIA_ENV = 'SEXTANT_SCOPE_VIA';
+
+type ScopeVia = 'explicit' | 'inferred';
+
 export const APPEND_FILE_OPTION = '--append-system-prompt-file';
 
 /** The subdirectory of the state directory that holds the launcher's system prompt files. */
@@ -39,7 +46,7 @@ export const LAUNCH_DIR = 'launch';
 export interface LaunchRequest {
   /** The arguments for claude, as given. */
   readonly args: readonly string[];
-  /** The --scope option, or null to keep the SEXTANT_SCOPE the launcher was started with. */
+  /** The --scope option, or null to keep an explicit SEXTANT_SCOPE the launcher was started with. */
   readonly scope: string | null;
   /** The --task option, or null to read the task from the prompt after -p. */
   readonly task: string | null;
@@ -66,15 +73,25 @@ export interface LaunchPlan {
   readonly messages: readonly string[];
 }
 
-/** What the launcher adds when it adds no rules: the scope, and no system prompt file inherited from an outer launch. */
-export function passThrough(args: readonly string[], scope: string | null): Pick<LaunchPlan, 'args' | 'env'> {
-  return { args: [...args], env: { [LAUNCH_FILE_ENV]: undefined, ...(scope !== null ? { [SCOPE_ENV]: scope } : {}) } };
+/**
+ * What the launcher adds when it adds no rules: the scope with where it came from, and no system prompt
+ * file inherited from an outer launch. Without a scope of its own, a scope an outer launcher inferred
+ * from its task is removed, while an explicit one is kept.
+ */
+export function passThrough(args: readonly string[], scope: string | null, env: Env, via: ScopeVia = 'explicit'): Pick<LaunchPlan, 'args' | 'env'> {
+  const scopeEnv =
+    scope !== null
+      ? { [SCOPE_ENV]: scope, [SCOPE_VIA_ENV]: via }
+      : env[SCOPE_VIA_ENV] === 'inferred'
+        ? { [SCOPE_ENV]: undefined, [SCOPE_VIA_ENV]: undefined }
+        : {};
+  return { args: [...args], env: { [LAUNCH_FILE_ENV]: undefined, ...scopeEnv } };
 }
 
 /** Decide what the launcher adds to a claude command line. Reads only local files; writes nothing. */
 export function planLaunch(config: Config, configFile: string, req: LaunchRequest): LaunchPlan {
   const given: CommandLine = { args: req.args, exact: true };
-  const scope = launchScope(config, applyEnv(req.env, passThrough(req.args, req.scope).env), req.task, given);
+  const scope = launchScope(config, applyEnv(req.env, passThrough(req.args, req.scope, req.env).env), req.task, given);
   const routed = route(config, {
     target: 'launcher',
     scope: scope.scope,
@@ -85,7 +102,7 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
   });
   const args = routedArgs(req.args, routed);
   // A scope from the task text is passed on, so the session's hooks decide with the same scope.
-  const base = passThrough(args, scope.source === 'task-text' ? scope.scope : req.scope);
+  const base = scope.source === 'task-text' ? passThrough(args, scope.scope, req.env, 'inferred') : passThrough(args, req.scope, req.env);
   const env = applyEnv(req.env, base.env);
   const place = sessionPlace(config, env);
   const cmd: CommandLine = { args, exact: true };
@@ -137,7 +154,7 @@ const MODEL_OPTION = '--model';
 const EFFORT_OPTION = '--effort';
 
 /**
- * The session's scope: SEXTANT_SCOPE (from --scope or the environment), else the scope whose matcher
+ * The session's scope: SEXTANT_SCOPE (from --scope or an explicit one in the environment), else the scope whose matcher
  * matches earliest in the task text, --task or the prompt after -p.
  */
 function launchScope(config: Config, env: Env, task: string | null, cmd: CommandLine): ScopeChoice {

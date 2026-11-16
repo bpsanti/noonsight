@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { ConfigError, loadConfig, readPreset } from '../src/config/load.js';
+import { runHook } from '../src/adapters/claude-code/hook.js';
 import { route, type RouteRequest } from '../src/core/route.js';
 import type { Config } from '../src/core/types.js';
 import { hookHome, hookInput, LAB_CONFIG, LAB_PRESETS, labPresetWith, runCli, tempTree, type HookHome } from './helpers.js';
@@ -278,7 +279,7 @@ test('route-subagents: the hook sets the call\'s model and effort from its scope
   // The check after the start compares with the routed model, and the result line says the call was routed.
   h.hook('agent-result', result('claude-haiku-5-5'));
   const checked = h.log().find((l) => l.event === 'agent-result');
-  assert.deepEqual([checked?.predicted, checked?.result, checked?.routing], ['claude-haiku-5-5', 'match', 'routed']);
+  assert.deepEqual([checked?.predicted, checked?.result, checked?.routing, checked?.routing_reason], ['claude-haiku-5-5', 'match', 'routed', 'table']);
 });
 
 test('route-subagents: an option that is not declared is passed over, and the log says why', () => {
@@ -423,6 +424,41 @@ test('a row that leaves subagents out, a call with no scope, and a refused confi
   assert.deepEqual(
     bad.log().map((l) => [l.event, l.status, l.routing, l.routing_reason]),
     [['agent-call', 'config-invalid', 'off', 'config-invalid']],
+  );
+});
+
+test('every agent-result line says what routing did and why: a call that yielded, a refused configuration, and a failed hook', () => {
+  const h = hookHome(routingConfig());
+  startOn(h, 'claude-sonnet-5-5');
+  h.hook('agent-call', call({ ...SUMMARY, model: 'sonnet' }));
+  h.hook('agent-result', result('claude-sonnet-5-5'));
+  const yielded = h.log().find((l) => l.event === 'agent-result');
+  assert.deepEqual([yielded?.result, yielded?.routing, yielded?.routing_reason], ['match', 'yielded', 'explicit-model']);
+
+  const bad = hookHome(path.join(tempTree({ 'sextant.json': { version: 1, routing: { enabled: 'yes' } } }), 'sextant.json'));
+  bad.hook('agent-call', call(SUMMARY));
+  assert.equal(bad.hook('agent-result', result('claude-haiku-5-5')).raw, '', 'the call already warned');
+  assert.deepEqual(
+    bad.log().map((l) => [l.event, l.status, l.routing, l.routing_reason, l.warned]),
+    [
+      ['agent-call', 'config-invalid', 'off', 'config-invalid', true],
+      ['agent-result', 'config-invalid', 'off', 'config-invalid', false],
+    ],
+  );
+
+  // A failure inside the hook: here the environment cannot be read once the hook has started.
+  const failing = hookHome(routingConfig());
+  const env = new Proxy({ ...failing.env } as Record<string, string | undefined>, {
+    get: (target, key) => {
+      if (key === 'SEXTANT_CONFIG') throw new Error('environment unreadable');
+      return Reflect.get(target, key);
+    },
+  });
+  const out = runHook('agent-result', result('claude-haiku-5-5'), { env, home: failing.dir, now: new Date(), version: 'test', install: null, parentPid: process.pid });
+  assert.match(JSON.parse(out).systemMessage, /the hook failed \(environment unreadable\), so the subagent's model was not checked/);
+  assert.deepEqual(
+    failing.log().map((l) => [l.event, l.status, l.routing, l.routing_reason]),
+    [['agent-result', 'error', 'off', 'error']],
   );
 });
 

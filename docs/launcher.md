@@ -23,7 +23,7 @@ sextant run [--scope <scope>] [--task <text>] [--] [claude arguments...]
 
 | Option | Effect |
 | --- | --- |
-| `--scope <scope>` | The task scope. It is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope. Without it, a `SEXTANT_SCOPE` already in the environment applies |
+| `--scope <scope>` | The task scope. It is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope. Without it, an explicit `SEXTANT_SCOPE` already in the environment applies |
 | `--task <text>` | The task text the scopes' matchers read when no scope is given. Without it, the prompt right after `-p` or `--print` |
 | `--help` | Shows the usage |
 
@@ -36,8 +36,11 @@ Ctrl-C and Ctrl-\ reach Claude Code from the terminal, and the launcher does not
 
 The launcher decides as the `SessionStart` hook does for a session that reports no model ([SessionStart](hooks.md#sessionstart)):
 
-1. The scope is `--scope`, else `SEXTANT_SCOPE`, else the scope whose matcher matches earliest in the task text: `--task`, else the argument right after `-p` or `--print` when it is not an option ([Scopes](configuration.md#scopes)).
+1. The scope is `--scope`, else an explicit `SEXTANT_SCOPE`, else the scope whose matcher matches earliest in the task text: `--task`, else the argument right after `-p` or `--print` when it is not an option ([Scopes](configuration.md#scopes)).
    A scope taken from the task text is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope.
+   `SEXTANT_SCOPE_VIA` is set next to it and says where the scope came from: `explicit` for `--scope` or an explicit `SEXTANT_SCOPE`, `inferred` for the task text.
+   A `SEXTANT_SCOPE` is explicit unless `SEXTANT_SCOPE_VIA` is `inferred`, so one a person or an orchestrator sets by hand counts.
+   A `sextant run` started inside a launched session ignores a scope inherited as `inferred`: it takes the scope from its own task text, or has none, and removes the inherited one from the session it starts.
    A prompt written elsewhere on the command line, or given on standard input, is not read, and an interactive session started without a task has only the scope it is given.
 2. With routing on for the launcher, the scope may add `--model` and `--effort` to the claude arguments ([Routing](#routing)).
 3. The model is the one Claude Code will start with: the `--model` argument among the claude arguments, else `ANTHROPIC_MODEL`, else the `model` setting of the highest-ranked settings file, with aliases resolved the same way.

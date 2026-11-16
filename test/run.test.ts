@@ -37,7 +37,7 @@ const { spawnSync } = require('node:child_process');
 const pick = (n) => process.env[n] ?? null;
 fs.writeFileSync(${JSON.stringify(record)}, JSON.stringify({
   args: process.argv.slice(2),
-  env: { SEXTANT_LAUNCH_FILE: pick('SEXTANT_LAUNCH_FILE'), SEXTANT_SCOPE: pick('SEXTANT_SCOPE'), ANTHROPIC_MODEL: pick('ANTHROPIC_MODEL') },
+  env: { SEXTANT_LAUNCH_FILE: pick('SEXTANT_LAUNCH_FILE'), SEXTANT_SCOPE: pick('SEXTANT_SCOPE'), SEXTANT_SCOPE_VIA: pick('SEXTANT_SCOPE_VIA'), ANTHROPIC_MODEL: pick('ANTHROPIC_MODEL') },
 }));
 if (process.env.FAKE_HOOK_INPUT) {
   const r = spawnSync(process.execPath, ${JSON.stringify([...NO_NETWORK, CLI, 'hook', 'session-start'])}, { input: process.env.FAKE_HOOK_INPUT, encoding: 'utf8', env: process.env });
@@ -85,7 +85,7 @@ test('launcher route: an explicit --model gets its rules in the system prompt fi
   assert.match(fs.readFileSync(file, 'utf8'), /SONNET-INV-5182/);
   assert.equal(path.dirname(file), path.join(l.h.dir, '.local', 'state', 'sextant', 'launch'));
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
-  assert.deepEqual(r.started?.env, { SEXTANT_LAUNCH_FILE: file, SEXTANT_SCOPE: 'investigate', ANTHROPIC_MODEL: null });
+  assert.deepEqual(r.started?.env, { SEXTANT_LAUNCH_FILE: file, SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'explicit', ANTHROPIC_MODEL: null });
   assert.deepEqual(
     launches(l.h).map((d) => [d.model, d.model_source, d.model_from, d.status, d.scope, d.scope_source, d.place, d.delivered, d.launch_file]),
     [['claude-sonnet-5-5', 'claude-args', '--model', 'matched', 'investigate', 'env', 'session', 'system-prompt', file]],
@@ -136,7 +136,7 @@ test('launcher: with no rules to add, claude starts with its arguments unchanged
   const l = lab();
   // Nothing names a model: the hooks decide from what Claude Code reports. An outer launch's file is not passed on.
   const none = l.run(['-p', 'hi'], { SEXTANT_LAUNCH_FILE: '/outer/launch.md' });
-  assert.deepEqual(none.started, { args: ['-p', 'hi'], env: { SEXTANT_LAUNCH_FILE: null, SEXTANT_SCOPE: null, ANTHROPIC_MODEL: null } });
+  assert.deepEqual(none.started, { args: ['-p', 'hi'], env: { SEXTANT_LAUNCH_FILE: null, SEXTANT_SCOPE: null, SEXTANT_SCOPE_VIA: null, ANTHROPIC_MODEL: null } });
   assert.equal(none.stderr, '');
   // A model declared with no rules.
   const opus = l.run(['--model', 'claude-opus-5-5', '-p', 'hi']);
@@ -316,6 +316,39 @@ test('launcher routing: without a scope, the task text of --task or of the promp
       ['summarize', 'task-text', '\\bsummari[sz]e', 'routed', 'table'],
       ['investigate', 'task-text', '\\binvestigat', 'routed', 'table'],
       [null, null, null, 'inherit', 'no-scope'],
+    ],
+  );
+});
+
+test('launcher routing: a nested sextant run ignores a scope the outer one inferred, and keeps one that was given', () => {
+  const l = lab(routingConfig());
+  const outer = l.run(['-p', 'Investigate the outage']);
+  assert.deepEqual([outer.started?.env.SEXTANT_SCOPE, outer.started?.env.SEXTANT_SCOPE_VIA], ['investigate', 'inferred']);
+  const inherited = { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'inferred' };
+
+  // The worker's own task decides its scope and route.
+  const worker = l.run(['--', '-p', 'Summarize the notes'], inherited);
+  assert.deepEqual(worker.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'Summarize the notes']);
+  assert.deepEqual([worker.started?.env.SEXTANT_SCOPE, worker.started?.env.SEXTANT_SCOPE_VIA], ['summarize', 'inferred']);
+  // A worker whose task names no scope has none, and its session does not keep the outer one.
+  const plain = l.run(['-p', 'Reply OK'], inherited);
+  assert.deepEqual(plain.started?.args, ['-p', 'Reply OK']);
+  assert.deepEqual([plain.started?.env.SEXTANT_SCOPE, plain.started?.env.SEXTANT_SCOPE_VIA], [null, null]);
+
+  // A scope given explicitly, or set by hand without a source, still wins over the task text.
+  const given = l.run(['-p', 'Summarize the notes'], { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'explicit' });
+  assert.deepEqual(given.started?.args.slice(2, 6), ['--model', 'claude-sonnet-5-5', '--effort', 'high']);
+  assert.deepEqual([given.started?.env.SEXTANT_SCOPE, given.started?.env.SEXTANT_SCOPE_VIA], ['investigate', 'explicit']);
+  const byHand = l.run(['-p', 'Summarize the notes'], { SEXTANT_SCOPE: 'investigate' });
+  assert.deepEqual([byHand.started?.env.SEXTANT_SCOPE, byHand.started?.env.SEXTANT_SCOPE_VIA], ['investigate', null]);
+  assert.deepEqual(
+    launches(l.h).map((d) => [d.scope, d.scope_source]),
+    [
+      ['investigate', 'task-text'],
+      ['summarize', 'task-text'],
+      [null, null],
+      ['investigate', 'env'],
+      ['investigate', 'env'],
     ],
   );
 });

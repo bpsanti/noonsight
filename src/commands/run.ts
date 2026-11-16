@@ -79,7 +79,7 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
   };
   if (!env.SEXTANT_CONFIG && !fs.existsSync(file)) {
     io.err(`sextant: there is no configuration at ${file}, so sextant run added no rules. Run \`sextant init\` to create one.`);
-    return passThrough(args, scope);
+    return passThrough(args, scope, env);
   }
   let plan: LaunchPlan;
   try {
@@ -97,7 +97,7 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
       log({ status: 'error', error: message, ...notRouted('error'), delivered: 'nothing', warned: true });
       io.err(`sextant: sextant run failed (${message}), so it added no rules.`);
     }
-    return passThrough(args, scope);
+    return passThrough(args, scope, env);
   }
   if (plan.file !== null) {
     try {

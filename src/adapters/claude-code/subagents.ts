@@ -132,6 +132,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
     sha256: decision.status === 'matched' ? decision.sha256 : null,
     delivered,
     routing: routed.routing,
+    routing_reason: routed.reason,
     at: ctx.now.toISOString(),
   };
   try {
@@ -210,6 +211,7 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
       result,
       delivered: call.delivered,
       ...(call.routing !== undefined ? { routing: call.routing } : {}),
+      ...(call.routing_reason !== undefined ? { routing_reason: call.routing_reason } : {}),
       warned: warn,
     },
     messages: warn
