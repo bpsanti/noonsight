@@ -451,11 +451,11 @@ test('a subagent\'s scope comes from its own task text, so two tasks on one mode
   assert.match(plain, /^Rename the variable\.\n\n<sextant-rules model="claude-haiku-5-5">\n/);
 
   assert.deepEqual(
-    agentLines(h).map((l) => [l.model, l.scope, l.place]),
+    agentLines(h).map((l) => [l.model, l.scope, l.scope_source, l.scope_matcher ?? null, l.place]),
     [
-      ['claude-haiku-5-5', 'summarize', 'subagent'],
-      ['claude-sonnet-5-5', 'investigate', 'subagent'],
-      ['claude-haiku-5-5', null, 'subagent'],
+      ['claude-haiku-5-5', 'summarize', 'task-text', '\\bsummar', 'subagent'],
+      ['claude-sonnet-5-5', 'investigate', 'task-text', '\\broot cause\\b', 'subagent'],
+      ['claude-haiku-5-5', null, null, null, 'subagent'],
     ],
   );
 });
@@ -466,7 +466,7 @@ test('the session\'s SEXTANT_SCOPE never carries over to a subagent, whose scope
   const other = h.hook('agent-call', call({ model: undefined, prompt: 'Rename the variable.' }), { SEXTANT_SCOPE: 'summarize' });
   assert.doesNotMatch(other.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-SUM-6610/);
   assert.deepEqual(
-    agentLines(h).map((l) => [l.subagent_type, l.scope]),
-    [['general-purpose', null]],
+    agentLines(h).map((l) => [l.subagent_type, l.scope, l.scope_source]),
+    [['general-purpose', null, null]],
   );
 });

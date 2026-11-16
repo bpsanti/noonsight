@@ -18,16 +18,28 @@ export const SCOPE_ENV = 'SEXTANT_SCOPE';
  */
 export const TASK_TEXT_LIMIT = 4000;
 
+export type ScopeSource = 'env' | 'task-text';
+
+export interface ScopeChoice {
+  /** The scope to resolve with, or null for none. From the environment it may be undeclared. */
+  readonly scope: string | null;
+  readonly source: ScopeSource | null;
+  /** For a scope chosen from the task text: the matcher that decided, as the configuration writes it. */
+  readonly matcher?: string;
+}
+
 export interface PlaceChoice {
   readonly place: Place;
   /** For an unattended session: the variable that marked it. */
   readonly because?: string;
 }
 
+const NO_SCOPE: ScopeChoice = { scope: null, source: null };
+
 /** A session's scope: SEXTANT_SCOPE, trimmed; empty or unset means none. */
-export function sessionScope(env: Readonly<Record<string, string | undefined>>): string | null {
+export function sessionScope(env: Readonly<Record<string, string | undefined>>): ScopeChoice {
   const value = (env[SCOPE_ENV] ?? '').trim();
-  return value ? value : null;
+  return value ? { scope: value, source: 'env' } : NO_SCOPE;
 }
 
 /** A session's place: unattended when any variable in session.unattended_when_env is set and not empty. */
@@ -47,15 +59,15 @@ export interface Task {
  * The scope whose matcher matches earliest in a subagent's description and task text. Two scopes
  * that match at the same place go to the one declared first: the preset's scopes before the user's.
  */
-export function taskScope(config: Config, task: Task): string | null {
+export function taskScope(config: Config, task: Task): ScopeChoice {
   const text = taskText(task.description ?? null, task.prompt ?? null);
-  let best: { scope: string; at: number } | null = null;
+  let best: { scope: string; matcher: string; at: number } | null = null;
   for (const scope of config.scopes.values())
     for (const m of scope.match) {
       const at = text.search(m.regex);
-      if (at >= 0 && (best === null || at < best.at)) best = { scope: scope.name, at };
+      if (at >= 0 && (best === null || at < best.at)) best = { scope: scope.name, matcher: m.source, at };
     }
-  return best?.scope ?? null;
+  return best === null ? NO_SCOPE : { scope: best.scope, source: 'task-text', matcher: best.matcher };
 }
 
 /**

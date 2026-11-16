@@ -178,7 +178,7 @@ Every decision adds one JSON line to `~/.local/state/sextant/decisions.jsonl`, i
 Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a new log starts.
 
 ```json
-{"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/sextant/sextant.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"session","model_source":"hook-input","delivered":"rules","warned":false}
+{"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/sextant/sextant.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"session","scope_source":null,"model_source":"hook-input","delivered":"rules","warned":false}
 ```
 
 | Field | Values |
@@ -200,7 +200,10 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model sextant cannot tell: the value, and why |
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |
 | `reason`, `key`, `rules`, `sha256` | As in `sextant resolve` ([configuration.md](configuration.md)) |
-| `scope`, `place` | The declared scope, or null for none, and the place the rules were resolved for |
+| `scope`, `place`, `unknown_scope` | The declared scope and the place the rules were resolved for, and a scope that was asked for but is not declared |
+| `scope_source` | `env` (`SEXTANT_SCOPE`), `task-text`, or null when there was no scope |
+| `scope_matcher` | For a scope taken from the task text: the matcher that decided, as the configuration writes it |
+| `unattended_env` | For a session in the place `unattended`: the variable that put it there |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |

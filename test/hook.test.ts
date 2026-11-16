@@ -471,7 +471,7 @@ function scopedConfig(): string {
   return path.join(dir, 'sextant.json');
 }
 
-test('SEXTANT_SCOPE gives the session the rules of that scope, and the log records the scope', () => {
+test('SEXTANT_SCOPE gives the session the rules of that scope, and the log says where the scope came from', () => {
   const h = home(scopedConfig());
   const context = (env: Record<string, string>, model = 'claude-sonnet-5-5'): string =>
     h.hook('session-start', start(model, { session_id: `s-${Object.values(env).join('-')}-${model}` }), env).out?.hookSpecificOutput.additionalContext ?? '';
@@ -484,22 +484,22 @@ test('SEXTANT_SCOPE gives the session the rules of that scope, and the log recor
   assert.doesNotMatch(context({}), /SONNET-INV-5182/);
 
   assert.deepEqual(
-    h.log().map((l) => [l.model, l.scope, l.place]),
+    h.log().map((l) => [l.model, l.scope, l.scope_source, l.place, l.unknown_scope ?? null]),
     [
-      ['claude-sonnet-5-5', 'investigate', 'session'],
-      ['claude-haiku-5-5', 'summarize', 'session'],
-      ['claude-haiku-5-5', 'investigate', 'session'],
-      ['claude-sonnet-5-5', null, 'session'],
+      ['claude-sonnet-5-5', 'investigate', 'env', 'session', null],
+      ['claude-haiku-5-5', 'summarize', 'env', 'session', null],
+      ['claude-haiku-5-5', 'investigate', 'env', 'session', null],
+      ['claude-sonnet-5-5', null, null, 'session', null],
     ],
   );
 });
 
-test('an undeclared SEXTANT_SCOPE gets the rules for every scope, with no warning from the hook', () => {
+test('an undeclared SEXTANT_SCOPE gets the rules for every scope, with no warning, and the log names it', () => {
   const h = home(scopedConfig());
   const r = h.hook('session-start', start('claude-sonnet-5-5'), { SEXTANT_SCOPE: 'release' });
   assert.deepEqual(Object.keys(r.out ?? {}), ['hookSpecificOutput'], 'no systemMessage');
   assert.match(r.out?.hookSpecificOutput.additionalContext, /^<sextant-rules model="claude-sonnet-5-5">\n/);
-  assert.deepEqual(h.log().map((l) => [l.scope, l.warned]), [[null, false]]);
+  assert.deepEqual(h.log().map((l) => [l.scope, l.unknown_scope, l.scope_source, l.warned]), [[null, 'release', 'env', false]]);
 });
 
 test('a variable of session.unattended_when_env puts the session in the place unattended, for startup and /model alike', () => {
@@ -513,11 +513,11 @@ test('a variable of session.unattended_when_env puts the session in the place un
   assert.match(text, /^<sextant-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">/);
   assert.doesNotMatch(h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'attended' }), { CI: '' }).out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
   assert.deepEqual(
-    h.log().map((l) => [l.event, l.place, l.scope]),
+    h.log().map((l) => [l.event, l.place, l.unattended_env ?? null, l.scope]),
     [
-      ['session-start', 'unattended', null],
-      ['model-switch', 'unattended', 'investigate'],
-      ['session-start', 'session', null],
+      ['session-start', 'unattended', 'CI', null],
+      ['model-switch', 'unattended', 'CI', 'investigate'],
+      ['session-start', 'session', null, null],
     ],
   );
 });

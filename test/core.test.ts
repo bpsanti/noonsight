@@ -79,11 +79,13 @@ test('user rules default to every scope and every place', () => {
   }
 });
 
-test('an undeclared scope means general rules, and the delivered text does not name it', () => {
+test('an undeclared scope means general rules, and the decision says which scope was ignored', () => {
   const d = matched(resolve(lab, { model: 'claude-sonnet-5-5', scope: 'no-such-scope', place: 'session' }));
   assert.deepEqual(d.rules, ['sonnet/general']);
   assert.equal(d.scope, null);
+  assert.equal(d.unknown_scope, 'no-such-scope');
   assert.doesNotMatch(d.text, /no-such-scope/);
+  assert.equal(matched(resolve(lab, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' })).unknown_scope, undefined);
 });
 
 test('the delivered text is the envelope around the joined rules', () => {

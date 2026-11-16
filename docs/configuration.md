@@ -57,7 +57,7 @@ Presets are read from the installed package, so a preset always follows the pack
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
 | `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
-| `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches every plain task text is refused; see [Scopes](#scopes). |
+| `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches all six probe texts is refused; see [Scopes](#scopes). |
 | `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text sextant changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
@@ -100,9 +100,10 @@ A session that investigates can start a subagent that summarizes, and each gets 
 Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware (flags `iu`).
 They read the subagent's `description`, then its `prompt`, joined, up to the first 4,000 characters; any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
 When several scopes match, the one whose matcher matches earliest in the text wins, and two that match at the same place go to the scope declared first: the preset's scopes in the preset's order, then the user's new ones in the file's order.
-A matcher that matches every one of the plain task texts `"a"`, `"Z"`, `"0"`, `" a "`, `"A B"` and `"x_1 y"` is refused, because it is a catch-all (such as `.`, `\b` or `\w`) that would put every task in its scope.
-The check runs only these six texts: a matcher that misses any of them is accepted, however broad it is.
-A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, only means "rules for every scope"; it never blocks and never warns in a session.
+The check tries each matcher against six probe texts: `"a"`, `"Z"`, `"0"`, `" a "`, `"A B"` and `"x_1 y"`, which are plain task texts.
+A matcher that matches all six is refused as a catch-all (such as `.`, `\b` or `\w`).
+A matcher that misses any of them is accepted, however broad it is.
+A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, only means "rules for every scope"; it never blocks and never warns in a session, and the decision log records it as `unknown_scope`.
 
 `sextant check` reports two scopes whose matchers match the same text, as a warning with an example text that both match and the scope a task with that text gets.
 To find such texts, sextant builds short example texts from each matcher and runs the other scopes' matchers over them, so every overlap it reports comes with a text that really matches both.
@@ -135,7 +136,7 @@ Beyond the schema, sextant checks that:
 - every rule file exists and is not empty;
 - rule ids are unique for each model;
 - every scope a rule names is declared;
-- every matcher is a valid regular expression and does not match an empty text, since such a matcher would put every task in its scope;
+- every matcher is a valid regular expression and does not match all six probe texts listed under [Scopes](#scopes);
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
@@ -158,6 +159,6 @@ An empty scope (`""`) means no scope, so a place can be given without one, as in
 | `none` | The model receives nothing. | `key`, `reason`: `declared-none` or `no-rule-applies` |
 | `undeclared` | The model has no entry. | `reason`: `no-entry` or `model-not-reported`; `warning` unless `on_undeclared` is `ignore` |
 
-Every decision also has `model`, `scope` and `place`.
+Every decision also has `model`, `scope` and `place`, plus `unknown_scope` when the requested scope is not declared.
 The command exits with 0 for every decision, and with 2 for a usage error or a refused configuration.
 It reads only local files and never uses the network.

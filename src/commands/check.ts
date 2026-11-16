@@ -144,7 +144,7 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
         '; the scope whose matcher matches earliest in a task wins, and at the same place the one declared first',
     );
 
-  const scope = sessionScope(env);
+  const scope = sessionScope(env).scope;
   const place = sessionPlace(config, env);
   if (scope !== null && !config.scopes.has(scope))
     add('warning', `${SCOPE_ENV} is "${scope}" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope`);

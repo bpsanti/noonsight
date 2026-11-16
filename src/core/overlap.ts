@@ -45,7 +45,7 @@ export function scopeOverlaps(config: Config): OverlapReport {
     for (const b of scopes.slice(i + 1)) {
       const text = witness(samples.get(a) ?? [], b) ?? witness(samples.get(b) ?? [], a);
       if (text === undefined) continue;
-      overlaps.push({ scopes: [a.name, b.name], text, winner: taskScope(config, { prompt: text }) });
+      overlaps.push({ scopes: [a.name, b.name], text, winner: taskScope(config, { prompt: text }).scope });
     }
   });
 

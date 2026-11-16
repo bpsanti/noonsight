@@ -266,7 +266,7 @@ function compileMatchers(sources: readonly string[], at: string, report: (at: st
     }
     if (CATCH_ALL_PROBES.every((text) => regex.test(text))) {
       const probes = CATCH_ALL_PROBES.map((text) => JSON.stringify(text)).join(', ');
-      report(`${at}/${i}`, `"${source}" matches every one of the plain task texts ${probes}, so it would put every task in this scope whatever it says`);
+      report(`${at}/${i}`, `"${source}" matches each of the probe texts ${probes}, which are plain task texts used to detect catch-all matchers`);
       return;
     }
     out.push({ source, regex });

@@ -45,7 +45,7 @@ const SCOPES = {
   summarize: { match: ['\\bsummar', '\\bdigest\\b'] },
 };
 const scoped = (extra: Record<string, unknown> = {}): Config => load({ models: SONNET, scopes: SCOPES, ...extra }, RULES);
-const scopeOf = (cfg: Config, prompt: string, description: string | null = null): string | null => taskScope(cfg, { description, prompt });
+const scopeOf = (cfg: Config, prompt: string, description: string | null = null): string | null => taskScope(cfg, { description, prompt }).scope;
 
 test('scope: two scopes on the same model deliver different rules, and no scope delivers only the general ones', () => {
   const cfg = scoped();
@@ -61,17 +61,18 @@ test('scope: two scopes on the same model deliver different rules, and no scope 
 });
 
 test('session scope: SEXTANT_SCOPE names it, trimmed; unset or empty means none', () => {
-  assert.equal(sessionScope({ SEXTANT_SCOPE: 'investigate' }), 'investigate');
-  assert.equal(sessionScope({ SEXTANT_SCOPE: '  summarize\n' }), 'summarize');
-  assert.equal(sessionScope({ SEXTANT_SCOPE: ' ' }), null);
-  assert.equal(sessionScope({}), null);
+  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: 'investigate' }), { scope: 'investigate', source: 'env' });
+  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: '  summarize\n' }), { scope: 'summarize', source: 'env' });
+  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: ' ' }), { scope: null, source: null });
+  assert.deepEqual(sessionScope({}), { scope: null, source: null });
 });
 
 test('session scope: an undeclared SEXTANT_SCOPE only means the general rules, never a warning', () => {
   const cfg = scoped();
-  const d = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: sessionScope({ SEXTANT_SCOPE: 'release' }), place: 'session' }));
+  const d = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: sessionScope({ SEXTANT_SCOPE: 'release' }).scope, place: 'session' }));
   assert.equal(d.scope, null);
   assert.deepEqual(d.rules, ['general']);
+  assert.equal(d.unknown_scope, 'release');
 });
 
 test('session place: unattended when a variable of session.unattended_when_env is set and not empty', () => {
@@ -90,7 +91,11 @@ test('session place: unattended when a variable of session.unattended_when_env i
 
 test('task scope: the matcher that matches earliest in the text wins, case-insensitively', () => {
   const cfg = scoped();
-  assert.equal(scopeOf(cfg, 'Find the ROOT CAUSE of the failure.'), 'investigate');
+  assert.deepEqual(taskScope(cfg, { prompt: 'Find the ROOT CAUSE of the failure.' }), {
+    scope: 'investigate',
+    source: 'task-text',
+    matcher: '\\broot cause\\b',
+  });
   assert.equal(scopeOf(cfg, 'Summarize what you find while you investigate.'), 'summarize');
   assert.equal(scopeOf(cfg, 'Investigate, then summarize.'), 'investigate');
   assert.equal(scopeOf(cfg, 'Rename the variable.'), null);
@@ -224,4 +229,15 @@ test('overlaps: a matcher whose examples are cut short is untested, so no overla
   const report = scopeOverlaps(cfg);
   assert.deepEqual(report.overlaps, [], 'the examples of a do not reach zeta');
   assert.deepEqual(report.untested, [{ scope: 'a', matcher: source }]);
+});
+
+test('overlaps: a repeat range wider than two counts makes its matchers untested, since a shared text can need another count', () => {
+  const a = '^x{3,5}y{1,5}$';
+  const b = '^x{1,5}y{3,5}$';
+  assert.ok(new RegExp(a, MATCHER_FLAGS).test('xxxyyy') && new RegExp(b, MATCHER_FLAGS).test('xxxyyy'), 'xxxyyy is a shared text');
+  const report = scopeOverlaps(load({ scopes: { a: { match: [a] }, b: { match: [b] } } }));
+  assert.deepEqual(report.untested, [
+    { scope: 'a', matcher: a },
+    { scope: 'b', matcher: b },
+  ]);
 });

@@ -102,6 +102,8 @@ interface DecisionBase {
   readonly model: string | null;
   /** The declared scope the decision used, or null for "general rules only". */
   readonly scope: string | null;
+  /** Present when the caller asked for a scope that is not declared; general rules apply. */
+  readonly unknown_scope?: string;
   readonly place: Place;
 }
 

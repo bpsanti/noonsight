@@ -268,6 +268,7 @@ function samplesOf(node: Node, state: State): string[] {
       }
       const inner = samplesOf(node.node, state);
       const counts = node.max > node.min ? [node.min, node.min + 1] : [node.min];
+      if (node.max > node.min + 1) state.complete = false;
       const out: string[] = node.min === 0 ? [''] : [];
       for (const k of counts) for (const s of inner) add(out, s.repeat(k), state);
       return out;

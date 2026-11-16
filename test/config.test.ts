@@ -210,11 +210,11 @@ test('scope matchers must be valid regular expressions and must not match every 
   assertProblem(problems, /^\/scopes\/investigate\/match\/1: not a valid regular expression \(/);
   assertProblem(
     problems,
-    /^\/scopes\/investigate\/match\/2: "a\*" matches every one of the plain task texts "a", "Z", "0", " a ", "A B", "x_1 y", so it would put every task in this scope whatever it says$/,
+    /^\/scopes\/investigate\/match\/2: "a\*" matches each of the probe texts "a", "Z", "0", " a ", "A B", "x_1 y", which are plain task texts used to detect catch-all matchers$/,
   );
-  assertProblem(problems, /^\/scopes\/investigate\/match\/3: "\." matches every one of the plain task texts/);
-  assertProblem(problems, /^\/scopes\/investigate\/match\/4: "\\b" matches every one of the plain task texts/);
-  assertProblem(problems, /^\/scopes\/investigate\/match\/5: "\\w" matches every one of the plain task texts/);
+  assertProblem(problems, /^\/scopes\/investigate\/match\/3: "\." matches each of the probe texts/);
+  assertProblem(problems, /^\/scopes\/investigate\/match\/4: "\\b" matches each of the probe texts/);
+  assertProblem(problems, /^\/scopes\/investigate\/match\/5: "\\w" matches each of the probe texts/);
   assert.ok(!problems.some((p) => p.startsWith('/scopes/investigate/match/0')), problems.join('\n'));
   assert.ok(!problems.some((p) => p.startsWith('/scopes/investigate/match/6')), 'a narrow matcher is accepted');
   assertProblem(problemsOf({ version: 1, scopes: { empty: { match: [''] } } }), /^\/scopes\/empty\/match\/0: must not be empty/);
