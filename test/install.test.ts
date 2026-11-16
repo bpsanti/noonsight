@@ -368,6 +368,30 @@ test('by default: install reaches every Claude Code configuration directory of t
   assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
 });
 
+/** Every entry below the directories, with its kind, inode, modification time and content. */
+function snapshot(...roots: string[]): Map<string, string> {
+  const found = new Map<string, string>();
+  const walk = (p: string): void => {
+    const st = fs.lstatSync(p, { bigint: true });
+    const content = st.isFile() ? fs.readFileSync(p, 'utf8') : st.isSymbolicLink() ? fs.readlinkSync(p) : '';
+    found.set(p, `${st.mode} ${st.ino} ${st.mtimeNs} ${content}`);
+    if (st.isDirectory()) for (const name of fs.readdirSync(p)) walk(path.join(p, name));
+  };
+  for (const root of roots) walk(root);
+  return found;
+}
+
+test('by default: a second install writes nothing at all, not even its own list of installs', () => {
+  const { home, outside, env } = logins();
+  assert.equal(runCli(['install'], env).status, 0);
+  const before = snapshot(home, outside);
+  // Long enough for any write to show in the modification times.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  const second = runCli(['install'], env);
+  assert.equal(second.status, 0, second.stderr);
+  assert.deepEqual(snapshot(home, outside), before);
+});
+
 test('by default: a login deleted since install does not keep the hook pointer, and uninstall forgets it', () => {
   const { home, env } = logins();
   assert.equal(runCli(['install'], env).status, 0);
