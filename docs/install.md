@@ -227,6 +227,7 @@ The machine-wide install's file is removed whole.
 The per-account pointer stays while another directory still uses it.
 A recorded directory that no longer exists is forgotten and no longer keeps the pointer; one that cannot be reached now, such as on an unmounted volume, is kept.
 Rules a running session already received stay in that session.
+`uninstall` does not stop the [watcher](#new-logins-as-they-appear-optional); while it is on, a new configuration directory still gets the hooks, so `sextant watch disable` is the step that keeps them out.
 
 ## Check
 

@@ -20,7 +20,7 @@ One configuration file serves the whole machine, for every Claude Code account o
 
 ```bash
 sextant install    # every Claude Code login of this account, no administrator rights
-sextant check      # configuration, installs, Claude Code version
+sextant check      # configuration, installs, watcher, Claude Code version
 ```
 
 `sextant watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `sextant watch disable` turns it off.
