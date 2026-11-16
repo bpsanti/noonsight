@@ -38,7 +38,7 @@
       "default": "warn"
     },
     "scopes": {
-      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here. A session takes its scope from SEXTANT_SCOPE; a subagent from its type (agent_types), else from the scope whose matcher matches earliest in its task.",
+      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here. A session takes its scope from SEXTANT_SCOPE; a subagent from the scope whose matcher matches earliest in its task.",
       "type": "object",
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9-]*$",
@@ -195,19 +195,8 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
-        },
-        "agent_types": {
-          "description": "Subagent types (subagent_type, compared exactly) that always run in this scope, whatever their task text says.",
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "$ref": "#/$defs/agentType" }
         }
       }
-    },
-    "agentType": {
-      "type": "string",
-      "pattern": "^\\S+$",
-      "x-hint": "a subagent type has no spaces, such as Explore or my-plugin:reviewer"
     },
     "ruleId": {
       "type": "string",

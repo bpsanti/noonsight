@@ -129,38 +129,30 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
   const report = scopeOverlaps(config);
   if (config.scopes.size > 0) {
     const untested = report.untested.map((u) => `scope "${u.scope}": ${JSON.stringify(u.matcher)}`);
-    const overlapping = report.overlaps.length > 0;
     add(
       'ok',
       `scopes: ${plural(config.scopes.size, 'scope')} declared, ${plural(report.matchers, 'matcher')}` +
-        (overlapping ? '' : report.matchers > 0 ? '; no two scopes overlap' : '') +
-        (untested.length ? `; no example text could be built to test ${untested.join(', ')} for overlaps` : ''),
+        (report.overlaps.length === 0 && untested.length === 0 && report.matchers > 0 ? '; no two scopes overlap' : '') +
+        (untested.length ? `; not all example texts could be built for ${untested.join(', ')}, so their overlaps are not fully checked` : ''),
     );
   }
   for (const o of report.overlaps)
-    if (o.kind === 'agent-type')
-      add(
-        'warning',
-        `scopes ${o.scopes.map((s) => `"${s}"`).join(' and ')} ${o.scopes.length === 2 ? 'both' : 'all'} list the subagent type "${o.agentType}" under agent_types; ` +
-          `such a subagent always gets "${o.scopes[0]}", the one declared first`,
-      );
-    else
-      add(
-        'warning',
-        `scopes "${o.scopes[0]}" and "${o.scopes[1]}" overlap: the task text ${JSON.stringify(o.text)} matches both` +
-          (o.winner !== null ? `, and a task with only that text gets "${o.winner}"` : '') +
-          '; the scope whose matcher matches earliest in a task wins, and at the same place the one declared first',
-      );
+    add(
+      'warning',
+      `scopes "${o.scopes[0]}" and "${o.scopes[1]}" overlap: the task text ${JSON.stringify(o.text)} matches both` +
+        (o.winner !== null ? `, and a task with only that text gets "${o.winner}"` : '') +
+        '; the scope whose matcher matches earliest in a task wins, and at the same place the one declared first',
+    );
 
   const scope = sessionScope(env);
   const place = sessionPlace(config, env);
-  if (scope.scope !== null && !config.scopes.has(scope.scope))
-    add('warning', `${SCOPE_ENV} is "${scope.scope}" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope`);
-  else if (scope.scope !== null || place.because !== undefined)
+  if (scope !== null && !config.scopes.has(scope))
+    add('warning', `${SCOPE_ENV} is "${scope}" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope`);
+  else if (scope !== null || place.because !== undefined)
     add(
       'ok',
       'sessions started from this environment get ' +
-        (scope.scope !== null ? `scope "${scope.scope}" (${SCOPE_ENV})` : 'no scope') +
+        (scope !== null ? `scope "${scope}" (${SCOPE_ENV})` : 'no scope') +
         `, place "${place.place}"` +
         (place.because !== undefined ? ` (${place.because} is set)` : ''),
     );

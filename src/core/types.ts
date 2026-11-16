@@ -72,8 +72,6 @@ export interface Scope {
   readonly description?: string;
   /** Matched against a subagent's task text. */
   readonly match: readonly ScopeMatcher[];
-  /** Subagent types that always run in this scope, compared exactly. */
-  readonly agentTypes: readonly string[];
 }
 
 /** How a session's place is told; the keys under "session" in the configuration. */
@@ -104,8 +102,6 @@ interface DecisionBase {
   readonly model: string | null;
   /** The declared scope the decision used, or null for "general rules only". */
   readonly scope: string | null;
-  /** Present when the caller asked for a scope that is not declared; general rules apply. */
-  readonly unknown_scope?: string;
   readonly place: Place;
 }
 

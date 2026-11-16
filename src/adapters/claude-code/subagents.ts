@@ -12,7 +12,7 @@
 
 import { normalizeModel } from '../../core/normalize.js';
 import { resolve } from '../../core/resolve.js';
-import { taskScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
+import { taskScope } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import {
   agentCallFile,
@@ -77,8 +77,8 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   });
   const prompt = typeof ti.prompt === 'string' ? ti.prompt : null;
   // The subagent's own task decides its scope; the session's scope does not carry over.
-  const scope = taskScope(config, { agentType: subagentType, description: str(ti.description), prompt });
-  const decision = resolve(config, { model: prediction.model, scope: scope.scope, place: 'subagent' });
+  const scope = taskScope(config, { description: str(ti.description), prompt });
+  const decision = resolve(config, { model: prediction.model, scope, place: 'subagent' });
 
   let delivered: AgentCall['delivered'] = 'nothing';
   let specific: Record<string, unknown> | null = null;
@@ -116,7 +116,6 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       parent_model: parent.model,
       parent_source: parent.source,
       ...decisionFields(decision),
-      ...choiceFields(scope),
       model_source: prediction.source,
       ...(prediction.value !== undefined ? { model_value: prediction.value } : {}),
       ...(prediction.definition !== undefined ? { definition: prediction.definition } : {}),
@@ -223,17 +222,7 @@ export function decisionFields(d: Decision): Record<string, unknown> {
     ...('key' in d ? { key: d.key } : {}),
     ...(d.status === 'matched' ? { rules: d.rules, sha256: d.sha256 } : {}),
     scope: d.scope,
-    ...(d.unknown_scope !== undefined ? { unknown_scope: d.unknown_scope } : {}),
     place: d.place,
-  };
-}
-
-/** What the decision log records about where the scope and the place came from. */
-export function choiceFields(scope: ScopeChoice, place?: PlaceChoice): Record<string, unknown> {
-  return {
-    scope_source: scope.source,
-    ...(scope.matcher !== undefined ? { scope_matcher: scope.matcher } : {}),
-    ...(place?.because !== undefined ? { unattended_env: place.because } : {}),
   };
 }
 

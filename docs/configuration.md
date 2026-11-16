@@ -36,10 +36,7 @@ Presets are read from the installed package, so a preset always follows the pack
   },
   "scopes": {
     "routine": { "description": "A well-scoped change that can be described precisely." },
-    "investigate": {
-      "match": ["\\binvestigat", "\\broot cause\\b", "\\bdiagnos"],
-      "agent_types": ["debugger"]
-    }
+    "investigate": { "match": ["\\binvestigat", "\\broot cause\\b", "\\bdiagnos"] }
   },
   "session": { "unattended_when_env": ["CI"] },
   "subagents": { "permission": "allow", "on_mismatch": "warn" }
@@ -60,8 +57,7 @@ Presets are read from the installed package, so a preset always follows the pack
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
 | `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
-| `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. |
-| `scopes.<name>.agent_types` | Subagent types | Empty | Subagent types that always run in this scope, compared exactly, such as `Explore` or `my-plugin:reviewer`. |
+| `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches every plain task text is refused; see [Scopes](#scopes). |
 | `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text sextant changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
@@ -96,7 +92,7 @@ A decision has at most one scope, and where it comes from depends on who reads t
 | Reader | Scope | Place |
 | --- | --- | --- |
 | A session | `SEXTANT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it; else none | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
-| A subagent | The scope that lists its type under `agent_types`; else the scope whose matcher matches earliest in its description and task text; else none | Always `subagent` |
+| A subagent | The scope whose matcher matches earliest in its description and task text; else none | Always `subagent` |
 
 A subagent's scope comes from its own task and is never taken from the session.
 A session that investigates can start a subagent that summarizes, and each gets the rules of its own scope.
@@ -104,16 +100,14 @@ A session that investigates can start a subagent that summarizes, and each gets 
 Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware (flags `iu`).
 They read the subagent's `description`, then its `prompt`, joined, up to the first 4,000 characters; any sextant rules a parent copied into the task are left out, so the rules' own words never pick the scope.
 When several scopes match, the one whose matcher matches earliest in the text wins, and two that match at the same place go to the scope declared first: the preset's scopes in the preset's order, then the user's new ones in the file's order.
-When several scopes list the same subagent type, the one declared first wins.
-A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, only means "rules for every scope"; it never blocks and never warns in a session, and the decision log records it as `unknown_scope`.
+A matcher that matches every one of the plain task texts `"a"`, `"Z"`, `"0"`, `" a "`, `"A B"` and `"x_1 y"` is refused, because it is a catch-all (such as `.`, `\b` or `\w`) that would put every task in its scope.
+The check runs only these six texts: a matcher that misses any of them is accepted, however broad it is.
+A scope that is not declared, such as a `SEXTANT_SCOPE` with a typing error, only means "rules for every scope"; it never blocks and never warns in a session.
 
-`sextant check` reports scopes that overlap, as warnings:
-
-- two scopes that list the same subagent type;
-- two scopes whose matchers match the same text, with an example text that both match and the scope a task with that text gets.
-
-To find matchers that overlap, sextant builds short example texts from each matcher and runs every other scope's matchers over them, so every overlap it reports comes with a text that really matches both.
-A matcher it cannot build an example for, such as one with a back reference, is named on the scopes line instead.
+`sextant check` reports two scopes whose matchers match the same text, as a warning with an example text that both match and the scope a task with that text gets.
+To find such texts, sextant builds short example texts from each matcher and runs the other scopes' matchers over them, so every overlap it reports comes with a text that really matches both.
+Two scopes can still overlap on a text the examples do not reach, so "no two scopes overlap" means no overlap was found.
+A matcher whose examples are incomplete, such as one with a back reference, or one with more texts than sextant keeps, is named on the scopes line, which then does not claim that no two scopes overlap.
 
 ## How a rule is chosen
 
@@ -164,6 +158,6 @@ An empty scope (`""`) means no scope, so a place can be given without one, as in
 | `none` | The model receives nothing. | `key`, `reason`: `declared-none` or `no-rule-applies` |
 | `undeclared` | The model has no entry. | `reason`: `no-entry` or `model-not-reported`; `warning` unless `on_undeclared` is `ignore` |
 
-Every decision also has `model`, `scope` and `place`, plus `unknown_scope` when the requested scope is not declared.
+Every decision also has `model`, `scope` and `place`.
 The command exits with 0 for every decision, and with 2 for a usage error or a refused configuration.
 It reads only local files and never uses the network.

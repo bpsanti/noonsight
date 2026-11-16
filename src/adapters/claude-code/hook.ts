@@ -16,14 +16,14 @@ import { ConfigError, loadConfig } from '../../config/load.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { normalizeModel } from '../../core/normalize.js';
 import { joinDelivery, resolve, switchNote } from '../../core/resolve.js';
-import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
+import { sessionPlace, sessionScope, type PlaceChoice } from '../../core/scope.js';
 import type { Config, Decision } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
 import { launchModel, type LaunchModel } from './launch.js';
 import type { InstallKind } from './locations.js';
 import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
-import { agentCall, agentResult, choiceFields, decisionFields } from './subagents.js';
+import { agentCall, agentResult, decisionFields } from './subagents.js';
 
 export interface HookContext {
   readonly env: Env;
@@ -138,7 +138,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
 
 /** A session's scope and place. */
 interface Where {
-  readonly scope: ScopeChoice;
+  readonly scope: string | null;
   readonly place: PlaceChoice;
 }
 
@@ -185,7 +185,7 @@ function sessionStart(
       : launch?.kind === 'found'
         ? launch.source
         : null;
-  const decision = resolve(config, { model, scope: where.scope.scope, place: where.place.place });
+  const decision = resolve(config, { model, scope: where.scope, place: where.place.place });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
   const repeat = (source === 'resume' || source === 'fork') && session !== null && session.model === decision.model && session.sha256 === sha;
 
@@ -194,7 +194,6 @@ function sessionStart(
   return {
     record: {
       ...decisionFields(decision),
-      ...choiceFields(where.scope, where.place),
       model_source: modelSource,
       ...launchFields(launch),
       delivered: repeat ? 'already-delivered' : context ? 'rules' : 'nothing',
@@ -213,10 +212,10 @@ function sessionStart(
 function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null): Outcome {
   const to = normalizeModel(str(input.to_model));
   const from = normalizeModel(str(input.from_model));
-  const request = { scope: where.scope.scope, place: where.place.place };
+  const request = { scope: where.scope, place: where.place.place };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const base = { ...decisionFields(decision), ...choiceFields(where.scope, where.place), model_source: 'hook-input', from_model: from || null };
+  const base = { ...decisionFields(decision), model_source: 'hook-input', from_model: from || null };
   const state = decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha };
 
   // Resuming a session restores its model and reports it as a switch; the rules may already be there.

@@ -52,7 +52,6 @@ interface RawModelEntry {
 interface RawScope {
   description?: string;
   match?: string[];
-  agent_types?: string[];
 }
 interface RawConfig {
   version: 1;
@@ -245,13 +244,15 @@ function toScope(name: string, raw: RawScope, at: string, report: (at: string, m
     name,
     ...(description !== undefined ? { description } : {}),
     match: raw.match !== undefined ? compileMatchers(raw.match, `${at}/match`, report) : (base?.match ?? []),
-    agentTypes: raw.agent_types ?? base?.agentTypes ?? [],
   };
 }
 
+/** Plain task texts. A matcher that matches every one of them is a catch-all, such as `.`, `\b` or `\w`. */
+const CATCH_ALL_PROBES = ['a', 'Z', '0', ' a ', 'A B', 'x_1 y'];
+
 /**
  * Matchers are JavaScript regular expressions, compiled case-insensitive and Unicode-aware. One that
- * matches an empty text would put every task in its scope, so it is refused.
+ * matches every plain task text (CATCH_ALL_PROBES) would put every task in its scope, so it is refused.
  */
 function compileMatchers(sources: readonly string[], at: string, report: (at: string, message: string) => void): ScopeMatcher[] {
   const out: ScopeMatcher[] = [];
@@ -263,8 +264,9 @@ function compileMatchers(sources: readonly string[], at: string, report: (at: st
       report(`${at}/${i}`, `not a valid regular expression (${(e as Error).message})`);
       return;
     }
-    if (regex.test('')) {
-      report(`${at}/${i}`, `"${source}" matches an empty text, so it would put every task in this scope`);
+    if (CATCH_ALL_PROBES.every((text) => regex.test(text))) {
+      const probes = CATCH_ALL_PROBES.map((text) => JSON.stringify(text)).join(', ');
+      report(`${at}/${i}`, `"${source}" matches every one of the plain task texts ${probes}, so it would put every task in this scope whatever it says`);
       return;
     }
     out.push({ source, regex });

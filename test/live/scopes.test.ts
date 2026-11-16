@@ -63,11 +63,11 @@ test('live, login: SEXTANT_SCOPE: two sessions on the same model in two scopes r
   assert.deepEqual(
     l.log()
       .filter((d) => d.event === 'session-start')
-      .map((d) => [d.model, d.scope, d.scope_source, d.status, d.delivered]),
+      .map((d) => [d.model, d.scope, d.status, d.delivered]),
     [
-      ['claude-sonnet-5-5', 'investigate', 'env', 'matched', 'rules'],
-      ['claude-sonnet-5-5', 'summarize', 'env', 'matched', 'rules'],
-      ['claude-sonnet-5-5', null, null, 'none', 'nothing'],
+      ['claude-sonnet-5-5', 'investigate', 'matched', 'rules'],
+      ['claude-sonnet-5-5', 'summarize', 'matched', 'rules'],
+      ['claude-sonnet-5-5', null, 'none', 'nothing'],
     ],
   );
 });
@@ -93,11 +93,11 @@ test('live, login: matchers: two subagents on the same model, whose tasks fall i
   assert.doesNotMatch(summarize, new RegExp(INVESTIGATE_WORD), r.result);
   assert.deepEqual(
     calls(l.log())
-      .map((d) => [d.model, d.scope, d.scope_source, d.place, d.delivered])
+      .map((d) => [d.model, d.scope, d.place, d.delivered])
       .sort(),
     [
-      ['claude-sonnet-5-5', 'investigate', 'task-text', 'subagent', 'rules'],
-      ['claude-sonnet-5-5', 'summarize', 'task-text', 'subagent', 'rules'],
+      ['claude-sonnet-5-5', 'investigate', 'subagent', 'rules'],
+      ['claude-sonnet-5-5', 'summarize', 'subagent', 'rules'],
     ],
   );
 });

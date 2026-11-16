@@ -3,8 +3,8 @@
 //
 //   Session    scope: SEXTANT_SCOPE, when whoever starts the session exports it; else none.
 //              place: unattended when a variable named in session.unattended_when_env is set; else session.
-//   Subagent   scope: the scope that lists the subagent's type under agent_types; else the scope whose
-//              matcher matches earliest in the task text; else none. Never inherited from the session.
+//   Subagent   scope: the scope whose matcher matches earliest in the task text; else none. Never
+//              inherited from the session.
 //              place: always subagent.
 
 import type { Config, Place } from './types.js';
@@ -18,28 +18,16 @@ export const SCOPE_ENV = 'SEXTANT_SCOPE';
  */
 export const TASK_TEXT_LIMIT = 4000;
 
-export type ScopeSource = 'env' | 'agent-type' | 'task-text';
-
-export interface ScopeChoice {
-  /** The scope to resolve with, or null for none. From the environment it may be undeclared. */
-  readonly scope: string | null;
-  readonly source: ScopeSource | null;
-  /** For a scope chosen from the task text: the matcher that decided, as the configuration writes it. */
-  readonly matcher?: string;
-}
-
 export interface PlaceChoice {
   readonly place: Place;
   /** For an unattended session: the variable that marked it. */
   readonly because?: string;
 }
 
-const NO_SCOPE: ScopeChoice = { scope: null, source: null };
-
 /** A session's scope: SEXTANT_SCOPE, trimmed; empty or unset means none. */
-export function sessionScope(env: Readonly<Record<string, string | undefined>>): ScopeChoice {
+export function sessionScope(env: Readonly<Record<string, string | undefined>>): string | null {
   const value = (env[SCOPE_ENV] ?? '').trim();
-  return value ? { scope: value, source: 'env' } : NO_SCOPE;
+  return value ? value : null;
 }
 
 /** A session's place: unattended when any variable in session.unattended_when_env is set and not empty. */
@@ -49,34 +37,25 @@ export function sessionPlace(config: Config, env: Readonly<Record<string, string
 }
 
 export interface Task {
-  /** The subagent type the call names. */
-  readonly agentType: string | null;
   /** The call's short description. */
   readonly description?: string | null;
   /** The call's task text. */
   readonly prompt?: string | null;
 }
 
-/** A subagent's scope, from its type, then from its task text. */
-export function taskScope(config: Config, task: Task): ScopeChoice {
-  if (task.agentType !== null)
-    for (const scope of config.scopes.values())
-      if (scope.agentTypes.includes(task.agentType)) return { scope: scope.name, source: 'agent-type' };
-  return textScope(config, taskText(task.description ?? null, task.prompt ?? null));
-}
-
 /**
- * The scope whose matcher matches earliest in the text. Two scopes that match at the same place
- * go to the one declared first: the preset's scopes before the user's new ones.
+ * The scope whose matcher matches earliest in a subagent's description and task text. Two scopes
+ * that match at the same place go to the one declared first: the preset's scopes before the user's.
  */
-export function textScope(config: Config, text: string): ScopeChoice {
-  let best: { scope: string; matcher: string; at: number } | null = null;
+export function taskScope(config: Config, task: Task): string | null {
+  const text = taskText(task.description ?? null, task.prompt ?? null);
+  let best: { scope: string; at: number } | null = null;
   for (const scope of config.scopes.values())
     for (const m of scope.match) {
       const at = text.search(m.regex);
-      if (at >= 0 && (best === null || at < best.at)) best = { scope: scope.name, matcher: m.source, at };
+      if (at >= 0 && (best === null || at < best.at)) best = { scope: scope.name, at };
     }
-  return best === null ? NO_SCOPE : { scope: best.scope, source: 'task-text', matcher: best.matcher };
+  return best?.scope ?? null;
 }
 
 /**

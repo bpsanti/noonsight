@@ -202,27 +202,32 @@ test('an unused default preset that is not installed is not a problem', () => {
   loadConfig(path.join(dir, 'sextant.json'), { presetsDir: tempTree({}) });
 });
 
-test('scope matchers must be valid regular expressions that never match an empty text', () => {
+test('scope matchers must be valid regular expressions and must not match every plain task text', () => {
   const problems = problemsOf({
     version: 1,
-    scopes: { investigate: { match: ['\\binvestigat', '(unclosed', 'a*', '\\q'] } },
+    scopes: { investigate: { match: ['\\binvestigat', '(unclosed', 'a*', '.', '\\b', '\\w', '\\bcat\\b'] } },
   });
   assertProblem(problems, /^\/scopes\/investigate\/match\/1: not a valid regular expression \(/);
-  assertProblem(problems, /^\/scopes\/investigate\/match\/2: "a\*" matches an empty text, so it would put every task in this scope$/);
-  assertProblem(problems, /^\/scopes\/investigate\/match\/3: not a valid regular expression/);
+  assertProblem(
+    problems,
+    /^\/scopes\/investigate\/match\/2: "a\*" matches every one of the plain task texts "a", "Z", "0", " a ", "A B", "x_1 y", so it would put every task in this scope whatever it says$/,
+  );
+  assertProblem(problems, /^\/scopes\/investigate\/match\/3: "\." matches every one of the plain task texts/);
+  assertProblem(problems, /^\/scopes\/investigate\/match\/4: "\\b" matches every one of the plain task texts/);
+  assertProblem(problems, /^\/scopes\/investigate\/match\/5: "\\w" matches every one of the plain task texts/);
   assert.ok(!problems.some((p) => p.startsWith('/scopes/investigate/match/0')), problems.join('\n'));
+  assert.ok(!problems.some((p) => p.startsWith('/scopes/investigate/match/6')), 'a narrow matcher is accepted');
   assertProblem(problemsOf({ version: 1, scopes: { empty: { match: [''] } } }), /^\/scopes\/empty\/match\/0: must not be empty/);
   assertProblem(problemsOf({ version: 1, scopes: { a: { match: ['x', 'x'] } } }), /^\/scopes\/a\/match: lists "x" more than once/);
 });
 
-test('agent types have no spaces, and unattended_when_env names environment variables', () => {
-  assertProblem(problemsOf({ version: 1, scopes: { a: { agent_types: ['general purpose'] } } }), /^\/scopes\/a\/agent_types\/0: .*a subagent type has no spaces/);
+test('unattended_when_env names environment variables, and a scope takes no agent_types key', () => {
   assertProblem(problemsOf({ version: 1, session: { unattended_when_env: ['CI', '1BAD'] } }), /^\/session\/unattended_when_env\/1: .*an environment variable name/);
   assertProblem(problemsOf({ version: 1, session: { delivery: 'off' } }), /^\/session\/delivery: unknown key$/);
-  const ok = tempTree({ 'sextant.json': { version: 1, scopes: { a: { agent_types: ['Explore', 'my-plugin:reviewer'] } }, session: { unattended_when_env: ['FM_TASK_ID'] } } });
+  assertProblem(problemsOf({ version: 1, scopes: { a: { agent_types: ['Explore'] } } }), /^\/scopes\/a\/agent_types: unknown key$/);
+  const ok = tempTree({ 'sextant.json': { version: 1, session: { unattended_when_env: ['FM_TASK_ID'] } } });
   const cfg = loadConfig(path.join(ok, 'sextant.json'), { presetsDir: LAB_PRESETS });
   assert.deepEqual(cfg.session.unattendedWhenEnv, ['FM_TASK_ID']);
-  assert.deepEqual(cfg.scopes.get('a')?.agentTypes, ['Explore', 'my-plugin:reviewer']);
 });
 
 test('the preset\'s matchers are checked with the preset, even when the user replaces them', () => {

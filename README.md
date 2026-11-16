@@ -5,7 +5,7 @@ Take a fix before you set the course: pick the right model for each agent task, 
 **Status: early development.** Nothing is published yet.
 Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
 So does each subagent a session starts: before it starts, sextant predicts the model it will run on and adds that model's rules to the end of its task, then checks the model it actually started on and warns on a difference.
-Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `SEXTANT_SCOPE`, a subagent from its type or from matchers run over its task, and `sextant check` reports scopes that overlap.
+Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `SEXTANT_SCOPE`, a subagent from matchers run over its task, and `sextant check` reports scopes that overlap.
 The starting preset comes next.
 
 ## What it will do

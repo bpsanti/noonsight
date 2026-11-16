@@ -425,11 +425,11 @@ test('subagent records nobody wrote for 7 days are removed when a session starts
   assert.deepEqual(fs.readdirSync(path.join(state, 'agents')), ['anew.json']);
 });
 
-/** The lab configuration with matchers on two scopes and a subagent type bound to one of them. */
+/** The lab configuration with matchers on two scopes and a search and an implement scope with none. */
 const SCOPED = (): string =>
   config({
     scopes: {
-      summarize: { match: ['\\bsummar', '\\bdigest\\b'], agent_types: ['digest-writer'] },
+      summarize: { match: ['\\bsummar', '\\bdigest\\b'] },
       investigate: { match: ['\\binvestigat', '\\broot cause\\b'] },
       search: {},
       implement: {},
@@ -451,27 +451,22 @@ test('a subagent\'s scope comes from its own task text, so two tasks on one mode
   assert.match(plain, /^Rename the variable\.\n\n<sextant-rules model="claude-haiku-5-5">\n/);
 
   assert.deepEqual(
-    agentLines(h).map((l) => [l.model, l.scope, l.scope_source, l.scope_matcher ?? null, l.place]),
+    agentLines(h).map((l) => [l.model, l.scope, l.place]),
     [
-      ['claude-haiku-5-5', 'summarize', 'task-text', '\\bsummar', 'subagent'],
-      ['claude-sonnet-5-5', 'investigate', 'task-text', '\\broot cause\\b', 'subagent'],
-      ['claude-haiku-5-5', null, null, null, 'subagent'],
+      ['claude-haiku-5-5', 'summarize', 'subagent'],
+      ['claude-sonnet-5-5', 'investigate', 'subagent'],
+      ['claude-haiku-5-5', null, 'subagent'],
     ],
   );
 });
 
-test('a subagent type listed under a scope decides the scope, and the session\'s SEXTANT_SCOPE never carries over to a subagent', () => {
+test('the session\'s SEXTANT_SCOPE never carries over to a subagent, whose scope comes from its own task only', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');
-  const r = h.hook('agent-call', call({ model: undefined, subagent_type: 'digest-writer', prompt: 'Investigate the logs.' }), { SEXTANT_SCOPE: 'investigate' });
-  assert.match(r.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-SUM-6610/);
-  const other = h.hook('agent-call', call({ model: undefined, prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_2' }), { SEXTANT_SCOPE: 'summarize' });
+  const other = h.hook('agent-call', call({ model: undefined, prompt: 'Rename the variable.' }), { SEXTANT_SCOPE: 'summarize' });
   assert.doesNotMatch(other.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-SUM-6610/);
   assert.deepEqual(
-    agentLines(h).map((l) => [l.subagent_type, l.scope, l.scope_source]),
-    [
-      ['digest-writer', 'summarize', 'agent-type'],
-      ['general-purpose', null, null],
-    ],
+    agentLines(h).map((l) => [l.subagent_type, l.scope]),
+    [['general-purpose', null]],
   );
 });

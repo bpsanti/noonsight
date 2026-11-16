@@ -25,11 +25,7 @@ export function resolve(config: Config, request: ResolveRequest): Decision {
   const model = normalizeModel(request.model);
   const askedScope = request.scope ?? null;
   const scope = askedScope !== null && config.scopes.has(askedScope) ? askedScope : null;
-  const base = {
-    scope,
-    ...(askedScope !== null && scope === null ? { unknown_scope: askedScope } : {}),
-    place: request.place,
-  };
+  const base = { scope, place: request.place };
 
   if (!model) return undeclared(config, { ...base, model: null, reason: 'model-not-reported' });
 
@@ -119,7 +115,7 @@ function matchModel(config: Config, model: string): { key: string; entry: ModelE
 
 function undeclared(
   config: Config,
-  d: { model: string | null; reason: 'model-not-reported' | 'no-entry'; scope: string | null; unknown_scope?: string; place: Place },
+  d: { model: string | null; reason: 'model-not-reported' | 'no-entry'; scope: string | null; place: Place },
 ): Decision {
   const warning =
     config.onUndeclared === 'warn'

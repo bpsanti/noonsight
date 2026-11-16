@@ -18,26 +18,34 @@ type Node =
 /** Characters tried, in order, for a character class or a class escape. */
 const CANDIDATES = ['a', 'e', 's', 'x', '0', '1', ' ', '-', '_', '.', '/', ':', 'A', 'Z', 'é'];
 
+export interface Samples {
+  /** Distinct texts the expression matches, at most MAX_SAMPLES. */
+  readonly texts: string[];
+  /** False when the generator dropped or capped a candidate, so the texts may leave out matches. */
+  readonly complete: boolean;
+}
+
 /**
  * Up to MAX_SAMPLES distinct texts that the compiled expression matches. The pattern must already
- * compile with the given flags. Returns an empty list when no example can be built.
+ * compile with the given flags. Returns no texts when no example can be built.
  */
-export function regexSamples(source: string, flags: string): string[] {
+export function regexSamples(source: string, flags: string): Samples {
   const regex = new RegExp(source, flags.replace(/[gy]/g, ''));
   let tree: Node;
   try {
     tree = new Parser(source, flags).parse();
   } catch {
-    return [];
+    return { texts: [], complete: false };
   }
-  const out: string[] = [];
-  for (const raw of samplesOf(tree)) {
+  const state: State = { complete: true };
+  const texts: string[] = [];
+  for (const raw of samplesOf(tree, state)) {
     // Padding satisfies a word boundary at either end.
     const found = [raw, ` ${raw} `].find((t) => regex.test(t));
-    if (found !== undefined && !out.includes(found)) out.push(found);
-    if (out.length >= MAX_SAMPLES) break;
+    if (found === undefined) state.complete = false;
+    else if (!texts.includes(found)) texts.push(found);
   }
-  return out;
+  return { texts, complete: state.complete };
 }
 
 class Unsupported extends Error {}
@@ -215,39 +223,54 @@ class Parser {
   }
 }
 
-function expand(nodes: readonly Node[]): string[] {
+/** Set to false the first time the generator drops a candidate. */
+interface State {
+  complete: boolean;
+}
+
+/** Adds a text once; a new text that does not fit under MAX_SAMPLES is dropped and noted. */
+function add(out: string[], text: string, state: State): void {
+  if (out.includes(text)) return;
+  if (out.length >= MAX_SAMPLES) state.complete = false;
+  else out.push(text);
+}
+
+function expand(nodes: readonly Node[], state: State): string[] {
   let acc: string[] = [''];
   for (const node of nodes) {
-    const options = samplesOf(node);
+    const options = samplesOf(node, state);
     const next: string[] = [];
-    for (const a of acc) for (const b of options) if (next.length < MAX_SAMPLES) next.push(a + b);
+    for (const a of acc) for (const b of options) add(next, a + b, state);
     acc = next;
     if (acc.length === 0) return [];
   }
   return acc;
 }
 
-function samplesOf(node: Node): string[] {
+function samplesOf(node: Node, state: State): string[] {
   switch (node.kind) {
     case 'text':
       return [node.value];
     case 'empty':
       return [''];
     case 'none':
+      state.complete = false;
       return [];
     case 'alt': {
       const out: string[] = [];
-      for (const branch of node.branches) for (const s of expand(branch)) if (out.length < MAX_SAMPLES && !out.includes(s)) out.push(s);
+      for (const branch of node.branches) for (const s of expand(branch, state)) add(out, s, state);
       return out;
     }
     case 'repeat': {
-      if (node.min > MAX_REPEAT) return [];
-      const inner = samplesOf(node.node);
+      if (node.min > MAX_REPEAT) {
+        state.complete = false;
+        return [];
+      }
+      const inner = samplesOf(node.node, state);
       const counts = node.max > node.min ? [node.min, node.min + 1] : [node.min];
-      const out: string[] = [];
-      for (const k of counts) for (const s of inner) if (out.length < MAX_SAMPLES && !out.includes(s.repeat(k))) out.push(s.repeat(k));
-      if (node.min === 0 && !out.includes('')) out.unshift('');
-      return out.slice(0, MAX_SAMPLES);
+      const out: string[] = node.min === 0 ? [''] : [];
+      for (const k of counts) for (const s of inner) add(out, s.repeat(k), state);
+      return out;
     }
   }
 }

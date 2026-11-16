@@ -94,12 +94,6 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
-        },
-        "agent_types": {
-          "description": "Subagent types that always run in this scope.",
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "type": "string", "pattern": "^\\S+$" }
         }
       }
     }
