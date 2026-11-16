@@ -28,7 +28,9 @@ Rules with a high cost, a described side effect or a narrow use ship off; `enabl
 No rule is delivered in a place where Claude Code already sends the same advice; the preset records, under `claude_code`, the Claude Code version it was compared with.
 [presets/claude/SOURCES.md](../presets/claude/SOURCES.md) lists every rule and scope with its source, and `sextant models` prints the rules of each declared model with their source, effect and cost.
 
-The preset's scopes declare no matchers, so a session takes one of them only from `SEXTANT_SCOPE`, and a subagent only once the user's file gives that scope a `match`.
+The preset's scopes declare no matchers, so a session takes one of them only from `SEXTANT_SCOPE` (which `sextant run --scope` sets), and a subagent only once the user's file gives that scope a `match`.
+A task whose scope is not known receives only the preset rules for every scope; the rules that list scopes stay dormant until the scope is known.
+[presets/claude/SOURCES.md](../presets/claude/SOURCES.md#how-the-rules-are-scoped) gives each rule's scopes, why, and whether that choice comes from a source or is a judgment.
 
 The preset also suggests a routing table, which applies only when the user turns routing on ([Routing](#routing)).
 

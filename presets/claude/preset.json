@@ -1,7 +1,7 @@
 {
   "$schema": "../../schema/preset.schema.json",
   "id": "claude",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "claude_code": {
     "version": "2.1.325",
     "checked": "2026-11-16"
@@ -107,7 +107,8 @@
           "id": "fable-5-2/finish-work",
           "file": "rules/fable-5-2/finish-work.md",
           "scopes": [
-            "*"
+            "investigate",
+            "build"
           ],
           "where": [
             "subagent"
@@ -278,6 +279,7 @@
           "id": "sonnet-5-5/verify-changes",
           "file": "rules/sonnet-5-5/verify-changes.md",
           "scopes": [
+            "investigate",
             "build",
             "routine"
           ],
@@ -298,7 +300,8 @@
           "id": "sonnet-5-5/no-self-review-rounds",
           "file": "rules/sonnet-5-5/no-self-review-rounds.md",
           "scopes": [
-            "*"
+            "build",
+            "routine"
           ],
           "where": [
             "session",
@@ -336,6 +339,7 @@
           "id": "sonnet-5-5/check-current-facts",
           "file": "rules/sonnet-5-5/check-current-facts.md",
           "scopes": [
+            "investigate",
             "digest"
           ],
           "where": [
@@ -378,6 +382,7 @@
           "id": "haiku-5-5/verify-changes",
           "file": "rules/haiku-5-5/verify-changes.md",
           "scopes": [
+            "investigate",
             "build",
             "routine"
           ],
@@ -398,6 +403,7 @@
           "id": "haiku-5-5/search-recent-facts",
           "file": "rules/haiku-5-5/search-recent-facts.md",
           "scopes": [
+            "investigate",
             "digest"
           ],
           "where": [
