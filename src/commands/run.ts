@@ -1,0 +1,147 @@
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { applyEnv, passThrough, planLaunch, type LaunchPlan } from '../adapters/claude-code/launcher.js';
+import { ConfigError, loadConfig } from '../config/load.js';
+import { configPath, stateDir, type Env } from '../config/paths.js';
+import { appendDecision } from '../state/log.js';
+import { writeFileAtomic } from '../state/files.js';
+import { packageVersion } from '../version.js';
+import { UsageError } from './usage.js';
+
+export const RUN_USAGE = `usage: sextant run [--scope <scope>] [--] [claude arguments...]
+
+Start Claude Code with the rules for its model in the system prompt, for sessions the hooks do not
+reach or reach without the model, such as \`claude -p\`. sextant takes the model the way Claude Code
+does: --model among the claude arguments, else ANTHROPIC_MODEL, else the model setting. It adds the
+rules with --append-system-prompt-file and runs claude with every other argument unchanged. When the
+hooks are installed too, they find the rules in the system prompt and do not deliver them again.
+
+Options, before the claude arguments:
+  --scope <scope>   the task scope, set as SEXTANT_SCOPE for the session
+
+Everything from the first other argument, or after "--", goes to claude. sextant run exits with
+claude's exit status.`;
+
+export interface RunIo {
+  readonly err: (text: string) => void;
+  readonly out: (text: string) => void;
+}
+
+/** Run claude through the launcher. Resolves to claude's exit status. */
+export async function runRun(args: readonly string[], env: Env, io: RunIo, home: string = os.homedir()): Promise<number> {
+  let scope: string | null = null;
+  let rest: readonly string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] ?? '';
+    if (a === '--help' || a === '-h') {
+      io.out(RUN_USAGE);
+      return 0;
+    }
+    if (a === '--scope') {
+      const value = args[++i];
+      if (value === undefined) throw new UsageError('--scope needs a value', RUN_USAGE);
+      scope = value;
+    } else if (a.startsWith('--scope=')) scope = a.slice('--scope='.length);
+    else {
+      rest = args.slice(a === '--' ? i + 1 : i);
+      break;
+    }
+  }
+
+  const plan = env.SEXTANT_DISABLE === '1' ? { args: [...rest], env: {} } : prepare(rest, scope, env, home, io);
+  return exec(plan.args, applyEnv(env, plan.env), io);
+}
+
+/** Decide, write the system prompt file and log. Any failure starts claude without the launcher's rules. */
+function prepare(args: readonly string[], scope: string | null, env: Env, home: string, io: RunIo): Pick<LaunchPlan, 'args' | 'env'> {
+  const state = stateDir(home);
+  const file = configPath(env, home);
+  const log = (fields: Record<string, unknown>): void => {
+    try {
+      appendDecision(state, { ts: new Date().toISOString(), version: safeVersion(), event: 'launch', config: file, ...fields });
+    } catch {
+      // A log that cannot be written must not cost the session its rules.
+    }
+  };
+  if (!env.SEXTANT_CONFIG && !fs.existsSync(file)) {
+    io.err(`sextant: there is no configuration at ${file}, so sextant run added no rules. Run \`sextant init\` to create one.`);
+    return passThrough(args, scope);
+  }
+  let plan: LaunchPlan;
+  try {
+    const config = loadConfig(file, {}, env);
+    plan = planLaunch(config, file, { args, scope, env, home, cwd: process.cwd(), state });
+  } catch (e) {
+    if (e instanceof ConfigError) {
+      log({ status: 'config-invalid', problems: e.problems.length, delivered: 'nothing', warned: true });
+      io.err(
+        `sextant: the configuration at ${file} was refused (${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}), ` +
+          'so sextant run added no rules. Run `sextant check` to see the problems.',
+      );
+    } else {
+      const message = e instanceof Error ? e.message : String(e);
+      log({ status: 'error', error: message, delivered: 'nothing', warned: true });
+      io.err(`sextant: sextant run failed (${message}), so it added no rules.`);
+    }
+    return passThrough(args, scope);
+  }
+  if (plan.file !== null) {
+    try {
+      fs.mkdirSync(path.dirname(plan.file.path), { recursive: true, mode: 0o700 });
+      // Written on every launch, which also keeps the file from being pruned while it is in use.
+      writeFileAtomic(plan.file.path, plan.file.content, 0o600);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      log({ ...plan.record, status: 'error', error: message, delivered: 'nothing', warned: true });
+      io.err(`sextant: could not write ${plan.file.path} (${message}), so sextant run added no rules.`);
+      return passThrough(args, scope);
+    }
+  }
+  log(plan.record);
+  for (const m of plan.messages) io.err(m);
+  return plan;
+}
+
+/**
+ * Start claude in the foreground and wait for it. The terminal sends Ctrl-C and Ctrl-\ to claude as
+ * well, so the launcher ignores them instead of ending under it; a SIGTERM or SIGHUP sent to the
+ * launcher alone is passed on.
+ */
+function exec(args: readonly string[], env: Record<string, string>, io: RunIo): Promise<number> {
+  return new Promise((done) => {
+    const child = spawn('claude', [...args], { stdio: 'inherit', env });
+    const ignore = (): void => {};
+    const forward = (signal: NodeJS.Signals): void => {
+      child.kill(signal);
+    };
+    const handlers: [NodeJS.Signals, (s: NodeJS.Signals) => void][] = [
+      ['SIGINT', ignore],
+      ['SIGQUIT', ignore],
+      ['SIGTERM', forward],
+      ['SIGHUP', forward],
+    ];
+    for (const [s, h] of handlers) process.on(s, h);
+    let finished = false;
+    const finish = (code: number): void => {
+      if (finished) return;
+      finished = true;
+      for (const [s, h] of handlers) process.off(s, h);
+      done(code);
+    };
+    child.on('error', (e) => {
+      io.err(`sextant: could not start claude (${e.message}).`);
+      finish(127);
+    });
+    child.on('exit', (code, signal) => finish(code ?? 128 + (signal ? (os.constants.signals[signal] ?? 0) : 0)));
+  });
+}
+
+function safeVersion(): string {
+  try {
+    return packageVersion();
+  } catch {
+    return 'unknown';
+  }
+}

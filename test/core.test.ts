@@ -3,7 +3,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { loadConfig } from '../src/config/load.js';
 import { normalizeModel } from '../src/core/normalize.js';
-import { resolve, switchNote } from '../src/core/resolve.js';
+import { launcherNote, resolve, switchNote } from '../src/core/resolve.js';
 import { SWITCH_NOTE_RESERVE } from '../src/core/types.js';
 import type { Config, Decision, MatchedDecision, Place } from '../src/core/types.js';
 import { LAB_CONFIG, LAB_PRESETS, tempTree } from './helpers.js';
@@ -160,4 +160,17 @@ test('the model-change note always fits the room kept for it, whatever the model
   // Only the two tags' own quotes and angle brackets remain: the names cannot break the tags.
   assert.deepEqual([...long].filter((c) => c === '"' || c === '<' || c === '>').join(''), '<""""><>');
   assert.match(switchNote('', 'claude-opus-5-5'), /from="\(not reported\)"/);
+});
+
+test('the note for rules sextant run put in the system prompt for another model fits the same room', () => {
+  assert.equal(
+    launcherNote('claude-sonnet-5-5', 'claude-haiku-5-5'),
+    '<sextant-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">\n' +
+      'This session runs on claude-haiku-5-5. ' +
+      'The working rules for claude-sonnet-5-5 that sextant added to the system prompt when it started the session do not apply.\n' +
+      '</sextant-rules-change>',
+  );
+  const long = launcherNote('x'.repeat(300), 'y"<z>'.repeat(60));
+  assert.ok(long.length + 2 <= SWITCH_NOTE_RESERVE, String(long.length));
+  assert.deepEqual([...long].filter((c) => c === '"' || c === '<' || c === '>').join(''), '<""""><>');
 });
