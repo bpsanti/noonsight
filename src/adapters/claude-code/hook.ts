@@ -24,6 +24,7 @@ import { launchFields, launchModel, readCommandLine, type LaunchModel } from './
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
+import { notRouted } from './routing.js';
 import { agentCall, agentResult, choiceFields, decisionFields } from './subagents.js';
 
 export interface HookContext {
@@ -85,9 +86,12 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       config = loadConfig(file, {}, ctx.env);
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
-      // The call this result belongs to already warned and logged.
-      if (event === 'PostToolUse') return '';
-      log({ status: 'config-invalid', problems: e.problems.length, delivered: 'nothing', warned: true });
+      // The call this result belongs to already warned.
+      if (event === 'PostToolUse') {
+        log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), warned: false });
+        return '';
+      }
+      log({ status: 'config-invalid', problems: e.problems.length, ...(event === 'PreToolUse' ? notRouted('config-invalid') : {}), delivered: 'nothing', warned: true });
       return output(
         [
           `sextant: the configuration at ${file} was refused (${plural(e.problems.length, 'problem')}), ` +
@@ -137,10 +141,10 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (event === 'PostToolUse') {
-      log({ status: 'error', error: message, warned: true });
+      log({ status: 'error', error: message, ...notRouted('error'), warned: true });
       return output([`sextant: the hook failed (${message}), so the subagent's model was not checked.`], null);
     }
-    log({ status: 'error', error: message, delivered: 'nothing', warned: true });
+    log({ status: 'error', error: message, ...(event === 'PreToolUse' ? notRouted('error') : {}), delivered: 'nothing', warned: true });
     return output([`sextant: the hook failed (${message}), so no rules were delivered.`], null);
   }
 }

@@ -82,6 +82,55 @@ export interface SessionSettings {
 
 export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [] };
 
+/** Where routing can act: the session `sextant run` starts, and the subagents a session starts. */
+export const ROUTE_TARGETS = ['launcher', 'subagents'] as const;
+export type RouteTarget = (typeof ROUTE_TARGETS)[number];
+
+/** The effort levels Claude Code accepts, for --effort and for an agent call's effort parameter. */
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+/**
+ * The model aliases a routing table may name. Each selects the latest model of its family, and both
+ * the claude --model option and the agent tool's model parameter accept them.
+ */
+export const ROUTE_ALIASES = ['fable', 'opus', 'sonnet', 'haiku'] as const;
+
+/** One choice in a routing table row: a model alias or a declared model identifier, and an optional effort. */
+export interface RouteOption {
+  readonly model: string;
+  readonly effort?: Effort;
+}
+
+/**
+ * A routing table row: the options for each target, in order of preference. A target the row does not
+ * list falls to routing.default; an empty list means "do not route".
+ */
+export type RouteRow = Partial<Readonly<Record<RouteTarget, readonly RouteOption[]>>>;
+
+/** The keys under "routing" in the configuration, with the preset's table merged in. */
+export interface RoutingSettings {
+  readonly enabled: boolean;
+  readonly targets: readonly RouteTarget[];
+  /** A model the caller already chose (claude --model, an agent call's model) wins over the table. */
+  readonly respectExplicit: boolean;
+  /** Environment variables that, when any is set and not empty, make routing yield. */
+  readonly yieldWhenEnv: readonly string[];
+  /** Scope name to row: the preset's rows, each replaced by the user's row of the same scope. */
+  readonly table: ReadonlyMap<string, RouteRow>;
+  /** The row for a task with no scope, or whose scope has no row for the target; null means inherit. */
+  readonly default: RouteRow | null;
+}
+
+export const DEFAULT_ROUTING_SETTINGS: RoutingSettings = {
+  enabled: false,
+  targets: ROUTE_TARGETS,
+  respectExplicit: true,
+  yieldWhenEnv: [],
+  table: new Map(),
+  default: null,
+};
+
 export interface Config {
   /** Exact model keys, each a full normalized identifier such as claude-fable-5-2. */
   readonly exact: ReadonlyMap<string, ModelEntry>;
@@ -95,6 +144,7 @@ export interface Config {
   readonly scopes: ReadonlyMap<string, Scope>;
   readonly session: SessionSettings;
   readonly subagents: SubagentSettings;
+  readonly routing: RoutingSettings;
 }
 
 interface DecisionBase {

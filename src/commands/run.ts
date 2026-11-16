@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { applyEnv, passThrough, planLaunch, type LaunchPlan } from '../adapters/claude-code/launcher.js';
+import { notRouted } from '../adapters/claude-code/routing.js';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
 import { appendDecision } from '../state/log.js';
@@ -10,7 +11,7 @@ import { writeFileAtomic } from '../state/files.js';
 import { packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
-export const RUN_USAGE = `usage: sextant run [--scope <scope>] [--] [claude arguments...]
+export const RUN_USAGE = `usage: sextant run [--scope <scope>] [--task <text>] [--] [claude arguments...]
 
 Start Claude Code with the rules for its model in the system prompt, for sessions the hooks do not
 reach or reach without the model, such as \`claude -p\`. sextant takes the model the way Claude Code
@@ -18,8 +19,13 @@ does: --model among the claude arguments, else ANTHROPIC_MODEL, else the model s
 rules with --append-system-prompt-file and runs claude with every other argument unchanged. When the
 hooks are installed too, they find the rules in the system prompt and do not deliver them again.
 
+With routing on for the launcher, the task scope's row in the routing table adds --model and
+--effort first, unless the claude arguments already give --model.
+
 Options, before the claude arguments:
   --scope <scope>   the task scope, set as SEXTANT_SCOPE for the session
+  --task <text>     the task text the scopes' matchers read when no scope is given; without it,
+                    the prompt right after -p or --print
 
 Everything from the first other argument, or after "--", goes to claude. sextant run exits with
 claude's exit status.`;
@@ -32,6 +38,7 @@ export interface RunIo {
 /** Run claude through the launcher. Resolves to claude's exit status. */
 export async function runRun(args: readonly string[], env: Env, io: RunIo, home: string = os.homedir()): Promise<number> {
   let scope: string | null = null;
+  let task: string | null = null;
   let rest: readonly string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i] ?? '';
@@ -44,18 +51,23 @@ export async function runRun(args: readonly string[], env: Env, io: RunIo, home:
       if (value === undefined) throw new UsageError('--scope needs a value', RUN_USAGE);
       scope = value;
     } else if (a.startsWith('--scope=')) scope = a.slice('--scope='.length);
+    else if (a === '--task') {
+      const value = args[++i];
+      if (value === undefined) throw new UsageError('--task needs a value', RUN_USAGE);
+      task = value;
+    } else if (a.startsWith('--task=')) task = a.slice('--task='.length);
     else {
       rest = args.slice(a === '--' ? i + 1 : i);
       break;
     }
   }
 
-  const plan = env.SEXTANT_DISABLE === '1' ? { args: [...rest], env: {} } : prepare(rest, scope, env, home, io);
+  const plan = env.SEXTANT_DISABLE === '1' ? { args: [...rest], env: {} } : prepare(rest, scope, task, env, home, io);
   return exec(plan.args, applyEnv(env, plan.env), io);
 }
 
 /** Decide, write the system prompt file and log. Any failure starts claude without the launcher's rules. */
-function prepare(args: readonly string[], scope: string | null, env: Env, home: string, io: RunIo): Pick<LaunchPlan, 'args' | 'env'> {
+function prepare(args: readonly string[], scope: string | null, task: string | null, env: Env, home: string, io: RunIo): Pick<LaunchPlan, 'args' | 'env'> {
   const state = stateDir(home);
   const file = configPath(env, home);
   const log = (fields: Record<string, unknown>): void => {
@@ -67,25 +79,25 @@ function prepare(args: readonly string[], scope: string | null, env: Env, home: 
   };
   if (!env.SEXTANT_CONFIG && !fs.existsSync(file)) {
     io.err(`sextant: there is no configuration at ${file}, so sextant run added no rules. Run \`sextant init\` to create one.`);
-    return passThrough(args, scope);
+    return passThrough(args, scope, env);
   }
   let plan: LaunchPlan;
   try {
     const config = loadConfig(file, {}, env);
-    plan = planLaunch(config, file, { args, scope, env, home, cwd: process.cwd(), state });
+    plan = planLaunch(config, file, { args, scope, task, env, home, cwd: process.cwd(), state });
   } catch (e) {
     if (e instanceof ConfigError) {
-      log({ status: 'config-invalid', problems: e.problems.length, delivered: 'nothing', warned: true });
+      log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), delivered: 'nothing', warned: true });
       io.err(
         `sextant: the configuration at ${file} was refused (${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}), ` +
           'so sextant run added no rules. Run `sextant check` to see the problems.',
       );
     } else {
       const message = e instanceof Error ? e.message : String(e);
-      log({ status: 'error', error: message, delivered: 'nothing', warned: true });
+      log({ status: 'error', error: message, ...notRouted('error'), delivered: 'nothing', warned: true });
       io.err(`sextant: sextant run failed (${message}), so it added no rules.`);
     }
-    return passThrough(args, scope);
+    return passThrough(args, scope, env);
   }
   if (plan.file !== null) {
     try {
@@ -96,7 +108,7 @@ function prepare(args: readonly string[], scope: string | null, env: Env, home: 
       const message = e instanceof Error ? e.message : String(e);
       log({ ...plan.record, status: 'error', error: message, delivered: 'nothing', warned: true });
       io.err(`sextant: could not write ${plan.file.path} (${message}), so sextant run added no rules.`);
-      return passThrough(args, scope);
+      return plan.fallback;
     }
   }
   log(plan.record);

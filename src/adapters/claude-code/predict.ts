@@ -38,6 +38,7 @@ export interface Prediction {
 export interface Definition {
   readonly file: string;
   readonly model: string | null;
+  readonly effort: string | null;
 }
 
 export interface PredictInput {
@@ -200,7 +201,7 @@ function findIn(root: string, name: string): Definition | null {
       const file = path.join(dir, e.name);
       if (e.isFile() && e.name.endsWith('.md')) {
         const fm = frontmatter(readHead(file));
-        if (fm !== null && fm.name === name) return { file, model: fm.model ?? null };
+        if (fm !== null && fm.name === name) return { file, model: fm.model ?? null, effort: fm.effort ?? null };
       } else if (e.isDirectory() && depth < MAX_DEPTH) {
         const found = walk(file, depth + 1);
         if (found !== null) return found;
@@ -211,16 +212,16 @@ function findIn(root: string, name: string): Definition | null {
   return walk(root, 0);
 }
 
-/** The top-level name and model of a definition's YAML frontmatter, or null when it has none. */
-export function frontmatter(text: string): { name?: string; model?: string } | null {
+/** The top-level name, model and effort of a definition's YAML frontmatter, or null when it has none. */
+export function frontmatter(text: string): { name?: string; model?: string; effort?: string } | null {
   const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
   if (!m) return null;
-  const fields: { name?: string; model?: string } = {};
+  const fields: { name?: string; model?: string; effort?: string } = {};
   for (const line of (m[1] ?? '').split(/\r?\n/)) {
-    const f = /^(name|model):[ \t]*(.*?)[ \t]*(?:#.*)?$/.exec(line);
+    const f = /^(name|model|effort):[ \t]*(.*?)[ \t]*(?:#.*)?$/.exec(line);
     if (!f) continue;
     const value = (f[2] ?? '').replace(/^(['"])(.*)\1$/, '$2').trim();
-    if (value) fields[f[1] as 'name' | 'model'] = value;
+    if (value) fields[f[1] as 'name' | 'model' | 'effort'] = value;
   }
   return fields;
 }

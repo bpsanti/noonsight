@@ -28,6 +28,19 @@
       "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
       "additionalProperties": { "$ref": "#/$defs/scope" }
     },
+    "routing": {
+      "description": "The routing table the preset suggests, used only when the user turns routing on. A user row for the same scope replaces the preset's row.",
+      "type": "object",
+      "required": ["table"],
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+          "additionalProperties": { "$ref": "#/$defs/routeEntry" }
+        }
+      }
+    },
     "models": {
       "type": "object",
       "propertyNames": {
@@ -49,6 +62,46 @@
     }
   },
   "$defs": {
+    "routeEntry": {
+      "description": "One row of the preset's routing table, with what it rests on.",
+      "type": "object",
+      "required": ["route", "basis", "sources"],
+      "additionalProperties": false,
+      "properties": {
+        "route": { "type": ["array", "object"], "$ref": "#/$defs/routeRow" },
+        "basis": {
+          "description": "What the sources say that supports this row.",
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/source" }
+        }
+      }
+    },
+    "routeRow": {
+      "description": "Options in order of preference: one list for every target, or an object with a list for each target.",
+      "items": { "$ref": "#/$defs/routeOption" },
+      "properties": {
+        "launcher": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } },
+        "subagents": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } }
+      },
+      "additionalProperties": false
+    },
+    "routeOption": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "description": "A preset names models by alias only, since it cannot know which model identifiers a user declares.",
+          "enum": ["fable", "opus", "sonnet", "haiku"]
+        },
+        "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+      }
+    },
     "rule": {
       "type": "object",
       "required": ["id", "file", "scopes", "where", "source", "effect", "cost"],

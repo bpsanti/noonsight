@@ -20,6 +20,7 @@ const GENERAL_WORD = 'LAUNCH-GENERAL-4807';
 const INVESTIGATE_WORD = 'LAUNCH-INVESTIGATE-2519';
 const THEIR_WORD = 'ORCHESTRATOR-LIVE-7731';
 const THEIR_FILE_WORD = 'ORCHESTRATOR-FILE-6094';
+const HAIKU_WORD = 'LAUNCH-HAIKU-8355';
 
 const QUESTION =
   'Reply with only every verification word you were given, in your system prompt or anywhere else in this conversation, ' +
@@ -134,4 +135,34 @@ test('live, login: an --append-system-prompt-file from someone else is merged, s
   assert.equal(r.status, 0, r.result);
   assert.match(r.result, new RegExp(GENERAL_WORD));
   assert.match(r.result, new RegExp(THEIR_FILE_WORD));
+});
+
+test('live, login: launcher routing: with no --model, the scope\'s row picks the model and the effort, and the routed model\'s rules arrive once', { skip: !enabled }, () => {
+  preconditions();
+  const l = lab(
+    'launcher-route',
+    {
+      version: 1,
+      models: {
+        'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'live/general', file: 'general.md' }] },
+        'claude-haiku-5-5': { use: 'custom', add: [{ id: 'live/haiku', file: 'haiku.md' }] },
+      },
+      scopes: { investigate: {} },
+      routing: { enabled: true, table: { investigate: [{ model: 'haiku', effort: 'low' }] } },
+    },
+    {
+      'general.md': `- The verification word for claude-sonnet-5-5 is ${GENERAL_WORD}.`,
+      'haiku.md': `- The verification word for claude-haiku-5-5 is ${HAIKU_WORD}.`,
+    },
+  );
+  const r = launch(l, ['--scope', 'investigate'], ['--permission-mode', 'default', '--setting-sources', 'project,local', '--settings', l.settings]);
+  assert.equal(r.status, 0, r.result);
+  assert.match(r.result, new RegExp(HAIKU_WORD));
+  assert.doesNotMatch(r.result, new RegExp(GENERAL_WORD));
+  assert.deepEqual(starts(l), [
+    ['launch', 'claude-haiku-5-5', 'investigate', 'matched', 'system-prompt'],
+    ['session-start', 'claude-haiku-5-5', 'investigate', 'matched', 'launcher'],
+  ]);
+  const [launched] = l.log();
+  assert.deepEqual([launched?.routing, launched?.route_value, launched?.route_effort], ['routed', 'haiku', 'low']);
 });

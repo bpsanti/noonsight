@@ -371,14 +371,20 @@ test('only the agent tool, under either name, reaches the subagent hooks; other 
   assert.equal(agentLines(h)[0]?.tool_name, 'Task');
 });
 
-test('a refused configuration: the call goes ahead unchanged, the person is warned once per call, and its result stays quiet', () => {
+test('a refused configuration: the call goes ahead unchanged, the person is warned once per call, and its result is logged without a warning', () => {
   const bad = path.join(tempTree({ 'sextant.json': { version: 1, subagents: { delivery: 'start-context' } } }), 'sextant.json');
   const h = hookHome(bad);
   const r = h.hook('agent-call', call());
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
   assert.match(r.out?.systemMessage, /was refused \(1 problem\), so no rules were delivered/);
   assert.equal(h.hook('agent-result', result(MAIN_CALL_ID, 'claude-haiku-5-5')).raw, '');
-  assert.deepEqual(h.log().map((l) => [l.event, l.status]), [['agent-call', 'config-invalid']]);
+  assert.deepEqual(
+    h.log().map((l) => [l.event, l.status, l.warned]),
+    [
+      ['agent-call', 'config-invalid', true],
+      ['agent-result', 'config-invalid', false],
+    ],
+  );
 });
 
 test('the hook pointer written by install runs the subagent hooks', () => {

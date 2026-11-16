@@ -32,10 +32,12 @@ All read on 2026-11-16.
 | Prompting Claude Opus 5.5 | https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5 | The Opus 5.5 rules, and the `review` scope |
 | Prompting Claude Sonnet 5.5 | https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5 | The Sonnet 5.5 rules |
 | Prompting Claude Haiku 5.5 | https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5 | The Haiku 5.5 rules |
-| Claude Code, Model configuration | https://code.claude.com/docs/en/model-config | The `investigate` scope |
+| Claude Code, Model configuration | https://code.claude.com/docs/en/model-config | The `investigate` scope, and the routing table |
 | Choosing the right model | https://platform.claude.com/docs/en/about-claude/models/choosing-a-model | The `build` scope |
 | Models overview | https://platform.claude.com/docs/en/models/overview | The `digest` scope |
-| Introducing Claude Sonnet 5.5 (2026-09-28) | https://www.anthropic.com/claude-sonnet-5-5 | The `routine` scope |
+| Introducing Claude Sonnet 5.5 (2026-09-28) | https://www.anthropic.com/claude-sonnet-5-5 | The `routine` scope, and the routing table |
+| Introducing Claude Fable 5.2 and Mythos 5.2 (2026-11-09) | https://www.anthropic.com/claude-fable-and-mythos-5-2 | The routing table |
+| Introducing Claude Haiku 5.5 (2026-10-07) | https://www.anthropic.com/claude-haiku-5-5 | The routing table |
 | Claude Code, Hooks reference | https://code.claude.com/docs/en/hooks | How the rule texts are worded (section "Add context for Claude") |
 
 ## Scopes
@@ -51,6 +53,23 @@ The preset's scopes declare no matchers: a keyword guess would put rules into ta
 | `review` | Review of code, or of a result that is already done. | https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, "Capabilities relevant to prompting": code review as a strength of its own |
 | `routine` | A well-scoped change that can be described precisely: a mechanical edit, a configuration change, or documentation. | https://www.anthropic.com/claude-sonnet-5-5, "Opening paragraphs, before the Performance heading": well-scoped everyday tasks |
 | `digest` | Reading material that already exists and condensing it: a summary, an extraction, a classification, or a search. | https://platform.claude.com/docs/en/models/overview, "Latest models": classification, extraction and routing |
+
+## Routing table
+
+The table applies only when the user turns routing on (`docs/configuration.md`, section "Routing").
+It sets a model and an effort where a source ties a kind of work to them; tasks without a scope keep their model and effort, as Claude Code's post on effort and model selection advises: "Most of the time, you shouldn't be thinking about either setting" (https://claude.com/blog/claude-model-and-effort-level-in-claude-code, "Start with the defaults, then reach for the dials").
+Each guide asks to measure a change on one's own tasks, so the table is a sourced starting point, not a measured result.
+
+| Scope | Launcher | Subagents | Basis | Sources |
+| --- | --- | --- | --- | --- |
+| `investigate` | Fable, `high`; else Opus, `high` | The same | Claude Code describes the `fable` alias as being "for your hardest and longest-running tasks", and the Fable 5.2 guide says "`high` suits hard coding, research, agentic work, and long unattended runs". Opus comes second for a configuration that does not declare Fable, whose usage can bill to usage credits | https://code.claude.com/docs/en/model-config, "Model aliases" and "Fable and usage credits"; https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, "Calibrate effort" |
+| `build` | Opus, `high` | The same | The Fable 5.2 announcement: "For most coding and knowledge tasks, we recommend that users start with Claude Opus 5.5". Claude Code gives `high` for work where verification matters or edge cases are likely, such as fixing a bug in an existing codebase | https://www.anthropic.com/claude-fable-and-mythos-5-2, "When to use Claude Fable 5.2 and Mythos 5.2"; https://code.claude.com/docs/en/model-config, "Choose an effort level" |
+| `review` | Opus, `high` | The same | The Opus 5.5 guide reports stronger code review, with more bugs caught and fewer false alarms; `high` as for `build` | https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, "Capabilities relevant to prompting"; https://code.claude.com/docs/en/model-config, "Choose an effort level" |
+| `routine` | Sonnet, `medium` | The same | "Sonnet 5.5 is strongest at well-scoped everyday tasks", and its guide says to "start at `medium` for well-specified tasks" in agentic coding | https://www.anthropic.com/claude-sonnet-5-5, opening paragraphs; https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, "Calibrate effort" |
+| `digest` | Sonnet, `medium` | Haiku, `medium` | Haiku 5.5 "pairs well with Opus 5.5 and Sonnet 5.5 as a subagent on coding work", while "Sonnet 5.5 and Opus 5.5 remain better choices for complex agentic coding tasks", so a session runs on Sonnet and a subagent on Haiku. The Haiku 5.5 guide makes `medium` the starting point and warns that at `low` the model "is more likely to skip a search, stop early, or skip a check" | https://www.anthropic.com/claude-haiku-5-5, opening paragraphs and "Further updates"; https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, "Use effort to control thinking"; the Sonnet 5.5 guide, "Calibrate effort" |
+
+The first option whose model the user declares wins, so a configuration that does not declare `claude-fable-5-2` sends `investigate` to Opus and never to Fable.
+`preset.json` holds the same rows with their basis and sources, and `sextant check` shows the table in use.
 
 ## Rules
 

@@ -18,12 +18,13 @@ With the hooks installed too, the rules still reach the session once: `SessionSt
 ## Usage
 
 ```text
-sextant run [--scope <scope>] [--] [claude arguments...]
+sextant run [--scope <scope>] [--task <text>] [--] [claude arguments...]
 ```
 
 | Option | Effect |
 | --- | --- |
-| `--scope <scope>` | The task scope. It is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope. Without it, a `SEXTANT_SCOPE` already in the environment applies |
+| `--scope <scope>` | The task scope. It is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope. Without it, an explicit `SEXTANT_SCOPE` already in the environment applies |
+| `--task <text>` | The task text the scopes' matchers read when no scope is given. Without it, the prompt right after `-p` or `--print` |
 | `--help` | Shows the usage |
 
 sextant's own options come first.
@@ -35,10 +36,16 @@ Ctrl-C and Ctrl-\ reach Claude Code from the terminal, and the launcher does not
 
 The launcher decides as the `SessionStart` hook does for a session that reports no model ([SessionStart](hooks.md#sessionstart)):
 
-1. The model is the one Claude Code will start with: the `--model` argument among the claude arguments, else `ANTHROPIC_MODEL`, else the `model` setting of the highest-ranked settings file, with aliases resolved the same way.
-   The launcher reads the arguments exactly as it passes them, so the limits of reading a command line on macOS do not apply to it.
-2. The scope is `--scope`, else `SEXTANT_SCOPE`.
-3. The place is `unattended` when a variable of `session.unattended_when_env` is set, else `session`.
+1. The scope is `--scope`, else an explicit `SEXTANT_SCOPE`, else the scope whose matcher matches earliest in the task text: `--task`, else the argument right after `-p` or `--print` when it is not an option ([Scopes](configuration.md#scopes)).
+   A scope taken from the task text is set as `SEXTANT_SCOPE` for the session, so its hooks decide with the same scope.
+   `SEXTANT_SCOPE_VIA` is set next to it and says where the scope came from: `explicit` for `--scope` or an explicit `SEXTANT_SCOPE`, `inferred` for the task text.
+   A `SEXTANT_SCOPE` is explicit unless `SEXTANT_SCOPE_VIA` is `inferred`, so one a person or an orchestrator sets by hand counts.
+   A `sextant run` started inside a launched session ignores a scope inherited as `inferred`: it takes the scope from its own task text, or has none, and removes the inherited one from the session it starts.
+   A prompt written elsewhere on the command line, or given on standard input, is not read, and an interactive session started without a task has only the scope it is given.
+2. With routing on for the launcher, the scope may add `--model` and `--effort` to the claude arguments ([Routing](#routing)).
+3. The model is the one Claude Code will start with: the `--model` argument among the claude arguments, else `ANTHROPIC_MODEL`, else the `model` setting of the highest-ranked settings file, with aliases resolved the same way.
+   The launcher reads the arguments exactly as it passes them, routed ones included, so the limits of reading a command line on macOS do not apply to it.
+4. The place is `unattended` when a variable of `session.unattended_when_env` is set, else `session`.
 
 When that decision has rules, the launcher writes them, in the same envelope the hooks use, to a file in `~/.local/state/sextant/launch/`, and starts:
 
@@ -57,7 +64,27 @@ When there are no rules to add, `claude` starts with its arguments unchanged:
 | The model is declared with no rules for this scope and place | Nothing |
 | The model is not declared | Warns, unless `on_undeclared` is `ignore` |
 | No configuration file, or a refused configuration | Warns; `sextant check` lists the problems |
-| `SEXTANT_DISABLE=1` | Nothing, and no log line |
+| `SEXTANT_DISABLE=1` | Nothing, and no log line; no routing either |
+
+## Routing
+
+With `routing.enabled` and the target `launcher` ([Routing](configuration.md#routing)), the launcher chooses the session's model and effort from its scope:
+
+```text
+sextant run --scope digest -- -p "Summarize the changelog"
+claude --append-system-prompt-file <file> --model sonnet --effort medium -p "Summarize the changelog"
+```
+
+- The scope's row, else `routing.default`, gives the options, and the first whose model is declared wins.
+  The launcher puts `--model <model>` and, when the option gives one, `--effort <effort>` ahead of the claude arguments, writing the model as the table writes it, an alias or an identifier.
+- A `--model` among the claude arguments wins under `routing.respect_explicit`, and the arguments are left as they are; an `--effort` among them is kept, and only the model is routed.
+  With `respect_explicit` set to `false`, the launcher takes out the given `--model` and `--effort` and passes its own.
+- A model from `ANTHROPIC_MODEL` or a `model` setting is a default rather than a choice for this task, so a route replaces it: Claude Code ranks `--model` above both.
+- `SEXTANT_ROUTING=off`, or a variable of `routing.yield_when_env` set in the environment the launcher starts with, leaves the arguments as they are.
+- The rules in the system prompt are the routed model's, so the hooks find them there as usual.
+
+The decision log records what routing did on each `launch` line ([The decision log](hooks.md#the-decision-log)).
+A session's model cannot be routed once it runs: routing the session needs `sextant run`, and a later `/model` works as always.
 
 ## Other text in the system prompt
 
@@ -94,6 +121,7 @@ Each launch adds a line with `event: "launch"` to the [decision log](hooks.md#th
 | Field | Values |
 | --- | --- |
 | `delivered` | `system-prompt` when the launcher added the rules, else `nothing` |
+| `routing`, `routing_reason` and the `route_*` fields | What routing did, as for an agent call ([The decision log](hooks.md#the-decision-log)) |
 | `launch_file` | The file passed with `--append-system-prompt-file` |
 | `merged_file` | An `--append-system-prompt-file` someone else passed, now merged into `launch_file` |
 | `merge_failed` | One that could not be read, so the launcher added nothing |

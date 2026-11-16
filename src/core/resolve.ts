@@ -126,6 +126,11 @@ function noteName(model: string): string {
   return safe.length > NOTE_NAME_LENGTH ? `${safe.slice(0, NOTE_NAME_LENGTH - 3)}...` : safe || '(not reported)';
 }
 
+/** Whether the configuration declares a normalized model, by an exact key or a wildcard. */
+export function declares(config: Config, model: string): boolean {
+  return matchModel(config, model) !== null;
+}
+
 function matchModel(config: Config, model: string): { key: string; entry: ModelEntry } | null {
   const exact = config.exact.get(model);
   if (exact) return { key: model, entry: exact };

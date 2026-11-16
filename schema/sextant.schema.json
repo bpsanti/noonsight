@@ -88,6 +88,61 @@
         }
       },
       "default": {}
+    },
+    "routing": {
+      "description": "Optional routing: choose the model and effort for a task from its scope. Off unless enabled. Whether or not a route applies, the scope and the rules are decided the same way, and the rules follow the model the task runs on.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Turns routing on. With false, sextant only delivers rules and never changes a model or an effort.",
+          "type": "boolean",
+          "default": false
+        },
+        "targets": {
+          "description": "Where routing acts. launcher: sextant run adds --model and --effort to the claude command line. subagents: the agent call hook sets the call's model and effort.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["launcher", "subagents"] },
+          "default": ["launcher", "subagents"]
+        },
+        "respect_explicit": {
+          "description": "With true, a model the caller already chose wins over the table: a --model on the claude command line, the model parameter of an agent call, or the model a subagent definition or a built-in subagent sets. An effort the caller set is kept too.",
+          "type": "boolean",
+          "default": true
+        },
+        "yield_when_env": {
+          "description": "Environment variables that mark a session someone else routes, such as an orchestrator's. When any of them is set and not empty, routing yields; the rules are still delivered.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
+          },
+          "default": []
+        },
+        "table": {
+          "description": "Scope name to a row of options in order of preference. Each row replaces the preset's row for the same scope. The first option whose model is declared under \"models\" wins.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "x-hint": "a scope name is lowercase letters, digits and hyphens, starting with a letter"
+          },
+          "additionalProperties": { "type": ["array", "object"], "$ref": "#/$defs/routeRow" },
+          "default": {}
+        },
+        "default": {
+          "description": "The row for a task with no scope, or whose scope has no row for the target. inherit leaves the model and the effort as they are.",
+          "type": ["string", "array", "object"],
+          "$ref": "#/$defs/routeRow",
+          "if": { "type": "string" },
+          "then": { "const": "inherit", "x-hint": "the only text value is \"inherit\"" },
+          "default": "inherit"
+        }
+      },
+      "default": {}
     }
   },
   "$defs": {
@@ -195,6 +250,31 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "routeRow": {
+      "description": "Options in order of preference: one list for every target, or an object with a list for each target it routes. A target the object leaves out falls to routing.default; an empty list means that target is not routed.",
+      "items": { "$ref": "#/$defs/routeOption" },
+      "properties": {
+        "launcher": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } },
+        "subagents": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } }
+      },
+      "additionalProperties": false
+    },
+    "routeOption": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "description": "A model alias (fable, opus, sonnet, haiku) or a model identifier declared under \"models\". An option is used only when the model it selects is declared.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[-.][a-z0-9]+)*$"
+        },
+        "effort": {
+          "description": "The effort level to set with the model. Left out, the effort is not changed.",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
         }
       }
     },
