@@ -14,8 +14,8 @@ const matched = (d: Decision): MatchedDecision => {
   return d as MatchedDecision;
 };
 const load = (config: unknown, files: Record<string, string> = {}): Config => {
-  const dir = tempTree({ 'sextant.json': config, ...files });
-  return loadConfig(path.join(dir, 'sextant.json'), { presetsDir: LAB_PRESETS });
+  const dir = tempTree({ 'noonsight.json': config, ...files });
+  return loadConfig(path.join(dir, 'noonsight.json'), { presetsDir: LAB_PRESETS });
 };
 
 test('normalize: suffixes, provider paths, Bedrock and Vertex forms, and case', () => {
@@ -75,7 +75,7 @@ test('user rules default to every scope and every place', () => {
   for (const place of ['session', 'unattended', 'subagent'] as const) {
     const d = matched(resolve(cfg, { model: 'claude-haiku-5-5', scope: null, place }));
     assert.deepEqual(d.rules, ['mine']);
-    assert.match(d.text, /\nMINE-1234\n<\/sextant-rules>$/);
+    assert.match(d.text, /\nMINE-1234\n<\/noonsight-rules>$/);
   }
 });
 
@@ -91,15 +91,15 @@ test('an undeclared scope means general rules, and the decision says which scope
 test('the delivered text is the envelope around the joined rules', () => {
   const d = matched(resolve(lab, { model: 'claude-sonnet-5-5[1m]', scope: 'investigate', place: 'session' }));
   const lines = d.text.split('\n');
-  assert.equal(lines[0], '<sextant-rules model="claude-sonnet-5-5" scope="investigate">');
+  assert.equal(lines[0], '<noonsight-rules model="claude-sonnet-5-5" scope="investigate">');
   assert.equal(
     lines[1],
-    'Working rules the user declared for claude-sonnet-5-5, task scope "investigate" (delivered by sextant, rules sonnet/general, sonnet/investigate):',
+    'Working rules the user declared for claude-sonnet-5-5, task scope "investigate" (delivered by noonsight, rules sonnet/general, sonnet/investigate):',
   );
-  assert.equal(lines.at(-1), '</sextant-rules>');
+  assert.equal(lines.at(-1), '</noonsight-rules>');
   assert.match(d.text, /SONNET-GEN-3306\.\n.*\n\n- The verification word for the Sonnet 5.5 investigation-scope/);
   const general = matched(resolve(lab, { model: 'claude-sonnet-5-5', place: 'session' }));
-  assert.equal(general.text.split('\n')[0], '<sextant-rules model="claude-sonnet-5-5">');
+  assert.equal(general.text.split('\n')[0], '<noonsight-rules model="claude-sonnet-5-5">');
 });
 
 test('wildcards: an exact key beats any wildcard, and more literal text beats less', () => {
@@ -134,7 +134,7 @@ test('wildcards: "?" matches exactly one character and ties pick the same key ev
 
 test('undeclared models carry a warning unless the configuration says to ignore them', () => {
   const warn = resolve(lab, { model: 'claude-fable-5-2', place: 'subagent' });
-  assert.equal(warn.status === 'undeclared' && warn.warning, 'sextant: model claude-fable-5-2 has no declared rules (no-entry, subagent)');
+  assert.equal(warn.status === 'undeclared' && warn.warning, 'noonsight: model claude-fable-5-2 has no declared rules (no-entry, subagent)');
   const quiet = load({ version: 1, on_undeclared: 'ignore', models: {} });
   const d = resolve(quiet, { model: 'claude-fable-5-2', place: 'session' });
   assert.equal(d.status, 'undeclared');
@@ -150,10 +150,10 @@ test('the model-change note always fits the room kept for it, whatever the model
   const note = switchNote('claude-sonnet-5-5', 'claude-opus-5-5');
   assert.equal(
     note,
-    '<sextant-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">\n' +
+    '<noonsight-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">\n' +
       "The session's model changed from claude-sonnet-5-5 to claude-opus-5-5. " +
-      'The working rules sextant delivered earlier in this conversation for claude-sonnet-5-5 no longer apply.\n' +
-      '</sextant-rules-change>',
+      'The working rules noonsight delivered earlier in this conversation for claude-sonnet-5-5 no longer apply.\n' +
+      '</noonsight-rules-change>',
   );
   const long = switchNote('x'.repeat(300), 'y"<z>'.repeat(60));
   assert.ok(long.length + 2 <= SWITCH_NOTE_RESERVE, String(long.length));
@@ -162,13 +162,13 @@ test('the model-change note always fits the room kept for it, whatever the model
   assert.match(switchNote('', 'claude-opus-5-5'), /from="\(not reported\)"/);
 });
 
-test('the note for rules sextant run put in the system prompt for another model fits the same room', () => {
+test('the note for rules noonsight run put in the system prompt for another model fits the same room', () => {
   assert.equal(
     launcherNote('claude-sonnet-5-5', 'claude-haiku-5-5'),
-    '<sextant-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">\n' +
+    '<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">\n' +
       'This session runs on claude-haiku-5-5. ' +
-      'The working rules for claude-sonnet-5-5 that sextant added to the system prompt when it started the session do not apply.\n' +
-      '</sextant-rules-change>',
+      'The working rules for claude-sonnet-5-5 that noonsight added to the system prompt when it started the session do not apply.\n' +
+      '</noonsight-rules-change>',
   );
   const long = launcherNote('x'.repeat(300), 'y"<z>'.repeat(60));
   assert.ok(long.length + 2 <= SWITCH_NOTE_RESERVE, String(long.length));

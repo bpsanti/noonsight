@@ -1,12 +1,12 @@
-// sextant's entries in a Claude Code settings file. Pure functions over the parsed JSON: they add,
-// repair or remove sextant's own hook handlers and never change anything else in the file.
+// noonsight's entries in a Claude Code settings file. Pure functions over the parsed JSON: they add,
+// repair or remove noonsight's own hook handlers and never change anything else in the file.
 //
-// sextant recognizes its handlers by the program they run: a file named sextant-hook (the hook
+// noonsight recognizes its handlers by the program they run: a file named noonsight-hook (the hook
 // pointer), wherever it lives. Every other handler, matcher group and key belongs to someone else.
 
-export const POINTER_NAME = 'sextant-hook';
+export const POINTER_NAME = 'noonsight-hook';
 
-/** The Claude Code events sextant handles, and the argument its hook command receives for each. */
+/** The Claude Code events noonsight handles, and the argument its hook command receives for each. */
 export const HOOK_EVENTS = {
   SessionStart: 'session-start',
   PostModelSwitch: 'model-switch',
@@ -24,7 +24,7 @@ export const AGENT_TOOLS: readonly string[] = ['Agent', 'Task'];
 
 /**
  * The matcher of each event's entry, or undefined for an entry with no matcher. The tool events only
- * run sextant for the agent tool, under either name; the hook checks the tool name again itself.
+ * run noonsight for the agent tool, under either name; the hook checks the tool name again itself.
  */
 export const HOOK_MATCHERS: Readonly<Record<HookEvent, string | undefined>> = {
   SessionStart: undefined,
@@ -54,7 +54,7 @@ export function handlerFor(pointer: string, event: HookEvent): CommandHandler {
   return { type: 'command', command: pointer, args: [HOOK_EVENTS[event]], timeout: HOOK_TIMEOUT_SECONDS };
 }
 
-/** A settings file whose shape sextant will not edit; the message names where the shape is wrong. */
+/** A settings file whose shape noonsight will not edit; the message names where the shape is wrong. */
 export class SettingsShapeError extends Error {
   constructor(message: string) {
     super(message);
@@ -68,7 +68,7 @@ export function isObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function isSextantHandler(handler: unknown): boolean {
+export function isNoonsightHandler(handler: unknown): boolean {
   if (!isObject(handler) || typeof handler.command !== 'string') return false;
   const base = handler.command.split(/[\\/]/).pop();
   return base === POINTER_NAME;
@@ -80,8 +80,8 @@ export interface FoundHandler {
   readonly handler: JsonObject;
 }
 
-/** Every sextant handler in the file, in order. Parts of the file with an unexpected shape are skipped. */
-export function findSextantHandlers(settings: unknown): FoundHandler[] {
+/** Every noonsight handler in the file, in order. Parts of the file with an unexpected shape are skipped. */
+export function findNoonsightHandlers(settings: unknown): FoundHandler[] {
   const found: FoundHandler[] = [];
   if (!isObject(settings) || !isObject(settings.hooks)) return found;
   for (const [event, groups] of Object.entries(settings.hooks)) {
@@ -89,7 +89,7 @@ export function findSextantHandlers(settings: unknown): FoundHandler[] {
     for (const group of groups) {
       if (!isObject(group) || !Array.isArray(group.hooks)) continue;
       for (const handler of group.hooks)
-        if (isSextantHandler(handler)) found.push({ event, matcher: group.matcher, handler: handler as JsonObject });
+        if (isNoonsightHandler(handler)) found.push({ event, matcher: group.matcher, handler: handler as JsonObject });
     }
   }
   return found;
@@ -100,19 +100,19 @@ export interface Edit {
   readonly changed: boolean;
 }
 
-/** The matcher group sextant adds for one event. */
+/** The matcher group noonsight adds for one event. */
 export function groupFor(pointer: string, event: HookEvent): JsonObject {
   const matcher = HOOK_MATCHERS[event];
   return { ...(matcher !== undefined ? { matcher } : {}), hooks: [handlerFor(pointer, event)] };
 }
 
 /**
- * The settings with exactly one sextant handler per event, each in its own matcher group with the
+ * The settings with exactly one noonsight handler per event, each in its own matcher group with the
  * event's matcher, pointing at the given pointer. Running it again on its own result changes nothing.
  */
-export function withSextantHooks(settings: unknown, pointer: string): Edit {
+export function withNoonsightHooks(settings: unknown, pointer: string): Edit {
   const base = checkShape(settings);
-  const found = findSextantHandlers(base);
+  const found = findNoonsightHandlers(base);
   const events = Object.keys(HOOK_EVENTS) as HookEvent[];
   const current =
     found.length === events.length &&
@@ -123,7 +123,7 @@ export function withSextantHooks(settings: unknown, pointer: string): Edit {
     });
   if (current) return { settings: base, changed: false };
 
-  const next = withoutSextantHooks(base).settings;
+  const next = withoutNoonsightHooks(base).settings;
   const hooks = isObject(next.hooks) ? next.hooks : (next.hooks = {});
   for (const event of events) {
     const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : (hooks[event] = []);
@@ -133,10 +133,10 @@ export function withSextantHooks(settings: unknown, pointer: string): Edit {
 }
 
 /**
- * The settings with every sextant handler removed. A matcher group, an event or the hooks object is
- * removed only when removing sextant's handlers is what left it empty.
+ * The settings with every noonsight handler removed. A matcher group, an event or the hooks object is
+ * removed only when removing noonsight's handlers is what left it empty.
  */
-export function withoutSextantHooks(settings: unknown): Edit {
+export function withoutNoonsightHooks(settings: unknown): Edit {
   const next = checkShape(settings);
   if (!isObject(next.hooks)) return { settings: next, changed: false };
   let changed = false;
@@ -149,7 +149,7 @@ export function withoutSextantHooks(settings: unknown): Edit {
         kept.push(group);
         continue;
       }
-      const handlers = group.hooks.filter((h) => !isSextantHandler(h));
+      const handlers = group.hooks.filter((h) => !isNoonsightHandler(h));
       if (handlers.length === group.hooks.length) {
         kept.push(group);
         continue;
@@ -166,7 +166,7 @@ export function withoutSextantHooks(settings: unknown): Edit {
   return { settings: next, changed };
 }
 
-/** A deep copy of the settings, after checking the parts sextant edits have the documented shape. */
+/** A deep copy of the settings, after checking the parts noonsight edits have the documented shape. */
 function checkShape(settings: unknown): JsonObject {
   if (!isObject(settings)) throw new SettingsShapeError('the file does not hold a JSON object');
   const copy = structuredClone(settings);

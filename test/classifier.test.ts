@@ -1,7 +1,7 @@
 // The classifier: its settings, the question it is asked and how its answer is read, and the agent
 // call hook and the launcher that ask it, driven as Claude Code and a person drive them. A stand-in
 // `claude` first on PATH plays the classifier: it records how it was started and answers as each test
-// asks, and it can run sextant's hook as its own child, with the environment it was given, as a hook
+// asks, and it can run noonsight's hook as its own child, with the environment it was given, as a hook
 // installed for the person would run inside the classifier's session. Each test has its own home
 // directory, so the decision log and the records start empty.
 
@@ -20,9 +20,9 @@ function config(fields: Record<string, unknown> = {}): string {
   const lab = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, any>;
   const scopes = { ...lab.scopes } as Record<string, Record<string, unknown>>;
   for (const [name, scope] of Object.entries((fields.scopes ?? {}) as Record<string, Record<string, unknown>>)) scopes[name] = { ...scopes[name], ...scope };
-  const dir = tempTree({ 'sextant.json': { ...lab, ...fields, scopes } });
+  const dir = tempTree({ 'noonsight.json': { ...lab, ...fields, scopes } });
   fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
-  return path.join(dir, 'sextant.json');
+  return path.join(dir, 'noonsight.json');
 }
 
 const load = (file: string): Config => loadConfig(file, { presetsDir: LAB_PRESETS });
@@ -40,7 +40,7 @@ interface Started {
   readonly args: string[];
   readonly input: string;
   readonly env: Record<string, string | null>;
-  /** What sextant's hook printed when the stand-in ran it as its child; absent when it did not. */
+  /** What noonsight's hook printed when the stand-in ran it as its child; absent when it did not. */
   readonly hook?: { status: number | null; stdout: string; stderr: string };
 }
 
@@ -54,7 +54,7 @@ interface Stand {
 
 /**
  * A stand-in claude. FAKE_CLASSIFIER says how it answers: answer:<scope>, sleep, fail, error,
- * garbage. With FAKE_HOOK_INPUT set, it first runs sextant's agent-call hook with that input.
+ * garbage. With FAKE_HOOK_INPUT set, it first runs noonsight's agent-call hook with that input.
  */
 function standIn(): Stand {
   const bin = tempTree({});
@@ -67,7 +67,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const input = fs.readFileSync(0, 'utf8');
 const pick = (n) => process.env[n] ?? null;
-const record = { args: process.argv.slice(2), input, env: { SEXTANT_DISABLE: pick('SEXTANT_DISABLE'), CLAUDE_CODE_EFFORT_LEVEL: pick('CLAUDE_CODE_EFFORT_LEVEL') } };
+const record = { args: process.argv.slice(2), input, env: { NOONSIGHT_DISABLE: pick('NOONSIGHT_DISABLE'), CLAUDE_CODE_EFFORT_LEVEL: pick('CLAUDE_CODE_EFFORT_LEVEL') } };
 if (process.env.FAKE_HOOK_INPUT) {
   const r = spawnSync(process.execPath, ${JSON.stringify([...NO_NETWORK, CLI, 'hook', 'agent-call'])}, { input: process.env.FAKE_HOOK_INPUT, encoding: 'utf8', env: process.env });
   record.hook = { status: r.status, stdout: r.stdout, stderr: r.stderr };
@@ -208,7 +208,7 @@ test('fallback: a task no matcher placed takes the classifier\'s scope, and gets
   const s = standIn();
   const h = hookHome(config({ classifier: { mode: 'fallback' } }));
   const r = h.hook('agent-call', call(PLAIN_TASK), s.env('answer:summarize'));
-  const expected = resolve(load(h.env.SEXTANT_CONFIG ?? ''), { model: 'claude-haiku-5-5', scope: 'summarize', place: 'subagent' });
+  const expected = resolve(load(h.env.NOONSIGHT_CONFIG ?? ''), { model: 'claude-haiku-5-5', scope: 'summarize', place: 'subagent' });
   assert.equal(expected.status, 'matched');
   assert.ok(expected.status === 'matched' && expected.rules.includes('user/haiku-summarize'));
   assert.ok(r.out?.hookSpecificOutput.updatedInput.prompt.endsWith(expected.status === 'matched' ? expected.text : '?'));
@@ -290,9 +290,9 @@ test('a classifier that fails or answers outside the scopes: no scope, the reaso
     assert.equal(line?.classifier, result, behavior);
     assert.match(String(line?.classifier_error), error, behavior);
     assert.equal(line?.warned, true, behavior);
-    assert.match(String(r.out?.systemMessage), /^sextant: the classifier could not place the task of subagent general-purpose \(.+\), so it has no scope\.$/, behavior);
+    assert.match(String(r.out?.systemMessage), /^noonsight: the classifier could not place the task of subagent general-purpose \(.+\), so it has no scope\.$/, behavior);
     // The rules for no scope still go with the call.
-    const general = resolve(load(h.env.SEXTANT_CONFIG ?? ''), { model: 'claude-haiku-5-5', scope: null, place: 'subagent' });
+    const general = resolve(load(h.env.NOONSIGHT_CONFIG ?? ''), { model: 'claude-haiku-5-5', scope: null, place: 'subagent' });
     assert.ok(general.status === 'matched' && r.out?.hookSpecificOutput.updatedInput.prompt.endsWith(general.text), behavior);
   }
 });
@@ -340,7 +340,7 @@ test('the classifier is not asked when the scope can change nothing: same rules 
   assert.equal(r.out?.hookSpecificOutput.updatedInput.model, 'haiku');
 });
 
-test('the classifier runs with sextant turned off: a sextant hook in its session does nothing and logs nothing', () => {
+test('the classifier runs with noonsight turned off: a noonsight hook in its session does nothing and logs nothing', () => {
   const s = standIn();
   const h = hookHome(config({ classifier: { mode: 'fallback' } }));
   // CLAUDE_CODE_EFFORT_LEVEL would win over the classifier's own --effort, so it is left out.
@@ -348,7 +348,7 @@ test('the classifier runs with sextant turned off: a sextant hook in its session
   const started = s.started();
   // One start only: the hook inside the classifier's session did not start a classifier of its own.
   assert.equal(started.length, 1);
-  assert.equal(started[0]?.env.SEXTANT_DISABLE, '1');
+  assert.equal(started[0]?.env.NOONSIGHT_DISABLE, '1');
   assert.equal(started[0]?.env.CLAUDE_CODE_EFFORT_LEVEL, null);
   assert.deepEqual(started[0]?.hook, { status: 0, stdout: '', stderr: '' });
   // The log holds the session's call alone.
@@ -356,10 +356,10 @@ test('the classifier runs with sextant turned off: a sextant hook in its session
   assert.equal(agentCalls(h)[0]?.scope, 'summarize');
 });
 
-test('a session started with SEXTANT_DISABLE=1, as the classifier\'s is, never starts a classifier', () => {
+test('a session started with NOONSIGHT_DISABLE=1, as the classifier\'s is, never starts a classifier', () => {
   const s = standIn();
   const h = hookHome(config({ classifier: { mode: 'fallback' } }));
-  const r = h.hook('agent-call', call(PLAIN_TASK), s.env('answer:summarize', { SEXTANT_DISABLE: '1' }));
+  const r = h.hook('agent-call', call(PLAIN_TASK), s.env('answer:summarize', { NOONSIGHT_DISABLE: '1' }));
   assert.equal(r.raw, '');
   assert.equal(s.started().length, 0);
   assert.deepEqual(h.log(), []);
@@ -381,7 +381,7 @@ function launcherStandIn(): Stand & { session(): Started | null } {
 const fs = require('node:fs');
 const pick = (n) => process.env[n] ?? null;
 if (process.argv.includes('--json-schema')) require(${JSON.stringify(classifier)});
-else fs.writeFileSync(${JSON.stringify(session)}, JSON.stringify({ args: process.argv.slice(2), input: '', env: { SEXTANT_SCOPE: pick('SEXTANT_SCOPE'), SEXTANT_SCOPE_VIA: pick('SEXTANT_SCOPE_VIA') } }));
+else fs.writeFileSync(${JSON.stringify(session)}, JSON.stringify({ args: process.argv.slice(2), input: '', env: { NOONSIGHT_SCOPE: pick('NOONSIGHT_SCOPE'), NOONSIGHT_SCOPE_VIA: pick('NOONSIGHT_SCOPE_VIA') } }));
 `,
     { mode: 0o755 },
   );
@@ -399,7 +399,7 @@ test('launcher: the prompt after -p is classified, and the scope is passed to th
   const r = runCli(['run', '--', '--model', 'claude-sonnet-5-5', '-p', 'Why does the nightly export write an empty file?'], { ...h.env, ...s.env('answer:investigate') }, NO_NETWORK);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(s.started()[0]?.input, 'Why does the nightly export write an empty file?');
-  assert.deepEqual(s.session()?.env, { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'inferred' });
+  assert.deepEqual(s.session()?.env, { NOONSIGHT_SCOPE: 'investigate', NOONSIGHT_SCOPE_VIA: 'inferred' });
   const launch = h.log().find((l) => l.event === 'launch');
   assert.equal(launch?.scope, 'investigate');
   assert.equal(launch?.scope_source, 'classifier');
@@ -413,7 +413,7 @@ test('launcher: with no model named before the session starts, the task is class
   const r = runCli(['run', '--', '-p', 'Why does the nightly export write an empty file?'], { ...h.env, ...s.env('answer:investigate') }, NO_NETWORK);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(s.started().length, 1);
-  assert.deepEqual(s.session()?.env, { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'inferred' });
+  assert.deepEqual(s.session()?.env, { NOONSIGHT_SCOPE: 'investigate', NOONSIGHT_SCOPE_VIA: 'inferred' });
   const launch = h.log().find((l) => l.event === 'launch');
   assert.equal(launch?.classifier, 'scoped');
   assert.equal(launch?.scope, 'investigate');
@@ -437,17 +437,17 @@ test('launcher: a failed classification starts the session with no scope, and sa
   const h = hookHome(config({ classifier: { mode: 'fallback' } }));
   const r = runCli(['run', '--', '--model', 'claude-sonnet-5-5', '-p', 'Find the cause'], { ...h.env, ...s.env('fail') }, NO_NETWORK);
   assert.equal(r.status, 0);
-  assert.match(r.stderr, /^sextant: the classifier could not place the task \(it failed: claude exited with status 1: Not logged in\. Please run \/login\), so the session has no scope\.$/m);
-  assert.deepEqual(s.session()?.env, { SEXTANT_SCOPE: null, SEXTANT_SCOPE_VIA: null });
+  assert.match(r.stderr, /^noonsight: the classifier could not place the task \(it failed: claude exited with status 1: Not logged in\. Please run \/login\), so the session has no scope\.$/m);
+  assert.deepEqual(s.session()?.env, { NOONSIGHT_SCOPE: null, NOONSIGHT_SCOPE_VIA: null });
   const launch = h.log().find((l) => l.event === 'launch');
   assert.equal(launch?.scope, null);
   assert.equal(launch?.classifier, 'failed');
 });
 
-test('sextant check says whether the classifier is on, for which tasks, and its time limit', () => {
-  const base = { SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) };
-  const off = runCli(['check'], { ...base, SEXTANT_CONFIG: LAB_CONFIG });
+test('noonsight check says whether the classifier is on, for which tasks, and its time limit', () => {
+  const base = { NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}) };
+  const off = runCli(['check'], { ...base, NOONSIGHT_CONFIG: LAB_CONFIG });
   assert.match(off.stdout, /^ok: classifier: off, so a task without an explicit scope takes its scope from the matchers alone$/m);
-  const on = runCli(['check'], { ...base, SEXTANT_CONFIG: config({ classifier: { mode: 'fallback', timeout_ms: 4000 } }) });
+  const on = runCli(['check'], { ...base, NOONSIGHT_CONFIG: config({ classifier: { mode: 'fallback', timeout_ms: 4000 } }) });
   assert.match(on.stdout, /^ok: classifier: fallback, for a task no explicit scope and no matcher placed; haiku at low effort, at most 4000 ms per task$/m);
 });

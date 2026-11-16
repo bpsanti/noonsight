@@ -13,7 +13,7 @@ import { CLI, hookHome, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, 
 const SESSION = 'dbef0a98-a930-44c9-9a0c-9f41dae960c8';
 const NESTED_AGENT = 'a3d49b7cc8d3bb7bc';
 
-/** A session start in SESSION on the given model, so sextant records the session's model. */
+/** A session start in SESSION on the given model, so noonsight records the session's model. */
 const startOn = (h: HookHome, model: string): void => {
   assert.equal(h.hook('session-start', hookInput('session-start-startup', { session_id: SESSION, model })).status, 0);
 };
@@ -41,9 +41,9 @@ const MAIN_CALL_ID = (JSON.parse(hookInput('pre-tool-use-agent')) as { tool_use_
 
 function config(fields: Record<string, unknown>): string {
   const lab = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, unknown>;
-  const dir = tempTree({ 'sextant.json': { ...lab, ...fields } });
+  const dir = tempTree({ 'noonsight.json': { ...lab, ...fields } });
   fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
-  return path.join(dir, 'sextant.json');
+  return path.join(dir, 'noonsight.json');
 }
 
 const agentLines = (h: HookHome): Record<string, any>[] => h.log().filter((l) => l.event === 'agent-call' || l.event === 'agent-result');
@@ -58,13 +58,13 @@ test('a call that names a model: its rules go at the end of the task text, the r
   const out = r.out?.hookSpecificOutput;
   assert.equal(out.hookEventName, 'PreToolUse');
   assert.equal(out.permissionDecision, 'allow');
-  assert.match(out.permissionDecisionReason, /sextant added the working rules/);
+  assert.match(out.permissionDecisionReason, /noonsight added the working rules/);
   const { prompt, ...rest } = out.updatedInput;
   const { prompt: original, ...originalRest } = input.tool_input;
   assert.deepEqual(rest, originalRest, 'every other field of the call is passed on unchanged');
-  assert.ok(prompt.startsWith(`${original}\n\n<sextant-rules model="claude-haiku-5-5">\n`), prompt);
+  assert.ok(prompt.startsWith(`${original}\n\n<noonsight-rules model="claude-haiku-5-5">\n`), prompt);
   assert.match(prompt, /HAIKU-GEN-9047/);
-  assert.match(prompt, /<\/sextant-rules>$/);
+  assert.match(prompt, /<\/noonsight-rules>$/);
 
   const [line] = agentLines(h);
   assert.equal(line?.event, 'agent-call');
@@ -85,10 +85,10 @@ test('a call that names no model: the subagent inherits the session\'s model and
   startOn(h, 'claude-sonnet-5-5');
   const r = h.hook('agent-call', call({ model: undefined }));
   const prompt: string = r.out?.hookSpecificOutput.updatedInput.prompt;
-  assert.match(prompt, /<sextant-rules model="claude-sonnet-5-5">/);
+  assert.match(prompt, /<noonsight-rules model="claude-sonnet-5-5">/);
   assert.match(prompt, /SONNET-GEN-3306/);
   assert.match(prompt, /SONNET-CARRY-4471/, 'a rule for subagents is delivered to a subagent');
-  assert.equal(r.out?.hookSpecificOutput.updatedInput.model, undefined, 'sextant never sets the model');
+  assert.equal(r.out?.hookSpecificOutput.updatedInput.model, undefined, 'noonsight never sets the model');
   const line = agentLines(h)[0];
   assert.deepEqual([line?.model, line?.model_source, line?.parent_source], ['claude-sonnet-5-5', 'parent', 'session-record']);
   assert.deepEqual(line?.rules, ['sonnet/general', 'sonnet/carry-through']);
@@ -117,7 +117,7 @@ test('an undeclared model warns the person and leaves the call alone; on_undecla
   startOn(h, 'claude-sonnet-5-5');
   const r = h.hook('agent-call', call({ model: 'fable' }));
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
-  assert.match(r.out?.systemMessage, /^sextant: subagent general-purpose will run on claude-fable-5-2, which is not declared in .*sextant\.json, so it gets no rules\./);
+  assert.match(r.out?.systemMessage, /^noonsight: subagent general-purpose will run on claude-fable-5-2, which is not declared in .*noonsight\.json, so it gets no rules\./);
   assert.deepEqual(agentLines(h).map((l) => [l.model, l.status, l.reason, l.delivered, l.warned]), [['claude-fable-5-2', 'undeclared', 'no-entry', 'nothing', true]]);
 
   const quiet = hookHome(config({ on_undeclared: 'ignore' }));
@@ -130,7 +130,7 @@ test('the result of the call: the model the subagent started on matches the pred
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
   h.hook('agent-call', call());
-  const calls = path.join(h.dir, '.local', 'state', 'sextant', 'agent-calls');
+  const calls = path.join(h.dir, '.local', 'state', 'noonsight', 'agent-calls');
   assert.deepEqual(fs.readdirSync(calls), [`${MAIN_CALL_ID}.json`]);
   const r = h.hook('agent-result', result(MAIN_CALL_ID, 'claude-haiku-5-5'));
   assert.equal(r.raw, '');
@@ -141,7 +141,7 @@ test('the result of the call: the model the subagent started on matches the pred
   );
   assert.equal(line?.subagent_id, 'a92fbba5fa2c7141c');
   assert.deepEqual(fs.readdirSync(calls), [], 'the record of the call is removed once checked');
-  const agent = JSON.parse(fs.readFileSync(path.join(h.dir, '.local', 'state', 'sextant', 'agents', 'a92fbba5fa2c7141c.json'), 'utf8'));
+  const agent = JSON.parse(fs.readFileSync(path.join(h.dir, '.local', 'state', 'noonsight', 'agents', 'a92fbba5fa2c7141c.json'), 'utf8'));
   assert.equal(agent.model, 'claude-haiku-5-5');
 });
 
@@ -153,7 +153,7 @@ test('a subagent that starts on another model than predicted: a warning and a MI
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
   assert.equal(
     r.out?.systemMessage,
-    'sextant: subagent general-purpose (a92fbba5fa2c7141c) started on claude-sonnet-5-5, not on claude-haiku-5-5 as sextant predicted, so it received the rules for claude-haiku-5-5.',
+    'noonsight: subagent general-purpose (a92fbba5fa2c7141c) started on claude-sonnet-5-5, not on claude-haiku-5-5 as noonsight predicted, so it received the rules for claude-haiku-5-5.',
   );
   const line = agentLines(h)[1];
   assert.deepEqual([line?.result, line?.predicted, line?.model, line?.warned], ['MISMATCH', 'claude-haiku-5-5', 'claude-sonnet-5-5', true]);
@@ -169,14 +169,14 @@ test('a subagent that starts on another model than predicted: a warning and a MI
   ]);
 });
 
-test('a result without resolvedModel, or for a call sextant never saw, is not a mismatch', () => {
+test('a result without resolvedModel, or for a call noonsight never saw, is not a mismatch', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
   h.hook('agent-call', call());
   assert.equal(h.hook('agent-result', result(MAIN_CALL_ID, undefined)).raw, '');
   assert.equal(agentLines(h)[1]?.result, 'unknown');
   assert.equal(h.hook('agent-result', result('toolu_never_seen', 'claude-haiku-5-5')).raw, '');
-  assert.equal(agentLines(h).length, 2, 'no line for a call sextant did not see start');
+  assert.equal(agentLines(h).length, 2, 'no line for a call noonsight did not see start');
 });
 
 test('a call made inside a subagent inherits that subagent\'s model: from the result of a background launch, else from its transcript', () => {
@@ -212,12 +212,12 @@ test('a call made inside a subagent inherits that subagent\'s model: from the re
   const nestedLine = agentLines(foreground).at(-1);
   assert.deepEqual([nestedLine?.parent_model, nestedLine?.parent_source, nestedLine?.model], ['claude-sonnet-5-5', 'agent-transcript', 'claude-sonnet-5-5']);
 
-  // Neither: sextant cannot tell, so it warns and delivers nothing rather than guess the session's model.
+  // Neither: noonsight cannot tell, so it warns and delivers nothing rather than guess the session's model.
   const unknown = hookHome();
   startOn(unknown, 'claude-haiku-5-5');
   const u = unknown.hook('agent-call', nestedCall({}, { transcript_path: path.join(tempTree({}), `${SESSION}.jsonl`) }));
   assert.deepEqual(Object.keys(u.out ?? {}), ['systemMessage']);
-  assert.match(u.out?.systemMessage, /^sextant: sextant cannot tell which model subagent general-purpose will run on \(the model of the session or subagent that starts it is not known\), so it gets no rules\./);
+  assert.match(u.out?.systemMessage, /^noonsight: noonsight cannot tell which model subagent general-purpose will run on \(the model of the session or subagent that starts it is not known\), so it gets no rules\./);
   assert.deepEqual(agentLines(unknown).map((l) => [l.model, l.status, l.reason, l.parent_source, l.delivered]), [[null, 'undeclared', 'model-not-reported', null, 'nothing']]);
 
   // A model named in the nested call needs no parent.
@@ -372,7 +372,7 @@ test('only the agent tool, under either name, reaches the subagent hooks; other 
 });
 
 test('a refused configuration: the call goes ahead unchanged, the person is warned once per call, and its result is logged without a warning', () => {
-  const bad = path.join(tempTree({ 'sextant.json': { version: 1, subagents: { delivery: 'start-context' } } }), 'sextant.json');
+  const bad = path.join(tempTree({ 'noonsight.json': { version: 1, subagents: { delivery: 'start-context' } } }), 'noonsight.json');
   const h = hookHome(bad);
   const r = h.hook('agent-call', call());
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
@@ -390,7 +390,7 @@ test('a refused configuration: the call goes ahead unchanged, the person is warn
 test('the hook pointer written by install runs the subagent hooks', () => {
   const home = tempTree({});
   const claudeDir = tempTree({});
-  const env = { HOME: home, SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) };
+  const env = { HOME: home, NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}) };
   assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
   const settings = JSON.parse(fs.readFileSync(path.join(claudeDir, 'settings.json'), 'utf8'));
   const [entry] = settings.hooks.PreToolUse;
@@ -401,7 +401,7 @@ test('the hook pointer written by install runs the subagent hooks', () => {
   assert.equal(r.status, 0, r.stderr);
   assert.match(JSON.parse(r.stdout).hookSpecificOutput.updatedInput.prompt, /HAIKU-GEN-9047/);
   const post = runProgram(pointer, settings.hooks.PostToolUse[0].hooks[0].args, env, result(MAIN_CALL_ID, 'claude-sonnet-5-5'));
-  assert.match(JSON.parse(post.stdout).systemMessage, /not on claude-haiku-5-5 as sextant predicted/);
+  assert.match(JSON.parse(post.stdout).systemMessage, /not on claude-haiku-5-5 as noonsight predicted/);
   assert.ok(fs.existsSync(CLI));
 });
 
@@ -414,7 +414,7 @@ test('definition frontmatter: top-level name and model only, quotes and comments
 
 test('subagent records nobody wrote for 7 days are removed when a session starts, the others kept', () => {
   const h = hookHome();
-  const state = path.join(h.dir, '.local', 'state', 'sextant');
+  const state = path.join(h.dir, '.local', 'state', 'noonsight');
   const old = Date.now() / 1000 - 8 * 24 * 60 * 60;
   for (const [dir, name, age] of [
     ['agent-calls', 'toolu_old.json', old],
@@ -447,14 +447,14 @@ test('a subagent\'s scope comes from its own task text, so two tasks on one mode
   startOn(h, 'claude-sonnet-5-5');
   const prompt = (input: string): string => h.hook('agent-call', input).out?.hookSpecificOutput.updatedInput.prompt ?? '';
   const summarize = prompt(call({ model: 'haiku', description: 'Condense the notes', prompt: 'Summarize the meeting notes.' }, { tool_use_id: 'toolu_sum' }));
-  assert.match(summarize, /<sextant-rules model="claude-haiku-5-5" scope="summarize">/);
+  assert.match(summarize, /<noonsight-rules model="claude-haiku-5-5" scope="summarize">/);
   assert.match(summarize, /HAIKU-SUM-6610/);
   const investigate = prompt(call({ model: 'sonnet', description: 'Find the root cause', prompt: 'Look at the failing build.' }, { tool_use_id: 'toolu_inv' }));
   assert.match(investigate, /SONNET-INV-5182/);
   assert.match(investigate, /SONNET-CARRY-4471/, 'a subagent is in the place subagent');
   const plain = prompt(call({ model: 'haiku', description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_none' }));
   assert.doesNotMatch(plain, /HAIKU-SUM-6610/);
-  assert.match(plain, /^Rename the variable\.\n\n<sextant-rules model="claude-haiku-5-5">\n/);
+  assert.match(plain, /^Rename the variable\.\n\n<noonsight-rules model="claude-haiku-5-5">\n/);
 
   assert.deepEqual(
     agentLines(h).map((l) => [l.model, l.scope, l.scope_source, l.scope_matcher ?? null, l.place]),
@@ -480,10 +480,10 @@ test('a task text longer than the matchers read is logged as cut, so a scope mis
   );
 });
 
-test('the session\'s SEXTANT_SCOPE never carries over to a subagent, whose scope comes from its own task only', () => {
+test('the session\'s NOONSIGHT_SCOPE never carries over to a subagent, whose scope comes from its own task only', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');
-  const other = h.hook('agent-call', call({ model: undefined, prompt: 'Rename the variable.' }), { SEXTANT_SCOPE: 'summarize' });
+  const other = h.hook('agent-call', call({ model: undefined, prompt: 'Rename the variable.' }), { NOONSIGHT_SCOPE: 'summarize' });
   assert.doesNotMatch(other.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-SUM-6610/);
   assert.deepEqual(
     agentLines(h).map((l) => [l.subagent_type, l.scope, l.scope_source]),

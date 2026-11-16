@@ -1,4 +1,4 @@
-// sextant init and sextant models, driven as separate processes with an isolated home directory.
+// noonsight init and noonsight models, driven as separate processes with an isolated home directory.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ import { FIXTURES, LAB_PRESETS, runCli, tempTree } from './helpers.js';
 const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
 
 function log(home: string, records: readonly Record<string, unknown>[], file = 'decisions.jsonl'): void {
-  const dir = path.join(home, '.local', 'state', 'sextant');
+  const dir = path.join(home, '.local', 'state', 'noonsight');
   fs.mkdirSync(dir, { recursive: true });
   fs.appendFileSync(path.join(dir, file), records.map((r) => `${JSON.stringify(r)}\n`).join(''));
 }
@@ -19,9 +19,9 @@ test('init writes a configuration that declares every preset model with "use": "
   const home = tempTree({});
   const r = runCli(['init'], { HOME: home }, NO_NETWORK);
   assert.equal(r.status, 0, r.stderr);
-  const file = path.join(home, '.config', 'sextant', 'sextant.json');
+  const file = path.join(home, '.config', 'noonsight', 'noonsight.json');
   assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {
-    $schema: 'https://unpkg.com/sextant-ai@0/schema/sextant.schema.json',
+    $schema: 'https://unpkg.com/noonsight@0/schema/noonsight.schema.json',
     version: 1,
     preset: 'claude',
     models: {
@@ -38,20 +38,20 @@ test('init writes a configuration that declares every preset model with "use": "
       '  claude-opus-5-5: 1 of 3 rules on\n' +
       '  claude-sonnet-5-5: 3 of 6 rules on\n' +
       '  claude-haiku-5-5: 2 of 3 rules on\n' +
-      'Next: `sextant models` lists every rule with its source, effect and cost; `sextant install` adds the hooks; `sextant check` checks it all.\n',
+      'Next: `noonsight models` lists every rule with its source, effect and cost; `noonsight install` adds the hooks; `noonsight check` checks it all.\n',
   );
   assert.equal(loadConfig(file).exact.size, 4);
   assert.doesNotMatch(r.stderr, /NETWORK-ATTEMPT/);
 });
 
-test('init writes to SEXTANT_CONFIG and never replaces an existing file', () => {
+test('init writes to NOONSIGHT_CONFIG and never replaces an existing file', () => {
   const dir = tempTree({ 'mine.json': '{"keep": true}' });
-  const existing = runCli(['init'], { SEXTANT_CONFIG: path.join(dir, 'mine.json') });
+  const existing = runCli(['init'], { NOONSIGHT_CONFIG: path.join(dir, 'mine.json') });
   assert.equal(existing.status, 1);
   assert.match(existing.stderr, /mine\.json already exists, and init never replaces it/);
   assert.equal(fs.readFileSync(path.join(dir, 'mine.json'), 'utf8'), '{"keep": true}');
 
-  const fresh = runCli(['init'], { SEXTANT_CONFIG: path.join(dir, 'nested', 'new.json') });
+  const fresh = runCli(['init'], { NOONSIGHT_CONFIG: path.join(dir, 'nested', 'new.json') });
   assert.equal(fresh.status, 0, fresh.stderr);
   assert.ok(fs.existsSync(path.join(dir, 'nested', 'new.json')));
 });
@@ -59,8 +59,8 @@ test('init writes to SEXTANT_CONFIG and never replaces an existing file', () => 
 test('init refuses arguments, and a preset that is not installed', () => {
   const usage = runCli(['init', '--force'], { HOME: tempTree({}) });
   assert.equal(usage.status, 2);
-  assert.match(usage.stderr, /usage: sextant init/);
-  const missing = runCli(['init'], { HOME: tempTree({}), SEXTANT_PRESETS_DIR: LAB_PRESETS });
+  assert.match(usage.stderr, /usage: noonsight init/);
+  const missing = runCli(['init'], { HOME: tempTree({}), NOONSIGHT_PRESETS_DIR: LAB_PRESETS });
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /preset "claude" is not installed/);
 });
@@ -68,7 +68,7 @@ test('init refuses arguments, and a preset that is not installed', () => {
 test('models lists each declared model with its rules on and off, their source, effect and cost, and the user\'s own rules', () => {
   const home = tempTree({});
   const config = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       version: 1,
       models: {
         'claude-sonnet-5-5': { use: 'preset', enable: ['sonnet-5-5/ideas-first'], disable: ['sonnet-5-5/stay-in-scope'], add: [{ id: 'team/style', file: 'style.md', scopes: ['routine'] }] },
@@ -87,9 +87,9 @@ test('models lists each declared model with its rules on and off, their source, 
     { ts: '2026-11-16T14:00:00.000Z', event: 'session-start', model: 'claude-fable-5-3', status: 'undeclared' },
     { ts: '2026-11-16T15:00:00.000Z', event: 'session-start', model: null, status: 'undeclared' },
   ]);
-  fs.appendFileSync(path.join(home, '.local', 'state', 'sextant', 'decisions.jsonl'), '{"torn\n');
+  fs.appendFileSync(path.join(home, '.local', 'state', 'noonsight', 'decisions.jsonl'), '{"torn\n');
   log(home, [{ ts: '2026-11-15T09:00:00.000Z', event: 'session-start', model: 'claude-sonnet-5-5', status: 'matched' }], 'decisions.1.jsonl');
-  const env = { HOME: home, SEXTANT_CONFIG: path.join(config, 'sextant.json') };
+  const env = { HOME: home, NOONSIGHT_CONFIG: path.join(config, 'noonsight.json') };
 
   const r = runCli(['models'], env, NO_NETWORK);
   assert.equal(r.status, 0, r.stderr);
@@ -139,20 +139,20 @@ test('models lists each declared model with its rules on and off, their source, 
 });
 
 test('models with no preset installed, no log, and a refused configuration', () => {
-  const config = tempTree({ 'sextant.json': { version: 1, models: { 'claude-haiku-5-5': { use: 'none' } } } });
-  const r = runCli(['models'], { SEXTANT_CONFIG: path.join(config, 'sextant.json'), SEXTANT_PRESETS_DIR: tempTree({}) });
+  const config = tempTree({ 'noonsight.json': { version: 1, models: { 'claude-haiku-5-5': { use: 'none' } } } });
+  const r = runCli(['models'], { NOONSIGHT_CONFIG: path.join(config, 'noonsight.json'), NOONSIGHT_PRESETS_DIR: tempTree({}) });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^preset: not installed$/m);
   assert.match(r.stdout, /^claude-haiku-5-5: none, by decision; not seen in the decision log$/m);
   assert.doesNotMatch(r.stdout, /not declared/);
 
-  const bad = tempTree({ 'sextant.json': { version: 1, models: { sonnet: { use: 'none' } } } });
-  const refused = runCli(['models'], { SEXTANT_CONFIG: path.join(bad, 'sextant.json') });
+  const bad = tempTree({ 'noonsight.json': { version: 1, models: { sonnet: { use: 'none' } } } });
+  const refused = runCli(['models'], { NOONSIGHT_CONFIG: path.join(bad, 'noonsight.json') });
   assert.equal(refused.status, 2);
   assert.match(refused.stderr, /configuration refused/);
   assert.equal(refused.stdout, '');
 
   const usage = runCli(['models', 'x'], {});
   assert.equal(usage.status, 2);
-  assert.match(usage.stderr, /usage: sextant models \[--json\]/);
+  assert.match(usage.stderr, /usage: noonsight models \[--json\]/);
 });

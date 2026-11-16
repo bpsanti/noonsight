@@ -1,4 +1,4 @@
-// sextant models: the models the configuration declares and the rules each one receives, with the
+// noonsight models: the models the configuration declares and the rules each one receives, with the
 // source, effect and cost the preset gives for each rule; the preset's models that are not
 // declared; and the models the decision log has seen that are not declared. It reads local files
 // only and changes nothing.
@@ -10,7 +10,7 @@ import { ANY_SCOPE, type Config, type Place, type Rule } from '../core/types.js'
 import { readDecisions } from '../state/log.js';
 import { UsageError } from './usage.js';
 
-export const MODELS_USAGE = `usage: sextant models [--json]
+export const MODELS_USAGE = `usage: noonsight models [--json]
 
 List the models the configuration declares and the rules each one receives, with the source,
 effect and cost of each preset rule; the preset's models that are not declared; and the models

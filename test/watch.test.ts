@@ -1,4 +1,4 @@
-// sextant watch: the opt-in watcher and its per-user service, always in a temporary home directory.
+// noonsight watch: the opt-in watcher and its per-user service, always in a temporary home directory.
 // A stand-in for launchctl and systemctl on PATH records each call, so no real service is ever
 // loaded, and the watcher itself runs as a child process watching a temporary home.
 
@@ -18,7 +18,7 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** A stand-in for launchctl and systemctl that records its calls and remembers whether the service runs. */
 const FAKE_MANAGER = `#!/bin/sh
 # Shell builtins only: PATH holds nothing but the stand-ins.
-dir="$SEXTANT_TEST_SERVICE_DIR"
+dir="$NOONSIGHT_TEST_SERVICE_DIR"
 call="\${0##*/} $*"
 echo "$call" >> "$dir/calls"
 state=off
@@ -31,7 +31,7 @@ case "$call" in
     [ "$state" = off ] && { echo "Boot-out failed: 3: No such process" >&2; exit 3; }
     echo off > "$dir/state";;
   "systemctl --user disable --now "*)
-    if [ ! -f "$SEXTANT_TEST_UNIT_FILE" ]; then echo "Failed to disable unit: Unit file does not exist." >&2; exit 1; fi
+    if [ ! -f "$NOONSIGHT_TEST_UNIT_FILE" ]; then echo "Failed to disable unit: Unit file does not exist." >&2; exit 1; fi
     echo off > "$dir/state";;
   "systemctl --user stop "*) echo off > "$dir/state";;
   "launchctl print "*)
@@ -47,18 +47,18 @@ esac
 `;
 
 function machine() {
-  const home = tempTree({ '.local/state/sextant/.keep': '', '.claude/.keep': '' });
+  const home = tempTree({ '.local/state/noonsight/.keep': '', '.claude/.keep': '' });
   const managerDir = tempTree({});
   const bin = fakeClaude('2.1.325');
   for (const name of ['launchctl', 'systemctl']) fs.writeFileSync(path.join(bin, name), FAKE_MANAGER, { mode: 0o755 });
   const env = {
     HOME: home,
     PATH: bin,
-    SEXTANT_TEST_SERVICE_DIR: managerDir,
-    SEXTANT_TEST_UNIT_FILE: path.join(home, '.config', 'systemd', 'user', SERVICE_UNIT),
-    SEXTANT_CONFIG: LAB_CONFIG,
-    SEXTANT_PRESETS_DIR: LAB_PRESETS,
-    SEXTANT_SYSTEM_ROOT: tempTree({}),
+    NOONSIGHT_TEST_SERVICE_DIR: managerDir,
+    NOONSIGHT_TEST_UNIT_FILE: path.join(home, '.config', 'systemd', 'user', SERVICE_UNIT),
+    NOONSIGHT_CONFIG: LAB_CONFIG,
+    NOONSIGHT_PRESETS_DIR: LAB_PRESETS,
+    NOONSIGHT_SYSTEM_ROOT: tempTree({}),
   };
   const service = watchService(env, home);
   // The service file's directory exists, as it does on a real machine, so the file is the only new entry.
@@ -121,27 +121,27 @@ function files(root: string): Map<string, string> {
   return found;
 }
 
-test('the launchd service file runs this copy of sextant at login and keeps it running', { skip: process.platform !== 'darwin' }, () => {
-  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant$/dist/src/cli.js' };
+test('the launchd service file runs this copy of noonsight at login and keeps it running', { skip: process.platform !== 'darwin' }, () => {
+  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/noonsight$/dist/src/cli.js' };
   const mac = watchService({}, '/Users/u', 'darwin');
   assert.equal(mac.file, `/Users/u/Library/LaunchAgents/${SERVICE_LABEL}.plist`);
   const plist = plistModel(serviceContent(mac, runtime));
   assert.deepEqual(plist.ProgramArguments, [runtime.node, runtime.cli, 'watch', 'run']);
   assert.equal(plist.RunAtLoad, true);
   assert.equal(plist.KeepAlive, true);
-  assert.equal(plist.StandardErrorPath, '/Users/u/.local/state/sextant/watch.log');
+  assert.equal(plist.StandardErrorPath, '/Users/u/.local/state/noonsight/watch.log');
   assert.equal(plist.WatchPaths, undefined);
 });
 
-test('the systemd unit runs this copy of sextant at login and keeps it running', () => {
-  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/sextant$/dist/src/cli.js' };
+test('the systemd unit runs this copy of noonsight at login and keeps it running', () => {
+  const runtime = { node: '/opt/node & co/bin/node', cli: '/opt/100%/noonsight$/dist/src/cli.js' };
   const linux = watchService({}, '/home/u', 'linux');
   assert.equal(linux.file, `/home/u/.config/systemd/user/${SERVICE_UNIT}`);
   assert.equal(watchService({ XDG_CONFIG_HOME: '/xdg' }, '/home/u', 'linux').file, `/xdg/systemd/user/${SERVICE_UNIT}`);
   const unit = unitModel(serviceContent(linux, runtime));
   assert.deepEqual(systemdWords(unit.Service?.ExecStart?.[0] ?? ''), [runtime.node, runtime.cli, 'watch', 'run']);
   assert.deepEqual(unit.Service?.Restart, ['always']);
-  assert.deepEqual(unit.Service?.StandardOutput, ['append:/home/u/.local/state/sextant/watch.log']);
+  assert.deepEqual(unit.Service?.StandardOutput, ['append:/home/u/.local/state/noonsight/watch.log']);
   assert.deepEqual(unit.Install?.WantedBy, ['default.target']);
 
   assert.throws(() => watchService({}, 'C:\\Users\\u', 'win32'), /not supported/);
@@ -154,7 +154,7 @@ test('the watcher is off by default: install writes no service, and check says i
   assert.equal(fs.existsSync(service.file), false);
   assert.deepEqual(calls(), [], 'install asks the service manager nothing');
   const check = runCli(['check'], env);
-  assert.match(check.stdout, /^ok: watcher: off; `sextant watch enable`/m);
+  assert.match(check.stdout, /^ok: watcher: off; `noonsight watch enable`/m);
 });
 
 test('watch enable writes only its service file and starts it; again changes nothing; disable removes exactly that file', { skip: !supported }, () => {
@@ -211,7 +211,7 @@ test('check reports a watcher whose service is in place but not running', { skip
   fs.writeFileSync(path.join(managerDir, 'state'), 'off\n');
   const check = runCli(['check'], env);
   assert.equal(check.status, 1, check.stdout);
-  assert.match(check.stdout, /^problem: watcher: on in .*, but not running; run `sextant watch enable` again$/m);
+  assert.match(check.stdout, /^problem: watcher: on in .*, but not running; run `noonsight watch enable` again$/m);
   // The last line the watcher logged is shown, as a warning when it reports a problem.
   fs.writeFileSync(service.log, '2026-01-01T00:00:00.000Z watching\n2026-01-01T00:00:01.000Z problem: install into /x failed\n');
   assert.match(runCli(['check'], env).stdout, /^warning: watcher log .*watch\.log: 2026-01-01T00:00:01\.000Z problem: install into \/x failed$/m);
@@ -225,13 +225,13 @@ test('watch enable that replaces a running service and is then refused leaves th
   const { env, service, managerDir } = machine();
   assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
-  // A copy of sextant that runs from another Node.js, as after an upgrade: enable replaces its service file.
+  // A copy of noonsight that runs from another Node.js, as after an upgrade: enable replaces its service file.
   const other = serviceContent(service, { node: '/usr/local/other/node', cli: fs.realpathSync(CLI) });
   fs.writeFileSync(service.file, other);
   fs.writeFileSync(path.join(managerDir, 'refuse'), '');
   const r = runCli(['watch', 'enable'], env);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /could not start the watcher .*refused by the test.*the watcher is stopped, and the service file was put back as it was; run `sextant watch enable` again/s);
+  assert.match(r.stderr, /could not start the watcher .*refused by the test.*the watcher is stopped, and the service file was put back as it was; run `noonsight watch enable` again/s);
   assert.equal(fs.readFileSync(service.file, 'utf8'), other);
   assert.equal(fs.readFileSync(path.join(managerDir, 'state'), 'utf8'), 'off\n');
 });
@@ -243,7 +243,7 @@ test('a running watcher whose service file was removed by hand is reported by ch
   fs.rmSync(service.file);
   const check = runCli(['check'], env);
   assert.equal(check.status, 1, check.stdout);
-  assert.match(check.stdout, /^problem: watcher: loaded without .*; run `sextant watch disable` to stop it$/m);
+  assert.match(check.stdout, /^problem: watcher: loaded without .*; run `noonsight watch disable` to stop it$/m);
 
   const again = runCli(['watch', 'enable'], env);
   assert.equal(again.status, 0, again.stderr);
@@ -269,12 +269,12 @@ test('watch enable that the service manager refuses leaves no service file behin
   assert.deepEqual(files(home), before);
 });
 
-test('watch disable leaves alone a service file sextant did not write', { skip: !supported }, () => {
+test('watch disable leaves alone a service file noonsight did not write', { skip: !supported }, () => {
   const { env, service, calls } = machine();
   fs.writeFileSync(service.file, 'someone else\n');
   const r = runCli(['watch', 'disable'], env);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /was not written by sextant/);
+  assert.match(r.stderr, /was not written by noonsight/);
   assert.equal(fs.readFileSync(service.file, 'utf8'), 'someone else\n');
   assert.equal(runCli(['watch', 'enable'], env).status, 1);
   assert.equal(fs.readFileSync(service.file, 'utf8'), 'someone else\n');
@@ -285,7 +285,7 @@ test('watch usage errors exit 2', () => {
   for (const args of [['watch'], ['watch', 'start'], ['watch', 'enable', 'now']]) {
     const r = runCli(args);
     assert.equal(r.status, 2, args.join(' '));
-    assert.match(r.stderr, /usage: sextant watch enable/);
+    assert.match(r.stderr, /usage: noonsight watch enable/);
   }
 });
 
@@ -296,7 +296,7 @@ interface Running {
   readonly output: () => string;
 }
 
-/** Start `sextant watch run` on the home directory, and wait until it watches. */
+/** Start `noonsight watch run` on the home directory, and wait until it watches. */
 async function startWatcher(env: Record<string, string>): Promise<Running> {
   const child = spawn(process.execPath, [CLI, 'watch', 'run'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
@@ -314,13 +314,13 @@ async function until(done: () => boolean, message: () => string, timeoutMs = 10_
   }
 }
 
-/** Whether the directory's settings.json holds a hook whose command is sextant's hook pointer. */
-function hasSextantHooks(dir: string): boolean {
+/** Whether the directory's settings.json holds a hook whose command is noonsight's hook pointer. */
+function hasNoonsightHooks(dir: string): boolean {
   try {
     const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8')) as {
       hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
     };
-    return Object.values(settings.hooks).some((groups) => groups.some((group) => group.hooks.some((hook) => hook.command.includes('sextant-hook'))));
+    return Object.values(settings.hooks).some((groups) => groups.some((group) => group.hooks.some((hook) => hook.command.includes('noonsight-hook'))));
   } catch {
     return false;
   }
@@ -328,11 +328,11 @@ function hasSextantHooks(dir: string): boolean {
 
 test('the watcher installs into a new configuration directory in the home directory, and nowhere else', async (t) => {
   const home = tempTree({
-    '.local/state/sextant/.keep': '',
+    '.local/state/noonsight/.keep': '',
     '.claude-before/.claude.json': {},
     'code/.keep': '',
   });
-  const env = { HOME: home, PATH: process.env.PATH ?? '', SEXTANT_SYSTEM_ROOT: tempTree({}), SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS };
+  const env = { HOME: home, PATH: process.env.PATH ?? '', NOONSIGHT_SYSTEM_ROOT: tempTree({}), NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS };
   const watcher = await startWatcher(env);
   t.after(() => watcher.child.kill());
   const entries = new Set(fs.readdirSync(home));
@@ -348,18 +348,18 @@ test('the watcher installs into a new configuration directory in the home direct
   fs.writeFileSync(path.join(login, '.claude.json'), '{}');
   entries.add('notes').add('.claude-new');
 
-  await until(() => hasSextantHooks(login), () => `no hooks in ${login}:\n${watcher.output()}`);
+  await until(() => hasNoonsightHooks(login), () => `no hooks in ${login}:\n${watcher.output()}`);
   await until(() => watcher.output().includes(`new Claude Code configuration ${login}: installed`), () => watcher.output());
-  assert.ok(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')));
+  assert.ok(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')));
 
   // The default directory has its marker in the home directory, so it needs none of its own.
   const defaultDir = path.join(home, '.claude');
   fs.mkdirSync(defaultDir);
   entries.add('.claude');
-  await until(() => hasSextantHooks(defaultDir), () => `no hooks in ${defaultDir}:\n${watcher.output()}`);
+  await until(() => hasNoonsightHooks(defaultDir), () => `no hooks in ${defaultDir}:\n${watcher.output()}`);
 
-  assert.equal(hasSextantHooks(path.join(home, '.claude-before')), false, 'a directory that was there before is left to sextant install');
-  assert.equal(hasSextantHooks(path.join(home, 'code', 'project')), false, 'nothing below the home directory is watched');
+  assert.equal(hasNoonsightHooks(path.join(home, '.claude-before')), false, 'a directory that was there before is left to noonsight install');
+  assert.equal(hasNoonsightHooks(path.join(home, 'code', 'project')), false, 'nothing below the home directory is watched');
   assert.deepEqual(fs.readdirSync(path.join(home, 'notes')), [], 'a directory that is not a configuration directory is left alone');
   assert.deepEqual(new Set(fs.readdirSync(home)), entries, 'the watcher made no entry in the home directory');
   assert.equal(watcher.child.exitCode, null, 'the watcher is still running');
@@ -439,14 +439,14 @@ test('a watcher install that fails leaves a problem line as its last log line, a
   assert.match(check.stdout, /^warning: watcher log .*: \S+ problem: install into .* failed; see the lines above$/m);
 });
 
-test('an upgrade of sextant at the same path is noticed: check warns, and enable rewrites the service file and restarts the watcher', { skip: !supported }, () => {
+test('an upgrade of noonsight at the same path is noticed: check warns, and enable rewrites the service file and restarts the watcher', { skip: !supported }, () => {
   const { env, service, calls } = machine();
   assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
   const current = fs.readFileSync(service.file, 'utf8');
   fs.writeFileSync(service.file, current.replaceAll(packageVersion(), 'previous-version'));
   const check = runCli(['check'], env);
-  assert.match(check.stdout, /^warning: watcher: .* runs another copy of sextant or another Node\.js/m);
+  assert.match(check.stdout, /^warning: watcher: .* runs another copy of noonsight or another Node\.js/m);
   const callsBefore = calls().length;
 
   const again = runCli(['watch', 'enable'], env);
@@ -472,7 +472,7 @@ test('an upgrade of sextant at the same path is noticed: check warns, and enable
 
 test('a watcher that cannot watch its home directory logs one problem line and exits 1', () => {
   const missing = path.join(tempTree({}), 'no-such-home');
-  const r = runCli(['watch', 'run'], { HOME: missing, PATH: process.env.PATH ?? '', SEXTANT_SYSTEM_ROOT: tempTree({}), SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS });
+  const r = runCli(['watch', 'run'], { HOME: missing, PATH: process.env.PATH ?? '', NOONSIGHT_SYSTEM_ROOT: tempTree({}), NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS });
   assert.equal(r.status, 1, r.stderr);
   const lines = r.stdout.trimEnd().split('\n');
   assert.equal(lines.length, 1, r.stdout);

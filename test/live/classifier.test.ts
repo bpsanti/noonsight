@@ -1,12 +1,12 @@
 // Live classifier tests, run from the login of the person running them. They send prompts to the
 // models, so they spend a little usage, and they only run when asked:
 //
-//   SEXTANT_LIVE_LOGIN=1 npm run test:live
+//   NOONSIGHT_LIVE_LOGIN=1 npm run test:live
 //
-// classifier-agreement asks the classifier, as sextant runs it, to place each hand-labeled task in
+// classifier-agreement asks the classifier, as noonsight runs it, to place each hand-labeled task in
 // test/fixtures/classifier/tasks.json with the scopes of the claude preset, and reports how often it
 // agrees with the label; the README reports the result. The other two run real sessions that start a
-// subagent, with sextant's hooks given through --settings: one whose task the classifier places, and
+// subagent, with noonsight's hooks given through --settings: one whose task the classifier places, and
 // one whose classification is stopped by the time limit. login.ts describes what they need, and what
 // they touch in the person's Claude Code directory.
 
@@ -27,8 +27,8 @@ const AGREEMENT_FLOOR = 0.75;
 
 test('live, login: classifier-agreement: the classifier places the hand-labeled tasks with the preset\'s scopes', { skip: !enabled }, (t) => {
   preconditions();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-live-agreement-'));
-  const file = path.join(dir, 'sextant.json');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-live-agreement-'));
+  const file = path.join(dir, 'noonsight.json');
   fs.writeFileSync(file, JSON.stringify({ version: 1, preset: 'claude', classifier: { mode: 'fallback' } }));
   const config = loadConfig(file, {}, {});
   const c = config.classifier;
@@ -92,7 +92,7 @@ const SUBAGENT_TASK =
   'This is a configuration test. Make exactly one Agent tool call with subagent_type "general-purpose", the model parameter "sonnet", ' +
   'the description "Condense a paragraph", and exactly this prompt: ' +
   '"Summarize the following paragraph in one sentence: The quarterly report shows that revenue grew by eight percent while costs stayed flat, ' +
-  'and that the new pricing page drove most of the growth. After the summary, on a new line, write the verification words of any sextant working rules ' +
+  'and that the new pricing page drove most of the growth. After the summary, on a new line, write the verification words of any noonsight working rules ' +
   'you were given in this conversation, separated by single spaces, or the single word NONE if you were given none. Do not use any tool." ' +
   'After the result arrives, reply with the subagent\'s reply verbatim.';
 

@@ -1,5 +1,5 @@
-// sextant watch: the opt-in watcher that installs sextant's hooks into each new Claude Code
-// configuration directory. It is off until `sextant watch enable` writes its per-user service.
+// noonsight watch: the opt-in watcher that installs noonsight's hooks into each new Claude Code
+// configuration directory. It is off until `noonsight watch enable` writes its per-user service.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,15 +11,15 @@ import { startWatcher } from '../watch/watcher.js';
 import { runInstall } from './install.js';
 import { UsageError } from './usage.js';
 
-export const WATCH_USAGE = `usage: sextant watch enable
-       sextant watch disable
+export const WATCH_USAGE = `usage: noonsight watch enable
+       noonsight watch disable
 
-The watcher is off unless you turn it on. \`sextant watch enable\` writes a per-user service (a
+The watcher is off unless you turn it on. \`noonsight watch enable\` writes a per-user service (a
 launchd agent on macOS, a systemd user service on Linux) that starts at login and keeps one small
 process running. It watches only the entries directly in the home directory: when a new Claude Code
-configuration directory appears there, it installs sextant's hooks into that directory, as
-\`sextant install --account <dir>\` does. \`sextant watch disable\` stops it and removes the service
-file. \`sextant check\` says whether it is on.
+configuration directory appears there, it installs noonsight's hooks into that directory, as
+\`noonsight install --account <dir>\` does. \`noonsight watch disable\` stops it and removes the service
+file. \`noonsight check\` says whether it is on.
 
 The first session of a brand-new login can still start without the rules; see docs/install.md.`;
 
@@ -39,7 +39,7 @@ export function runWatch(args: readonly string[], env: Env, io: Io): number {
         service = watchService(env, os.homedir());
       } catch (e) {
         if (!(e instanceof WatchUnsupported)) throw e;
-        io.err(`sextant: ${e.message}`);
+        io.err(`noonsight: ${e.message}`);
         return 1;
       }
       return action === 'enable' ? enable(service, io) : disable(service, io);
@@ -60,7 +60,7 @@ function enable(service: WatchService, io: Io): number {
   const content = serviceContent(service, runtime);
   const old = readServiceFile(service);
   if (old !== null && !isOurs(old)) {
-    io.err(`sextant: ${service.file} was not written by sextant, so it is left alone; nothing was changed`);
+    io.err(`noonsight: ${service.file} was not written by noonsight, so it is left alone; nothing was changed`);
     return 1;
   }
   if (old === content && manager.running(service) === 'running') {
@@ -71,7 +71,7 @@ function enable(service: WatchService, io: Io): number {
   if (isLoaded(manager.running(service))) {
     const stopped = manager.unload(service);
     if (!stopped.ok) {
-      io.err(`sextant: could not stop the watcher to update it (${stopped.detail}); nothing was changed`);
+      io.err(`noonsight: could not stop the watcher to update it (${stopped.detail}); nothing was changed`);
       return 1;
     }
   }
@@ -86,16 +86,16 @@ function enable(service: WatchService, io: Io): number {
       fs.rmSync(service.file, { force: true });
       manager.forget(service);
     } else if (old !== content) writeFileAtomic(service.file, old, 0o644);
-    const restored = old === null ? 'the service file was removed again' : 'the service file was put back as it was; run `sextant watch enable` again once the cause is fixed';
-    io.err(`sextant: could not start the watcher (${started.detail}); the watcher is stopped, and ${restored}`);
+    const restored = old === null ? 'the service file was removed again' : 'the service file was put back as it was; run `noonsight watch enable` again once the cause is fixed';
+    io.err(`noonsight: could not start the watcher (${started.detail}); the watcher is stopped, and ${restored}`);
     return 1;
   }
   io.out(
     [
       `watcher: on (${service.file})`,
       `It runs ${runtime.node} ${runtime.cli} watch run, starts at every login, and logs to ${service.log}.`,
-      'note: it adds the hooks to Claude Code configuration directories made from now on; for ones that exist already, run `sextant install`.',
-      'note: the first session of a brand-new login can still start without the rules (see docs/install.md); turn the watcher off with `sextant watch disable`.',
+      'note: it adds the hooks to Claude Code configuration directories made from now on; for ones that exist already, run `noonsight install`.',
+      'note: the first session of a brand-new login can still start without the rules (see docs/install.md); turn the watcher off with `noonsight watch disable`.',
     ].join('\n'),
   );
   return 0;
@@ -104,7 +104,7 @@ function enable(service: WatchService, io: Io): number {
 function disable(service: WatchService, io: Io): number {
   const old = readServiceFile(service);
   if (old !== null && !isOurs(old)) {
-    io.err(`sextant: ${service.file} was not written by sextant, so it is left alone; nothing was changed`);
+    io.err(`noonsight: ${service.file} was not written by noonsight, so it is left alone; nothing was changed`);
     return 1;
   }
   if (old === null && !isLoaded(manager.running(service))) {
@@ -114,7 +114,7 @@ function disable(service: WatchService, io: Io): number {
   const stopped = manager.unload(service);
   // launchctl refuses to stop a service that is not loaded; that is already the state we want.
   if (!stopped.ok && !(service.platform === 'darwin' && manager.running(service) === 'off')) {
-    io.err(`sextant: could not stop the watcher (${stopped.detail}); nothing was changed`);
+    io.err(`noonsight: could not stop the watcher (${stopped.detail}); nothing was changed`);
     return 1;
   }
   fs.rmSync(service.file, { force: true });
@@ -145,7 +145,7 @@ function run(env: Env, io: Io): number {
       log,
       install: (dir) => {
         const status = runInstall('install', ['--account', dir], env, { out: log, err: log });
-        // A summary last, so the last line of the log, which `sextant check` shows, says how it went.
+        // A summary last, so the last line of the log, which `noonsight check` shows, says how it went.
         log(status === 0 ? `new Claude Code configuration ${dir}: installed` : `problem: install into ${dir} failed; see the lines above`);
       },
     });

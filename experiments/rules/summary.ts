@@ -76,17 +76,17 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
     '',
   );
 
-  // Delivery, from the decision log the runs left, through `sextant report`.
-  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-summary-'));
-  const config = path.join(configDir, 'sextant.json');
+  // Delivery, from the decision log the runs left, through `noonsight report`.
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-summary-'));
+  const config = path.join(configDir, 'noonsight.json');
   fs.writeFileSync(config, JSON.stringify({ version: 1, models: Object.fromEntries(Object.values(plan.models).map((m) => [m.id, { use: 'preset' }])) }));
-  const report = buildReport({ SEXTANT_CONFIG: config }, { log: decisions });
+  const report = buildReport({ NOONSIGHT_CONFIG: config }, { log: decisions });
   // The first line names the log file; the configuration is named for what it is, not where it was.
   const delivery = renderReport({ ...report, config: { ...report.config, file: 'every model of the plan with "use": "preset"' } }).split('\n').slice(1);
   lines.push(
-    '## What sextant delivered',
+    '## What noonsight delivered',
     '',
-    'From the decision log of every run, as `sextant report --log decisions.jsonl` prints it, against a configuration that declares every model of the plan with the preset:',
+    'From the decision log of every run, as `noonsight report --log decisions.jsonl` prints it, against a configuration that declares every model of the plan with the preset:',
     '',
     '```text',
     ...delivery,
@@ -105,7 +105,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
   const rows: Row[] = [];
   for (const [key, g] of [...groups].sort(([a], [b]) => (a < b ? -1 : 1))) {
     const [task, model, arm] = key.split('\u0000') as [string, string, string];
-    const rules = [...new Set(g.flatMap((r) => r.sextant.rules))];
+    const rules = [...new Set(g.flatMap((r) => r.noonsight.rules))];
     rows.push([
       task,
       model,
@@ -136,7 +136,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
   // Per rule.
   lines.push('## Each rule', '');
   for (const [rule, names] of Object.entries(plan.signals)) {
-    const withRule = runs.filter((r) => r.arm === 'rules' && r.sextant.rules.includes(rule));
+    const withRule = runs.filter((r) => r.arm === 'rules' && r.noonsight.rules.includes(rule));
     lines.push(`### \`${rule}\``, '');
     if (!withRule.length) {
       lines.push('Not delivered in any run of this experiment, so not measured.', '');
@@ -148,7 +148,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
       const [task, model] = pair.split('\u0000') as [string, string];
       const on = withRule.filter((r) => r.task === task && r.model === model);
       const off = runs.filter((r) => r.arm === 'none' && r.task === task && r.model === model);
-      const others = [...new Set(on.flatMap((r) => r.sextant.rules).filter((x) => x !== rule))];
+      const others = [...new Set(on.flatMap((r) => r.noonsight.rules).filter((x) => x !== rule))];
       for (const name of names) rowsRule.push([task, model, SIGNAL_NAMES[name] ?? name, signal(name, on), signal(name, off)]);
       const dOut = mean(on.map((r) => r.tokens.output)) - mean(off.map((r) => r.tokens.output));
       const dIn = mean(on.map(inputTokens)) - mean(off.map(inputTokens));

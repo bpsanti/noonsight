@@ -158,7 +158,7 @@ export interface Preset {
   readonly models: ReadonlyMap<string, readonly PresetRule[]>;
 }
 
-/** How the configuration file declares one model, as `sextant models` shows it. */
+/** How the configuration file declares one model, as `noonsight models` shows it. */
 export interface DeclaredModel {
   readonly use: 'preset' | 'custom' | 'none';
   readonly wildcard: boolean;
@@ -202,9 +202,9 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     throw new ConfigError(configFile, problems);
   };
 
-  const raw = readJson(configFile, problems, 'no configuration file here; create one, or point SEXTANT_CONFIG at one');
+  const raw = readJson(configFile, problems, 'no configuration file here; create one, or point NOONSIGHT_CONFIG at one');
   if (raw === undefined) refuse();
-  problems.push(...validateSchema(schema('sextant.schema.json'), raw));
+  problems.push(...validateSchema(schema('noonsight.schema.json'), raw));
   if (problems.length) refuse();
   const cfg = raw as RawConfig;
   const models = cfg.models ?? {};

@@ -38,7 +38,7 @@ export type LaunchModel =
       readonly aliasFrom?: string;
     }
   | {
-      /** A source decides the model, but sextant cannot tell which model it selects. */
+      /** A source decides the model, but noonsight cannot tell which model it selects. */
       readonly kind: 'unresolved';
       readonly value: string;
       readonly source: LaunchSource;
@@ -181,7 +181,7 @@ function settingsModel(ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>, cmd: Co
   if (inline !== undefined) {
     const value = readSettingsArgument(inline);
     if (value === undefined)
-      return { kind: 'unresolved', value: inline, source: 'settings', from: '--settings', why: 'sextant could not read the --settings value' };
+      return { kind: 'unresolved', value: inline, source: 'settings', from: '--settings', why: 'noonsight could not read the --settings value' };
     if (value !== null) return resolveValue(value, 'settings', '--settings', ctx.env);
   }
 

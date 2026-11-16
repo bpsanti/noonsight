@@ -1,6 +1,6 @@
-// The live experiment that measures what the preset's rules change when sextant delivers them. It
+// The live experiment that measures what the preset's rules change when noonsight delivers them. It
 // runs the same small task on each target model twice over: once with the model's preset rules,
-// delivered by sextant's SessionStart hook, and once with the model declared "use": "none", so the
+// delivered by noonsight's SessionStart hook, and once with the model declared "use": "none", so the
 // same hook runs and delivers nothing. It records the outcome signals each rule's source claims and
 // the tokens and cost Claude Code reports, one JSON line per run. README.md describes the design.
 //
@@ -10,7 +10,7 @@
 //   npm run experiment -- run [--models fable,sonnet] [--tasks question,fix] [--reps 3] [--cap-usd 10] [--out <dir>]
 //   npm run experiment -- summarize <dir> [--to <dir>]
 //
-// Each run gets the lab of the live tests (test/live/login.ts): a temporary sextant home and
+// Each run gets the lab of the live tests (test/live/login.ts): a temporary noonsight home and
 // configuration, the hook entries in a --settings file, and none of the person's own settings files,
 // CLAUDE.md included.
 
@@ -67,8 +67,8 @@ export interface RunRecord extends Cell {
   readonly claude_code: string;
   readonly started: string;
   readonly scope: string;
-  /** What sextant's SessionStart hook decided, from the run's decision log. */
-  readonly sextant: { readonly status: string | null; readonly reason: string | null; readonly place: string | null; readonly rules: readonly string[]; readonly sha256: string | null; readonly delivered: string | null };
+  /** What noonsight's SessionStart hook decided, from the run's decision log. */
+  readonly noonsight: { readonly status: string | null; readonly reason: string | null; readonly place: string | null; readonly rules: readonly string[]; readonly sha256: string | null; readonly delivered: string | null };
   readonly exit: number | null;
   /** The result event's subtype: success, or why the run stopped, such as the budget. */
   readonly outcome: string;
@@ -149,7 +149,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
     '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence',
     '--tools', TOOLS, '--allowedTools', ALLOWED,
   ];
-  const env = { ...baseEnv(), SEXTANT_SCOPE: task.scope, [plan.unattended_env]: '1' };
+  const env = { ...baseEnv(), NOONSIGHT_SCOPE: task.scope, [plan.unattended_env]: '1' };
   const { status, stdout } = await spawnClaude(args, l.project, env);
   const stream = stdout
     .split('\n')
@@ -172,7 +172,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   // Without the hook's decision, the run cannot say what it received, so it is not recorded and a resume runs it again.
   if (!log.some((d) => d.event === 'session-start')) {
     fs.rmSync(l.root, { recursive: true, force: true });
-    throw new RunFailed(`sextant logged no session start, so the hook did not run or failed; ${path.join(dir, 'stream.jsonl')} holds its output`, result.total_cost_usd === undefined ? null : Number(result.total_cost_usd));
+    throw new RunFailed(`noonsight logged no session start, so the hook did not run or failed; ${path.join(dir, 'stream.jsonl')} holds its output`, result.total_cost_usd === undefined ? null : Number(result.total_cost_usd));
   }
   fs.appendFileSync(path.join(out, 'decisions.jsonl'), log.map((d) => `${JSON.stringify({ ...d, experiment_run: cellKey(cell) })}\n`).join(''));
 
@@ -206,7 +206,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
     claude_code: claudeVersion,
     started,
     scope: task.scope,
-    sextant: {
+    noonsight: {
       status: session.status ?? null,
       reason: session.reason ?? null,
       place: session.place ?? null,
@@ -383,7 +383,7 @@ async function main(argv: readonly string[]): Promise<number> {
       reps: Number(opts.get('reps') ?? plan.reps),
       cap: Number(opts.get('cap-usd') ?? plan.cap_usd),
       concurrency: Number(opts.get('concurrency') ?? 3),
-      out: path.resolve(opts.get('out') ?? path.join(os.tmpdir(), `sextant-experiment-${day}`)),
+      out: path.resolve(opts.get('out') ?? path.join(os.tmpdir(), `noonsight-experiment-${day}`)),
     });
     return 0;
   }

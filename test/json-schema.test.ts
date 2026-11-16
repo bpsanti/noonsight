@@ -18,11 +18,11 @@ test('a schema keyword outside the implemented subset is refused instead of skip
 });
 
 test('the fixture configurations and preset satisfy the published schemas', () => {
-  const config = read(path.join(SCHEMA_DIR, 'sextant.schema.json'));
+  const config = read(path.join(SCHEMA_DIR, 'noonsight.schema.json'));
   for (const file of [
-    path.join(FIXTURES, 'lab', 'config', 'sextant.json'),
-    path.join(FIXTURES, 'subagent-proto', 'sextant.json'),
-    path.join(FIXTURES, 'subagent-proto', 'config-b', 'sextant.json'),
+    path.join(FIXTURES, 'lab', 'config', 'noonsight.json'),
+    path.join(FIXTURES, 'subagent-proto', 'noonsight.json'),
+    path.join(FIXTURES, 'subagent-proto', 'config-b', 'noonsight.json'),
   ])
     assert.deepEqual(validateSchema(config, read(file)), [], file);
   assert.deepEqual(validateSchema(read(path.join(SCHEMA_DIR, 'preset.schema.json')), read(path.join(LAB_PRESETS, 'lab', 'preset.json'))), []);

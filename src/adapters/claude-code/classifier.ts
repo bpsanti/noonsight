@@ -1,10 +1,10 @@
 // The classifier in Claude Code: one `claude -p` call on a small model, with the login Claude Code
-// already has, so sextant never handles a credential. The question and the reading of the answer are
+// already has, so noonsight never handles a credential. The question and the reading of the answer are
 // the core's (core/classify.ts); this file runs the call and says what the decision log records.
 //
 // The call is bounded and kept apart from the session that asked:
 //   - It is stopped after classifier.timeout_ms, and a task it has not placed by then gets no scope.
-//   - It runs with SEXTANT_DISABLE=1, so sextant's hooks, wherever they are installed, do nothing in
+//   - It runs with NOONSIGHT_DISABLE=1, so noonsight's hooks, wherever they are installed, do nothing in
 //     the classifier's own session and never start a classifier from inside it.
 //   - --safe-mode leaves out the person's hooks, plugins, MCP servers and CLAUDE.md, --tools "" leaves
 //     it no tool, so it cannot start a subagent, and --no-session-persistence keeps it out of the
@@ -89,7 +89,7 @@ export function classify(config: Config, text: string, env: Env): Classification
   for (const [k, v] of Object.entries(env)) if (v !== undefined) childEnv[k] = v;
   // The classifier's own effort holds: this variable wins over --effort.
   delete childEnv[EFFORT_ENV];
-  childEnv.SEXTANT_DISABLE = '1';
+  childEnv.NOONSIGHT_DISABLE = '1';
 
   const started = Date.now();
   const r = spawnSync(CLASSIFIER_COMMAND, args, {

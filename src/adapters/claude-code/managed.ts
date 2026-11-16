@@ -1,4 +1,4 @@
-// Claude Code's managed settings, as far as sextant needs them: whether the managed settings files
+// Claude Code's managed settings, as far as noonsight needs them: whether the managed settings files
 // apply to a login, and the values they set.
 //
 // Claude Code ranks its managed sources (https://code.claude.com/docs/en/managed-settings, "How

@@ -9,9 +9,9 @@ import { ConfigError, loadConfig } from '../src/config/load.js';
 import { LAB_PRESETS, labPresetWith, tempTree } from './helpers.js';
 
 function problemsOf(config: unknown, files: Record<string, string> = {}, presetsDir: string = LAB_PRESETS): readonly string[] {
-  const dir = tempTree({ 'sextant.json': config, ...files });
+  const dir = tempTree({ 'noonsight.json': config, ...files });
   try {
-    loadConfig(path.join(dir, 'sextant.json'), { presetsDir });
+    loadConfig(path.join(dir, 'noonsight.json'), { presetsDir });
   } catch (e) {
     if (e instanceof ConfigError) return e.problems;
     throw e;
@@ -29,7 +29,7 @@ function assertProblem(problems: readonly string[], pattern: RegExp): void {
 const custom = (file = 'r.md') => ({ use: 'custom', add: [{ id: 'r', file }] });
 
 test('a missing file, unreadable JSON and a wrong version are refused', () => {
-  assert.throws(() => loadConfig(path.join(tempTree({}), 'sextant.json')), /no configuration file here/);
+  assert.throws(() => loadConfig(path.join(tempTree({}), 'noonsight.json')), /no configuration file here/);
   assertProblem(problemsOf('{ not json'), /not valid JSON/);
   assertProblem(problemsOf({ version: 2 }), /^\/version: must be 1$/);
   assertProblem(problemsOf({}), /missing required key "version"/);
@@ -144,14 +144,14 @@ test('every combination of scope and place must fit the delivery limit, with roo
 });
 
 test('a text exactly at the limit is accepted', () => {
-  const dir = tempTree({ 'sextant.json': { version: 1, models: { 'claude-haiku-5-5': custom() } } });
-  const envelopeSize = '<sextant-rules model="claude-haiku-5-5">\nWorking rules the user declared for claude-haiku-5-5 (delivered by sextant, rules r):\n\n</sextant-rules>'.length;
+  const dir = tempTree({ 'noonsight.json': { version: 1, models: { 'claude-haiku-5-5': custom() } } });
+  const envelopeSize = '<noonsight-rules model="claude-haiku-5-5">\nWorking rules the user declared for claude-haiku-5-5 (delivered by noonsight, rules r):\n\n</noonsight-rules>'.length;
   // No preset here, so no scope is declared and the envelope is the one without a scope.
   const noPreset = { presetsDir: tempTree({}) };
   fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(9500 - envelopeSize));
-  loadConfig(path.join(dir, 'sextant.json'), noPreset);
+  loadConfig(path.join(dir, 'noonsight.json'), noPreset);
   fs.writeFileSync(path.join(dir, 'r.md'), 'y'.repeat(9501 - envelopeSize));
-  assert.throws(() => loadConfig(path.join(dir, 'sextant.json'), noPreset), /come to 9501 characters/);
+  assert.throws(() => loadConfig(path.join(dir, 'noonsight.json'), noPreset), /come to 9501 characters/);
 });
 
 test('every schema problem is reported together', () => {
@@ -200,8 +200,8 @@ test('a refused preset is reported alone, without blaming user rules that name i
 });
 
 test('an unused default preset that is not installed is not a problem', () => {
-  const dir = tempTree({ 'sextant.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'none' } } } });
-  loadConfig(path.join(dir, 'sextant.json'), { presetsDir: tempTree({}) });
+  const dir = tempTree({ 'noonsight.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'none' } } } });
+  loadConfig(path.join(dir, 'noonsight.json'), { presetsDir: tempTree({}) });
 });
 
 test('scope matchers must be valid regular expressions and must not match every plain task text', () => {
@@ -227,8 +227,8 @@ test('unattended_when_env names environment variables, and a scope takes no agen
   assertProblem(problemsOf({ version: 1, session: { unattended_when_env: ['CI', '1BAD'] } }), /^\/session\/unattended_when_env\/1: .*an environment variable name/);
   assertProblem(problemsOf({ version: 1, session: { delivery: 'off' } }), /^\/session\/delivery: unknown key$/);
   assertProblem(problemsOf({ version: 1, scopes: { a: { agent_types: ['Explore'] } } }), /^\/scopes\/a\/agent_types: unknown key$/);
-  const ok = tempTree({ 'sextant.json': { version: 1, session: { unattended_when_env: ['FM_TASK_ID'] } } });
-  const cfg = loadConfig(path.join(ok, 'sextant.json'), { presetsDir: LAB_PRESETS });
+  const ok = tempTree({ 'noonsight.json': { version: 1, session: { unattended_when_env: ['FM_TASK_ID'] } } });
+  const cfg = loadConfig(path.join(ok, 'noonsight.json'), { presetsDir: LAB_PRESETS });
   assert.deepEqual(cfg.session.unattendedWhenEnv, ['FM_TASK_ID']);
 });
 
@@ -260,14 +260,14 @@ test('matchers with a catastrophic-backtracking shape are refused, naming the sc
 
 test('common matchers pass the backtracking check', () => {
   const dir = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       version: 1,
       scopes: {
         deploy: { match: ['\\bdeploy\\b', 'review|revis', '^fix\\b', '^.*hotfix', '\\b(?:summar(?:y|ize|ise)|digest)\\b', '\\w+\\s+investigat', 'foo.*bar', 'release[- ]notes?'] },
       },
     },
   });
-  const cfg = loadConfig(path.join(dir, 'sextant.json'), { presetsDir: LAB_PRESETS });
+  const cfg = loadConfig(path.join(dir, 'noonsight.json'), { presetsDir: LAB_PRESETS });
   assert.equal(cfg.scopes.get('deploy')?.match.length, 8);
 });
 

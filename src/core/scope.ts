@@ -1,7 +1,7 @@
 // Where a decision's scope and place come from. Pure, like the rest of the core: the adapters pass
 // the environment and the task text in as data.
 //
-//   Session    scope: SEXTANT_SCOPE, when whoever starts the session exports it; else none.
+//   Session    scope: NOONSIGHT_SCOPE, when whoever starts the session exports it; else none.
 //              place: unattended when a variable named in session.unattended_when_env is set; else session.
 //   Subagent   scope: the scope whose matcher matches earliest in the task text; else none. Never
 //              inherited from the session.
@@ -13,7 +13,7 @@
 import type { Config, Place } from './types.js';
 
 /** The environment variable that names a session's task scope. */
-export const SCOPE_ENV = 'SEXTANT_SCOPE';
+export const SCOPE_ENV = 'NOONSIGHT_SCOPE';
 
 /**
  * How much of a subagent's task text the matchers read. The matchers run inside the hook before every
@@ -39,7 +39,7 @@ export interface PlaceChoice {
 
 const NO_SCOPE: ScopeChoice = { scope: null, source: null };
 
-/** A session's scope: SEXTANT_SCOPE, trimmed; empty or unset means none. */
+/** A session's scope: NOONSIGHT_SCOPE, trimmed; empty or unset means none. */
 export function sessionScope(env: Readonly<Record<string, string | undefined>>): ScopeChoice {
   const value = (env[SCOPE_ENV] ?? '').trim();
   return value ? { scope: value, source: 'env' } : NO_SCOPE;
@@ -72,11 +72,11 @@ export interface TaskText {
 }
 
 /**
- * The text the matchers read: the description, then the task text, without any sextant envelope a
+ * The text the matchers read: the description, then the task text, without any noonsight envelope a
  * parent copied into it (the rules' own words must not pick the scope), cut to TASK_TEXT_LIMIT.
  */
 export function taskText(description: string | null, prompt: string | null): TaskText {
-  const strip = (s: string): string => s.replace(/<sextant-rules(-change)?\b[^>]*>[\s\S]*?<\/sextant-rules\1>/g, '');
+  const strip = (s: string): string => s.replace(/<noonsight-rules(-change)?\b[^>]*>[\s\S]*?<\/noonsight-rules\1>/g, '');
   const whole = [description, prompt]
     .filter((s): s is string => s !== null && s !== '')
     .map(strip)

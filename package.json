@@ -1,16 +1,20 @@
 {
-  "name": "sextant-ai",
+  "name": "noonsight",
   "version": "0.0.0",
   "private": true,
   "description": "Hand every Claude Code session and subagent the rules for the model it actually runs on.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bpsanti/sextant-ai.git"
+    "url": "git+https://github.com/bpsanti/noonsight.git"
+  },
+  "homepage": "https://github.com/bpsanti/noonsight#readme",
+  "bugs": {
+    "url": "https://github.com/bpsanti/noonsight/issues"
   },
   "type": "module",
   "bin": {
-    "sextant": "dist/src/cli.js"
+    "noonsight": "dist/src/cli.js"
   },
   "files": [
     "dist/src",

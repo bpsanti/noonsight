@@ -1,4 +1,4 @@
-// The launcher, `sextant run`, driven as a person runs it, with a stand-in `claude` first on PATH. The
+// The launcher, `noonsight run`, driven as a person runs it, with a stand-in `claude` first on PATH. The
 // stand-in records the arguments and environment it was started with and, when a test asks, runs the
 // SessionStart hook as its child, so the hook reads the stand-in's command line as it reads Claude
 // Code's. Each test has its own home directory, so the decision log and the state start empty.
@@ -37,7 +37,7 @@ const { spawnSync } = require('node:child_process');
 const pick = (n) => process.env[n] ?? null;
 fs.writeFileSync(${JSON.stringify(record)}, JSON.stringify({
   args: process.argv.slice(2),
-  env: { SEXTANT_LAUNCH_FILE: pick('SEXTANT_LAUNCH_FILE'), SEXTANT_SCOPE: pick('SEXTANT_SCOPE'), SEXTANT_SCOPE_VIA: pick('SEXTANT_SCOPE_VIA'), ANTHROPIC_MODEL: pick('ANTHROPIC_MODEL') },
+  env: { NOONSIGHT_LAUNCH_FILE: pick('NOONSIGHT_LAUNCH_FILE'), NOONSIGHT_SCOPE: pick('NOONSIGHT_SCOPE'), NOONSIGHT_SCOPE_VIA: pick('NOONSIGHT_SCOPE_VIA'), ANTHROPIC_MODEL: pick('ANTHROPIC_MODEL') },
 }));
 if (process.env.FAKE_HOOK_INPUT) {
   const r = spawnSync(process.execPath, ${JSON.stringify([...NO_NETWORK, CLI, 'hook', 'session-start'])}, { input: process.env.FAKE_HOOK_INPUT, encoding: 'utf8', env: process.env });
@@ -61,7 +61,7 @@ process.exit(Number(process.env.FAKE_EXIT || 0));
   };
 }
 
-const config = () => loadConfig(LAB_CONFIG, {}, { SEXTANT_PRESETS_DIR: LAB_PRESETS });
+const config = () => loadConfig(LAB_CONFIG, {}, { NOONSIGHT_PRESETS_DIR: LAB_PRESETS });
 const rulesFor = (model: string, scope: string | null = null): string => {
   const d = resolve(config(), { model, scope, place: 'session' });
   assert.equal(d.status, 'matched');
@@ -83,9 +83,9 @@ test('launcher route: an explicit --model gets its rules in the system prompt fi
   assert.deepEqual(r.started?.args.slice(2), ['--model', 'claude-sonnet-5-5', '-p', 'Find the cause']);
   assert.equal(fs.readFileSync(file, 'utf8'), `${rulesFor('claude-sonnet-5-5', 'investigate')}\n`);
   assert.match(fs.readFileSync(file, 'utf8'), /SONNET-INV-5182/);
-  assert.equal(path.dirname(file), path.join(l.h.dir, '.local', 'state', 'sextant', 'launch'));
+  assert.equal(path.dirname(file), path.join(l.h.dir, '.local', 'state', 'noonsight', 'launch'));
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
-  assert.deepEqual(r.started?.env, { SEXTANT_LAUNCH_FILE: file, SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'explicit', ANTHROPIC_MODEL: null });
+  assert.deepEqual(r.started?.env, { NOONSIGHT_LAUNCH_FILE: file, NOONSIGHT_SCOPE: 'investigate', NOONSIGHT_SCOPE_VIA: 'explicit', ANTHROPIC_MODEL: null });
   assert.deepEqual(
     launches(l.h).map((d) => [d.model, d.model_source, d.model_from, d.status, d.scope, d.scope_source, d.place, d.delivered, d.launch_file]),
     [['claude-sonnet-5-5', 'claude-args', '--model', 'matched', 'investigate', 'env', 'session', 'system-prompt', file]],
@@ -135,8 +135,8 @@ test('launcher: an --append-system-prompt-file from someone else is merged ahead
 test('launcher: with no rules to add, claude starts with its arguments unchanged', () => {
   const l = lab();
   // Nothing names a model: the hooks decide from what Claude Code reports. An outer launch's file is not passed on.
-  const none = l.run(['-p', 'hi'], { SEXTANT_LAUNCH_FILE: '/outer/launch.md' });
-  assert.deepEqual(none.started, { args: ['-p', 'hi'], env: { SEXTANT_LAUNCH_FILE: null, SEXTANT_SCOPE: null, SEXTANT_SCOPE_VIA: null, ANTHROPIC_MODEL: null } });
+  const none = l.run(['-p', 'hi'], { NOONSIGHT_LAUNCH_FILE: '/outer/launch.md' });
+  assert.deepEqual(none.started, { args: ['-p', 'hi'], env: { NOONSIGHT_LAUNCH_FILE: null, NOONSIGHT_SCOPE: null, NOONSIGHT_SCOPE_VIA: null, ANTHROPIC_MODEL: null } });
   assert.equal(none.stderr, '');
   // A model declared with no rules.
   const opus = l.run(['--model', 'claude-opus-5-5', '-p', 'hi']);
@@ -144,7 +144,7 @@ test('launcher: with no rules to add, claude starts with its arguments unchanged
   // An undeclared model warns.
   const fable = l.run(['--model', 'claude-fable-5-2', '-p', 'hi']);
   assert.deepEqual(fable.started?.args, ['--model', 'claude-fable-5-2', '-p', 'hi']);
-  assert.match(fable.stderr, /claude-fable-5-2 is not declared in .*, so sextant run added no rules/);
+  assert.match(fable.stderr, /claude-fable-5-2 is not declared in .*, so noonsight run added no rules/);
   assert.deepEqual(
     launches(l.h).map((d) => [d.model, d.status, d.delivered, d.warned]),
     [
@@ -155,20 +155,20 @@ test('launcher: with no rules to add, claude starts with its arguments unchanged
   );
 });
 
-test('launcher: a missing or refused configuration, or SEXTANT_DISABLE, still starts claude, unchanged', () => {
+test('launcher: a missing or refused configuration, or NOONSIGHT_DISABLE, still starts claude, unchanged', () => {
   const missing = lab(path.join(tempTree({}), 'none.json'));
-  const r = missing.run(['--model', 'sonnet', '-p', 'hi'], { SEXTANT_CONFIG: '' });
+  const r = missing.run(['--model', 'sonnet', '-p', 'hi'], { NOONSIGHT_CONFIG: '' });
   assert.deepEqual(r.started?.args, ['--model', 'sonnet', '-p', 'hi']);
-  assert.match(r.stderr, /there is no configuration at .*sextant\.json, so sextant run added no rules/);
+  assert.match(r.stderr, /there is no configuration at .*noonsight\.json, so noonsight run added no rules/);
 
-  const refused = lab(path.join(tempTree({ 'sextant.json': { version: 1, models: { x: { use: 'nope' } } } }), 'sextant.json'));
+  const refused = lab(path.join(tempTree({ 'noonsight.json': { version: 1, models: { x: { use: 'nope' } } } }), 'noonsight.json'));
   const bad = refused.run(['--model', 'sonnet', '-p', 'hi']);
   assert.deepEqual(bad.started?.args, ['--model', 'sonnet', '-p', 'hi']);
-  assert.match(bad.stderr, /was refused \(\d+ problems?\), so sextant run added no rules/);
+  assert.match(bad.stderr, /was refused \(\d+ problems?\), so noonsight run added no rules/);
   assert.equal(launches(refused.h)[0]?.status, 'config-invalid');
 
   const off = lab();
-  const disabled = off.run(['--scope', 'investigate', '--model', 'sonnet', '-p', 'hi'], { SEXTANT_DISABLE: '1' });
+  const disabled = off.run(['--scope', 'investigate', '--model', 'sonnet', '-p', 'hi'], { NOONSIGHT_DISABLE: '1' });
   assert.deepEqual(disabled.started?.args, ['--model', 'sonnet', '-p', 'hi']);
   assert.deepEqual(off.h.log(), []);
 });
@@ -177,11 +177,11 @@ test('launcher: its own options come first; everything from the first other argu
   const l = lab();
   assert.deepEqual(l.run(['--', '--help']).started?.args, ['--help']);
   assert.deepEqual(l.run(['-p', '--scope', 'x']).started?.args, ['-p', '--scope', 'x']);
-  assert.equal(l.run(['--scope=investigate', '-p', 'hi']).started?.env.SEXTANT_SCOPE, 'investigate');
+  assert.equal(l.run(['--scope=investigate', '-p', 'hi']).started?.env.NOONSIGHT_SCOPE, 'investigate');
   const help = l.run(['--help']);
   assert.equal(help.status, 0);
   assert.equal(help.started, null);
-  assert.match(help.stdout, /^usage: sextant run/);
+  assert.match(help.stdout, /^usage: noonsight run/);
   const usage = l.run(['--scope']);
   assert.equal(usage.status, 2);
   assert.match(usage.stderr, /--scope needs a value/);
@@ -238,9 +238,9 @@ test('launcher route with the hook: a session on another model than the launcher
   const r = l.run(['--model', 'sonnet'], { FAKE_HOOK_INPUT: input });
   const out = JSON.parse(r.stdout) as Record<string, any>;
   const text: string = out.hookSpecificOutput.additionalContext;
-  assert.match(text, /^<sextant-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">\nThis session runs on claude-haiku-5-5\./);
+  assert.match(text, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">\nThis session runs on claude-haiku-5-5\./);
   assert.match(text, /HAIKU-GEN-9047/);
-  assert.match(out.systemMessage, /sextant run put the rules for claude-sonnet-5-5 in the system prompt, but this session runs on claude-haiku-5-5/);
+  assert.match(out.systemMessage, /noonsight run put the rules for claude-sonnet-5-5 in the system prompt, but this session runs on claude-haiku-5-5/);
   const start = l.h.log().at(-1);
   assert.deepEqual([start?.delivered, start?.launch_model, start?.warned], ['rules+note', 'claude-sonnet-5-5', true]);
 });
@@ -250,7 +250,7 @@ test('launcher route with the hook: a claude started from inside a launched sess
   const r = l.run(['--model', 'sonnet', '-p', 'hi'], { FAKE_HOOK_INPUT: printStart('outer') });
   const file = fileArg(r.started);
   // The inner claude's hook: the same variable, under a process started without the option.
-  const nested = runCli(['hook', 'session-start'], { ...l.h.env, SEXTANT_LAUNCH_FILE: file, ANTHROPIC_MODEL: 'claude-sonnet-5-5' }, NO_NETWORK, printStart('inner'));
+  const nested = runCli(['hook', 'session-start'], { ...l.h.env, NOONSIGHT_LAUNCH_FILE: file, ANTHROPIC_MODEL: 'claude-sonnet-5-5' }, NO_NETWORK, printStart('inner'));
   assert.match((JSON.parse(nested.stdout) as Record<string, any>).hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
   assert.equal(l.h.log().at(-1)?.delivered, 'rules');
 });
@@ -261,7 +261,7 @@ test('launcher route with the hook: a claude started from inside a launched sess
 function routingConfig(routing: Record<string, unknown> = {}): string {
   const labConfig = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, any>;
   const dir = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       ...labConfig,
       scopes: { ...labConfig.scopes, summarize: { match: ['\\bsummari[sz]e'] }, investigate: { match: ['\\binvestigat'] } },
       routing: {
@@ -278,7 +278,7 @@ function routingConfig(routing: Record<string, unknown> = {}): string {
     },
   });
   fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
-  return path.join(dir, 'sextant.json');
+  return path.join(dir, 'noonsight.json');
 }
 
 const routeOf = (d: Record<string, any> | undefined): unknown[] => [d?.routing, d?.routing_reason, d?.route_model, d?.route_effort, d?.model, d?.scope];
@@ -289,7 +289,7 @@ test('launcher routing: the scope\'s row adds --model and --effort first, and th
   const file = fileArg(r.started);
   assert.deepEqual(r.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'hi']);
   assert.match(fs.readFileSync(file, 'utf8'), /HAIKU-GEN-9047[\s\S]*HAIKU-SUM-6610/);
-  assert.equal(r.started?.env.SEXTANT_SCOPE, 'summarize');
+  assert.equal(r.started?.env.NOONSIGHT_SCOPE, 'summarize');
   const [launch] = launches(l.h);
   assert.deepEqual(routeOf(launch), ['routed', 'table', 'claude-haiku-5-5', 'low', 'claude-haiku-5-5', 'summarize']);
   assert.deepEqual([launch?.model_source, launch?.model_from, launch?.route_value, launch?.delivered], ['claude-args', '--model', 'haiku', 'system-prompt']);
@@ -300,11 +300,11 @@ test('launcher routing: the scope\'s row adds --model and --effort first, and th
   assert.deepEqual(launches(l.h)[1]?.route_skipped, [{ model: 'fable', why: 'claude-fable-5-2 is not declared under "models"' }]);
 });
 
-test('launcher routing: without a scope, the task text of --task or of the prompt after -p picks one, which the session gets as SEXTANT_SCOPE', () => {
+test('launcher routing: without a scope, the task text of --task or of the prompt after -p picks one, which the session gets as NOONSIGHT_SCOPE', () => {
   const l = lab(routingConfig());
   const printed = l.run(['-p', 'Summarize the release notes', '--output-format', 'json']);
   assert.deepEqual(printed.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'Summarize the release notes', '--output-format', 'json']);
-  assert.equal(printed.started?.env.SEXTANT_SCOPE, 'summarize');
+  assert.equal(printed.started?.env.NOONSIGHT_SCOPE, 'summarize');
   const task = l.run(['--task', 'Investigate the outage', '--', '--resume', 'abc']);
   assert.deepEqual(task.started?.args.slice(2), ['--model', 'claude-sonnet-5-5', '--effort', 'high', '--resume', 'abc']);
   // A prompt that is not right after -p is not read, and an interactive session has no task.
@@ -320,27 +320,27 @@ test('launcher routing: without a scope, the task text of --task or of the promp
   );
 });
 
-test('launcher routing: a nested sextant run ignores a scope the outer one inferred, and keeps one that was given', () => {
+test('launcher routing: a nested noonsight run ignores a scope the outer one inferred, and keeps one that was given', () => {
   const l = lab(routingConfig());
   const outer = l.run(['-p', 'Investigate the outage']);
-  assert.deepEqual([outer.started?.env.SEXTANT_SCOPE, outer.started?.env.SEXTANT_SCOPE_VIA], ['investigate', 'inferred']);
-  const inherited = { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'inferred' };
+  assert.deepEqual([outer.started?.env.NOONSIGHT_SCOPE, outer.started?.env.NOONSIGHT_SCOPE_VIA], ['investigate', 'inferred']);
+  const inherited = { NOONSIGHT_SCOPE: 'investigate', NOONSIGHT_SCOPE_VIA: 'inferred' };
 
   // The worker's own task decides its scope and route.
   const worker = l.run(['--', '-p', 'Summarize the notes'], inherited);
   assert.deepEqual(worker.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'Summarize the notes']);
-  assert.deepEqual([worker.started?.env.SEXTANT_SCOPE, worker.started?.env.SEXTANT_SCOPE_VIA], ['summarize', 'inferred']);
+  assert.deepEqual([worker.started?.env.NOONSIGHT_SCOPE, worker.started?.env.NOONSIGHT_SCOPE_VIA], ['summarize', 'inferred']);
   // A worker whose task names no scope has none, and its session does not keep the outer one.
   const plain = l.run(['-p', 'Reply OK'], inherited);
   assert.deepEqual(plain.started?.args, ['-p', 'Reply OK']);
-  assert.deepEqual([plain.started?.env.SEXTANT_SCOPE, plain.started?.env.SEXTANT_SCOPE_VIA], [null, null]);
+  assert.deepEqual([plain.started?.env.NOONSIGHT_SCOPE, plain.started?.env.NOONSIGHT_SCOPE_VIA], [null, null]);
 
   // A scope given explicitly, or set by hand without a source, still wins over the task text.
-  const given = l.run(['-p', 'Summarize the notes'], { SEXTANT_SCOPE: 'investigate', SEXTANT_SCOPE_VIA: 'explicit' });
+  const given = l.run(['-p', 'Summarize the notes'], { NOONSIGHT_SCOPE: 'investigate', NOONSIGHT_SCOPE_VIA: 'explicit' });
   assert.deepEqual(given.started?.args.slice(2, 6), ['--model', 'claude-sonnet-5-5', '--effort', 'high']);
-  assert.deepEqual([given.started?.env.SEXTANT_SCOPE, given.started?.env.SEXTANT_SCOPE_VIA], ['investigate', 'explicit']);
-  const byHand = l.run(['-p', 'Summarize the notes'], { SEXTANT_SCOPE: 'investigate' });
-  assert.deepEqual([byHand.started?.env.SEXTANT_SCOPE, byHand.started?.env.SEXTANT_SCOPE_VIA], ['investigate', null]);
+  assert.deepEqual([given.started?.env.NOONSIGHT_SCOPE, given.started?.env.NOONSIGHT_SCOPE_VIA], ['investigate', 'explicit']);
+  const byHand = l.run(['-p', 'Summarize the notes'], { NOONSIGHT_SCOPE: 'investigate' });
+  assert.deepEqual([byHand.started?.env.NOONSIGHT_SCOPE, byHand.started?.env.NOONSIGHT_SCOPE_VIA], ['investigate', null]);
   assert.deepEqual(
     launches(l.h).map((d) => [d.scope, d.scope_source]),
     [
@@ -373,10 +373,10 @@ test('explicit-model, launcher: a --model on the command line wins under respect
   assert.deepEqual(replaced.started?.args.slice(2), ['--model', 'haiku', '--effort', 'low', '-p', 'hi']);
 });
 
-test('orchestrator-env, launcher: a variable of yield_when_env, SEXTANT_ROUTING=off, or a targets list without the launcher leave the command line alone', () => {
+test('orchestrator-env, launcher: a variable of yield_when_env, NOONSIGHT_ROUTING=off, or a targets list without the launcher leave the command line alone', () => {
   for (const [config, env, reason] of [
     [routingConfig({ yield_when_env: ['ORCH_TASK_ID'] }), { ORCH_TASK_ID: 't-1' }, 'yield-env'],
-    [routingConfig(), { SEXTANT_ROUTING: 'off' }, 'routing-env'],
+    [routingConfig(), { NOONSIGHT_ROUTING: 'off' }, 'routing-env'],
     [routingConfig({ targets: ['subagents'] }), {}, 'target-off'],
   ] as const) {
     const l = lab(config);
@@ -386,7 +386,7 @@ test('orchestrator-env, launcher: a variable of yield_when_env, SEXTANT_ROUTING=
   }
 });
 
-test('launcher routing off: the command line is the one sextant run gives without a routing table, and the log says routing is off', () => {
+test('launcher routing off: the command line is the one noonsight run gives without a routing table, and the log says routing is off', () => {
   for (const args of [['--scope', 'summarize', '--model', 'sonnet', '-p', 'hi'], ['-p', 'Summarize the notes'], ['--model', 'haiku']]) {
     const plain = lab().run(args);
     const off = lab(routingConfig({ enabled: false }));
@@ -394,7 +394,7 @@ test('launcher routing off: the command line is the one sextant run gives withou
     assert.deepEqual(r.started?.args.slice(r.started.args[0] === '--append-system-prompt-file' ? 2 : 0), plain.started?.args.slice(plain.started.args[0] === '--append-system-prompt-file' ? 2 : 0));
     assert.deepEqual([launches(off.h)[0]?.routing, launches(off.h)[0]?.routing_reason], ['off', 'disabled']);
   }
-  const refused = lab(path.join(tempTree({ 'sextant.json': { version: 1, routing: { enabled: 1 } } }), 'sextant.json'));
+  const refused = lab(path.join(tempTree({ 'noonsight.json': { version: 1, routing: { enabled: 1 } } }), 'noonsight.json'));
   refused.run(['-p', 'hi']);
   assert.deepEqual([launches(refused.h)[0]?.status, launches(refused.h)[0]?.routing, launches(refused.h)[0]?.routing_reason], ['config-invalid', 'off', 'config-invalid']);
 });

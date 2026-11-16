@@ -1,8 +1,8 @@
 // Live subagent tests: real Claude Code sessions that start subagents, run from the login of the
-// person running them, with sextant's hooks given through --settings. They send prompts to the
+// person running them, with noonsight's hooks given through --settings. They send prompts to the
 // models, so they spend a little usage, and they only run when asked:
 //
-//   SEXTANT_LIVE_LOGIN=1 npm run test:live
+//   NOONSIGHT_LIVE_LOGIN=1 npm run test:live
 //
 // login.ts describes what they need, and what they touch in the person's Claude Code directory.
 
@@ -19,7 +19,7 @@ const SONNET_WORD = 'SONNET-SUB-5521';
 const HAIKU_WORD = 'HAIKU-SUB-8093';
 /** What every subagent is asked; the answer names the rules it received. */
 const PROBE =
-  'Reply with only the verification words of any sextant working rules you were given in this conversation, ' +
+  'Reply with only the verification words of any noonsight working rules you were given in this conversation, ' +
   'separated by single spaces, or the single word NONE if you were given none. Do not use any tool.';
 
 interface Lab extends LoginLab {
@@ -31,13 +31,13 @@ function lab(config: Record<string, unknown>): Lab {
     'sonnet.md': `- The verification word for claude-sonnet-5-5 is ${SONNET_WORD}.`,
     'haiku.md': `- The verification word for claude-haiku-5-5 is ${HAIKU_WORD}.`,
   });
-  // A plugin whose subagent sets its own model: sextant does not read plugin definitions, so it
+  // A plugin whose subagent sets its own model: noonsight does not read plugin definitions, so it
   // predicts the parent's model, and the subagent starts on Haiku.
   const plugin = path.join(l.root, 'plugin');
   fs.mkdirSync(path.join(plugin, '.claude-plugin'), { recursive: true });
   fs.mkdirSync(path.join(plugin, 'agents'));
-  fs.writeFileSync(path.join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'sextant-live', version: '0.0.0', description: 'sextant live test' }));
-  fs.writeFileSync(path.join(plugin, 'agents', 'probe.md'), '---\nname: probe\ndescription: Answers the sextant live test probe.\nmodel: haiku\n---\nAnswer the task exactly as asked.\n');
+  fs.writeFileSync(path.join(plugin, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'noonsight-live', version: '0.0.0', description: 'noonsight live test' }));
+  fs.writeFileSync(path.join(plugin, 'agents', 'probe.md'), '---\nname: probe\ndescription: Answers the noonsight live test probe.\nmodel: haiku\n---\nAnswer the task exactly as asked.\n');
   return { ...l, plugin };
 }
 
@@ -150,17 +150,17 @@ test('live, login: a subagent that starts on another model than predicted: a war
   const l = lab(CONFIG);
   const r = print(
     l,
-    `This is a configuration test. Make exactly one Agent tool call with subagent_type "sextant-live:probe", no model parameter, and exactly this prompt: "${PROBE}" ` +
+    `This is a configuration test. Make exactly one Agent tool call with subagent_type "noonsight-live:probe", no model parameter, and exactly this prompt: "${PROBE}" ` +
       'After the result arrives, reply with exactly the subagent\'s reply, copied verbatim.',
     ['--plugin-dir', l.plugin],
   );
   assert.equal(r.status, 0, r.result);
   const [call] = calls(l.log());
-  assert.deepEqual([call?.subagent_type, call?.model, call?.definition, call?.delivered], ['sextant-live:probe', 'claude-sonnet-5-5', 'not-read', 'rules']);
+  assert.deepEqual([call?.subagent_type, call?.model, call?.definition, call?.delivered], ['noonsight-live:probe', 'claude-sonnet-5-5', 'not-read', 'rules']);
   const [checked] = results(l.log());
   assert.deepEqual([checked?.predicted, checked?.model, checked?.result, checked?.warned], ['claude-sonnet-5-5', 'claude-haiku-5-5', 'MISMATCH', true]);
   assert.ok(
-    JSON.stringify(r.stream).includes('not on claude-sonnet-5-5 as sextant predicted'),
+    JSON.stringify(r.stream).includes('not on claude-sonnet-5-5 as noonsight predicted'),
     'the warning reaches the person through the session output',
   );
 });

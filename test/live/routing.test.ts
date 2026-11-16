@@ -1,8 +1,8 @@
 // Live routing tests: real `claude -p` sessions on Sonnet at low effort that start subagents, run from
-// the login of the person running them, with sextant's hooks given through --settings. They send
+// the login of the person running them, with noonsight's hooks given through --settings. They send
 // prompts to the models, so they spend a little usage, and they only run when asked:
 //
-//   SEXTANT_LIVE_LOGIN=1 npm run test:live
+//   NOONSIGHT_LIVE_LOGIN=1 npm run test:live
 //
 // login.ts describes what they need, and what they touch in the person's Claude Code directory.
 // A task text with the probe word falls in the scope "probe", which the routing table sends to Haiku
@@ -19,10 +19,10 @@ const SONNET_WORD = 'SONNET-ROUTE-6142';
 const HAIKU_WORD = 'HAIKU-ROUTE-3087';
 const PROBE_WORD = 'ROUTE-PROBE';
 /** The variable an orchestrator sets in the sessions it starts, for yield_when_env. */
-const ORCHESTRATOR_ENV = 'SEXTANT_LIVE_ORCHESTRATOR';
+const ORCHESTRATOR_ENV = 'NOONSIGHT_LIVE_ORCHESTRATOR';
 
 const QUESTION =
-  'Reply with only the verification words of any sextant working rules you were given in this conversation, ' +
+  'Reply with only the verification words of any noonsight working rules you were given in this conversation, ' +
   'separated by single spaces, or the single word NONE if you were given none.';
 
 interface Lab extends LoginLab {

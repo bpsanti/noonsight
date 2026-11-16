@@ -1,4 +1,4 @@
-// A small JSON Schema (draft 2020-12) validator for the subset the sextant schemas use.
+// A small JSON Schema (draft 2020-12) validator for the subset the noonsight schemas use.
 // The published schemas own the shape of the configuration and of a preset; this validator applies
 // them at run time so the shape is written once. A keyword outside the subset is a programming
 // error and throws, so a schema can never rely on a rule this validator silently skips.

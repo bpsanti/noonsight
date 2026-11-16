@@ -1,6 +1,6 @@
 # Rule effect experiment
 
-Does a preset rule change what its source says it changes when sextant delivers it, and what does it cost in tokens?
+Does a preset rule change what its source says it changes when noonsight delivers it, and what does it cost in tokens?
 This harness answers that with real Claude Code sessions, a few at a time, and writes what it measured to a result file.
 It sends prompts to the models from the login of the person running it, so it spends usage, and it never runs in CI.
 
@@ -10,14 +10,14 @@ The same small task runs on each target model in two arms:
 
 | Arm | Configuration | What the session receives |
 | --- | --- | --- |
-| `rules` | The model declared with `"use": "preset"` | The preset rules for the model, the task's scope and the place `unattended`, delivered by sextant's `SessionStart` hook |
+| `rules` | The model declared with `"use": "preset"` | The preset rules for the model, the task's scope and the place `unattended`, delivered by noonsight's `SessionStart` hook |
 | `none` | The model declared with `"use": "none"` | Nothing; the same hook runs and logs `declared-none` |
 
 Everything else is the same in both arms: the prompt, the model, the effort, the tools, the fixture project and the hooks.
 So a difference between the arms comes from the rules or from chance, and with a few runs per arm chance stays large.
 
-A session is in the place `unattended` because the plan's variable (`SEXTANT_EXPERIMENT`) is listed in `session.unattended_when_env` and set, as an orchestrator's workers would be.
-The scope comes from `SEXTANT_SCOPE`, set to the task's scope.
+A session is in the place `unattended` because the plan's variable (`NOONSIGHT_EXPERIMENT`) is listed in `session.unattended_when_env` and set, as an orchestrator's workers would be.
+The scope comes from `NOONSIGHT_SCOPE`, set to the task's scope.
 The rules a run received are read from its decision log, not assumed from the arm.
 
 ### The tasks
@@ -45,7 +45,7 @@ The cost of a rule is the difference between the arms' means; it holds both the 
 
 ### Isolation
 
-Each run gets the lab the live tests use (`test/live/login.ts`): a temporary home for sextant, its own configuration, and sextant's hook entries in a `--settings` file.
+Each run gets the lab the live tests use (`test/live/login.ts`): a temporary home for noonsight, its own configuration, and noonsight's hook entries in a `--settings` file.
 `--setting-sources project,local` keeps the person's own settings and `CLAUDE.md` out, `--strict-mcp-config` their MCP servers, `--disable-slash-commands` their skills, and `--no-session-persistence` keeps the runs out of their session history.
 The tools are limited to `Bash`, `Read`, `Grep`, `Glob`, `Edit` and `Write`, and `Bash` is allowed only for `npm test`, `node`, `ls` and `cat`, so a session cannot start subagents and has none of the usual shell network tools (a `node` script could still open a connection).
 
@@ -57,7 +57,7 @@ npm run experiment -- summarize <dir> [--to <dir>]
 ```
 
 `run` records one JSON line per run in `<dir>/runs.jsonl`, and keeps each run's event stream, report and diff under `<dir>/runs/`.
-The decision log of every run goes to `<dir>/decisions.jsonl`, so `sextant report --log <dir>/decisions.jsonl` shows what sextant delivered.
+The decision log of every run goes to `<dir>/decisions.jsonl`, so `noonsight report --log <dir>/decisions.jsonl` shows what noonsight delivered.
 The hooks run this checkout's `dist/`, so do not build while an experiment runs: a hook that loads a file being rewritten fails.
 A run whose decision log holds no session start, because the hook did not run or failed, is not recorded.
 A run that stops can be started again with the same `--out`: the runs already recorded are skipped, so a later call with more `--reps` or other `--models` adds to the same results.

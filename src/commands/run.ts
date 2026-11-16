@@ -11,10 +11,10 @@ import { writeFileAtomic } from '../state/files.js';
 import { packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
-export const RUN_USAGE = `usage: sextant run [--scope <scope>] [--task <text>] [--] [claude arguments...]
+export const RUN_USAGE = `usage: noonsight run [--scope <scope>] [--task <text>] [--] [claude arguments...]
 
 Start Claude Code with the rules for its model in the system prompt, for sessions the hooks do not
-reach or reach without the model, such as \`claude -p\`. sextant takes the model the way Claude Code
+reach or reach without the model, such as \`claude -p\`. noonsight takes the model the way Claude Code
 does: --model among the claude arguments, else ANTHROPIC_MODEL, else the model setting. It adds the
 rules with --append-system-prompt-file and runs claude with every other argument unchanged. When the
 hooks are installed too, they find the rules in the system prompt and do not deliver them again.
@@ -23,11 +23,11 @@ With routing on for the launcher, the task scope's row in the routing table adds
 --effort first, unless the claude arguments already give --model.
 
 Options, before the claude arguments:
-  --scope <scope>   the task scope, set as SEXTANT_SCOPE for the session
+  --scope <scope>   the task scope, set as NOONSIGHT_SCOPE for the session
   --task <text>     the task text the scopes' matchers read when no scope is given; without it,
                     the prompt right after -p or --print
 
-Everything from the first other argument, or after "--", goes to claude. sextant run exits with
+Everything from the first other argument, or after "--", goes to claude. noonsight run exits with
 claude's exit status.`;
 
 export interface RunIo {
@@ -62,7 +62,7 @@ export async function runRun(args: readonly string[], env: Env, io: RunIo, home:
     }
   }
 
-  const plan = env.SEXTANT_DISABLE === '1' ? { args: [...rest], env: {} } : prepare(rest, scope, task, env, home, io);
+  const plan = env.NOONSIGHT_DISABLE === '1' ? { args: [...rest], env: {} } : prepare(rest, scope, task, env, home, io);
   return exec(plan.args, applyEnv(env, plan.env), io);
 }
 
@@ -77,8 +77,8 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
       // A log that cannot be written must not cost the session its rules.
     }
   };
-  if (!env.SEXTANT_CONFIG && !fs.existsSync(file)) {
-    io.err(`sextant: there is no configuration at ${file}, so sextant run added no rules. Run \`sextant init\` to create one.`);
+  if (!env.NOONSIGHT_CONFIG && !fs.existsSync(file)) {
+    io.err(`noonsight: there is no configuration at ${file}, so noonsight run added no rules. Run \`noonsight init\` to create one.`);
     return passThrough(args, scope, env);
   }
   let plan: LaunchPlan;
@@ -89,13 +89,13 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
     if (e instanceof ConfigError) {
       log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), delivered: 'nothing', warned: true });
       io.err(
-        `sextant: the configuration at ${file} was refused (${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}), ` +
-          'so sextant run added no rules. Run `sextant check` to see the problems.',
+        `noonsight: the configuration at ${file} was refused (${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}), ` +
+          'so noonsight run added no rules. Run `noonsight check` to see the problems.',
       );
     } else {
       const message = e instanceof Error ? e.message : String(e);
       log({ status: 'error', error: message, ...notRouted('error'), delivered: 'nothing', warned: true });
-      io.err(`sextant: sextant run failed (${message}), so it added no rules.`);
+      io.err(`noonsight: noonsight run failed (${message}), so it added no rules.`);
     }
     return passThrough(args, scope, env);
   }
@@ -107,7 +107,7 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       log({ ...plan.record, status: 'error', error: message, delivered: 'nothing', warned: true });
-      io.err(`sextant: could not write ${plan.file.path} (${message}), so sextant run added no rules.`);
+      io.err(`noonsight: could not write ${plan.file.path} (${message}), so noonsight run added no rules.`);
       return plan.fallback;
     }
   }
@@ -143,7 +143,7 @@ function exec(args: readonly string[], env: Record<string, string>, io: RunIo): 
       done(code);
     };
     child.on('error', (e) => {
-      io.err(`sextant: could not start claude (${e.message}).`);
+      io.err(`noonsight: could not start claude (${e.message}).`);
       finish(127);
     });
     child.on('exit', (code, signal) => finish(code ?? 128 + (signal ? (os.constants.signals[signal] ?? 0) : 0)));

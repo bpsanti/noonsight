@@ -23,7 +23,7 @@ import { isSet, otherProvider, resolveModelValue } from './launch.js';
 export type PredictionSource = 'fork' | 'forced' | 'parameter' | 'definition' | 'built-in' | 'env' | 'parent';
 
 export interface Prediction {
-  /** The normalized model, or null when sextant cannot tell. */
+  /** The normalized model, or null when noonsight cannot tell. */
   readonly model: string | null;
   readonly source: PredictionSource;
   /** What the source named, such as an alias, when it named a model. */

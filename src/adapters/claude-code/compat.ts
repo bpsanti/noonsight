@@ -1,5 +1,5 @@
-// The Claude Code versions sextant's hooks need, one line per feature, with the date each was checked
-// against Claude Code's documentation. `sextant check` compares the installed claude with these.
+// The Claude Code versions noonsight's hooks need, one line per feature, with the date each was checked
+// against Claude Code's documentation. `noonsight check` compares the installed claude with these.
 
 export interface Floor {
   readonly version: string;

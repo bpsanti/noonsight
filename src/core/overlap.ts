@@ -1,5 +1,5 @@
-// Overlapping scopes: two scopes a single task can fall in. sextant still picks one, by fixed rules
-// (scope.ts), but the person declared two scopes for the same task, and `sextant check` says so.
+// Overlapping scopes: two scopes a single task can fall in. noonsight still picks one, by fixed rules
+// (scope.ts), but the person declared two scopes for the same task, and `noonsight check` says so.
 //
 // Two scopes overlap when a text that one scope's matcher matches is also matched by the other's.
 // That text is the evidence: it comes from the examples regex-sample.ts builds, each of which really

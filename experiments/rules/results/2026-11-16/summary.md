@@ -3,9 +3,9 @@
 112 runs, Claude Code 2.1.326, effort medium, 2026-11-16; $7.57 spent in total, as Claude Code reports cost.
 With a few runs per arm, every difference below is a direction to look at again, not a measured effect.
 
-## What sextant delivered
+## What noonsight delivered
 
-From the decision log of every run, as `sextant report --log decisions.jsonl` prints it, against a configuration that declares every model of the plan with the preset:
+From the decision log of every run, as `noonsight report --log decisions.jsonl` prints it, against a configuration that declares every model of the plan with the preset:
 
 ```text
 112 decisions, from 2026-11-16T22:51:24.984Z to 2026-11-16T23:01:28.248Z

@@ -13,7 +13,7 @@ export type InstallKind = 'managed' | 'account';
 
 export interface InstallTarget {
   readonly kind: InstallKind;
-  /** The settings file sextant writes its hook entries to. */
+  /** The settings file noonsight writes its hook entries to. */
   readonly settingsFile: string;
   /** The hook pointer those entries run. */
   readonly pointer: string;
@@ -23,22 +23,22 @@ export interface InstallTarget {
   readonly configDir?: string;
 }
 
-/** sextant's own file in the managed settings drop-in directory. */
-export const DROP_IN_NAME = 'sextant-ai.json';
+/** noonsight's own file in the managed settings drop-in directory. */
+export const DROP_IN_NAME = 'noonsight.json';
 
 interface SystemDirs {
   /** Claude Code's managed settings directory. */
   readonly claudeCode: string;
   /** Where the machine-wide hook pointer lives; it must be readable by every account. */
-  readonly sextant: string;
+  readonly noonsight: string;
 }
 
 const SYSTEM_DIRS: Partial<Record<NodeJS.Platform, SystemDirs>> = {
-  darwin: { claudeCode: '/Library/Application Support/ClaudeCode', sextant: '/Library/Application Support/sextant' },
-  linux: { claudeCode: '/etc/claude-code', sextant: '/usr/local/lib/sextant' },
+  darwin: { claudeCode: '/Library/Application Support/ClaudeCode', noonsight: '/Library/Application Support/noonsight' },
+  linux: { claudeCode: '/etc/claude-code', noonsight: '/usr/local/lib/noonsight' },
 };
 
-/** Claude Code's managed settings directory on Windows; sextant does not install there yet. */
+/** Claude Code's managed settings directory on Windows; noonsight does not install there yet. */
 export const WINDOWS_MANAGED_DIR = 'C:\\Program Files\\ClaudeCode';
 
 export class UnsupportedPlatformError extends Error {
@@ -46,28 +46,28 @@ export class UnsupportedPlatformError extends Error {
     super(
       platform === 'win32'
         ? `installing on Windows is not supported yet. Claude Code reads machine-wide settings from ${WINDOWS_MANAGED_DIR}, ` +
-            `but the sextant hook pointer is a POSIX shell script that has not been verified there.`
-        : `installing on ${platform} is not supported; sextant knows Claude Code's managed settings directory on macOS and Linux only.`,
+            `but the noonsight hook pointer is a POSIX shell script that has not been verified there.`
+        : `installing on ${platform} is not supported; noonsight knows Claude Code's managed settings directory on macOS and Linux only.`,
     );
     this.name = 'UnsupportedPlatformError';
   }
 }
 
 /**
- * The machine-wide install. SEXTANT_SYSTEM_ROOT stands in for "/" so tests can install into a
+ * The machine-wide install. NOONSIGHT_SYSTEM_ROOT stands in for "/" so tests can install into a
  * temporary directory; it is not meant for real installs.
  */
 export function managedTarget(env: Env, platform: NodeJS.Platform = process.platform): InstallTarget {
   const dirs = SYSTEM_DIRS[platform];
   if (!dirs) throw new UnsupportedPlatformError(platform);
-  const root = env.SEXTANT_SYSTEM_ROOT ? path.resolve(env.SEXTANT_SYSTEM_ROOT) : null;
+  const root = env.NOONSIGHT_SYSTEM_ROOT ? path.resolve(env.NOONSIGHT_SYSTEM_ROOT) : null;
   const system = (p: string): string => (root ? path.join(root, p) : p);
   const managedDir = system(dirs.claudeCode);
   return {
     kind: 'managed',
     managedDir,
     settingsFile: path.join(managedDir, 'managed-settings.d', DROP_IN_NAME),
-    pointer: path.join(system(dirs.sextant), POINTER_NAME),
+    pointer: path.join(system(dirs.noonsight), POINTER_NAME),
   };
 }
 
@@ -87,7 +87,7 @@ export const CONFIG_MARKER = '.claude.json';
  * Every Claude Code configuration directory of this account that exists, each once: ~/.claude, the
  * directory in CLAUDE_CONFIG_DIR, every directory directly in the home directory that holds a Claude
  * Code configuration (such as ~/.claude-work, made for a second login), and the extra directories
- * given, such as the ones sextant installed into before. Each login keeps its own settings in its
+ * given, such as the ones noonsight installed into before. Each login keeps its own settings in its
  * own directory, so these are the places a per-account hook must be to reach every login.
  */
 export function discoverConfigDirs(env: Env, home: string = os.homedir(), extra: readonly string[] = []): string[] {

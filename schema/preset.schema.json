@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://unpkg.com/sextant-ai@0/schema/preset.schema.json",
-  "title": "sextant preset",
+  "$id": "https://unpkg.com/noonsight@0/schema/preset.schema.json",
+  "title": "noonsight preset",
   "description": "A preset shipped with the package: rules per exact model identifier, each with its source.",
   "type": "object",
   "required": ["id", "version", "models"],

@@ -5,9 +5,9 @@ import type { InstallKind } from '../adapters/claude-code/locations.js';
 import type { Env } from '../config/paths.js';
 import { packageVersion } from '../version.js';
 
-export const HOOK_USAGE = `usage: sextant hook [--install managed|account] <session-start|model-switch|agent-call|agent-result>
+export const HOOK_USAGE = `usage: noonsight hook [--install managed|account] <session-start|model-switch|agent-call|agent-result>
 
-The Claude Code hook adapter; the hook pointer written by \`sextant install\` runs it. It reads the
+The Claude Code hook adapter; the hook pointer written by \`noonsight install\` runs it. It reads the
 hook input on stdin, prints at most one JSON object, writes the decision log, and always exits 0.`;
 
 /** Runs a hook event. Always returns 0: a hook never holds or fails the session. */

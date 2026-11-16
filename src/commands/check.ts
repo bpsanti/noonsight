@@ -1,4 +1,4 @@
-// sextant check: the configuration, every install this account can see, the watcher, the Claude
+// noonsight check: the configuration, every install this account can see, the watcher, the Claude
 // Code version and the last decision, one line each. It reads local files, runs `claude --version`,
 // and, when the watcher is on, asks the service manager whether it runs; it never uses the network
 // and never changes anything.
@@ -12,7 +12,7 @@ import { readSettings } from '../adapters/claude-code/install.js';
 import { accountTarget, discoverConfigDirs, managedTarget, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSettings } from '../adapters/claude-code/managed.js';
 import { readPointer } from '../adapters/claude-code/pointer.js';
-import { findSextantHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from '../adapters/claude-code/settings.js';
+import { findNoonsightHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { scopeOverlaps } from '../core/overlap.js';
 import { SCOPE_ENV, sessionPlace, sessionScope } from '../core/scope.js';
@@ -25,7 +25,7 @@ import { lastDecision } from '../state/log.js';
 import { compareVersions, packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
-export const CHECK_USAGE = `usage: sextant check
+export const CHECK_USAGE = `usage: noonsight check
 
 Check the configuration, the installed hooks, the watcher and the Claude Code version, and show
 the last decision. Each line starts with ok, warning or problem. Exits 0 when there is no problem, 1 when there is one,
@@ -88,19 +88,19 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     if (recorded.includes(dir) || hasAccountHooks) {
       if (checkInstall(target, version, cli, add, true)) installs++;
       if (hasAccountHooks && managedReaches)
-        add('warning', `account install ${dir}: the machine-wide install reaches this login too, so its sessions receive the rules twice; remove one with \`sextant uninstall\``);
+        add('warning', `account install ${dir}: the machine-wide install reaches this login too, so its sessions receive the rules twice; remove one with \`noonsight uninstall\``);
     } else if (managedReaches) add('ok', `Claude Code configuration ${dir}: reached by the machine-wide install`);
     else uncovered.push(dir);
     checkRemotePolicy(dir, remote, hasAccountHooks, managedInstalled, add);
   }
-  if (installs === 0) add('problem', 'sextant is not installed: run `sextant install`');
+  if (installs === 0) add('problem', 'noonsight is not installed: run `noonsight install`');
   else
     for (const dir of uncovered)
       add(
         'problem',
-        `Claude Code configuration ${dir}: no sextant hooks reach it` +
+        `Claude Code configuration ${dir}: no noonsight hooks reach it` +
           (managedInstalled ? ' (its login receives server-managed settings, so Claude Code ignores the machine-wide install there)' : '') +
-          '; run `sextant install`',
+          '; run `noonsight install`',
       );
 
   // The watcher.
@@ -165,7 +165,7 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
 function checkRouting(config: Config, env: Env, add: (level: Level, text: string) => void): void {
   const r = config.routing;
   if (!r.enabled) {
-    add('ok', 'routing: off, so sextant never changes a model or an effort');
+    add('ok', 'routing: off, so noonsight never changes a model or an effort');
     return;
   }
   const rows = [...r.table.entries()].map(([scope, row]) => `${scope} ${describeRow(row)}`);
@@ -214,7 +214,7 @@ function checkInstall(
   expected: boolean,
 ): boolean {
   const label = target.kind === 'managed' ? 'machine-wide install' : `account install ${target.configDir}`;
-  const again = target.kind === 'managed' ? '`sextant install --managed` again, as an administrator,' : '`sextant install` again';
+  const again = target.kind === 'managed' ? '`noonsight install --managed` again, as an administrator,' : '`noonsight install` again';
   let settings: Record<string, unknown> | null;
   try {
     settings = readSettings(target.settingsFile);
@@ -222,9 +222,9 @@ function checkInstall(
     add('problem', `${label}: ${(e as Error).message}`);
     return false;
   }
-  const found = findSextantHandlers(settings);
+  const found = findNoonsightHandlers(settings);
   if (found.length === 0) {
-    if (expected) add('problem', `${label}: no sextant hooks in ${target.settingsFile}; run \`sextant install --account ${target.configDir}\``);
+    if (expected) add('problem', `${label}: no noonsight hooks in ${target.settingsFile}; run \`noonsight install --account ${target.configDir}\``);
     else add('ok', `${label}: not installed (${target.settingsFile})`);
     return false;
   }
@@ -258,15 +258,15 @@ function checkInstall(
     add(
       'problem',
       `${label}: this account cannot run ${denied.join(' and ')}, so its hooks do nothing; ` +
-        'install sextant from a Node.js and a copy of sextant that every account can read and run',
+        'install noonsight from a Node.js and a copy of noonsight that every account can read and run',
     );
     return true;
   }
   const running = pointer.cli === cli ? version : versionOf(pointer.node, pointer.cli);
-  if (running === null) add('problem', `${label}: the copy of sextant the hook pointer runs (${pointer.cli}) did not report its version`);
+  if (running === null) add('problem', `${label}: the copy of noonsight the hook pointer runs (${pointer.cli}) did not report its version`);
   else if (running !== version)
-    add('warning', `${label}: hooks run sextant ${running} (${pointer.cli}), but this copy is ${version}; run ${again} to switch`);
-  else add('ok', `${label}: hook pointer ${target.pointer} runs sextant ${running}`);
+    add('warning', `${label}: hooks run noonsight ${running} (${pointer.cli}), but this copy is ${version}; run ${again} to switch`);
+  else add('ok', `${label}: hook pointer ${target.pointer} runs noonsight ${running}`);
   return true;
 }
 
@@ -278,19 +278,19 @@ function checkManagedPolicy(managed: InstallTarget, env: Env, add: (level: Level
   const { merged: policy, problems } = readManagedFiles(managed.managedDir ?? '');
   for (const p of problems)
     add('problem', `managed settings ${p.file} cannot be read as a JSON object (${p.message}); Claude Code refuses to start while it is so`);
-  if (policy.disableAllHooks === true) add('problem', 'managed settings set disableAllHooks: Claude Code runs no hooks at all, sextant included');
+  if (policy.disableAllHooks === true) add('problem', 'managed settings set disableAllHooks: Claude Code runs no hooks at all, noonsight included');
   if (policy.allowManagedHooksOnly === true)
     add('warning', 'managed settings set allowManagedHooksOnly: only the machine-wide install runs; account installs are ignored');
 
   // An MDM profile ranks above managed settings files, and Claude Code then ignores the files by default.
   if (installed && process.platform === 'darwin') {
-    const root = env.SEXTANT_SYSTEM_ROOT ? path.resolve(env.SEXTANT_SYSTEM_ROOT) : '/';
+    const root = env.NOONSIGHT_SYSTEM_ROOT ? path.resolve(env.NOONSIGHT_SYSTEM_ROOT) : '/';
     const profile = path.join(root, 'Library', 'Managed Preferences', 'com.anthropic.claudecode.plist');
     if (fs.existsSync(profile))
       add(
         'warning',
         `an MDM profile for Claude Code is present (${profile}); unless it sets managedSourcesBehavior to "merge", ` +
-          'Claude Code ignores the managed settings files and the machine-wide hooks do not run. Use `sextant install` (without --managed) instead.',
+          'Claude Code ignores the managed settings files and the machine-wide hooks do not run. Use `noonsight install` (without --managed) instead.',
       );
   }
 }
@@ -314,7 +314,7 @@ function checkRemotePolicy(
     add(
       'problem',
       `${label}: the server-managed settings of this login (${remote.file}) set allowManagedHooksOnly, ` +
-        'so Claude Code runs only the hooks the organization delivers, and no sextant install reaches it',
+        'so Claude Code runs only the hooks the organization delivers, and no noonsight install reaches it',
     );
   else if (accountHooks && !remote.merges)
     add('ok', `${label}: this login receives server-managed settings, which shadow the managed settings files; the account install reaches it`);
@@ -338,22 +338,22 @@ function checkWatcher(env: Env, home: string, cli: string, add: (level: Level, t
     return;
   }
   if (content === null) {
-    if (isLoaded(manager.running(service))) add('problem', `watcher: loaded without ${service.file}; run \`sextant watch disable\` to stop it`);
-    else add('ok', 'watcher: off; `sextant watch enable` installs into each new Claude Code configuration directory as it appears');
+    if (isLoaded(manager.running(service))) add('problem', `watcher: loaded without ${service.file}; run \`noonsight watch disable\` to stop it`);
+    else add('ok', 'watcher: off; `noonsight watch enable` installs into each new Claude Code configuration directory as it appears');
     return;
   }
   if (!isOurs(content)) {
-    add('warning', `watcher: ${service.file} is in sextant's place but was not written by sextant`);
+    add('warning', `watcher: ${service.file} is in noonsight's place but was not written by noonsight`);
     return;
   }
   const running = manager.running(service);
-  if (running === 'off') add('problem', `watcher: on in ${service.file}, but not running; run \`sextant watch enable\` again`);
-  else if (running === 'loaded') add('warning', `watcher: on in ${service.file}, but loaded without a running process; run \`sextant watch enable\` again`);
+  if (running === 'off') add('problem', `watcher: on in ${service.file}, but not running; run \`noonsight watch enable\` again`);
+  else if (running === 'loaded') add('warning', `watcher: on in ${service.file}, but loaded without a running process; run \`noonsight watch enable\` again`);
   else add('ok', `watcher: on (${service.file})${running === null ? '; whether it runs now could not be checked' : ''}`);
   if (content !== serviceContent(service, { node: process.execPath, cli }))
-    add('warning', `watcher: ${service.file} runs another copy of sextant or another Node.js; run \`sextant watch enable\` again to switch to this one`);
+    add('warning', `watcher: ${service.file} runs another copy of noonsight or another Node.js; run \`noonsight watch enable\` again to switch to this one`);
   const last = lastLine(service.log);
-  if (last !== null) add(/ (problem|sextant): /.test(last) ? 'warning' : 'ok', `watcher log ${service.log}: ${last}`);
+  if (last !== null) add(/ (problem|noonsight): /.test(last) ? 'warning' : 'ok', `watcher log ${service.log}: ${last}`);
 }
 
 /** The last line of a small log file, or null when there is none. */
@@ -398,7 +398,7 @@ function checkClaude(env: Env, add: (level: Level, text: string) => void): void 
     add(
       'warning',
       `claude: installed ${found}; when a session without a reported model, such as \`claude -p\`, names it by an alias, ` +
-        `sextant assumes what the aliases select from Claude Code ${aliases} on (upgrade: claude update)`,
+        `noonsight assumes what the aliases select from Claude Code ${aliases} on (upgrade: claude update)`,
     );
 }
 
@@ -426,7 +426,7 @@ function versionOf(node: string, cli: string): string | null {
 
 function hasHooks(file: string): boolean {
   try {
-    return findSextantHandlers(readSettings(file)).length > 0;
+    return findNoonsightHandlers(readSettings(file)).length > 0;
   } catch {
     return false;
   }
