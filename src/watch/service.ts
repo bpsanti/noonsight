@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { stateDir, type Env } from '../config/paths.js';
+import { packageVersion } from '../version.js';
 
 /** The launchd label and the systemd unit name. */
 export const SERVICE_LABEL = 'io.github.bpsanti.sextant-ai.watch';
@@ -58,6 +59,7 @@ export function serviceContent(service: WatchService, runtime: WatchRuntime): st
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
       `<!-- ${MARKER} -->`,
+      `<!-- sextant ${packageVersion()} -->`,
       '<plist version="1.0">',
       '<dict>',
       `  <key>Label</key>${string(SERVICE_LABEL)}`,
@@ -75,6 +77,7 @@ export function serviceContent(service: WatchService, runtime: WatchRuntime): st
   }
   return [
     `# ${MARKER}`,
+    `# sextant ${packageVersion()}`,
     '[Unit]',
     'Description=sextant: add the Claude Code hooks to each new Claude Code configuration directory',
     '',

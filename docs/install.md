@@ -96,6 +96,7 @@ The watcher sees a new directory as soon as it appears, then checks for its mark
 The service starts at every login and runs `sextant watch run`: one resident Node.js process for the account, which uses no CPU while nothing changes in the home directory.
 Like the hook pointer, it runs the Node.js and the copy of sextant that ran `enable`, by absolute paths.
 After moving or upgrading either one, run `sextant watch enable` again; `sextant check` warns until then.
+The service file records the sextant version, so an upgrade at the same path counts too: `enable` restarts the watcher on the new code.
 Running `enable` again with nothing changed writes nothing.
 
 The process watches only the entries directly in the home directory, without recursion.

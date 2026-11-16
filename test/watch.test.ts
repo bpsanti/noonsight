@@ -9,6 +9,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { serviceContent, SERVICE_LABEL, SERVICE_UNIT, watchService, type WatchService } from '../src/watch/service.js';
 import { startWatcher as runWatcher } from '../src/watch/watcher.js';
+import { packageVersion } from '../src/version.js';
 import { CLI, fakeClaude, LAB_CONFIG, LAB_PRESETS, runCli, tempTree } from './helpers.js';
 
 const supported = process.platform === 'darwin' || process.platform === 'linux';
@@ -436,4 +437,35 @@ test('a watcher install that fails leaves a problem line as its last log line, a
   fs.writeFileSync(service.log, watcher.output());
   const check = runCli(['check'], env);
   assert.match(check.stdout, /^warning: watcher log .*: \S+ problem: install into .* failed; see the lines above$/m);
+});
+
+test('an upgrade of sextant at the same path is noticed: check warns, and enable rewrites the service file and restarts the watcher', { skip: !supported }, () => {
+  const { env, service, calls } = machine();
+  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['watch', 'enable'], env).status, 0);
+  const current = fs.readFileSync(service.file, 'utf8');
+  fs.writeFileSync(service.file, current.replaceAll(packageVersion(), 'previous-version'));
+  const check = runCli(['check'], env);
+  assert.match(check.stdout, /^warning: watcher: .* runs another copy of sextant or another Node\.js/m);
+  const callsBefore = calls().length;
+
+  const again = runCli(['watch', 'enable'], env);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(fs.readFileSync(service.file, 'utf8'), current);
+  assert.deepEqual(
+    calls().slice(callsBefore),
+    process.platform === 'darwin'
+      ? [
+          `launchctl print gui/${process.getuid?.()}/${SERVICE_LABEL}`,
+          `launchctl bootout gui/${process.getuid?.()}/${SERVICE_LABEL}`,
+          `launchctl bootstrap gui/${process.getuid?.()} ${service.file}`,
+        ]
+      : [
+          `systemctl --user is-active --quiet ${SERVICE_UNIT}`,
+          `systemctl --user disable --now ${SERVICE_UNIT}`,
+          'systemctl --user daemon-reload',
+          `systemctl --user enable --now ${SERVICE_UNIT}`,
+        ],
+  );
+  assert.match(runCli(['check'], env).stdout, /^ok: watcher: on \(/m);
 });
