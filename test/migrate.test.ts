@@ -291,4 +291,30 @@ test('an install for this account names a sextant machine-wide install still in 
   assert.ok(fs.existsSync(oldDropIn), 'an install for one account leaves the machine-wide files alone');
 });
 
+test('a state file both names have, other than the log and the list of installs, is left in place and named', { skip: !supported }, () => {
+  const m = machine();
+  const oldRotated = path.join(m.home, '.local', 'state', 'sextant', 'decisions.1.jsonl');
+  const newRotated = path.join(m.home, '.local', 'state', 'noonsight', 'decisions.1.jsonl');
+  for (const [file, text] of [
+    [oldRotated, '{"n":"old"}\n'],
+    [newRotated, '{"n":"new"}\n'],
+    [path.join(m.home, '.local', 'state', 'sextant', 'sessions', 'a.json'), '{}'],
+  ] as const) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+  }
+
+  const r = runCli(['install'], m.env);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(oldRotated, 'utf8'), '{"n":"old"}\n');
+  assert.equal(fs.readFileSync(newRotated, 'utf8'), '{"n":"new"}\n');
+  assert.ok(fs.existsSync(path.join(m.home, '.local', 'state', 'noonsight', 'sessions', 'a.json')));
+  assert.match(r.stdout, new RegExp(`moved to .*, except ${esc(oldRotated)}, which noonsight also has and which were left in place`));
+
+  const before = tree(m.home);
+  const again = runCli(['install'], m.env);
+  assert.equal(again.status, 0, again.stderr);
+  assert.deepEqual(tree(m.home), before, 'what was left stays as it was');
+});
+
 const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

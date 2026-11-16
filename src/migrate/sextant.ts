@@ -73,16 +73,7 @@ export function checkManagedMigration(env: Env): void {
 
 /** After a machine-wide install: remove sextant's drop-in file, or its hooks in it, and its hook pointer. */
 export function migrateManaged(env: Env): Migration {
-  const lines: string[] = [];
-  let ok = true;
-  const step = (what: string, act: () => void): void => {
-    try {
-      act();
-    } catch (e) {
-      ok = false;
-      lines.push(`problem: migrating from sextant: ${what} failed (${(e as Error).message}); run the install again once the cause is fixed`);
-    }
-  };
+  const { lines, step, result } = steps('`noonsight install --managed`');
   const { dropIn, pointer } = managedPaths(env);
   if (dropIn !== null && fs.existsSync(dropIn))
     step(`removing sextant's hooks from ${dropIn}`, () => {
@@ -101,7 +92,7 @@ export function migrateManaged(env: Env): Migration {
       removeIfEmpty(path.dirname(pointer));
       lines.push(`migrated from sextant: hook pointer ${pointer}: removed`);
     });
-  return { lines, ok };
+  return result();
 }
 
 /**
@@ -110,16 +101,7 @@ export function migrateManaged(env: Env): Migration {
  * places, replace sextant's watcher with noonsight's, and name the SEXTANT_* variables still set.
  */
 export function migrateAccount(env: Env, home: string): Migration {
-  const lines: string[] = [];
-  let ok = true;
-  const step = (what: string, act: () => void): void => {
-    try {
-      act();
-    } catch (e) {
-      ok = false;
-      lines.push(`problem: migrating from sextant: ${what} failed (${(e as Error).message}); run \`noonsight install\` again once the cause is fixed`);
-    }
-  };
+  const { lines, step, result } = steps('`noonsight install`');
 
   // Read before the state moves: the directories sextant recorded are where its hooks may remain.
   const recorded = sextantAccountDirs(home);
@@ -187,7 +169,7 @@ export function migrateAccount(env: Env, home: string): Migration {
       `note: sextant is still installed for the whole machine (${managedPaths(env).dropIn ?? ''}); ` +
         'migrate it with `noonsight install --managed`, as an administrator.',
     );
-  return { lines, ok };
+  return result();
 }
 
 /** For an install into one directory: the sextant files it leaves for `noonsight install` to migrate. */
@@ -198,6 +180,24 @@ export function leftoverNote(env: Env, home: string): string[] {
   return left.length
     ? [`note: a sextant install left ${left.join(', ')}; run \`noonsight install\`, without --account, to migrate them.`]
     : [];
+}
+
+/**
+ * The migration's steps: each runs on its own, so one that fails leaves a problem line naming it,
+ * and the steps after it still run.
+ */
+function steps(again: string): { lines: string[]; step: (what: string, act: () => void) => void; result: () => Migration } {
+  const lines: string[] = [];
+  let ok = true;
+  const step = (what: string, act: () => void): void => {
+    try {
+      act();
+    } catch (e) {
+      ok = false;
+      lines.push(`problem: migrating from sextant: ${what} failed (${(e as Error).message}); run ${again} again once the cause is fixed`);
+    }
+  };
+  return { lines, step, result: () => ({ lines, ok }) };
 }
 
 function hasSextantHooks(file: string): boolean {
