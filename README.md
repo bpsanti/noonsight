@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/bpsanti/noonsight/main/docs/images/noonsight-lockup-dark.svg">
+    <img src="https://raw.githubusercontent.com/bpsanti/noonsight/main/docs/images/noonsight-lockup.svg" alt="noonsight" width="360">
+  </picture>
+</p>
+
 # noonsight
 
 Take a fix before you set the course: pick the right model for each agent task, and hand every agent the practices that fit the model it actually runs on.
