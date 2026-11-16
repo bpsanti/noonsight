@@ -216,20 +216,13 @@ If the copy it points at is removed, the pointer exits quietly and `noonsight ch
 ## Moving from sextant
 
 noonsight was called sextant before (the package `sextant-ai`, the command `sextant`).
-An install made under that name keeps running the old command until it is migrated, and `noonsight install` migrates it.
-With no option, as the account that made the install, it:
+noonsight does not read sextant's names, and `noonsight install` leaves a sextant install as it is, so move one by hand, as the account that made it:
 
-- replaces sextant's hook entries with noonsight's, in the same write, in every configuration directory it installs into, including every directory sextant recorded installing into;
-- removes sextant's hook pointer, `~/.local/share/sextant/sextant-hook`, once no settings file runs it, and its directory once it is empty;
-- moves the configuration, `~/.config/sextant/`, to `~/.config/noonsight/`, renaming `sextant.json` to `noonsight.json` and pointing its `$schema` at noonsight's schema;
-- moves the state, `~/.local/state/sextant/`, to `~/.local/state/noonsight/`: the decision log, the list of account installs and the session records (when noonsight has a decision log or a list of installs already, sextant's entries are put first; any other file both have is left in the old directory, and the output names it);
-- stops and removes sextant's watcher, when `sextant watch enable` turned it on, and turns noonsight's on in its place;
-- names every `SEXTANT_*` variable still set in its environment, since noonsight reads only the `NOONSIGHT_*` ones (`SEXTANT_CONFIG` becomes `NOONSIGHT_CONFIG`, `SEXTANT_DISABLE` becomes `NOONSIGHT_DISABLE`, and so on).
-
-Each line of what it did starts with `migrated from sextant:`.
-A machine-wide sextant install is migrated by `noonsight install --managed`: it removes sextant's entries from `managed-settings.d/sextant-ai.json` (the whole file when nothing else is in it) and sextant's hook pointer.
-`noonsight install --account <dir>` replaces sextant's entries in that directory only, and names what it left for the full migration.
-Running the install again finds nothing left and changes nothing.
+1. With the old command still installed, remove sextant's hooks and watcher: `sextant watch disable`, then `sextant uninstall` (and `sudo "$(command -v node)" "$(command -v sextant)" uninstall --managed` for a machine-wide install).
+   Without it, delete the hook entries that run `sextant-hook` from each `settings.json`, `~/.local/share/sextant/`, `managed-settings.d/sextant-ai.json`, and the watcher's service file (`~/Library/LaunchAgents/io.github.bpsanti.sextant-ai.watch.plist` on macOS, after `launchctl bootout`; `~/.config/systemd/user/sextant-watch.service` on Linux, after `systemctl --user disable --now sextant-watch.service`).
+2. If you want to keep them, move `~/.config/sextant/` to `~/.config/noonsight/` (renaming `sextant.json` to `noonsight.json` and pointing its `$schema` at `schema/noonsight.schema.json`) and `~/.local/state/sextant/` to `~/.local/state/noonsight/`.
+3. Rename every `SEXTANT_*` variable you set to `NOONSIGHT_*`.
+4. Run `noonsight install`, and `noonsight watch enable` if the watcher was on.
 
 ## Uninstall
 

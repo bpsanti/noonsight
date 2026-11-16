@@ -9,7 +9,6 @@ import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { isPermissionError } from '../state/files.js';
 import { accountInstalls, recordAccountInstall } from '../state/installs.js';
-import { checkManagedMigration, leftoverNote, migrateAccount, migrateManaged, replacedHookLines, SEXTANT_POINTER, sextantAccountDirs, sextantHookFiles, type Migration } from '../migrate/sextant.js';
 import { packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
@@ -29,8 +28,7 @@ lists any directory it does not reach.
                    needs administrator rights, and Claude Code ignores these files on a login whose
                    organization delivers server-managed settings (see docs/install.md)
 
-Running install again changes nothing; uninstall removes only noonsight's own entries. Without
---account, install also migrates an install of sextant, noonsight's earlier name (see docs/install.md).`;
+Running install again changes nothing; uninstall removes only noonsight's own entries.`;
 
 /** The page that explains the guard Claude Code loads on every machine with managed settings. */
 export const MOD_GUARD_URL = 'https://code.claude.com/docs/en/plugins/mods/admin#know-what-happens-by-default';
@@ -59,27 +57,19 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
   }
 
   const lines: string[] = [];
-  let migration: Migration = { lines: [], ok: true };
   let current: InstallTarget | undefined = targets[0];
   try {
     if (command === 'install') {
-      // sextant's hook entries are replaced in the same write that adds noonsight's.
-      const options = { replaces: [SEXTANT_POINTER] };
-      const replaced = sextantHookFiles(targets);
       // Every directory is checked before any is written, so a refusal leaves all of them as they were.
       for (const target of targets) {
         current = target;
-        checkInstallable(target, runtime, options);
+        checkInstallable(target, runtime);
       }
-      if (mode.kind === 'managed') checkManagedMigration(env);
       for (const target of targets) {
         current = target;
-        lines.push(...install(target, runtime, options));
+        lines.push(...install(target, runtime));
         record(target, true, home, lines);
       }
-      lines.push(...replacedHookLines(replaced));
-      migration =
-        mode.kind === 'managed' ? migrateManaged(env) : mode.kind === 'every' ? migrateAccount(env, home) : { lines: leftoverNote(env, home), ok: true };
     } else {
       // The per-account pointer is shared by every account install of this account: it stays while a
       // recorded directory that still exists, and that this uninstall has not reached yet, runs it.
@@ -122,11 +112,10 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     throw e;
   }
 
-  lines.push(...migration.lines);
   if (command === 'install') lines.push(...installNotes(targets, env, home));
   else if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
   io.out(lines.join('\n'));
-  return migration.ok ? 0 : 1;
+  return 0;
 }
 
 /**
@@ -144,8 +133,6 @@ function everyAccountTarget(command: 'install' | 'uninstall', env: Env, home: st
   if (command === 'install') {
     const defaultDir = path.join(home, '.claude');
     if (!fs.existsSync(defaultDir)) fs.mkdirSync(defaultDir, { recursive: true, mode: 0o700 });
-    // The directories sextant installed into, so its hooks are replaced there too.
-    recorded.push(...sextantAccountDirs(home));
   }
   return discoverConfigDirs(env, home, recorded).map((dir) => accountTarget(dir, home));
 }

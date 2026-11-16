@@ -27,8 +27,6 @@ export interface WatchRuntime {
 
 export interface WatchService {
   readonly platform: 'darwin' | 'linux';
-  /** The launchd label, or on Linux the systemd unit name. */
-  readonly name: string;
   /** The service file. */
   readonly file: string;
   /** Where the watcher's output goes. */
@@ -44,11 +42,11 @@ export class WatchUnsupported extends Error {
 
 export function watchService(env: Env, home: string, platform: NodeJS.Platform = process.platform): WatchService {
   const log = path.join(stateDir(home), WATCH_LOG);
-  if (platform === 'darwin') return { platform, name: SERVICE_LABEL, log, file: path.join(home, 'Library', 'LaunchAgents', `${SERVICE_LABEL}.plist`) };
+  if (platform === 'darwin') return { platform, log, file: path.join(home, 'Library', 'LaunchAgents', `${SERVICE_LABEL}.plist`) };
   if (platform === 'linux') {
     // systemd reads user units from $XDG_CONFIG_HOME/systemd/user, which defaults to ~/.config.
     const config = env.XDG_CONFIG_HOME && path.isAbsolute(env.XDG_CONFIG_HOME) ? env.XDG_CONFIG_HOME : path.join(home, '.config');
-    return { platform, name: SERVICE_UNIT, log, file: path.join(config, 'systemd', 'user', SERVICE_UNIT) };
+    return { platform, log, file: path.join(config, 'systemd', 'user', SERVICE_UNIT) };
   }
   throw new WatchUnsupported(platform);
 }
@@ -64,7 +62,7 @@ export function serviceContent(service: WatchService, runtime: WatchRuntime): st
       `<!-- noonsight ${packageVersion()} -->`,
       '<plist version="1.0">',
       '<dict>',
-      `  <key>Label</key>${string(service.name)}`,
+      `  <key>Label</key>${string(SERVICE_LABEL)}`,
       '  <key>ProgramArguments</key>',
       `  <array>${[runtime.node, runtime.cli, 'watch', 'run'].map(string).join('')}</array>`,
       '  <key>RunAtLoad</key><true/>',
@@ -133,16 +131,16 @@ export const manager = {
     if (service.platform === 'darwin') return run('launchctl', ['bootstrap', domain(), service.file]);
     const reload = run('systemctl', ['--user', 'daemon-reload']);
     if (!reload.ok) return reload;
-    return run('systemctl', ['--user', 'enable', '--now', service.name]);
+    return run('systemctl', ['--user', 'enable', '--now', SERVICE_UNIT]);
   },
   /**
    * Stop the service and keep it from starting at login. Without its unit file systemd cannot
    * disable the unit, so only the stop is done, and a link to the file may remain.
    */
   unload(service: WatchService): ManagerResult {
-    if (service.platform === 'darwin') return run('launchctl', ['bootout', `${domain()}/${service.name}`]);
-    if (!fs.existsSync(service.file)) return run('systemctl', ['--user', 'stop', service.name]);
-    return run('systemctl', ['--user', 'disable', '--now', service.name]);
+    if (service.platform === 'darwin') return run('launchctl', ['bootout', `${domain()}/${SERVICE_LABEL}`]);
+    if (!fs.existsSync(service.file)) return run('systemctl', ['--user', 'stop', SERVICE_UNIT]);
+    return run('systemctl', ['--user', 'disable', '--now', SERVICE_UNIT]);
   },
   /** Make the service manager forget a unit file that was removed; macOS has nothing to forget. */
   forget(service: WatchService): ManagerResult {
@@ -153,8 +151,8 @@ export const manager = {
   running(service: WatchService): WatcherState | null {
     const r =
       service.platform === 'darwin'
-        ? spawnSync('launchctl', ['print', `${domain()}/${service.name}`], { encoding: 'utf8', timeout: 10000 })
-        : spawnSync('systemctl', ['--user', 'is-active', '--quiet', service.name], { encoding: 'utf8', timeout: 10000 });
+        ? spawnSync('launchctl', ['print', `${domain()}/${SERVICE_LABEL}`], { encoding: 'utf8', timeout: 10000 })
+        : spawnSync('systemctl', ['--user', 'is-active', '--quiet', SERVICE_UNIT], { encoding: 'utf8', timeout: 10000 });
     if (r.error) return null;
     if (service.platform === 'darwin') {
       // launchctl print exits 113 for an unknown service; a loaded job prints its state, and a pid only while it runs.

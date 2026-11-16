@@ -42,30 +42,14 @@ interface InstallPlan {
   readonly pointerChanged: boolean;
 }
 
-export interface InstallOptions {
-  /**
-   * File names of hook pointers whose handlers this install replaces, such as the pointer of an
-   * earlier name of noonsight: their handlers are removed in the same write that adds noonsight's.
-   */
-  readonly replaces?: readonly string[];
-}
-
 /** What install would write, after every check that can refuse it; nothing is written. */
-function planInstall(target: InstallTarget, runtime: Runtime, options: InstallOptions): InstallPlan {
+function planInstall(target: InstallTarget, runtime: Runtime): InstallPlan {
   if (target.configDir !== undefined && !isDirectory(target.configDir))
     throw new InstallRefused(`${target.configDir} is not a directory; give the Claude Code configuration directory of an account, such as ~/.claude`);
   refuseRootInAccount(target);
 
   const settings = readSettings(target.settingsFile);
-  let base: Record<string, unknown> = settings ?? {};
-  let replaced = false;
-  for (const pointerName of options.replaces ?? []) {
-    const without = editSettings(target.settingsFile, () => withoutNoonsightHooks(base, pointerName));
-    base = without.settings;
-    replaced ||= without.changed;
-  }
-  const added = editSettings(target.settingsFile, () => withNoonsightHooks(base, target.pointer));
-  const edit = { settings: added.settings, changed: added.changed || replaced };
+  const edit = editSettings(target.settingsFile, () => withNoonsightHooks(settings ?? {}, target.pointer));
   const pointer: PointerTarget = { ...runtime, kind: target.kind };
   const script = pointerScript(pointer);
   const oldScript = readText(target.pointer);
@@ -78,12 +62,12 @@ function planInstall(target: InstallTarget, runtime: Runtime, options: InstallOp
 }
 
 /** Throws what install would throw, and writes nothing; for installing into several directories at once. */
-export function checkInstallable(target: InstallTarget, runtime: Runtime, options: InstallOptions = {}): void {
-  planInstall(target, runtime, options);
+export function checkInstallable(target: InstallTarget, runtime: Runtime): void {
+  planInstall(target, runtime);
 }
 
-export function install(target: InstallTarget, runtime: Runtime, options: InstallOptions = {}): string[] {
-  const { settings, edit, script, oldScript, pointerChanged } = planInstall(target, runtime, options);
+export function install(target: InstallTarget, runtime: Runtime): string[] {
+  const { settings, edit, script, oldScript, pointerChanged } = planInstall(target, runtime);
 
   if (pointerChanged) {
     mkdirWithMode(path.dirname(target.pointer), 0o755);
@@ -213,7 +197,7 @@ function isDirectory(dir: string): boolean {
 }
 
 /** Whether this account can create or replace the file: the nearest existing directory above it must be writable. */
-export function canCreate(file: string): boolean {
+function canCreate(file: string): boolean {
   let dir = path.dirname(file);
   for (;;) {
     try {
