@@ -138,6 +138,7 @@ sextant watch disable
 ```
 
 It stops the service and removes the one service file `enable` wrote, and nothing else; on Linux it also disables the unit, which removes its link in `default.target.wants`.
+If that file was removed by hand while the watcher ran, on Linux `disable` only stops the unit by name, and the link may remain in `default.target.wants`; the command output names it.
 A service file at that path that sextant did not write is left alone, and both commands refuse to touch it.
 The hooks the watcher installed stay, like any other install; `sextant uninstall` removes them.
 The log stays in `~/.local/state/sextant/watch.log`.
