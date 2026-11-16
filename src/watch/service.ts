@@ -1,6 +1,6 @@
 // The per-user service that keeps the watcher running: a launchd agent on macOS and a systemd user
 // service on Linux. Both start the watcher at login and restart it if it ends. The service file is
-// the only file `sextant watch enable` writes, and the only one `sextant watch disable` removes.
+// the only file `noonsight watch enable` writes, and the only one `noonsight watch disable` removes.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -9,19 +9,19 @@ import { stateDir, type Env } from '../config/paths.js';
 import { packageVersion } from '../version.js';
 
 /** The launchd label and the systemd unit name. */
-export const SERVICE_LABEL = 'io.github.bpsanti.sextant-ai.watch';
-export const SERVICE_UNIT = 'sextant-watch.service';
+export const SERVICE_LABEL = 'io.github.bpsanti.noonsight.watch';
+export const SERVICE_UNIT = 'noonsight-watch.service';
 
 /** The file the watcher appends to, through the service's standard output and error. */
 export const WATCH_LOG = 'watch.log';
 
-/** The line every service file carries, so disable never removes a file sextant did not write. */
-const MARKER = 'Written by `sextant watch enable`; `sextant watch disable` removes it.';
+/** The line every service file carries, so disable never removes a file noonsight did not write. */
+const MARKER = 'Written by `noonsight watch enable`; `noonsight watch disable` removes it.';
 
 export interface WatchRuntime {
   /** The Node.js executable. */
   readonly node: string;
-  /** sextant's command line entry point. */
+  /** noonsight's command line entry point. */
   readonly cli: string;
 }
 
@@ -51,7 +51,7 @@ export function watchService(env: Env, home: string, platform: NodeJS.Platform =
   throw new WatchUnsupported(platform);
 }
 
-/** The service file's content: it runs `sextant watch run` with this Node.js and this copy of sextant, by absolute paths. */
+/** The service file's content: it runs `noonsight watch run` with this Node.js and this copy of noonsight, by absolute paths. */
 export function serviceContent(service: WatchService, runtime: WatchRuntime): string {
   if (service.platform === 'darwin') {
     const string = (s: string): string => `<string>${xmlEscape(s)}</string>`;
@@ -59,7 +59,7 @@ export function serviceContent(service: WatchService, runtime: WatchRuntime): st
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
       `<!-- ${MARKER} -->`,
-      `<!-- sextant ${packageVersion()} -->`,
+      `<!-- noonsight ${packageVersion()} -->`,
       '<plist version="1.0">',
       '<dict>',
       `  <key>Label</key>${string(SERVICE_LABEL)}`,
@@ -77,9 +77,9 @@ export function serviceContent(service: WatchService, runtime: WatchRuntime): st
   }
   return [
     `# ${MARKER}`,
-    `# sextant ${packageVersion()}`,
+    `# noonsight ${packageVersion()}`,
     '[Unit]',
-    'Description=sextant: add the Claude Code hooks to each new Claude Code configuration directory',
+    'Description=noonsight: add the Claude Code hooks to each new Claude Code configuration directory',
     '',
     '[Service]',
     `ExecStart=${[runtime.node, runtime.cli, 'watch', 'run'].map(systemdQuote).join(' ')}`,
@@ -104,7 +104,7 @@ export function readServiceFile(service: WatchService): string | null {
   }
 }
 
-/** Whether a service file was written by sextant. */
+/** Whether a service file was written by noonsight. */
 export function isOurs(content: string): boolean {
   return content.includes(MARKER);
 }

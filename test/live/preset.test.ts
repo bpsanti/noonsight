@@ -1,8 +1,8 @@
 // Live tests of the shipped preset: real Claude Code sessions, run from the login of the person
-// running them, with sextant's hooks given through --settings. They send prompts to the models, so
+// running them, with noonsight's hooks given through --settings. They send prompts to the models, so
 // they spend a little usage, and they only run when asked:
 //
-//   SEXTANT_LIVE_LOGIN=1 npm run test:live
+//   NOONSIGHT_LIVE_LOGIN=1 npm run test:live
 //
 // login.ts describes what they need, and what they touch in the person's Claude Code directory.
 //
@@ -13,7 +13,7 @@
 // not ask before billing Fable usage to usage credits, on plans where Fable draws on them.
 //
 // preset-hash: the real preset reaches a session and a subagent, and the decision log records the
-// hash of the exact text `sextant resolve` gives for them.
+// hash of the exact text `noonsight resolve` gives for them.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -35,7 +35,7 @@ function presetLab(name: string): Lab {
       version: 1,
       preset: 'claude',
       models: Object.fromEntries(Object.values(MODELS).map((m) => [m, { use: 'preset' }])),
-      session: { unattended_when_env: ['SEXTANT_LIVE_UNATTENDED'] },
+      session: { unattended_when_env: ['NOONSIGHT_LIVE_UNATTENDED'] },
     },
     {},
   );
@@ -125,7 +125,7 @@ function sessionIdOf(stream: Record<string, any>[]): string {
 }
 
 function readPreset(l: Lab): Preset {
-  const { preset } = loadConfigDetails(path.join(l.root, 'rules', 'sextant.json'));
+  const { preset } = loadConfigDetails(path.join(l.root, 'rules', 'noonsight.json'));
   assert.ok(preset, 'the preset is installed');
   return preset;
 }
@@ -198,18 +198,18 @@ test('live, login: system-prompt: the preset never delivers a rule where Claude 
 test('live, login: preset-hash: the real preset reaches a session and a subagent, and the log records the hash resolve gives', { skip: !enabled }, (t) => {
   preconditions();
   const l = presetLab('preset-hash');
-  const probe = 'Reply with only the ids of the sextant working rules you were given in this conversation, separated by single spaces, or the single word NONE if you were given none. Do not use any tool.';
+  const probe = 'Reply with only the ids of the noonsight working rules you were given in this conversation, separated by single spaces, or the single word NONE if you were given none. Do not use any tool.';
   const r = print(
     l,
     'This is a configuration test. Make exactly one Agent tool call with subagent_type "general-purpose", the model parameter "haiku", ' +
       `the description "Probe", and exactly this prompt: "${probe}" ` +
-      'After the result arrives, reply with exactly one line in this form: session=<the ids of the sextant working rules you were given, separated by single spaces> subagent=<the reply of the subagent, verbatim>',
+      'After the result arrives, reply with exactly one line in this form: session=<the ids of the noonsight working rules you were given, separated by single spaces> subagent=<the reply of the subagent, verbatim>',
     [],
-    { SEXTANT_SCOPE: 'routine', SEXTANT_LIVE_UNATTENDED: '1' },
+    { NOONSIGHT_SCOPE: 'routine', NOONSIGHT_LIVE_UNATTENDED: '1' },
   );
   assert.equal(r.status, 0, r.result);
 
-  const { config } = loadConfigDetails(path.join(l.root, 'rules', 'sextant.json'));
+  const { config } = loadConfigDetails(path.join(l.root, 'rules', 'noonsight.json'));
   const session = resolve(config, { model: MODELS.sonnet, scope: 'routine', place: 'unattended' });
   const subagent = resolve(config, { model: MODELS.haiku, scope: null, place: 'subagent' });
   assert.ok(session.status === 'matched' && subagent.status === 'matched');

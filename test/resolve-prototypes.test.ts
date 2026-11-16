@@ -70,13 +70,13 @@ test('scope prototype: the same request always gives the same text and hash', ()
 
 test('scope prototype: disable removes a preset rule; with nothing left the result is none', () => {
   const dir = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       version: 1,
       preset: 'lab',
       models: { 'claude-sonnet-5-5': { use: 'preset', disable: ['sonnet/general'] } },
     },
   });
-  const cfg = loadConfig(path.join(dir, 'sextant.json'), { presetsDir: LAB_PRESETS });
+  const cfg = loadConfig(path.join(dir, 'noonsight.json'), { presetsDir: LAB_PRESETS });
   assert.deepEqual(matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' })).rules, [
     'sonnet/investigate',
   ]);
@@ -89,20 +89,20 @@ test('scope prototype: wildcard entries that would give rules are refused (the o
   // The prototype accepted {"claude-opus-?-5": "none", "claude-opus-5-?": "preset"} and failed only
   // when a model hit both. Wildcards now only declare "none", so the file is refused up front.
   const dir = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       version: 1,
       preset: 'lab',
       models: { 'claude-opus-?-5': { use: 'none' }, 'claude-opus-5-?': { use: 'preset' } },
     },
   });
   assert.throws(
-    () => loadConfig(path.join(dir, 'sextant.json'), { presetsDir: LAB_PRESETS }),
+    () => loadConfig(path.join(dir, 'noonsight.json'), { presetsDir: LAB_PRESETS }),
     (e: unknown) => e instanceof ConfigError && e.problems.some((p) => p.startsWith('/models/claude-opus-5-?/use')),
   );
 });
 
-const proto = loadConfig(path.join(FIXTURES, 'subagent-proto', 'sextant.json'), { presetsDir: LAB_PRESETS });
-const protoB = loadConfig(path.join(FIXTURES, 'subagent-proto', 'config-b', 'sextant.json'), { presetsDir: LAB_PRESETS });
+const proto = loadConfig(path.join(FIXTURES, 'subagent-proto', 'noonsight.json'), { presetsDir: LAB_PRESETS });
+const protoB = loadConfig(path.join(FIXTURES, 'subagent-proto', 'config-b', 'noonsight.json'), { presetsDir: LAB_PRESETS });
 const sub = (cfg: typeof proto, model: string): Decision => resolve(cfg, { model, place: 'subagent' });
 
 test('subagent prototype: fable is matched through the [1m] suffix', () => {

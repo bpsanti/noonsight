@@ -4,7 +4,7 @@
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session beyond a bound: it reads local files only and never
 //     the network itself. It starts no process, except `ps` on macOS to read the Claude Code command
-//     line when nothing else names the session's model (launch.ts), or when `sextant run` started the
+//     line when nothing else names the session's model (launch.ts), or when `noonsight run` started the
 //     session (launcher.ts); and, with classifier.mode on, the classifier for an agent call, stopped
 //     after classifier.timeout_ms (classifier.ts).
 //   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session context, or a
@@ -33,7 +33,7 @@ export interface HookContext {
   readonly env: Env;
   readonly home: string;
   readonly now: Date;
-  /** The sextant version, recorded in the log. */
+  /** The noonsight version, recorded in the log. */
   readonly version: string;
   /** Which install ran the hook, as the hook pointer reports it. */
   readonly install: InstallKind | null;
@@ -43,7 +43,7 @@ export interface HookContext {
 
 /** Run one hook event. Returns what to print on stdout (possibly nothing). Never throws. */
 export function runHook(arg: string, rawInput: string, ctx: HookContext): string {
-  if (ctx.env.SEXTANT_DISABLE === '1') return '';
+  if (ctx.env.NOONSIGHT_DISABLE === '1') return '';
   const event = (Object.keys(HOOK_EVENTS) as HookEvent[]).find((e) => HOOK_EVENTS[e] === arg);
   if (!event) return '';
   const input = parseInput(rawInput);
@@ -80,8 +80,8 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
 
   try {
     const file = configPath(ctx.env, ctx.home);
-    // A machine-wide install reaches every account; an account that never set sextant up is left alone.
-    if (!ctx.env.SEXTANT_CONFIG && !fs.existsSync(file)) return '';
+    // A machine-wide install reaches every account; an account that never set noonsight up is left alone.
+    if (!ctx.env.NOONSIGHT_CONFIG && !fs.existsSync(file)) return '';
     record.config = file;
     let config: Config;
     try {
@@ -96,8 +96,8 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       log({ status: 'config-invalid', problems: e.problems.length, ...(event === 'PreToolUse' ? notRouted('config-invalid') : {}), delivered: 'nothing', warned: true });
       return output(
         [
-          `sextant: the configuration at ${file} was refused (${plural(e.problems.length, 'problem')}), ` +
-            'so no rules were delivered. Run `sextant check` to see the problems.',
+          `noonsight: the configuration at ${file} was refused (${plural(e.problems.length, 'problem')}), ` +
+            'so no rules were delivered. Run `noonsight check` to see the problems.',
         ],
         null,
       );
@@ -144,10 +144,10 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     const message = e instanceof Error ? e.message : String(e);
     if (event === 'PostToolUse') {
       log({ status: 'error', error: message, ...notRouted('error'), warned: true });
-      return output([`sextant: the hook failed (${message}), so the subagent's model was not checked.`], null);
+      return output([`noonsight: the hook failed (${message}), so the subagent's model was not checked.`], null);
     }
     log({ status: 'error', error: message, ...(event === 'PreToolUse' ? notRouted('error') : {}), delivered: 'nothing', warned: true });
-    return output([`sextant: the hook failed (${message}), so no rules were delivered.`], null);
+    return output([`noonsight: the hook failed (${message}), so no rules were delivered.`], null);
   }
 }
 
@@ -176,7 +176,7 @@ interface Outcome {
  * session or, after /clear and compaction, of the same Claude Code process; and when neither knows
  * it, as in every `claude -p` run, from what the session was started with (launch.ts).
  *
- * A session `sextant run` started already holds rules in its system prompt. Claude Code renders the
+ * A session `noonsight run` started already holds rules in its system prompt. Claude Code renders the
  * system prompt from the current launch for a new conversation, after /clear and after compaction,
  * so at those starts the rules are not delivered again when the launcher's text holds them. A resumed
  * or forked conversation keeps the system prompt it was first sent with, so the session record decides.
@@ -222,7 +222,7 @@ function sessionStart(
     : [
         ...(otherModel !== null
           ? [
-              `sextant: sextant run put the rules for ${otherModel} in the system prompt, but this session runs on ${decision.model ?? 'a model Claude Code did not report'}; ` +
+              `noonsight: noonsight run put the rules for ${otherModel} in the system prompt, but this session runs on ${decision.model ?? 'a model Claude Code did not report'}; ` +
                 'the session was told that those rules do not apply.',
             ]
           : []),
@@ -284,16 +284,16 @@ function undeclaredMessages(decision: Decision, file: string, launch: LaunchMode
   if (decision.status !== 'undeclared' || decision.warning === undefined) return [];
   if (decision.reason !== 'model-not-reported')
     return [
-      `sextant: ${decision.model} is not declared in ${file}, so this session gets no rules. ` +
+      `noonsight: ${decision.model} is not declared in ${file}, so this session gets no rules. ` +
         'Declare it under "models" (with "use": "none" if it needs no rules).',
     ];
   if (launch?.kind === 'unresolved')
     return [
-      `sextant: this session's model is set to "${launch.value}" (${launch.from}), and sextant cannot tell which model that is ` +
+      `noonsight: this session's model is set to "${launch.value}" (${launch.from}), and noonsight cannot tell which model that is ` +
         `(${launch.why}), so no rules were delivered.`,
     ];
   return [
-    "sextant: Claude Code did not report this session's model, and neither its command line, ANTHROPIC_MODEL nor a model setting names one, " +
+    "noonsight: Claude Code did not report this session's model, and neither its command line, ANTHROPIC_MODEL nor a model setting names one, " +
       'so no rules were delivered.',
   ];
 }

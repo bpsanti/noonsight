@@ -99,7 +99,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const scope = classified.scope;
   const unplaced =
     classified.failure !== null
-      ? [`sextant: the classifier could not place the task of subagent ${subagentType} (${classified.failure}), so it has no scope.`]
+      ? [`noonsight: the classifier could not place the task of subagent ${subagentType} (${classified.failure}), so it has no scope.`]
       : [];
 
   const definitionEffort = subagentType.includes(':') ? null : (findDefinition(subagentType)?.effort ?? null);
@@ -188,7 +188,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   };
 }
 
-/** The hookSpecificOutput for a call sextant changed, with the permission decision the configuration asks for. */
+/** The hookSpecificOutput for a call noonsight changed, with the permission decision the configuration asks for. */
 function changed(config: Config, updatedInput: Record<string, unknown>, routed: Record<string, unknown>, rules: boolean): Record<string, unknown> {
   const permission = config.subagents.permission;
   const set = Object.entries(routed).map(([k, v]) => `${k} ${String(v)}`);
@@ -198,7 +198,7 @@ function changed(config: Config, updatedInput: Record<string, unknown>, routed: 
   ];
   return {
     hookEventName: 'PreToolUse',
-    ...(permission !== 'passthrough' ? { permissionDecision: permission, permissionDecisionReason: `sextant ${what.join(', and ')}` } : {}),
+    ...(permission !== 'passthrough' ? { permissionDecision: permission, permissionDecisionReason: `noonsight ${what.join(', and ')}` } : {}),
     updatedInput,
   };
 }
@@ -218,7 +218,7 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
 
   const callFile = agentCallFile(ctx.state, str(input.tool_use_id));
   const call = readAgentCall(callFile);
-  // No prediction to check: sextant did not see the call start, or delivery is off.
+  // No prediction to check: noonsight did not see the call start, or delivery is off.
   if (call === null) return null;
   removeRecord(callFile);
 
@@ -241,8 +241,8 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
     },
     messages: warn
       ? [
-          `sextant: subagent ${call.subagent_type}${subagentId !== null ? ` (${subagentId})` : ''} started on ${resolved}, ` +
-            `not on ${call.predicted} as sextant predicted, so it received ${got}.`,
+          `noonsight: subagent ${call.subagent_type}${subagentId !== null ? ` (${subagentId})` : ''} started on ${resolved}, ` +
+            `not on ${call.predicted} as noonsight predicted, so it received ${got}.`,
         ]
       : [],
     specific: null,
@@ -252,11 +252,11 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
 /**
  * The model of whoever makes the agent call.
  *
- * A call made inside a subagent carries that subagent's agent_id. Its model is the one sextant
+ * A call made inside a subagent carries that subagent's agent_id. Its model is the one noonsight
  * recorded from the result of the call that started it, which for a background subagent arrives at
  * once; for a subagent still running in the foreground, the model of its own transcript.
  *
- * A call made by the session: sextant's record of the session, kept current by SessionStart and
+ * A call made by the session: noonsight's record of the session, kept current by SessionStart and
  * PostModelSwitch; else the session's transcript; else the settings the session started with.
  */
 function parentModel(input: Record<string, unknown>, ctx: SubagentContext): Parent {
@@ -283,10 +283,10 @@ function undeclaredMessages(decision: Decision, prediction: Prediction, type: st
   if (decision.status !== 'undeclared' || decision.warning === undefined) return [];
   if (decision.reason === 'no-entry')
     return [
-      `sextant: subagent ${type} will run on ${decision.model}, which is not declared in ${file}, so it gets no rules. ` +
+      `noonsight: subagent ${type} will run on ${decision.model}, which is not declared in ${file}, so it gets no rules. ` +
         'Declare it under "models" (with "use": "none" if it needs no rules).',
     ];
-  return [`sextant: sextant cannot tell which model subagent ${type} will run on (${prediction.why ?? 'no model is known'}), so it gets no rules.`];
+  return [`noonsight: noonsight cannot tell which model subagent ${type} will run on (${prediction.why ?? 'no model is known'}), so it gets no rules.`];
 }
 
 export function decisionFields(d: Decision): Record<string, unknown> {

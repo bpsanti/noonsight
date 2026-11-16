@@ -7,7 +7,7 @@ import test from 'node:test';
 import { FIXTURES, LAB_CONFIG, LAB_PRESETS, runCli, tempTree } from './helpers.js';
 import { PACKAGE_ROOT } from '../src/config/paths.js';
 
-const LAB_ENV = { SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS };
+const LAB_ENV = { NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS };
 const NO_NETWORK = ['--require', path.join(FIXTURES, 'no-network.cjs')];
 
 test('resolve prints the decision as JSON and exits 0 for each status', () => {
@@ -18,7 +18,7 @@ test('resolve prints the decision as JSON and exits 0 for each status', () => {
   assert.equal(d.model, 'claude-sonnet-5-5');
   assert.equal(d.place, 'session');
   assert.deepEqual(d.rules, ['sonnet/general', 'sonnet/investigate']);
-  assert.match(d.text, /^<sextant-rules model="claude-sonnet-5-5" scope="investigate">\n/);
+  assert.match(d.text, /^<noonsight-rules model="claude-sonnet-5-5" scope="investigate">\n/);
 
   const n = runCli(['resolve', 'claude-opus-5-5'], LAB_ENV);
   assert.equal(n.status, 0, n.stderr);
@@ -32,7 +32,7 @@ test('resolve prints the decision as JSON and exits 0 for each status', () => {
     place: 'subagent',
     model: 'claude-fable-5-2',
     reason: 'no-entry',
-    warning: 'sextant: model claude-fable-5-2 has no declared rules (no-entry, subagent)',
+    warning: 'noonsight: model claude-fable-5-2 has no declared rules (no-entry, subagent)',
   });
 
   const r = runCli(['resolve', ''], LAB_ENV);
@@ -40,7 +40,7 @@ test('resolve prints the decision as JSON and exits 0 for each status', () => {
   assert.equal(JSON.parse(r.stdout).reason, 'model-not-reported');
 });
 
-test('resolve: scope and place are positional, as in sextant resolve <model> [scope] [place]', () => {
+test('resolve: scope and place are positional, as in noonsight resolve <model> [scope] [place]', () => {
   const r = runCli(['resolve', 'claude-sonnet-5-5', '', 'unattended'], LAB_ENV);
   assert.deepEqual(JSON.parse(r.stdout).rules, ['sonnet/general', 'sonnet/carry-through']);
   const both = JSON.parse(runCli(['resolve', 'claude-sonnet-5-5', 'investigate', 'subagent'], LAB_ENV).stdout);
@@ -50,8 +50,8 @@ test('resolve: scope and place are positional, as in sextant resolve <model> [sc
 });
 
 test('a refused configuration exits 2, prints its problems and no decision', () => {
-  const dir = tempTree({ 'sextant.json': { version: 1, models: { sonnet: { use: 'none' }, 'claude-x-*': { use: 'custom' } } } });
-  const r = runCli(['resolve', 'claude-sonnet-5-5'], { SEXTANT_CONFIG: path.join(dir, 'sextant.json') });
+  const dir = tempTree({ 'noonsight.json': { version: 1, models: { sonnet: { use: 'none' }, 'claude-x-*': { use: 'custom' } } } });
+  const r = runCli(['resolve', 'claude-sonnet-5-5'], { NOONSIGHT_CONFIG: path.join(dir, 'noonsight.json') });
   assert.equal(r.status, 2);
   assert.equal(r.stdout, '');
   assert.match(r.stderr, /configuration refused/);
@@ -64,7 +64,7 @@ test('usage errors exit 2 with the usage text', () => {
   for (const args of [[], ['nope'], ['resolve'], ['resolve', 'a', 'b', 'session', 'c'], ['resolve', 'a', 'b', 'office'], ['resolve', 'a', '--scope', 'b'], ['resolve', 'a', '--x']]) {
     const r = runCli(args, LAB_ENV);
     assert.equal(r.status, 2, `${JSON.stringify(args)}: ${r.stdout}`);
-    assert.match(r.stderr, /usage: sextant/);
+    assert.match(r.stderr, /usage: noonsight/);
     assert.equal(r.stdout, '');
   }
 });
@@ -86,8 +86,8 @@ test('--version prints only the package version, --help the usage', () => {
 test('one configuration serves the whole machine: it never comes from a Claude Code config directory', () => {
   const machine = { version: 1, models: { 'claude-sonnet-5-5': { use: 'none' } } };
   const account = { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'acct', file: 'a.md' }] } } };
-  const home = tempTree({ '.config/sextant/sextant.json': machine });
-  const claudeDir = tempTree({ 'sextant.json': account, 'sextant/sextant.json': account, 'a.md': 'ACCOUNT' });
+  const home = tempTree({ '.config/noonsight/noonsight.json': machine });
+  const claudeDir = tempTree({ 'noonsight.json': account, 'noonsight/noonsight.json': account, 'a.md': 'ACCOUNT' });
   const viaHome = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home, CLAUDE_CONFIG_DIR: claudeDir });
   assert.equal(JSON.parse(viaHome.stdout).status, 'none', viaHome.stderr);
 
@@ -99,7 +99,7 @@ test('with no configuration anywhere, resolve says where it looked', () => {
   const home = tempTree({});
   const r = runCli(['resolve', 'claude-sonnet-5-5'], { HOME: home });
   assert.equal(r.status, 2);
-  assert.ok(r.stderr.includes(path.join(home, '.config', 'sextant', 'sextant.json')), r.stderr);
+  assert.ok(r.stderr.includes(path.join(home, '.config', 'noonsight', 'noonsight.json')), r.stderr);
   assert.match(r.stderr, /no configuration file here/);
 });
 
@@ -119,8 +119,8 @@ test('resolve never touches the network', () => {
     assert.equal(r.status, 0, r.stderr);
     assert.doesNotMatch(r.stderr, /NETWORK-ATTEMPT/);
   }
-  const dir = tempTree({ 'sextant.json': { version: 7 } });
-  const refused = runCli(['resolve', 'x-1'], { SEXTANT_CONFIG: path.join(dir, 'sextant.json') }, NO_NETWORK);
+  const dir = tempTree({ 'noonsight.json': { version: 7 } });
+  const refused = runCli(['resolve', 'x-1'], { NOONSIGHT_CONFIG: path.join(dir, 'noonsight.json') }, NO_NETWORK);
   assert.equal(refused.status, 2);
   assert.doesNotMatch(refused.stderr, /NETWORK-ATTEMPT/);
 });

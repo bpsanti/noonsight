@@ -1,5 +1,5 @@
 // install and uninstall, machine-wide and per account, always against temporary directories.
-// SEXTANT_SYSTEM_ROOT stands in for "/" so the machine-wide install never touches the real system.
+// NOONSIGHT_SYSTEM_ROOT stands in for "/" so the machine-wide install never touches the real system.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,7 +8,7 @@ import test from 'node:test';
 import { accountTarget, managedTarget, UnsupportedPlatformError } from '../src/adapters/claude-code/locations.js';
 import { CLI, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
 
-/** A settings file that already has hooks of its own, and other settings, before sextant arrives. */
+/** A settings file that already has hooks of its own, and other settings, before noonsight arrives. */
 const THIRD_PARTY = {
   model: 'opus',
   permissions: { allow: ['Bash(npm test)'] },
@@ -25,56 +25,56 @@ const supported = process.platform in PLATFORM_ROOTS;
 function machine() {
   const home = tempTree({});
   const root = tempTree({});
-  const env = { HOME: home, SEXTANT_SYSTEM_ROOT: root, SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS };
+  const env = { HOME: home, NOONSIGHT_SYSTEM_ROOT: root, NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS };
   const target = managedTarget(env);
   return { home, root, env, target };
 }
 
-function sextantHandlers(settings: any): any[] {
+function noonsightHandlers(settings: any): any[] {
   return Object.entries(settings.hooks ?? {}).flatMap(([event, groups]) =>
-    (groups as any[]).flatMap((g) => (g.hooks as any[]).filter((h) => String(h.command).endsWith('/sextant-hook')).map((h) => ({ event, matcher: g.matcher, ...h }))),
+    (groups as any[]).flatMap((g) => (g.hooks as any[]).filter((h) => String(h.command).endsWith('/noonsight-hook')).map((h) => ({ event, matcher: g.matcher, ...h }))),
   );
 }
 
 test('the machine-wide paths are the ones Claude Code documents for each system', () => {
   const mac = managedTarget({}, 'darwin');
-  assert.equal(mac.settingsFile, '/Library/Application Support/ClaudeCode/managed-settings.d/sextant-ai.json');
-  assert.equal(mac.pointer, '/Library/Application Support/sextant/sextant-hook');
+  assert.equal(mac.settingsFile, '/Library/Application Support/ClaudeCode/managed-settings.d/noonsight.json');
+  assert.equal(mac.pointer, '/Library/Application Support/noonsight/noonsight-hook');
   const linux = managedTarget({}, 'linux');
-  assert.equal(linux.settingsFile, '/etc/claude-code/managed-settings.d/sextant-ai.json');
-  assert.equal(linux.pointer, '/usr/local/lib/sextant/sextant-hook');
+  assert.equal(linux.settingsFile, '/etc/claude-code/managed-settings.d/noonsight.json');
+  assert.equal(linux.pointer, '/usr/local/lib/noonsight/noonsight-hook');
   assert.throws(() => managedTarget({}, 'win32'), (e) => e instanceof UnsupportedPlatformError && /C:\\Program Files\\ClaudeCode/.test(e.message));
   assert.equal(accountTarget('~/.claude', '/home/u').settingsFile, '/home/u/.claude/settings.json');
-  assert.equal(accountTarget('/x/claude-work', '/home/u').pointer, '/home/u/.local/share/sextant/sextant-hook');
+  assert.equal(accountTarget('/x/claude-work', '/home/u').pointer, '/home/u/.local/share/noonsight/noonsight-hook');
 });
 
 test('per account: install twice adds one entry per event and keeps every third-party hook and setting', () => {
   const home = tempTree({});
   const claudeDir = tempTree({ 'settings.json': THIRD_PARTY });
   const file = path.join(claudeDir, 'settings.json');
-  const env = { HOME: home, SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS };
+  const env = { HOME: home, NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS };
 
   const first = runCli(['install', '--account', claudeDir], env);
   assert.equal(first.status, 0, first.stderr);
   assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
-  assert.match(first.stdout, /hook pointer .*sextant-hook: written/);
+  assert.match(first.stdout, /hook pointer .*noonsight-hook: written/);
   const once = fs.readFileSync(file, 'utf8');
 
   const second = runCli(['install', '--account', claudeDir], env);
   assert.equal(second.status, 0, second.stderr);
   assert.match(second.stdout, /settings\.json: unchanged/);
-  assert.match(second.stdout, /sextant-hook: unchanged/);
+  assert.match(second.stdout, /noonsight-hook: unchanged/);
   assert.equal(fs.readFileSync(file, 'utf8'), once, 'the second install leaves the file byte for byte as it was');
 
   const settings = JSON.parse(once);
-  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
-  assert.deepEqual(sextantHandlers(settings), [
+  const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
+  assert.deepEqual(noonsightHandlers(settings), [
     { event: 'SessionStart', matcher: undefined, type: 'command', command: pointer, args: ['session-start'], timeout: 10 },
     { event: 'PostModelSwitch', matcher: undefined, type: 'command', command: pointer, args: ['model-switch'], timeout: 10 },
     { event: 'PreToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-call'], timeout: 10 },
     { event: 'PostToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-result'], timeout: 10 },
   ]);
-  // The third-party PreToolUse group comes first and is left as it was; sextant's has its own group.
+  // The third-party PreToolUse group comes first and is left as it was; noonsight's has its own group.
   assert.deepEqual(settings.hooks.PreToolUse[0], THIRD_PARTY.hooks.PreToolUse[0]);
   // Everything that was there is still there, in place.
   assert.equal(settings.model, 'opus');
@@ -100,7 +100,7 @@ test('per account: a missing settings file is created, and a broken one is refus
   const r = runCli(['install', '--account', empty], env);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /settings\.json: created/);
-  assert.equal(sextantHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 4);
+  assert.equal(noonsightHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 4);
 
   for (const [content, message] of [
     ['{ "hooks": ', /is not valid JSON/],
@@ -123,10 +123,10 @@ test('per account: a missing settings file is created, and a broken one is refus
   assert.match(missing.stderr, /is not a directory/);
 });
 
-test('per account: install repairs a moved, duplicated or outdated sextant entry', () => {
+test('per account: install repairs a moved, duplicated or outdated noonsight entry', () => {
   const home = tempTree({});
-  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
-  const stale = { type: 'command', command: '/old/place/sextant-hook', args: ['session-start'] };
+  const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
+  const stale = { type: 'command', command: '/old/place/noonsight-hook', args: ['session-start'] };
   const dir = tempTree({
     'settings.json': {
       hooks: {
@@ -141,7 +141,7 @@ test('per account: install repairs a moved, duplicated or outdated sextant entry
   const r = runCli(['install', '--account', dir], { HOME: home });
   assert.equal(r.status, 0, r.stderr);
   const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
-  assert.deepEqual(sextantHandlers(settings).map((h) => [h.event, h.command, h.args[0]]), [
+  assert.deepEqual(noonsightHandlers(settings).map((h) => [h.event, h.command, h.args[0]]), [
     ['SessionStart', pointer, 'session-start'],
     ['PostModelSwitch', pointer, 'model-switch'],
     ['PreToolUse', pointer, 'agent-call'],
@@ -151,9 +151,9 @@ test('per account: install repairs a moved, duplicated or outdated sextant entry
   assert.equal(settings.hooks.Stop, undefined);
 });
 
-test('per account: an install from before the subagent hooks gains them, and a sextant entry with a widened matcher is narrowed back', () => {
+test('per account: an install from before the subagent hooks gains them, and a noonsight entry with a widened matcher is narrowed back', () => {
   const home = tempTree({});
-  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
+  const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
   const own = (args: string[]): Record<string, unknown> => ({ type: 'command', command: pointer, args, timeout: 10 });
   const dir = tempTree({
     'settings.json': {
@@ -170,7 +170,7 @@ test('per account: an install from before the subagent hooks gains them, and a s
   const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
   // Rewritten events move to the end of the file's hooks object; their order there does not matter.
   const byEvent = (a: unknown[], b: unknown[]): number => String(a[0]).localeCompare(String(b[0]));
-  assert.deepEqual(sextantHandlers(settings).map((h) => [h.event, h.matcher, h.args[0]]).sort(byEvent), [
+  assert.deepEqual(noonsightHandlers(settings).map((h) => [h.event, h.matcher, h.args[0]]).sort(byEvent), [
     ['PostModelSwitch', undefined, 'model-switch'],
     ['PostToolUse', 'Agent|Task', 'agent-result'],
     ['PreToolUse', 'Agent|Task', 'agent-call'],
@@ -180,7 +180,7 @@ test('per account: an install from before the subagent hooks gains them, and a s
   assert.equal(settings.hooks.PreToolUse.length, 2);
 });
 
-test('machine-wide: sextant writes its own drop-in file and never edits the managed settings already there', { skip: !supported }, () => {
+test('machine-wide: noonsight writes its own drop-in file and never edits the managed settings already there', { skip: !supported }, () => {
   const { root, env, target } = machine();
   const managedDir = target.managedDir ?? '';
   const itPolicy = JSON.stringify({ ...THIRD_PARTY, permissions: { deny: ['Read(./.env)'] } }, null, 4);
@@ -191,12 +191,12 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
 
   const first = runCli(['install', '--managed'], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /managed-settings\.d\/sextant-ai\.json: created \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
+  assert.match(first.stdout, /managed-settings\.d\/noonsight\.json: created \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
   assert.match(first.stdout, /built-in guard for the mods users install: https:\/\/code\.claude\.com\/docs\/en\/plugins\/mods\/admin/);
-  assert.match(first.stdout, /SEXTANT_DISABLE=1/);
+  assert.match(first.stdout, /NOONSIGHT_DISABLE=1/);
   const dropIn = fs.readFileSync(target.settingsFile, 'utf8');
   assert.deepEqual(Object.keys(JSON.parse(dropIn)), ['hooks']);
-  assert.deepEqual(sextantHandlers(JSON.parse(dropIn)).map((h) => [h.event, h.command]), [
+  assert.deepEqual(noonsightHandlers(JSON.parse(dropIn)).map((h) => [h.event, h.command]), [
     ['SessionStart', target.pointer],
     ['PostModelSwitch', target.pointer],
     ['PreToolUse', target.pointer],
@@ -205,18 +205,18 @@ test('machine-wide: sextant writes its own drop-in file and never edits the mana
   const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
   assert.equal(hooked.status, 0, hooked.stderr);
   assert.match(JSON.parse(hooked.stdout).hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
-  const decisions = fs.readFileSync(path.join(env.HOME, '.local', 'state', 'sextant', 'decisions.jsonl'), 'utf8').trimEnd().split('\n');
+  const decisions = fs.readFileSync(path.join(env.HOME, '.local', 'state', 'noonsight', 'decisions.jsonl'), 'utf8').trimEnd().split('\n');
   assert.equal(JSON.parse(decisions.at(-1) ?? '{}').install, 'managed');
   assert.equal(fs.statSync(target.pointer).mode & 0o777, 0o755);
   assert.equal(fs.statSync(target.settingsFile).mode & 0o777, 0o644);
 
   const second = runCli(['install', '--managed'], env);
   assert.equal(second.status, 0, second.stderr);
-  assert.match(second.stdout, /sextant-ai\.json: unchanged/);
+  assert.match(second.stdout, /noonsight\.json: unchanged/);
   assert.equal(fs.readFileSync(target.settingsFile, 'utf8'), dropIn);
   assert.equal(fs.readFileSync(path.join(managedDir, 'managed-settings.json'), 'utf8'), itPolicy);
   assert.equal(fs.readFileSync(path.join(managedDir, 'managed-settings.d', '10-it.json'), 'utf8'), otherDropIn);
-  assert.deepEqual(fs.readdirSync(path.join(managedDir, 'managed-settings.d')).sort(), ['10-it.json', 'sextant-ai.json']);
+  assert.deepEqual(fs.readdirSync(path.join(managedDir, 'managed-settings.d')).sort(), ['10-it.json', 'noonsight.json']);
 
   const removed = runCli(['uninstall', '--managed'], env);
   assert.equal(removed.status, 0, removed.stderr);
@@ -238,7 +238,7 @@ test('machine-wide without administrator rights: says so plainly, offers the ins
     assert.match(r.stderr, /needs administrator rights\. Nothing was changed\./);
     assert.ok(r.stderr.includes(target.settingsFile) && r.stderr.includes(target.pointer), r.stderr);
     assert.match(r.stderr, /\n  sudo \S+node\S* \S+cli\.js install --managed\n/);
-    assert.match(r.stderr, /for every Claude Code configuration directory of this account:\n  sextant install$/m);
+    assert.match(r.stderr, /for every Claude Code configuration directory of this account:\n  noonsight install$/m);
     assert.deepEqual(fs.readdirSync(root), []);
 
     const un = runCli(['uninstall', '--managed'], env);
@@ -266,29 +266,29 @@ test('a per-account install next to a machine-wide one warns that the rules woul
   assert.equal(runCli(['install', '--managed'], env).status, 0);
   const r = runCli(['install', '--account', tempTree({})], env);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /warning: sextant is also installed for the whole machine .*sessions that use .* receive the rules twice/);
+  assert.match(r.stdout, /warning: noonsight is also installed for the whole machine .*sessions that use .* receive the rules twice/);
 });
 
 test('install says what to do next about the configuration', () => {
   const home = tempTree({});
   const none = runCli(['install', '--account', tempTree({})], { HOME: home });
-  assert.match(none.stdout, /next: create .*\.config\/sextant\/sextant\.json/);
-  const bad = path.join(tempTree({ 'sextant.json': { version: 9 } }), 'sextant.json');
-  const refused = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), SEXTANT_CONFIG: bad });
+  assert.match(none.stdout, /next: create .*\.config\/noonsight\/noonsight\.json/);
+  const bad = path.join(tempTree({ 'noonsight.json': { version: 9 } }), 'noonsight.json');
+  const refused = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), NOONSIGHT_CONFIG: bad });
   assert.equal(refused.status, 0);
-  assert.match(refused.stdout, /refused \(1 problem\); run `sextant check`/);
+  assert.match(refused.stdout, /refused \(1 problem\); run `noonsight check`/);
 });
 
 test('two account installs share one pointer, which stays until the last one is removed', () => {
   const home = tempTree({});
   const a = tempTree({});
   const b = tempTree({});
-  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
+  const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
   assert.equal(runCli(['install', '--account', a], { HOME: home }).status, 0);
   assert.equal(runCli(['install', '--account', b], { HOME: home }).status, 0);
   assert.match(runCli(['uninstall', '--account', a], { HOME: home }).stdout, /kept \(another account install uses it\)/);
   assert.ok(fs.existsSync(pointer));
-  assert.match(runCli(['uninstall', '--account', b], { HOME: home }).stdout, /sextant-hook: removed/);
+  assert.match(runCli(['uninstall', '--account', b], { HOME: home }).stdout, /noonsight-hook: removed/);
   assert.equal(fs.existsSync(pointer), false);
 });
 
@@ -296,7 +296,7 @@ test('install and uninstall usage errors exit 2', () => {
   for (const args of [['install', '--bogus'], ['install', '--account'], ['install', 'x'], ['uninstall', '--account='], ['install', '--managed', '--account', '/x']]) {
     const r = runCli(args);
     assert.equal(r.status, 2, args.join(' '));
-    assert.match(r.stderr, /usage: sextant install/);
+    assert.match(r.stderr, /usage: noonsight install/);
   }
   assert.equal(runCli(['install', '--help']).status, 0);
 });
@@ -323,7 +323,7 @@ function logins() {
     'code/project/.claude/settings.json': { model: 'sonnet' },
   });
   const outside = tempTree({ '.claude.json': {} });
-  const env = { HOME: home, CLAUDE_CONFIG_DIR: outside, SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) };
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: outside, NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}) };
   const dirs = [path.join(home, '.claude'), outside, path.join(home, '.claude-work'), path.join(home, 'second-login')];
   return { home, outside, env, dirs };
 }
@@ -332,13 +332,13 @@ const readJson = (file: string): any => JSON.parse(fs.readFileSync(file, 'utf8')
 
 test('by default: install reaches every Claude Code configuration directory of the account, twice changes nothing, uninstall removes them all', () => {
   const { home, env, dirs } = logins();
-  const pointer = path.join(home, '.local', 'share', 'sextant', 'sextant-hook');
+  const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
 
   const first = runCli(['install'], env);
   assert.equal(first.status, 0, first.stderr);
   for (const dir of dirs) {
     assert.ok(first.stdout.includes(`hooks ${path.join(dir, 'settings.json')}: `), `${dir}\n${first.stdout}`);
-    assert.deepEqual(sextantHandlers(readJson(path.join(dir, 'settings.json'))).map((h) => [h.event, h.command]), [
+    assert.deepEqual(noonsightHandlers(readJson(path.join(dir, 'settings.json'))).map((h) => [h.event, h.command]), [
       ['SessionStart', pointer],
       ['PostModelSwitch', pointer],
       ['PreToolUse', pointer],
@@ -351,7 +351,7 @@ test('by default: install reaches every Claude Code configuration directory of t
   assert.deepEqual(kept.hooks.SessionStart[0], THIRD_PARTY.hooks.SessionStart[0]);
   assert.equal(readJson(path.join(home, 'second-login', 'settings.json')).theme, 'dark');
   assert.deepEqual(readJson(path.join(home, 'code', 'project', '.claude', 'settings.json')), { model: 'sonnet' }, 'a project is not a login');
-  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts.sort(), [...dirs].sort());
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'noonsight', 'installs.json')).accounts.sort(), [...dirs].sort());
 
   const before = dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
   const second = runCli(['install'], env);
@@ -362,10 +362,10 @@ test('by default: install reaches every Claude Code configuration directory of t
   // A directory that is no longer found, such as one whose CLAUDE_CONFIG_DIR is not set now, is still removed.
   const removed = runCli(['uninstall'], { ...env, CLAUDE_CONFIG_DIR: '' });
   assert.equal(removed.status, 0, removed.stderr);
-  for (const dir of dirs) assert.deepEqual(sextantHandlers(readJson(path.join(dir, 'settings.json'))), [], dir);
+  for (const dir of dirs) assert.deepEqual(noonsightHandlers(readJson(path.join(dir, 'settings.json'))), [], dir);
   assert.deepEqual(readJson(path.join(home, '.claude', 'settings.json')), THIRD_PARTY);
   assert.equal(fs.existsSync(pointer), false);
-  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'noonsight', 'installs.json')).accounts, []);
 });
 
 test('by default: a login deleted since install does not keep the hook pointer, and uninstall forgets it', () => {
@@ -375,14 +375,14 @@ test('by default: a login deleted since install does not keep the hook pointer, 
   const r = runCli(['uninstall'], env);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, new RegExp(`account install ${path.join(home, 'second-login')}: forgotten`));
-  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
-  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'sextant', 'installs.json')).accounts, []);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')), false);
+  assert.deepEqual(readJson(path.join(home, '.local', 'state', 'noonsight', 'installs.json')).accounts, []);
 });
 
 test('uninstall --managed leaves the list of account installs alone, even for a login deleted since', { skip: !supported }, () => {
   const { home, env } = logins();
   assert.equal(runCli(['install'], env).status, 0);
-  const installs = path.join(home, '.local', 'state', 'sextant', 'installs.json');
+  const installs = path.join(home, '.local', 'state', 'noonsight', 'installs.json');
   fs.rmSync(path.join(home, 'second-login'), { recursive: true });
   const before = fs.readFileSync(installs, 'utf8');
   const r = runCli(['uninstall', '--managed'], env);
@@ -395,7 +395,7 @@ test('by default: install creates ~/.claude when Claude Code has not run yet', (
   const home = tempTree({});
   const r = runCli(['install'], { HOME: home });
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(sextantHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 4);
+  assert.equal(noonsightHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 4);
 });
 
 test('by default: one broken settings file refuses the whole install and leaves every directory as it was', () => {
@@ -406,7 +406,7 @@ test('by default: one broken settings file refuses the whole install and leaves 
   assert.equal(r.status, 1);
   assert.match(r.stderr, /second-login\/settings\.json is not valid JSON .*nothing was changed/);
   assert.deepEqual(dirs.map((d) => (fs.existsSync(path.join(d, 'settings.json')) ? fs.readFileSync(path.join(d, 'settings.json'), 'utf8') : null)), before);
-  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), false);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')), false);
 });
 
 test('by default: one broken settings file refuses the whole uninstall and leaves every directory as it was', () => {
@@ -420,20 +420,20 @@ test('by default: one broken settings file refuses the whole uninstall and leave
   assert.match(r.stderr, /second-login\/settings\.json is not valid JSON .*nothing was changed/);
   assert.doesNotMatch(r.stdout, /: removed/);
   assert.deepEqual(read(), before);
-  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'sextant', 'sextant-hook')), true);
+  assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')), true);
 });
 
 test('by default: a hook pointer this account cannot remove refuses the whole uninstall and leaves every directory as it was', { skip: process.getuid?.() === 0 }, () => {
   const { home, env, dirs } = logins();
   assert.equal(runCli(['install'], env).status, 0);
-  const pointerDir = path.join(home, '.local', 'share', 'sextant');
+  const pointerDir = path.join(home, '.local', 'share', 'noonsight');
   const read = () => dirs.map((d) => fs.readFileSync(path.join(d, 'settings.json'), 'utf8'));
   const before = read();
   fs.chmodSync(pointerDir, 0o555);
   try {
     const r = runCli(['uninstall'], env);
     assert.equal(r.status, 1);
-    assert.match(r.stderr, /sextant-hook\. Nothing was changed\./);
+    assert.match(r.stderr, /noonsight-hook\. Nothing was changed\./);
     assert.doesNotMatch(r.stdout, /: removed/);
     assert.deepEqual(read(), before);
   } finally {
@@ -450,7 +450,7 @@ test('--managed warns about each login whose server-managed settings make Claude
   assert.equal(r.status, 0, r.stderr);
   const warned = r.stdout.split('\n').filter((l) => l.startsWith('warning: the login in '));
   assert.equal(warned.length, 1, r.stdout);
-  assert.ok(warned[0]?.includes(path.join(home, '.claude')) && /Run `sextant install`, without --managed/.test(warned[0] ?? ''), r.stdout);
+  assert.ok(warned[0]?.includes(path.join(home, '.claude')) && /Run `noonsight install`, without --managed/.test(warned[0] ?? ''), r.stdout);
 
   // The default install next to it: only logins the machine-wide install still reaches get the rules twice.
   const both = runCli(['install'], env);

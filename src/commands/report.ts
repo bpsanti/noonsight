@@ -1,4 +1,4 @@
-// sextant report: what the decision log says the hooks and the launcher did. For each rule, how
+// noonsight report: what the decision log says the hooks and the launcher did. For each rule, how
 // often it was delivered, and to which models, scopes, places and events; the rules the
 // configuration has on that the log never shows delivered; and the decisions that delivered
 // nothing, by why. It reads local files only and changes nothing.
@@ -12,7 +12,7 @@ import { ANY_SCOPE, type Config, type Place } from '../core/types.js';
 import { LOG_FILE, readDecisionFile, readDecisions, ROTATED_LOG_FILE } from '../state/log.js';
 import { UsageError } from './usage.js';
 
-export const REPORT_USAGE = `usage: sextant report [--json] [--log <file>]
+export const REPORT_USAGE = `usage: noonsight report [--json] [--log <file>]
 
 Report what the decision log records: for each rule, how often it was delivered and to which
 models, scopes, places and events, with the length of its text; the rules the configuration has on
@@ -309,7 +309,7 @@ export function renderReport(r: Report): string {
       '',
       r.config.status === 'missing'
         ? `No configuration at ${r.config.file}, so rule lengths and the rules never delivered are not shown.`
-        : `The configuration at ${r.config.file} is refused (\`sextant check\` lists why), so rule lengths and the rules never delivered are not shown.`,
+        : `The configuration at ${r.config.file} is refused (\`noonsight check\` lists why), so rule lengths and the rules never delivered are not shown.`,
     );
   return lines.join('\n');
 }

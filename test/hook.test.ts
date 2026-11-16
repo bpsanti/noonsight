@@ -27,7 +27,7 @@ test('a model with rules gets them as session context, and the log records the d
   assert.deepEqual(Object.keys(r.out ?? {}), ['hookSpecificOutput']);
   assert.equal(r.out?.hookSpecificOutput.hookEventName, 'SessionStart');
   const text: string = r.out?.hookSpecificOutput.additionalContext;
-  assert.match(text, /^<sextant-rules model="claude-sonnet-5-5">\n/);
+  assert.match(text, /^<noonsight-rules model="claude-sonnet-5-5">\n/);
   assert.match(text, /SONNET-GEN-3306/);
   assert.doesNotMatch(text, /SONNET-CARRY-4471/, 'a rule for unattended sessions only is not delivered to a session');
 
@@ -64,16 +64,16 @@ test('an undeclared model only warns the person, never Claude, and writes a log 
   const r = h.hook('session-start', start('claude-fable-5-2'));
   assert.equal(r.status, 0);
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
-  assert.match(r.out?.systemMessage, /^sextant: claude-fable-5-2 is not declared in .*sextant\.json, so this session gets no rules\./);
+  assert.match(r.out?.systemMessage, /^noonsight: claude-fable-5-2 is not declared in .*noonsight\.json, so this session gets no rules\./);
   assert.deepEqual(h.log().map((l) => [l.status, l.reason, l.delivered, l.warned]), [['undeclared', 'no-entry', 'nothing', true]]);
 
-  const quiet = home(path.join(tempTree({ 'sextant.json': { version: 1, on_undeclared: 'ignore' } }), 'sextant.json'));
+  const quiet = home(path.join(tempTree({ 'noonsight.json': { version: 1, on_undeclared: 'ignore' } }), 'noonsight.json'));
   assert.equal(quiet.hook('session-start', start('claude-fable-5-2')).raw, '');
   assert.deepEqual(quiet.log().map((l) => [l.status, l.warned]), [['undeclared', false]]);
 });
 
 test('an invalid configuration: the session opens, nothing is delivered, the log records config-invalid', () => {
-  const config = path.join(tempTree({ 'sextant.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'r', file: 'missing.md' }] } } } }), 'sextant.json');
+  const config = path.join(tempTree({ 'noonsight.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'r', file: 'missing.md' }] } } } }), 'noonsight.json');
   const h = home(config);
   for (const [event, input] of [
     ['session-start', start('claude-sonnet-5-5')],
@@ -82,14 +82,14 @@ test('an invalid configuration: the session opens, nothing is delivered, the log
     const r = h.hook(event, input);
     assert.equal(r.status, 0);
     assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
-    assert.match(r.out?.systemMessage, /configuration at .* was refused \(1 problem\), so no rules were delivered\. Run `sextant check`/);
+    assert.match(r.out?.systemMessage, /configuration at .* was refused \(1 problem\), so no rules were delivered\. Run `noonsight check`/);
   }
   assert.deepEqual(h.log().map((l) => [l.event, l.status, l.problems, l.delivered]), [
     ['session-start', 'config-invalid', 1, 'nothing'],
     ['model-switch', 'config-invalid', 1, 'nothing'],
   ]);
 
-  const unreadable = home(path.join(tempTree({ 'sextant.json': '{ "version": 1, ' }), 'sextant.json'));
+  const unreadable = home(path.join(tempTree({ 'noonsight.json': '{ "version": 1, ' }), 'noonsight.json'));
   assert.match(unreadable.hook('session-start', start('claude-sonnet-5-5')).out?.systemMessage, /refused/);
   assert.equal(unreadable.log()[0]?.status, 'config-invalid');
 });
@@ -105,10 +105,10 @@ test('an account with no configuration is left alone: no output and no files', (
   assert.match(h.hook('session-start', start('claude-sonnet-5-5')).out?.systemMessage, /refused/);
 });
 
-test('SEXTANT_DISABLE=1 turns every hook off', () => {
+test('NOONSIGHT_DISABLE=1 turns every hook off', () => {
   const h = home();
-  assert.equal(h.hook('session-start', start('claude-sonnet-5-5'), { SEXTANT_DISABLE: '1' }).raw, '');
-  assert.equal(h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5'), { SEXTANT_DISABLE: '1' }).raw, '');
+  assert.equal(h.hook('session-start', start('claude-sonnet-5-5'), { NOONSIGHT_DISABLE: '1' }).raw, '');
+  assert.equal(h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5'), { NOONSIGHT_DISABLE: '1' }).raw, '');
   assert.deepEqual(h.log(), []);
 });
 
@@ -156,8 +156,8 @@ test('SessionStart by start type: resume and fork skip rules the session already
 });
 
 test('a resume after the rules changed delivers the new rules', () => {
-  const dir = tempTree({ 'sextant.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'r', file: 'r.md' }] } } }, 'r.md': 'WORD-ONE' });
-  const h = home(path.join(dir, 'sextant.json'));
+  const dir = tempTree({ 'noonsight.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'r', file: 'r.md' }] } } }, 'r.md': 'WORD-ONE' });
+  const h = home(path.join(dir, 'noonsight.json'));
   assert.match(h.hook('session-start', start('claude-sonnet-5-5')).out?.hookSpecificOutput.additionalContext, /WORD-ONE/);
   fs.writeFileSync(path.join(dir, 'r.md'), 'WORD-TWO');
   assert.match(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' })).out?.hookSpecificOutput.additionalContext, /WORD-TWO/);
@@ -197,22 +197,22 @@ test('/model: the new model gets its rules, with a note that the earlier rules n
   assert.equal(toSonnet.status, 0);
   assert.equal(toSonnet.out?.hookSpecificOutput.hookEventName, 'PostModelSwitch');
   const text: string = toSonnet.out?.hookSpecificOutput.additionalContext;
-  assert.match(text, /^<sextant-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">\nThe session's model changed from claude-haiku-5-5 to claude-sonnet-5-5\. The working rules sextant delivered earlier in this conversation for claude-haiku-5-5 no longer apply\.\n<\/sextant-rules-change>\n\n<sextant-rules model="claude-sonnet-5-5">/);
+  assert.match(text, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">\nThe session's model changed from claude-haiku-5-5 to claude-sonnet-5-5\. The working rules noonsight delivered earlier in this conversation for claude-haiku-5-5 no longer apply\.\n<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-sonnet-5-5">/);
   assert.match(text, /SONNET-GEN-3306/);
   assert.doesNotMatch(text, /HAIKU-GEN-9047/);
 
   // To a model with no rules: only the note. Back from it: only the rules, there is nothing to withdraw.
   const toOpus = h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-opus-5-5'));
-  assert.match(toOpus.out?.hookSpecificOutput.additionalContext, /^<sextant-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">[^]*<\/sextant-rules-change>$/);
+  assert.match(toOpus.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">[^]*<\/noonsight-rules-change>$/);
   const back = h.hook('model-switch', switchTo('claude-opus-5-5', 'claude-sonnet-5-5'));
-  assert.match(back.out?.hookSpecificOutput.additionalContext, /^<sextant-rules model="claude-sonnet-5-5">/);
+  assert.match(back.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules model="claude-sonnet-5-5">/);
 
   // Resuming restores the model and reports it as a switch: the rules are already there.
   assert.equal(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-sonnet-5-5', { source: 'resume' })).raw, '');
   // To an undeclared model: the note for Claude and a warning for the person.
   const toFable = h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-fable-5-2'));
   assert.match(toFable.out?.systemMessage, /claude-fable-5-2 is not declared/);
-  assert.match(toFable.out?.hookSpecificOutput.additionalContext, /^<sextant-rules-change from="claude-sonnet-5-5" to="claude-fable-5-2">/);
+  assert.match(toFable.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-fable-5-2">/);
 
   assert.deepEqual(
     h.log().map((l) => [l.event, l.from_model ?? null, l.model, l.status, l.delivered]),
@@ -232,8 +232,8 @@ test('the longest rules a configuration may hold, plus the model-change note, fi
   const to = `claude-${'t'.repeat(120)}-5-5`;
   const withRule = (length: number): Home => {
     const custom = (file: string) => ({ use: 'custom', add: [{ id: `user/${file}`, file }] });
-    const dir = tempTree({ 'sextant.json': { version: 1, models: { [from]: custom('from.md'), [to]: custom('to.md') } }, 'from.md': 'FROM', 'to.md': 'x'.repeat(length) });
-    return home(path.join(dir, 'sextant.json'));
+    const dir = tempTree({ 'noonsight.json': { version: 1, models: { [from]: custom('from.md'), [to]: custom('to.md') } }, 'from.md': 'FROM', 'to.md': 'x'.repeat(length) });
+    return home(path.join(dir, 'noonsight.json'));
   };
   const overhead = (withRule(1).hook('session-start', start(to)).out?.hookSpecificOutput.additionalContext as string).length - 1;
   const longest = RULES_TEXT_LIMIT - overhead;
@@ -244,15 +244,15 @@ test('the longest rules a configuration may hold, plus the model-change note, fi
   const h = withRule(longest);
   assert.match(h.hook('session-start', start(from)).out?.hookSpecificOutput.additionalContext, /FROM/);
   const text: string = h.hook('model-switch', switchTo(from, to)).out?.hookSpecificOutput.additionalContext;
-  assert.match(text, /^<sextant-rules-change [^]*<\/sextant-rules-change>\n\n<sextant-rules model="claude-t+-5-5">[^]*x{100}/);
+  assert.match(text, /^<noonsight-rules-change [^]*<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-t+-5-5">[^]*x{100}/);
   assert.ok(text.length <= 10000, String(text.length));
 });
 
 test('/model with no record of the session: the note follows from the previous model the input names', () => {
   const h = home();
-  assert.match(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5')).out?.hookSpecificOutput.additionalContext, /^<sextant-rules-change from="claude-sonnet-5-5"[^]*HAIKU-GEN-9047/);
+  assert.match(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5')).out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-sonnet-5-5"[^]*HAIKU-GEN-9047/);
   const fresh = home();
-  assert.match(fresh.hook('model-switch', switchTo('claude-opus-5-5', 'claude-haiku-5-5')).out?.hookSpecificOutput.additionalContext, /^<sextant-rules model="claude-haiku-5-5">/);
+  assert.match(fresh.hook('model-switch', switchTo('claude-opus-5-5', 'claude-haiku-5-5')).out?.hookSpecificOutput.additionalContext, /^<noonsight-rules model="claude-haiku-5-5">/);
 });
 
 test('a decision log that cannot be written never costs the session its rules', () => {
@@ -268,13 +268,13 @@ test('the hook pointer written by install runs the hook, and exits 0 quietly onc
   const claudeDir = tempTree({});
   const installed = runCli(['install', '--account', claudeDir], h.env);
   assert.equal(installed.status, 0, installed.stderr);
-  const pointer = path.join(h.dir, '.local', 'share', 'sextant', 'sextant-hook');
+  const pointer = path.join(h.dir, '.local', 'share', 'noonsight', 'noonsight-hook');
   const r = runProgram(pointer, ['session-start'], h.env, start('claude-sonnet-5-5'));
   assert.equal(r.status, 0, r.stderr);
   assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
   assert.equal(h.log()[0]?.install, 'account');
 
-  // A pointer whose copy of sextant was removed: no output, no error, exit 0.
+  // A pointer whose copy of noonsight was removed: no output, no error, exit 0.
   const script = fs.readFileSync(pointer, 'utf8').replace(/^cli=.*$/m, `cli='${path.join(h.dir, 'gone', 'cli.js')}'`);
   fs.writeFileSync(pointer, script);
   assert.deepEqual(Object.values(runProgram(pointer, ['session-start'], h.env, start('claude-sonnet-5-5'))), [0, '', '']);
@@ -297,7 +297,7 @@ const context = (r: { out: Record<string, any> | null }): string => r.out?.hookS
 
 function underClaude(h: Home, claudeArgs: readonly string[], input: string, extra: Record<string, string> = {}) {
   const hook = [process.execPath, ...NO_NETWORK, CLI, 'hook', 'session-start'];
-  const r = runProgram(process.execPath, [FAKE_CLAUDE, ...claudeArgs], { ...h.env, ...extra, SEXTANT_FAKE_HOOK: JSON.stringify(hook) }, input);
+  const r = runProgram(process.execPath, [FAKE_CLAUDE, ...claudeArgs], { ...h.env, ...extra, NOONSIGHT_FAKE_HOOK: JSON.stringify(hook) }, input);
   assert.equal(r.status, 0);
   assert.equal(r.stderr, '', r.stderr);
   return { out: r.stdout ? (JSON.parse(r.stdout) as Record<string, any>) : null, raw: r.stdout };
@@ -388,10 +388,10 @@ test('claude -p: without --model or ANTHROPIC_MODEL, the highest-ranked settings
   ]);
 });
 
-test('claude -p: a model setting sextant cannot pin down warns with what was set and where, and delivers nothing', () => {
+test('claude -p: a model setting noonsight cannot pin down warns with what was set and where, and delivers nothing', () => {
   const h = home();
   const plan = underClaude(h, ['-p', '--model', 'opusplan', 'hello'], print('plan'));
-  assert.match(plan.out?.systemMessage, /model is set to "opusplan" \(--model\), and sextant cannot tell which model that is \(Claude Code chooses that model while the session runs\)/);
+  assert.match(plan.out?.systemMessage, /model is set to "opusplan" \(--model\), and noonsight cannot tell which model that is \(Claude Code chooses that model while the session runs\)/);
   const bedrock = underClaude(h, ['-p', 'hello'], print('bedrock'), { ANTHROPIC_MODEL: 'haiku', CLAUDE_CODE_USE_BEDROCK: '1' });
   assert.match(bedrock.out?.systemMessage, /set to "haiku" \(ANTHROPIC_MODEL\).*when CLAUDE_CODE_USE_BEDROCK is set; set ANTHROPIC_DEFAULT_HAIKU_MODEL/);
   // Pinning the alias settles it on any provider.
@@ -461,26 +461,26 @@ test('an option given more than one value on a command line without argument bou
 function scopedConfig(): string {
   const lab = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, any>;
   const dir = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       ...lab,
       scopes: { ...lab.scopes, investigate: { match: ['\\binvestigat'] }, summarize: { match: ['\\bsummar'] } },
       session: { unattended_when_env: ['CI'] },
     },
   });
   fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
-  return path.join(dir, 'sextant.json');
+  return path.join(dir, 'noonsight.json');
 }
 
-test('SEXTANT_SCOPE gives the session the rules of that scope, and the log says where the scope came from', () => {
+test('NOONSIGHT_SCOPE gives the session the rules of that scope, and the log says where the scope came from', () => {
   const h = home(scopedConfig());
   const context = (env: Record<string, string>, model = 'claude-sonnet-5-5'): string =>
     h.hook('session-start', start(model, { session_id: `s-${Object.values(env).join('-')}-${model}` }), env).out?.hookSpecificOutput.additionalContext ?? '';
-  const investigate = context({ SEXTANT_SCOPE: 'investigate' });
-  assert.match(investigate, /^<sextant-rules model="claude-sonnet-5-5" scope="investigate">\n/);
+  const investigate = context({ NOONSIGHT_SCOPE: 'investigate' });
+  assert.match(investigate, /^<noonsight-rules model="claude-sonnet-5-5" scope="investigate">\n/);
   assert.match(investigate, /SONNET-GEN-3306[\s\S]*SONNET-INV-5182/);
-  const summarize = context({ SEXTANT_SCOPE: 'summarize' }, 'claude-haiku-5-5');
+  const summarize = context({ NOONSIGHT_SCOPE: 'summarize' }, 'claude-haiku-5-5');
   assert.match(summarize, /HAIKU-SUM-6610/);
-  assert.doesNotMatch(context({ SEXTANT_SCOPE: 'investigate' }, 'claude-haiku-5-5'), /HAIKU-SUM-6610/);
+  assert.doesNotMatch(context({ NOONSIGHT_SCOPE: 'investigate' }, 'claude-haiku-5-5'), /HAIKU-SUM-6610/);
   assert.doesNotMatch(context({}), /SONNET-INV-5182/);
 
   assert.deepEqual(
@@ -494,11 +494,11 @@ test('SEXTANT_SCOPE gives the session the rules of that scope, and the log says 
   );
 });
 
-test('an undeclared SEXTANT_SCOPE gets the rules for every scope, with no warning, and the log names it', () => {
+test('an undeclared NOONSIGHT_SCOPE gets the rules for every scope, with no warning, and the log names it', () => {
   const h = home(scopedConfig());
-  const r = h.hook('session-start', start('claude-sonnet-5-5'), { SEXTANT_SCOPE: 'release' });
+  const r = h.hook('session-start', start('claude-sonnet-5-5'), { NOONSIGHT_SCOPE: 'release' });
   assert.deepEqual(Object.keys(r.out ?? {}), ['hookSpecificOutput'], 'no systemMessage');
-  assert.match(r.out?.hookSpecificOutput.additionalContext, /^<sextant-rules model="claude-sonnet-5-5">\n/);
+  assert.match(r.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules model="claude-sonnet-5-5">\n/);
   assert.deepEqual(h.log().map((l) => [l.scope, l.unknown_scope, l.scope_source, l.warned]), [[null, 'release', 'env', false]]);
 });
 
@@ -506,11 +506,11 @@ test('a variable of session.unattended_when_env puts the session in the place un
   const h = home(scopedConfig());
   const r = h.hook('session-start', start('claude-haiku-5-5', { session_id: SESSION }), { CI: 'true' });
   assert.match(r.out?.hookSpecificOutput.additionalContext, /HAIKU-GEN-9047/);
-  const switched = h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5'), { CI: 'true', SEXTANT_SCOPE: 'investigate' });
+  const switched = h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5'), { CI: 'true', NOONSIGHT_SCOPE: 'investigate' });
   const text: string = switched.out?.hookSpecificOutput.additionalContext;
   assert.match(text, /SONNET-CARRY-4471/, 'the rule for unattended sessions is delivered');
   assert.match(text, /SONNET-INV-5182/);
-  assert.match(text, /^<sextant-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">/);
+  assert.match(text, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">/);
   assert.doesNotMatch(h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'attended' }), { CI: '' }).out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
   assert.deepEqual(
     h.log().map((l) => [l.event, l.place, l.unattended_env ?? null, l.scope]),
@@ -526,5 +526,5 @@ test('a resumed session whose scope changed gets the rules of the new scope', ()
   const h = home(scopedConfig());
   h.hook('session-start', start('claude-sonnet-5-5'));
   assert.equal(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' })).raw, '');
-  assert.match(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' }), { SEXTANT_SCOPE: 'investigate' }).out?.hookSpecificOutput.additionalContext, /SONNET-INV-5182/);
+  assert.match(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' }), { NOONSIGHT_SCOPE: 'investigate' }).out?.hookSpecificOutput.additionalContext, /SONNET-INV-5182/);
 });

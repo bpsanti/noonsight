@@ -1,14 +1,14 @@
 // Live tests: real interactive Claude Code sessions, driven through a terminal with expect, with
-// sextant installed per account into a temporary Claude Code configuration directory. Nothing here
+// noonsight installed per account into a temporary Claude Code configuration directory. Nothing here
 // touches the account of the person running it.
 //
 //   npm run test:live
 //     Needs `claude` and `expect` on PATH; fails when either is missing. Sends no prompt and no
 //     request to Anthropic: a placeholder token gets Claude Code past sign-in and the API address
 //     points at a closed local port. It proves that Claude Code runs the hooks on startup, /model and
-//     /clear, with the inputs the adapter expects, and shows sextant's warnings.
+//     /clear, with the inputs the adapter expects, and shows noonsight's warnings.
 //
-//   SEXTANT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live
+//   NOONSIGHT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live
 //     Also asks the models which rules they received; this spends a little usage on the account the
 //     token belongs to. The token is passed to claude through the environment only and is never
 //     written to a file. Create one with `claude setup-token`.
@@ -26,11 +26,11 @@ const DRIVER = path.join(PACKAGE_ROOT, 'test', 'live', 'drive.exp');
 const SONNET_WORD = 'SONNET-LIVE-4127';
 const OPUS_WORD = 'OPUS-LIVE-7350';
 const QUESTION =
-  'Reply with only the verification words of the sextant working rules that apply to you now, separated by spaces, ' +
+  'Reply with only the verification words of the noonsight working rules that apply to you now, separated by spaces, ' +
   'or the single word NONE when there are none. Do not use any tool.';
 
 const tools = ['claude', 'expect'].filter((t) => spawnSync(t, t === 'expect' ? ['-v'] : ['--version']).status !== 0);
-const withTokens = process.env.SEXTANT_LIVE_TOKENS === '1';
+const withTokens = process.env.NOONSIGHT_LIVE_TOKENS === '1';
 
 interface Lab {
   readonly home: string;
@@ -48,7 +48,7 @@ interface Lab {
 }
 
 function lab(): Lab {
-  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-live-')));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-live-')));
   const home = path.join(root, 'home');
   const claudeDir = path.join(root, 'claude');
   const project = path.join(root, 'project');
@@ -59,7 +59,7 @@ function lab(): Lab {
     path.join(claudeDir, '.claude.json'),
     JSON.stringify({ hasCompletedOnboarding: true, projects: { [project]: { hasTrustDialogAccepted: true } } }),
   );
-  // A Stop hook that records each answer, next to sextant's own entries.
+  // A Stop hook that records each answer, next to noonsight's own entries.
   const stop = { type: 'command', command: '/bin/sh', args: ['-c', 'cat > "$0/stop-$$.json"', probe], timeout: 10 };
   fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify({ theme: 'dark', hooks: { Stop: [{ hooks: [stop] }] } }));
 
@@ -74,11 +74,11 @@ function lab(): Lab {
   };
   const sonnet = { use: 'custom', add: [{ id: 'live/sonnet', file: 'sonnet.md' }] };
   const opus = { use: 'custom', add: [{ id: 'live/opus', file: 'opus.md' }] };
-  const config = write('sextant.json', { 'claude-sonnet-5-5': sonnet, 'claude-opus-5-5': opus, 'claude-haiku-5-5': { use: 'none' } });
+  const config = write('noonsight.json', { 'claude-sonnet-5-5': sonnet, 'claude-opus-5-5': opus, 'claude-haiku-5-5': { use: 'none' } });
   const undeclared = write('undeclared.json', { 'claude-sonnet-5-5': sonnet });
   const invalid = write('invalid.json', { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'x', file: 'missing.md' }] } });
 
-  const installed = runCli(['install', '--account', claudeDir], { HOME: home, SEXTANT_CONFIG: config });
+  const installed = runCli(['install', '--account', claudeDir], { HOME: home, NOONSIGHT_CONFIG: config });
   assert.equal(installed.status, 0, installed.stderr);
 
   return {
@@ -90,7 +90,7 @@ function lab(): Lab {
     undeclared,
     invalid,
     log() {
-      const file = path.join(home, '.local', 'state', 'sextant', 'decisions.jsonl');
+      const file = path.join(home, '.local', 'state', 'noonsight', 'decisions.jsonl');
       return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trimEnd().split('\n').map((l) => JSON.parse(l)) : [];
     },
     answers() {
@@ -116,13 +116,13 @@ function sessionEnv(l: Lab, config: string, tokens: boolean): Record<string, str
     TERM: 'xterm-256color',
     LANG: 'en_US.UTF-8',
     CLAUDE_CONFIG_DIR: l.claudeDir,
-    SEXTANT_CONFIG: config,
+    NOONSIGHT_CONFIG: config,
     DISABLE_AUTOUPDATER: '1',
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
   };
   if (tokens) env.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN ?? '';
   else {
-    env.CLAUDE_CODE_OAUTH_TOKEN = 'sextant-live-test-placeholder';
+    env.CLAUDE_CODE_OAUTH_TOKEN = 'noonsight-live-test-placeholder';
     env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:9';
   }
   return env;
@@ -147,7 +147,7 @@ test('live, no tokens: claude and expect are installed', () => {
   assert.deepEqual(tools, [], `missing on PATH: ${tools.join(', ')}`);
 });
 
-test('live, no tokens: startup, /model and /clear run the hooks with the inputs sextant expects', { skip: tools.length > 0 }, () => {
+test('live, no tokens: startup, /model and /clear run the hooks with the inputs noonsight expects', { skip: tools.length > 0 }, () => {
   const l = lab();
   const r = session(l, l.config, ['wait:12', 'type:/model opus', 'type:/model haiku', 'type:/clear', 'wait:4'], ['--model', 'sonnet'], false);
   assert.equal(r.status, 0, r.screen.slice(-2000));
@@ -199,7 +199,7 @@ test('live, no tokens: claude -p reports no model, and the hook takes it from --
 
 test('live, with tokens: the models answer with the rules they received, and /model switches them', { skip: !withTokens }, () => {
   assert.deepEqual(tools, [], `missing on PATH: ${tools.join(', ')}`);
-  assert.ok(process.env.CLAUDE_CODE_OAUTH_TOKEN, 'SEXTANT_LIVE_TOKENS=1 needs CLAUDE_CODE_OAUTH_TOKEN in the environment');
+  assert.ok(process.env.CLAUDE_CODE_OAUTH_TOKEN, 'NOONSIGHT_LIVE_TOKENS=1 needs CLAUDE_CODE_OAUTH_TOKEN in the environment');
   const l = lab();
   const ask = `ask:${QUESTION}`;
 

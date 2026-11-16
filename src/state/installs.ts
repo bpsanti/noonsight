@@ -1,5 +1,5 @@
-// The Claude Code configuration directories this account installed sextant into with --account.
-// `sextant check` reads the list to know which settings files to look at; the machine-wide install
+// The Claude Code configuration directories this account installed noonsight into with --account.
+// `noonsight check` reads the list to know which settings files to look at; the machine-wide install
 // lives at a fixed path and needs no record.
 
 import fs from 'node:fs';

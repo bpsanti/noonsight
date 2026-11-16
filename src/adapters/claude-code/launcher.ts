@@ -1,16 +1,16 @@
-// The launcher, `sextant run`: it starts Claude Code with the rules for the session's model in the
+// The launcher, `noonsight run`: it starts Claude Code with the rules for the session's model in the
 // system prompt, through --append-system-prompt-file, and passes every other argument unchanged.
 //
 // It decides exactly as the SessionStart hook does for a session that reports no model: the model
 // Claude Code will start with, read from the arguments it is about to pass, ANTHROPIC_MODEL and the
-// settings files (launch.ts); the scope from SEXTANT_SCOPE; the place from session.unattended_when_env.
+// settings files (launch.ts); the scope from NOONSIGHT_SCOPE; the place from session.unattended_when_env.
 // So when the hooks are installed too, SessionStart finds the same rules already in the system prompt
 // and does not deliver them a second time (launcherPrompt below).
 //
-// Without SEXTANT_SCOPE, the scope comes from the task text, --task or the prompt after -p, through
+// Without NOONSIGHT_SCOPE, the scope comes from the task text, --task or the prompt after -p, through
 // the scopes' matchers or, with classifier.mode on, the classifier (classifier.ts), and is passed on
-// to the session as SEXTANT_SCOPE so its hooks decide alike.
-// SEXTANT_SCOPE_VIA says where the scope came from: a sextant run started inside that session reads an
+// to the session as NOONSIGHT_SCOPE so its hooks decide alike.
+// NOONSIGHT_SCOPE_VIA says where the scope came from: a noonsight run started inside that session reads an
 // inherited scope that was inferred from the outer task as no scope, and takes one from its own task.
 // With routing on for the launcher, the scope's row adds --model and --effort before anything else is
 // decided, so the rules are the routed model's.
@@ -33,10 +33,10 @@ import { launcherTranslation, routeFields } from './routing.js';
 import { choiceFields, decisionFields } from './subagents.js';
 
 /** Names, for the session and its hooks, the system prompt file the launcher passed. */
-export const LAUNCH_FILE_ENV = 'SEXTANT_LAUNCH_FILE';
+export const LAUNCH_FILE_ENV = 'NOONSIGHT_LAUNCH_FILE';
 
-/** Where the launcher's SEXTANT_SCOPE came from: explicit (--scope or an explicit SEXTANT_SCOPE) or inferred (the task text). */
-export const SCOPE_VIA_ENV = 'SEXTANT_SCOPE_VIA';
+/** Where the launcher's NOONSIGHT_SCOPE came from: explicit (--scope or an explicit NOONSIGHT_SCOPE) or inferred (the task text). */
+export const SCOPE_VIA_ENV = 'NOONSIGHT_SCOPE_VIA';
 
 type ScopeVia = 'explicit' | 'inferred';
 
@@ -48,7 +48,7 @@ export const LAUNCH_DIR = 'launch';
 export interface LaunchRequest {
   /** The arguments for claude, as given. */
   readonly args: readonly string[];
-  /** The --scope option, or null to keep an explicit SEXTANT_SCOPE the launcher was started with. */
+  /** The --scope option, or null to keep an explicit NOONSIGHT_SCOPE the launcher was started with. */
   readonly scope: string | null;
   /** The --task option, or null to read the task from the prompt after -p. */
   readonly task: string | null;
@@ -134,7 +134,7 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
     ...routeFields(routed, env),
   };
   const messages = [
-    ...(classified.failure !== null ? [`sextant: the classifier could not place the task (${classified.failure}), so the session has no scope.`] : []),
+    ...(classified.failure !== null ? [`noonsight: the classifier could not place the task (${classified.failure}), so the session has no scope.`] : []),
     ...undeclaredMessages(decision, configFile),
   ];
   const nothing = (extra: Record<string, unknown> = {}, more: readonly string[] = []): LaunchPlan => ({
@@ -155,7 +155,7 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
     } catch (e) {
       const why = (e as NodeJS.ErrnoException).code ?? String(e);
       return nothing({ merge_failed: theirs }, [
-        `sextant: could not read ${theirs}, given to ${APPEND_FILE_OPTION} (${why}), so sextant run added no rules to the system prompt.`,
+        `noonsight: could not read ${theirs}, given to ${APPEND_FILE_OPTION} (${why}), so noonsight run added no rules to the system prompt.`,
       ]);
     }
   }
@@ -175,7 +175,7 @@ const MODEL_OPTION = '--model';
 const EFFORT_OPTION = '--effort';
 
 /**
- * The session's scope: SEXTANT_SCOPE (from --scope or an explicit one in the environment), else the scope whose matcher
+ * The session's scope: NOONSIGHT_SCOPE (from --scope or an explicit one in the environment), else the scope whose matcher
  * matches earliest in the task text, --task or the prompt after -p.
  */
 function launchScope(config: Config, env: Env, task: string | null, cmd: CommandLine): ScopeChoice {
@@ -245,12 +245,12 @@ function undeclaredMessages(decision: Decision, file: string): string[] {
   // A session whose model the launcher cannot tell is left to the hooks, which see what Claude Code reports.
   if (decision.status !== 'undeclared' || decision.warning === undefined || decision.reason !== 'no-entry') return [];
   return [
-    `sextant: ${decision.model} is not declared in ${file}, so sextant run added no rules. ` +
+    `noonsight: ${decision.model} is not declared in ${file}, so noonsight run added no rules. ` +
       'Declare it under "models" (with "use": "none" if it needs no rules).',
   ];
 }
 
-/** The system prompt text sextant run gave this Claude Code process. */
+/** The system prompt text noonsight run gave this Claude Code process. */
 export interface LauncherPrompt {
   readonly file: string;
   readonly content: string;
@@ -259,7 +259,7 @@ export interface LauncherPrompt {
 }
 
 /**
- * The text sextant run put in this session's system prompt, or null when it put none. The variable
+ * The text noonsight run put in this session's system prompt, or null when it put none. The variable
  * alone is not enough: a claude started from inside a launched session inherits it without the
  * option, so the Claude Code command line must pass the same file.
  */
@@ -276,6 +276,6 @@ export function launcherPrompt(env: Env, commandLine: () => CommandLine | null):
   } catch {
     return null;
   }
-  const models = [...content.matchAll(/<sextant-rules model="([^"]*)"/g)];
+  const models = [...content.matchAll(/<noonsight-rules model="([^"]*)"/g)];
   return { file, content, model: models.at(-1)?.[1] || null };
 }

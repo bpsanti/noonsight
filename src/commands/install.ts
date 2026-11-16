@@ -4,7 +4,7 @@ import path from 'node:path';
 import { checkInstallable, checkUninstallable, install, InstallRefused, NeedsPermission, readSettings, uninstall, type Runtime } from '../adapters/claude-code/install.js';
 import { accountTarget, defaultAccountDir, discoverConfigDirs, managedTarget, UnsupportedPlatformError, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readRemoteSettings } from '../adapters/claude-code/managed.js';
-import { findSextantHandlers } from '../adapters/claude-code/settings.js';
+import { findNoonsightHandlers } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { isPermissionError } from '../state/files.js';
@@ -12,15 +12,15 @@ import { accountInstalls, recordAccountInstall } from '../state/installs.js';
 import { packageVersion } from '../version.js';
 import { UsageError } from './usage.js';
 
-export const INSTALL_USAGE = `usage: sextant install [--account <dir> | --managed]
-       sextant uninstall [--account <dir> | --managed]
+export const INSTALL_USAGE = `usage: noonsight install [--account <dir> | --managed]
+       noonsight uninstall [--account <dir> | --managed]
 
-With no option, install sextant's hooks into the user settings of every Claude Code configuration
+With no option, install noonsight's hooks into the user settings of every Claude Code configuration
 directory of this account: ~/.claude, the directory in CLAUDE_CONFIG_DIR, and every other directory
 in the home directory that holds a Claude Code configuration, one per login. It needs no
 administrator rights, and it reaches every login, including one whose organization delivers
 server-managed settings. Run it again after adding a Claude Code configuration directory, or run
-\`sextant watch enable\` once to have each new one installed as it appears; \`sextant check\`
+\`noonsight watch enable\` once to have each new one installed as it appears; \`noonsight check\`
 lists any directory it does not reach.
 
   --account <dir>  only this Claude Code configuration directory
@@ -28,7 +28,7 @@ lists any directory it does not reach.
                    needs administrator rights, and Claude Code ignores these files on a login whose
                    organization delivers server-managed settings (see docs/install.md)
 
-Running install again changes nothing; uninstall removes only sextant's own entries.`;
+Running install again changes nothing; uninstall removes only noonsight's own entries.`;
 
 /** The page that explains the guard Claude Code loads on every machine with managed settings. */
 export const MOD_GUARD_URL = 'https://code.claude.com/docs/en/plugins/mods/admin#know-what-happens-by-default';
@@ -52,7 +52,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     else targets = everyAccountTarget(command, env, home);
   } catch (e) {
     if (!(e instanceof UnsupportedPlatformError) && !(e instanceof InstallRefused)) throw e;
-    io.err(`sextant: ${e.message}`);
+    io.err(`noonsight: ${e.message}`);
     return 1;
   }
 
@@ -101,7 +101,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
       return 1;
     }
     if (e instanceof InstallRefused) {
-      io.err(`sextant: ${e.message}${lines.length > 0 ? ' (except what the lines above report)' : ''}`);
+      io.err(`noonsight: ${e.message}${lines.length > 0 ? ' (except what the lines above report)' : ''}`);
       return 1;
     }
     // A permission the check before writing could not foresee, such as a file locked meanwhile.
@@ -121,12 +121,12 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
 /**
  * The default install reaches every Claude Code configuration directory of this account. ~/.claude
  * is Claude Code's own default, so install creates it when Claude Code has not run yet; uninstall
- * also visits every directory sextant installed into before.
+ * also visits every directory noonsight installed into before.
  */
 function everyAccountTarget(command: 'install' | 'uninstall', env: Env, home: string): InstallTarget[] {
   if (process.getuid?.() === 0 && ownerOf(home) !== 0)
     throw new InstallRefused(
-      `${home} belongs to another account. Without --managed, sextant installs for the account that runs it: ` +
+      `${home} belongs to another account. Without --managed, noonsight installs for the account that runs it: ` +
         'run it as that account, without sudo, or install for every account with --managed.',
     );
   const recorded = accountInstalls(stateDir(home));
@@ -154,7 +154,7 @@ function recordDir(configDir: string, installed: boolean, home: string, lines: s
     recordAccountInstall(stateDir(home), configDir, installed);
     return true;
   } catch {
-    lines.push(`warning: could not update the list of account installs in ${stateDir(home)}; \`sextant check\` may not see this install`);
+    lines.push(`warning: could not update the list of account installs in ${stateDir(home)}; \`noonsight check\` may not see this install`);
     return false;
   }
 }
@@ -195,8 +195,8 @@ function installNotes(targets: readonly InstallTarget[], env: Env, home: string)
   const notes: string[] = [];
   if (targets[0]?.kind === 'managed') {
     notes.push(
-      'note: every Claude Code account on this machine now runs these hooks; an account with no sextant configuration gets nothing and is not warned.',
-      'note: a person can silence sextant for one session with SEXTANT_DISABLE=1; disableAllHooks in their own settings does not reach managed hooks.',
+      'note: every Claude Code account on this machine now runs these hooks; an account with no noonsight configuration gets nothing and is not warned.',
+      'note: a person can silence noonsight for one session with NOONSIGHT_DISABLE=1; disableAllHooks in their own settings does not reach managed hooks.',
       `note: on a machine with managed settings, Claude Code loads its built-in guard for the mods users install: ${MOD_GUARD_URL}`,
     );
     for (const dir of discoverConfigDirs(env, home)) {
@@ -205,35 +205,35 @@ function installNotes(targets: readonly InstallTarget[], env: Env, home: string)
         notes.push(
           `warning: the login in ${dir} receives server-managed settings from its organization (${remote?.file ?? ''}), ` +
             'so Claude Code ignores the managed settings files there and its sessions get no rules from this install. ' +
-            'Run `sextant install`, without --managed and without sudo, as the account that owns it.',
+            'Run `noonsight install`, without --managed and without sudo, as the account that owns it.',
         );
     }
   } else {
     if (targets.length === 0) notes.push('no Claude Code configuration directory found');
     const managed = safeManaged(env);
-    if (managed && hasSextantHooks(managed.settingsFile)) {
+    if (managed && hasNoonsightHooks(managed.settingsFile)) {
       const twice = targets.filter((t) => t.configDir !== undefined && managedFilesApply(readRemoteSettings(t.configDir)));
       if (twice.length)
         notes.push(
-          `warning: sextant is also installed for the whole machine (${managed.settingsFile}); while both installs are in place, ` +
+          `warning: noonsight is also installed for the whole machine (${managed.settingsFile}); while both installs are in place, ` +
             `sessions that use ${twice.map((t) => t.configDir).join(', ')} receive the rules twice. ` +
-            'Remove one of them with `sextant uninstall`.',
+            'Remove one of them with `noonsight uninstall`.',
         );
     }
   }
-  if (process.getuid?.() === 0) notes.push('next: run `sextant check` as yourself, without administrator rights, to check your configuration.');
+  if (process.getuid?.() === 0) notes.push('next: run `noonsight check` as yourself, without administrator rights, to check your configuration.');
   else notes.push(configLine(env, home));
   return notes;
 }
 
 function configLine(env: Env, home: string): string {
   const file = configPath(env, home);
-  if (!fs.existsSync(file)) return `next: create ${file} to declare your models (see docs/configuration.md), then run \`sextant check\`.`;
+  if (!fs.existsSync(file)) return `next: create ${file} to declare your models (see docs/configuration.md), then run \`noonsight check\`.`;
   try {
     loadConfig(file, {}, env);
     return `config ${file}: valid`;
   } catch (e) {
-    if (e instanceof ConfigError) return `config ${file}: refused (${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}); run \`sextant check\` to see them. Until it is fixed, sessions get no rules.`;
+    if (e instanceof ConfigError) return `config ${file}: refused (${e.problems.length} problem${e.problems.length === 1 ? '' : 's'}); run \`noonsight check\` to see them. Until it is fixed, sessions get no rules.`;
     throw e;
   }
 }
@@ -248,18 +248,18 @@ function permissionMessage(
   changedBefore: boolean,
 ): string {
   const unchanged = changedBefore ? 'Nothing was changed past the lines above.' : 'Nothing was changed.';
-  const lines = [`sextant: this account cannot write ${paths.join(' or ')}. ${unchanged}`];
+  const lines = [`noonsight: this account cannot write ${paths.join(' or ')}. ${unchanged}`];
   if (target.kind === 'managed') {
-    lines[0] = `sextant: ${command === 'install' ? 'installing' : 'uninstalling'} with --managed writes Claude Code's managed settings, which needs administrator rights. ${unchanged}`;
+    lines[0] = `noonsight: ${command === 'install' ? 'installing' : 'uninstalling'} with --managed writes Claude Code's managed settings, which needs administrator rights. ${unchanged}`;
     lines.push(
       `It writes: ${paths.join('\n           ')}`,
       'Run it once as an administrator:',
       `  sudo ${shellQuote(runtime.node)} ${shellQuote(runtime.cli)} ${command} --managed`,
       'Or, with no administrator rights, for every Claude Code configuration directory of this account:',
-      `  sextant ${command}`,
+      `  noonsight ${command}`,
     );
   } else if (process.getuid?.() !== 0) {
-    lines.push(`To ${command} for one directory only: sextant ${command} --account ${shellQuote(defaultAccountDir(env, home))}`);
+    lines.push(`To ${command} for one directory only: noonsight ${command} --account ${shellQuote(defaultAccountDir(env, home))}`);
   }
   return lines.join('\n');
 }
@@ -272,9 +272,9 @@ function safeManaged(env: Env): InstallTarget | null {
   }
 }
 
-function hasSextantHooks(file: string): boolean {
+function hasNoonsightHooks(file: string): boolean {
   try {
-    return findSextantHandlers(readSettings(file)).length > 0;
+    return findNoonsightHandlers(readSettings(file)).length > 0;
   } catch {
     return false;
   }

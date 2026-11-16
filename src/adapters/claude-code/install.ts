@@ -1,5 +1,5 @@
-// Install and uninstall: write the hook pointer, then add sextant's hook entries to a settings file
-// (or remove both). Every write replaces a whole file in one step, nothing outside sextant's own
+// Install and uninstall: write the hook pointer, then add noonsight's hook entries to a settings file
+// (or remove both). Every write replaces a whole file in one step, nothing outside noonsight's own
 // entries is changed, and running the same command twice changes nothing the second time.
 
 import fs from 'node:fs';
@@ -7,9 +7,9 @@ import path from 'node:path';
 import { isPermissionError, mkdirWithMode, modeOf, readJsonFile, writeFileAtomic } from '../../state/files.js';
 import type { InstallTarget } from './locations.js';
 import { pointerScript, readPointer, type PointerTarget } from './pointer.js';
-import { HOOK_EVENTS, isObject, withSextantHooks, withoutSextantHooks, SettingsShapeError } from './settings.js';
+import { HOOK_EVENTS, isObject, withNoonsightHooks, withoutNoonsightHooks, SettingsShapeError } from './settings.js';
 
-/** What the hook pointer should run: this copy of sextant, by absolute paths. */
+/** What the hook pointer should run: this copy of noonsight, by absolute paths. */
 export interface Runtime {
   readonly node: string;
   readonly cli: string;
@@ -49,7 +49,7 @@ function planInstall(target: InstallTarget, runtime: Runtime): InstallPlan {
   refuseRootInAccount(target);
 
   const settings = readSettings(target.settingsFile);
-  const edit = editSettings(target.settingsFile, () => withSextantHooks(settings ?? {}, target.pointer));
+  const edit = editSettings(target.settingsFile, () => withNoonsightHooks(settings ?? {}, target.pointer));
   const pointer: PointerTarget = { ...runtime, kind: target.kind };
   const script = pointerScript(pointer);
   const oldScript = readText(target.pointer);
@@ -109,8 +109,8 @@ interface UninstallPlan {
 function planUninstall(target: InstallTarget, options: UninstallOptions): UninstallPlan {
   refuseRootInAccount(target);
   const settings = readSettings(target.settingsFile);
-  const edit = settings === null ? null : editSettings(target.settingsFile, () => withoutSextantHooks(settings));
-  // sextant's drop-in file is removed once nothing is left in it.
+  const edit = settings === null ? null : editSettings(target.settingsFile, () => withoutNoonsightHooks(settings));
+  // noonsight's drop-in file is removed once nothing is left in it.
   const removeFile = edit !== null && target.kind === 'managed' && Object.keys(edit.settings).length === 0;
   const pointer = readPointer(target.pointer);
   const removePointer = pointer !== null && pointer.kind === target.kind && !options.keepPointer;
@@ -184,7 +184,7 @@ function refuseRootInAccount(target: InstallTarget): void {
   }
   if (owner !== 0)
     throw new InstallRefused(
-      `${target.configDir} belongs to another account; run sextant with --account as that account, without sudo, so its settings stay its own`,
+      `${target.configDir} belongs to another account; run noonsight with --account as that account, without sudo, so its settings stay its own`,
     );
 }
 

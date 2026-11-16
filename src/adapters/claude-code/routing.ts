@@ -1,7 +1,7 @@
 // Routing in Claude Code: what counts as a model the caller already chose, how a routing table's
 // model is written for each target, and what the decision log records about a route.
 //
-//   launcher    sextant run adds --model and --effort to the claude command line. A model is written
+//   launcher    noonsight run adds --model and --effort to the claude command line. A model is written
 //               as the table writes it, an alias or an identifier, since --model takes both.
 //   subagents   the agent call hook sets the call's model and effort parameters. The model parameter
 //               takes an alias only (https://code.claude.com/docs/en/sub-agents, "Choose a model"),
@@ -17,7 +17,7 @@ import type { Prediction } from './predict.js';
 /** The variable that, when set, wins over the effort a command line or an agent call sets. */
 export const EFFORT_ENV = 'CLAUDE_CODE_EFFORT_LEVEL';
 
-/** How sextant run writes a table's model for --model, and the model that selects. */
+/** How noonsight run writes a table's model for --model, and the model that selects. */
 export function launcherTranslation(env: Env): (model: string) => Translation {
   return (model) => {
     const r = resolveModelValue(model, env);
@@ -34,7 +34,7 @@ export function subagentTranslation(select: (alias: string) => string | null): (
   return (model) => {
     if ((ROUTE_ALIASES as readonly string[]).includes(model)) {
       const selected = select(model);
-      return selected !== null ? { value: model, model: selected } : { why: `sextant cannot tell which model "${model}" selects for this subagent` };
+      return selected !== null ? { value: model, model: selected } : { why: `noonsight cannot tell which model "${model}" selects for this subagent` };
     }
     const target = normalizeModel(model);
     const alias = ROUTE_ALIASES.find((a) => select(a) === target);
@@ -47,7 +47,7 @@ export function subagentTranslation(select: (alias: string) => string | null): (
 /**
  * The model a subagent call already has, from the prediction of its model without routing. A fork and
  * CLAUDE_CODE_SUBAGENT_MODEL_FORCE fix the model whatever the call asks; a model parameter, a
- * definition, a built-in subagent's own model and a plugin's definition, which sextant does not read,
+ * definition, a built-in subagent's own model and a plugin's definition, which noonsight does not read,
  * are the caller's or the author's choice.
  */
 export function subagentHeld(prediction: Prediction): Held | null {

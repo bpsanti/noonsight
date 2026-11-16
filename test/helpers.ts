@@ -6,13 +6,13 @@ import path from 'node:path';
 import { PACKAGE_ROOT } from '../src/config/paths.js';
 
 export const FIXTURES = path.join(PACKAGE_ROOT, 'test', 'fixtures');
-export const LAB_CONFIG = path.join(FIXTURES, 'lab', 'config', 'sextant.json');
+export const LAB_CONFIG = path.join(FIXTURES, 'lab', 'config', 'noonsight.json');
 export const LAB_PRESETS = path.join(FIXTURES, 'lab', 'presets');
 export const CLI = path.join(PACKAGE_ROOT, 'dist', 'src', 'cli.js');
 
 /** A fresh temporary directory holding the given files; JSON values are serialized. */
 export function tempTree(files: Record<string, unknown>): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-test-'));
   for (const [rel, content] of Object.entries(files)) {
     const file = path.join(dir, rel);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -23,7 +23,7 @@ export function tempTree(files: Record<string, unknown>): string {
 
 /** Copy the lab preset into a temporary presets directory and apply edits to its preset.json. */
 export function labPresetWith(edit: (preset: Record<string, any>) => void): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-presets-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-presets-'));
   fs.cpSync(LAB_PRESETS, dir, { recursive: true });
   const file = path.join(dir, 'lab', 'preset.json');
   const preset = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, any>;
@@ -48,7 +48,7 @@ export function runCli(
   nodeArgs: readonly string[] = [],
   input = '',
 ): CliResult {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-home-'));
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-home-'));
   const r = spawnSync(process.execPath, [...nodeArgs, CLI, ...args], {
     encoding: 'utf8',
     input,
@@ -65,7 +65,7 @@ export function runProgram(file: string, args: readonly string[], env: Record<st
 
 /** A directory holding a fake `claude` that reports the given version, to put on PATH. */
 export function fakeClaude(version: string): string {
-  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-bin-'));
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-bin-'));
   fs.writeFileSync(path.join(bin, 'claude'), `#!/bin/sh\necho '${version} (Claude Code)'\n`, { mode: 0o755 });
   return bin;
 }
@@ -93,7 +93,7 @@ export interface HookHome {
 export function hookHome(config: string = LAB_CONFIG, extraEnv: Record<string, string> = {}): HookHome {
   const dir = tempTree({});
   // The system root keeps this machine's own managed settings out of the model lookup.
-  const env = { HOME: dir, SEXTANT_CONFIG: config, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}), ...extraEnv };
+  const env = { HOME: dir, NOONSIGHT_CONFIG: config, NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}), ...extraEnv };
   return {
     env,
     dir,
@@ -103,7 +103,7 @@ export function hookHome(config: string = LAB_CONFIG, extraEnv: Record<string, s
       return { status: r.status, out: r.stdout ? (JSON.parse(r.stdout) as Record<string, any>) : null, raw: r.stdout };
     },
     log() {
-      const file = path.join(dir, '.local', 'state', 'sextant', 'decisions.jsonl');
+      const file = path.join(dir, '.local', 'state', 'noonsight', 'decisions.jsonl');
       if (!fs.existsSync(file)) return [];
       return fs
         .readFileSync(file, 'utf8')

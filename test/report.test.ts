@@ -1,4 +1,4 @@
-// sextant report, driven as a separate process with an isolated home directory and a written log.
+// noonsight report, driven as a separate process with an isolated home directory and a written log.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,7 +7,7 @@ import test from 'node:test';
 import { NO_NETWORK, runCli, tempTree } from './helpers.js';
 
 function writeLog(home: string, records: readonly Record<string, unknown>[], file = 'decisions.jsonl'): string {
-  const dir = path.join(home, '.local', 'state', 'sextant');
+  const dir = path.join(home, '.local', 'state', 'noonsight');
   fs.mkdirSync(dir, { recursive: true });
   const target = path.join(dir, file);
   fs.appendFileSync(target, records.map((r) => `${JSON.stringify(r)}\n`).join(''));
@@ -33,7 +33,7 @@ const CONFIG = {
 
 function configTree(): string {
   return tempTree({
-    'sextant.json': CONFIG,
+    'noonsight.json': CONFIG,
     'general.md': 'Say what you will do first.',
     'investigate.md': 'Name the evidence for each finding.',
     'review.md': 'Report only what you checked.',
@@ -66,9 +66,9 @@ test('report counts each rule\'s deliveries by model, scope, place and event, an
   const file = writeLog(home, LOG);
   fs.appendFileSync(file, '{"torn\n');
   const config = configTree();
-  const r = runCli(['report'], { HOME: home, SEXTANT_CONFIG: path.join(config, 'sextant.json') }, NO_NETWORK);
+  const r = runCli(['report'], { HOME: home, NOONSIGHT_CONFIG: path.join(config, 'noonsight.json') }, NO_NETWORK);
   assert.equal(r.status, 0, r.stderr);
-  const state = path.join(home, '.local', 'state', 'sextant');
+  const state = path.join(home, '.local', 'state', 'noonsight');
   assert.equal(
     r.stdout,
     [
@@ -92,7 +92,7 @@ test('report counts each rule\'s deliveries by model, scope, place and event, an
       '     events: session-start 1',
       '     text: 35 characters for claude-sonnet-5-5',
       '',
-      `On in the configuration (${path.join(config, 'sextant.json')}), never delivered in this log:`,
+      `On in the configuration (${path.join(config, 'noonsight.json')}), never delivered in this log:`,
       '  team/review for claude-sonnet-5-5 (scopes: review; places: subagent)',
       '',
     ].join('\n'),
@@ -103,7 +103,7 @@ test('report counts each rule\'s deliveries by model, scope, place and event, an
 test('report --json prints the same as JSON', () => {
   const home = tempTree({});
   writeLog(home, LOG);
-  const r = runCli(['report', '--json'], { HOME: home, SEXTANT_CONFIG: path.join(configTree(), 'sextant.json') });
+  const r = runCli(['report', '--json'], { HOME: home, NOONSIGHT_CONFIG: path.join(configTree(), 'noonsight.json') });
   assert.equal(r.status, 0, r.stderr);
   const report = JSON.parse(r.stdout) as Record<string, any>;
   assert.equal(report.decisions, LOG.length);
@@ -141,12 +141,12 @@ test('report without a configuration still reports the log, and says what it lea
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /team\/investigate: 1 delivery in 1 session/);
   assert.doesNotMatch(r.stdout, /text: /);
-  assert.match(r.stdout, /No configuration at .*sextant\.json, so rule lengths and the rules never delivered are not shown\./);
+  assert.match(r.stdout, /No configuration at .*noonsight\.json, so rule lengths and the rules never delivered are not shown\./);
 
-  const refused = tempTree({ 'sextant.json': { version: 2 } });
-  const r2 = runCli(['report'], { HOME: home, SEXTANT_CONFIG: path.join(refused, 'sextant.json') });
+  const refused = tempTree({ 'noonsight.json': { version: 2 } });
+  const r2 = runCli(['report'], { HOME: home, NOONSIGHT_CONFIG: path.join(refused, 'noonsight.json') });
   assert.equal(r2.status, 0, r2.stderr);
-  assert.match(r2.stdout, /is refused \(`sextant check` lists why\)/);
+  assert.match(r2.stdout, /is refused \(`noonsight check` lists why\)/);
 });
 
 test('report with an empty log says so', () => {
@@ -167,9 +167,9 @@ test('report refuses an unknown option, a stray argument and a --log it cannot r
     const r = runCli([...args], {});
     assert.equal(r.status, 2, args.join(' '));
     assert.match(r.stderr, message);
-    assert.match(r.stderr, /usage: sextant report/);
+    assert.match(r.stderr, /usage: noonsight report/);
   }
   const help = runCli(['report', '--help'], {});
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /^usage: sextant report/);
+  assert.match(help.stdout, /^usage: noonsight report/);
 });

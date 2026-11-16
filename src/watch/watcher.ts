@@ -1,10 +1,10 @@
-// The watcher: a resident process that adds sextant's hooks to each Claude Code configuration
+// The watcher: a resident process that adds noonsight's hooks to each Claude Code configuration
 // directory made in the home directory after it started, so a new login gets them without anyone
-// running `sextant install` again.
+// running `noonsight install` again.
 //
 // It watches only the entries directly in the home directory, without recursion, so writes below
 // them never wake it. When a new directory appears there, it waits for the file that marks a Claude
-// Code configuration directory, then runs the same install as `sextant install --account <dir>` for
+// Code configuration directory, then runs the same install as `noonsight install --account <dir>` for
 // that directory alone. The wait is kept up for as long as the directory stays there, so a marker
 // written late is still picked up.
 
@@ -14,7 +14,7 @@ import { CONFIG_MARKER } from '../adapters/claude-code/locations.js';
 
 export interface WatcherOptions {
   readonly home: string;
-  /** Install sextant's hooks into one configuration directory, as `sextant install --account <dir>` does. */
+  /** Install noonsight's hooks into one configuration directory, as `noonsight install --account <dir>` does. */
   readonly install: (dir: string) => void;
   readonly log: (text: string) => void;
   /** How long the marker is checked every POLL_MS before it is checked every slowPollMs. */
@@ -38,7 +38,7 @@ export function startWatcher(options: WatcherOptions): () => void {
   const timers = new Set<NodeJS.Timeout>();
 
   // The entries already there are not new; a directory made while the watcher was not running is
-  // left to `sextant install`, and `sextant check` lists it. Each entry is known by its inode, so a
+  // left to `noonsight install`, and `noonsight check` lists it. Each entry is known by its inode, so a
   // directory removed and made again under the same name between two events still counts as new.
   const known = new Map<string, bigint>();
   for (const name of fs.readdirSync(home)) {

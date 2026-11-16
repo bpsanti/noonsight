@@ -19,8 +19,8 @@ const matched = (d: Decision): MatchedDecision => {
 };
 
 function load(config: Record<string, unknown>, files: Record<string, string> = {}, presetsDir = LAB_PRESETS): Config {
-  const dir = tempTree({ 'sextant.json': { version: 1, ...config }, ...files });
-  return loadConfig(path.join(dir, 'sextant.json'), { presetsDir });
+  const dir = tempTree({ 'noonsight.json': { version: 1, ...config }, ...files });
+  return loadConfig(path.join(dir, 'noonsight.json'), { presetsDir });
 }
 
 /** Sonnet with one rule for every scope and one rule each for two scopes, in every place. */
@@ -61,16 +61,16 @@ test('scope: two scopes on the same model deliver different rules, and no scope 
   assert.doesNotMatch(a.text, /SUMMARIZE-3000/);
 });
 
-test('session scope: SEXTANT_SCOPE names it, trimmed; unset or empty means none', () => {
-  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: 'investigate' }), { scope: 'investigate', source: 'env' });
-  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: '  summarize\n' }), { scope: 'summarize', source: 'env' });
-  assert.deepEqual(sessionScope({ SEXTANT_SCOPE: ' ' }), { scope: null, source: null });
+test('session scope: NOONSIGHT_SCOPE names it, trimmed; unset or empty means none', () => {
+  assert.deepEqual(sessionScope({ NOONSIGHT_SCOPE: 'investigate' }), { scope: 'investigate', source: 'env' });
+  assert.deepEqual(sessionScope({ NOONSIGHT_SCOPE: '  summarize\n' }), { scope: 'summarize', source: 'env' });
+  assert.deepEqual(sessionScope({ NOONSIGHT_SCOPE: ' ' }), { scope: null, source: null });
   assert.deepEqual(sessionScope({}), { scope: null, source: null });
 });
 
-test('session scope: an undeclared SEXTANT_SCOPE only means the general rules, never a warning', () => {
+test('session scope: an undeclared NOONSIGHT_SCOPE only means the general rules, never a warning', () => {
   const cfg = scoped();
-  const d = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: sessionScope({ SEXTANT_SCOPE: 'release' }).scope, place: 'session' }));
+  const d = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: sessionScope({ NOONSIGHT_SCOPE: 'release' }).scope, place: 'session' }));
   assert.equal(d.scope, null);
   assert.deepEqual(d.rules, ['general']);
   assert.equal(d.unknown_scope, 'release');
@@ -142,10 +142,10 @@ test('task scope: a user scope named like a preset scope keeps its place and rep
 
 test('task scope: rules a parent copied into the task do not pick the scope', () => {
   const cfg = scoped();
-  const envelope = '<sextant-rules model="claude-sonnet-5-5" scope="investigate">\nInvestigate with care.\n</sextant-rules>';
+  const envelope = '<noonsight-rules model="claude-sonnet-5-5" scope="investigate">\nInvestigate with care.\n</noonsight-rules>';
   assert.equal(scopeOf(cfg, `Rename the variable.\n\n${envelope}`), null);
   assert.equal(scopeOf(cfg, `${envelope}\n\nSummarize the log.`), 'summarize');
-  const note = '<sextant-rules-change from="a" to="b">\nThe digest no longer applies.\n</sextant-rules-change>';
+  const note = '<noonsight-rules-change from="a" to="b">\nThe digest no longer applies.\n</noonsight-rules-change>';
   assert.equal(scopeOf(cfg, `${note} Rename it.`), null);
 });
 

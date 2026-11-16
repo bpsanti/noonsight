@@ -12,9 +12,9 @@ import { declares } from './resolve.js';
 import type { Config, Effort, RouteOption, RouteRow, RouteTarget } from './types.js';
 
 /** The environment variable that turns routing off for a session and everything it starts. */
-export const ROUTING_ENV = 'SEXTANT_ROUTING';
+export const ROUTING_ENV = 'NOONSIGHT_ROUTING';
 
-/** SEXTANT_ROUTING values that turn routing off. */
+/** NOONSIGHT_ROUTING values that turn routing off. */
 const OFF_VALUES = ['off', '0', 'false', 'no'];
 
 /** A model the call already has, which routing may not replace. */
@@ -82,7 +82,7 @@ export type RouteDecision =
       readonly skipped: readonly SkippedOption[];
     };
 
-/** Whether SEXTANT_ROUTING turns routing off. */
+/** Whether NOONSIGHT_ROUTING turns routing off. */
 export function routingEnvOff(env: Readonly<Record<string, string | undefined>>): boolean {
   return OFF_VALUES.includes((env[ROUTING_ENV] ?? '').trim().toLowerCase());
 }

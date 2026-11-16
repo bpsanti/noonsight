@@ -1,8 +1,8 @@
 // Live scope tests: one model, two task scopes, two verification words. Real Claude Code sessions,
-// run from the login of the person running them, with sextant's hooks given through --settings.
+// run from the login of the person running them, with noonsight's hooks given through --settings.
 // They send prompts to the models, so they spend a little usage, and they only run when asked:
 //
-//   SEXTANT_LIVE_LOGIN=1 npm run test:live
+//   NOONSIGHT_LIVE_LOGIN=1 npm run test:live
 //
 // login.ts describes what they need, and what they touch in the person's Claude Code directory.
 
@@ -41,10 +41,10 @@ function scopeLab(): Lab {
 }
 
 const QUESTION =
-  'Reply with only the verification words of the sextant working rules that apply to you now, separated by spaces, ' +
+  'Reply with only the verification words of the noonsight working rules that apply to you now, separated by spaces, ' +
   'or the single word NONE when there are none. Do not use any tool.';
 
-test('live, login: SEXTANT_SCOPE: two sessions on the same model in two scopes receive different rules, and a session with no scope none', { skip: !enabled }, () => {
+test('live, login: NOONSIGHT_SCOPE: two sessions on the same model in two scopes receive different rules, and a session with no scope none', { skip: !enabled }, () => {
   preconditions();
   const l = scopeLab();
   const answer = (env: Record<string, string>): string => {
@@ -52,8 +52,8 @@ test('live, login: SEXTANT_SCOPE: two sessions on the same model in two scopes r
     assert.equal(r.status, 0, r.result);
     return r.result.trim();
   };
-  const investigate = answer({ SEXTANT_SCOPE: 'investigate' });
-  const summarize = answer({ SEXTANT_SCOPE: 'summarize' });
+  const investigate = answer({ NOONSIGHT_SCOPE: 'investigate' });
+  const summarize = answer({ NOONSIGHT_SCOPE: 'summarize' });
   const none = answer({});
   assert.match(investigate, new RegExp(INVESTIGATE_WORD));
   assert.doesNotMatch(investigate, new RegExp(SUMMARIZE_WORD));
@@ -75,7 +75,7 @@ test('live, login: SEXTANT_SCOPE: two sessions on the same model in two scopes r
 test('live, login: matchers: two subagents on the same model, whose tasks fall in two scopes, receive different rules', { skip: !enabled }, () => {
   preconditions();
   const l = scopeLab();
-  const probe = 'Reply with only the verification words of any sextant working rules you were given in this conversation, separated by single spaces, or the single word NONE if you were given none. Do not use any tool.';
+  const probe = 'Reply with only the verification words of any noonsight working rules you were given in this conversation, separated by single spaces, or the single word NONE if you were given none. Do not use any tool.';
   const r = print(
     l,
     'This is a configuration test. Make exactly two Agent tool calls in a single message, so that they run in parallel. ' +

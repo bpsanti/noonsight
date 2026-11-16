@@ -1,6 +1,6 @@
 # Rule effect, 2026-11-16
 
-The preset rules sextant delivers moved two of the three outcomes this experiment could observe, in the direction their sources describe.
+The preset rules noonsight delivers moved two of the three outcomes this experiment could observe, in the direction their sources describe.
 Sonnet 5.5 and Haiku 5.5 ran the tests after fixing the code far more often with their rules (10 of 10 and 8 of 10) than without (0 of 10 each).
 Fable 5.2 wrote reports with shorter sentences and almost no semicolons with its report rule.
 The finished signal could not tell the arms apart: every run of both arms finished.
@@ -24,10 +24,10 @@ Every difference below is a direction with its counts, not a significant result.
 The run thrown away was a no-rules Fable run whose `SessionStart` hook failed because `dist/` was rebuilt while it loaded; it was run again, and the harness now refuses to record a run without the hook's decision.
 `runs.jsonl` holds every recorded run, and `summary.md` is what `npm run experiment -- summarize` printed from it.
 
-## What sextant delivered
+## What noonsight delivered
 
 The decision log of the 112 runs holds one session start per run: 56 delivered rules and 56 logged `declared-none`, the no-rules arm.
-`sextant report` shows each rule delivered only to the model it was written for, in the scopes and the place its preset entry names.
+`noonsight report` shows each rule delivered only to the model it was written for, in the scopes and the place its preset entry names.
 That is the earlier controlled test's point, that only the model a rule targets applies it, now held by delivery: a Sonnet session never receives the Fable rule, so it cannot apply it.
 `fable-5-2/finish-work` was never delivered, because it reaches subagents only and these tasks start none.
 

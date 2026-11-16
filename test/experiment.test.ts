@@ -122,7 +122,7 @@ function run(fields: Partial<RunRecord> & Pick<RunRecord, 'task' | 'model' | 'ar
     claude_code: '2.1.326',
     started: '2026-11-16T22:00:00.000Z',
     scope: 'routine',
-    sextant: { status: 'none', reason: 'declared-none', place: 'unattended', rules: [], sha256: null, delivered: 'nothing' },
+    noonsight: { status: 'none', reason: 'declared-none', place: 'unattended', rules: [], sha256: null, delivered: 'nothing' },
     exit: 0,
     outcome: 'success',
     cost_usd: cost,
@@ -153,8 +153,8 @@ test('the summary compares each rule\'s signals with and without it, from the ru
   const plan = loadPlan();
   const withRules = { status: 'matched', reason: null, place: 'unattended', rules: ['sonnet-5-5/verify-changes', 'sonnet-5-5/stay-in-scope'], sha256: 'abc', delivered: 'rules' };
   const runs = [
-    run({ task: 'fix', model: 'sonnet', arm: 'rules', rep: 1, sextant: withRules }, { ran_tests: true, verified: true }, 1200, 0.06),
-    run({ task: 'fix', model: 'sonnet', arm: 'rules', rep: 2, sextant: withRules }, { ran_tests: true, verified: true }, 1400, 0.07),
+    run({ task: 'fix', model: 'sonnet', arm: 'rules', rep: 1, noonsight: withRules }, { ran_tests: true, verified: true }, 1200, 0.06),
+    run({ task: 'fix', model: 'sonnet', arm: 'rules', rep: 2, noonsight: withRules }, { ran_tests: true, verified: true }, 1400, 0.07),
     run({ task: 'fix', model: 'sonnet', arm: 'none', rep: 1 }, {}, 800, 0.04),
     run({ task: 'fix', model: 'sonnet', arm: 'none', rep: 2 }, { extra_files: ['test/digest.test.js'] }, 1000, 0.05),
   ];

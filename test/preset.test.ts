@@ -19,7 +19,7 @@ const rules = [...preset.models.values()].flat();
 
 /** A copy of the shipped preset in a temporary presets directory, with edits applied to its preset.json. */
 function presetWith(edit: (p: Record<string, any>) => void): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sextant-presets-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-presets-'));
   fs.cpSync(PRESETS, dir, { recursive: true });
   const file = path.join(dir, 'claude', 'preset.json');
   const p = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, any>;
@@ -31,7 +31,7 @@ function presetWith(edit: (p: Record<string, any>) => void): string {
 /** A configuration that declares every model of the preset with "use": "preset". */
 function allPreset(extra: Record<string, unknown> = {}): string {
   const models = Object.fromEntries([...preset.models.keys()].map((k) => [k, { use: 'preset', ...extra }]));
-  return path.join(tempTree({ 'sextant.json': { version: 1, preset: 'claude', models } }), 'sextant.json');
+  return path.join(tempTree({ 'noonsight.json': { version: 1, preset: 'claude', models } }), 'noonsight.json');
 }
 
 function problemsOf(presetsDir: string): readonly string[] {
@@ -152,13 +152,13 @@ test('with every rule on, every model, scope and place fits the delivery limit',
   const everyRule = loadConfig(
     path.join(
       tempTree({
-        'sextant.json': {
+        'noonsight.json': {
           version: 1,
           preset: 'claude',
           models: Object.fromEntries([...preset.models].map(([k, list]) => [k, { use: 'preset', enable: list.filter((r) => !r.enabled).map((r) => r.id) }])),
         },
       }),
-      'sextant.json',
+      'noonsight.json',
     ),
     { presetsDir: PRESETS },
   );
@@ -222,13 +222,13 @@ test('each rule, turned on, reaches exactly its scopes in each of its places, an
   const everyRule = loadConfig(
     path.join(
       tempTree({
-        'sextant.json': {
+        'noonsight.json': {
           version: 1,
           preset: 'claude',
           models: Object.fromEntries([...preset.models].map(([k, list]) => [k, { use: 'preset', enable: list.filter((r) => !r.enabled).map((r) => r.id) }])),
         },
       }),
-      'sextant.json',
+      'noonsight.json',
     ),
     { presetsDir: PRESETS },
   );
@@ -294,9 +294,9 @@ test('a preset rule over the size limit is refused even while it is off, and so 
   );
 });
 
-test('sextant check refuses a preset rule without a source, and one over the size limit', () => {
+test('noonsight check refuses a preset rule without a source, and one over the size limit', () => {
   const run = (presetsDir: string) =>
-    runCli(['check'], { SEXTANT_CONFIG: allPreset(), SEXTANT_PRESETS_DIR: presetsDir, SEXTANT_SYSTEM_ROOT: tempTree({}), PATH: fakeClaude('2.1.325') });
+    runCli(['check'], { NOONSIGHT_CONFIG: allPreset(), NOONSIGHT_PRESETS_DIR: presetsDir, NOONSIGHT_SYSTEM_ROOT: tempTree({}), PATH: fakeClaude('2.1.325') });
 
   const ok = run(PRESETS);
   assert.match(ok.stdout, /^ok: config .*: valid \(4 model entries;/m, ok.stdout);

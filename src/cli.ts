@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// sextant command line. Exit codes: 0 for success and for every decision (matched, none,
+// noonsight command line. Exit codes: 0 for success and for every decision (matched, none,
 // undeclared); 1 when install, uninstall, watch or check finds a problem; 2 for a usage error or a
-// refused configuration. `sextant init` exits 1 when the configuration file already exists.
-// `sextant hook` always exits 0, `sextant watch run` keeps running, and `sextant run` exits with
+// refused configuration. `noonsight init` exits 1 when the configuration file already exists.
+// `noonsight hook` always exits 0, `noonsight watch run` keeps running, and `noonsight run` exits with
 // claude's exit status.
 
 import fs from 'node:fs';
@@ -21,7 +21,7 @@ import { ConfigError } from './config/load.js';
 import type { Env } from './config/paths.js';
 import { packageVersion } from './version.js';
 
-const USAGE = `usage: sextant <command>
+const USAGE = `usage: noonsight <command>
 
 Commands:
   init                              create the configuration file from the preset
@@ -46,7 +46,7 @@ Options:
   --help       show this help
   --version    print the version
 
-The configuration is read from $SEXTANT_CONFIG, else ~/.config/sextant/sextant.json. One file serves every Claude Code account on the machine.`;
+The configuration is read from $NOONSIGHT_CONFIG, else ~/.config/noonsight/noonsight.json. One file serves every Claude Code account on the machine.`;
 
 export interface Io {
   readonly out: (text: string) => void;
@@ -116,11 +116,11 @@ export function main(argv: readonly string[], env: Env, io: Io): number | Promis
 
 function handleError(e: unknown, io: Io): number {
   if (e instanceof UsageError) {
-    io.err(`sextant: ${e.message}\n\n${e.usage}`);
+    io.err(`noonsight: ${e.message}\n\n${e.usage}`);
     return 2;
   }
   if (e instanceof ConfigError) {
-    io.err(`sextant: ${e.message}\nNothing from this configuration was applied.`);
+    io.err(`noonsight: ${e.message}\nNothing from this configuration was applied.`);
     return 2;
   }
   throw e;

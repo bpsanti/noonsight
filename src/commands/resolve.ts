@@ -4,7 +4,7 @@ import { resolve } from '../core/resolve.js';
 import { PLACES, type Decision, type Place } from '../core/types.js';
 import { UsageError } from './usage.js';
 
-export const RESOLVE_USAGE = `usage: sextant resolve <model> [scope] [session|unattended|subagent]
+export const RESOLVE_USAGE = `usage: noonsight resolve <model> [scope] [session|unattended|subagent]
 
 Print, as JSON, the decision for a model: the rules it receives and the exact text that would be
 delivered, "none" when the configuration decided it needs no rules, or "undeclared".

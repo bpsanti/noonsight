@@ -85,10 +85,10 @@ export function envelope(model: string, scope: string | null, ruleIds: readonly 
   const scopeAttr = scope !== null ? ` scope="${scope}"` : '';
   const scopeText = scope !== null ? `, task scope "${scope}"` : '';
   return (
-    `<sextant-rules model="${model}"${scopeAttr}>\n` +
-    `Working rules the user declared for ${model}${scopeText} (delivered by sextant, rules ${ruleIds.join(', ')}):\n` +
+    `<noonsight-rules model="${model}"${scopeAttr}>\n` +
+    `Working rules the user declared for ${model}${scopeText} (delivered by noonsight, rules ${ruleIds.join(', ')}):\n` +
     `${joined}\n` +
-    `</sextant-rules>`
+    `</noonsight-rules>`
   );
 }
 
@@ -101,16 +101,16 @@ export function switchNote(fromModel: string, toModel: string): string {
   const from = noteName(fromModel);
   const to = noteName(toModel);
   const note =
-    `<sextant-rules-change from="${from}" to="${to}">\n` +
+    `<noonsight-rules-change from="${from}" to="${to}">\n` +
     `The session's model changed from ${from} to ${to}. ` +
-    `The working rules sextant delivered earlier in this conversation for ${from} no longer apply.\n` +
-    `</sextant-rules-change>`;
+    `The working rules noonsight delivered earlier in this conversation for ${from} no longer apply.\n` +
+    `</noonsight-rules-change>`;
   if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('switchNote: the note outgrew its reserve');
   return note;
 }
 
 /**
- * The note delivered when `sextant run` put one model's rules in the system prompt and the session
+ * The note delivered when `noonsight run` put one model's rules in the system prompt and the session
  * runs on another model. Like switchNote, it states as a fact that those rules do not apply, and it
  * always fits SWITCH_NOTE_RESERVE.
  */
@@ -118,10 +118,10 @@ export function launcherNote(promptModel: string, sessionModel: string): string 
   const from = noteName(promptModel);
   const to = noteName(sessionModel);
   const note =
-    `<sextant-rules-change from="${from}" to="${to}">\n` +
+    `<noonsight-rules-change from="${from}" to="${to}">\n` +
     `This session runs on ${to}. ` +
-    `The working rules for ${from} that sextant added to the system prompt when it started the session do not apply.\n` +
-    `</sextant-rules-change>`;
+    `The working rules for ${from} that noonsight added to the system prompt when it started the session do not apply.\n` +
+    `</noonsight-rules-change>`;
   if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('launcherNote: the note outgrew its reserve');
   return note;
 }
@@ -156,7 +156,7 @@ function undeclared(
 ): Decision {
   const warning =
     config.onUndeclared === 'warn'
-      ? `sextant: model ${d.model ?? '(not reported)'} has no declared rules (${d.reason}, ${d.place})`
+      ? `noonsight: model ${d.model ?? '(not reported)'} has no declared rules (${d.reason}, ${d.place})`
       : undefined;
   return { status: 'undeclared', ...d, ...(warning !== undefined ? { warning } : {}) };
 }

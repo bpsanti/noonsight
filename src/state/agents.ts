@@ -1,6 +1,6 @@
 // What the subagent hooks keep between the call that starts a subagent and its result.
 //
-//   agent-calls/<tool_use_id>.json  written before the subagent starts: the model sextant predicted,
+//   agent-calls/<tool_use_id>.json  written before the subagent starts: the model noonsight predicted,
 //                                   and what it delivered. The result of the same call, which carries
 //                                   the same tool_use_id, compares it with the model that ran.
 //   agents/<agent id>.json          written when a call's result names the subagent and the model
@@ -16,7 +16,7 @@ import { writeFileAtomic } from './files.js';
 export interface AgentCall {
   readonly session_id: string | null;
   readonly subagent_type: string;
-  /** The model the rules were chosen for, or null when sextant could not tell. */
+  /** The model the rules were chosen for, or null when noonsight could not tell. */
   readonly predicted: string | null;
   readonly status: 'matched' | 'none' | 'undeclared';
   readonly sha256: string | null;

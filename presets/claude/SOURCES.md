@@ -2,13 +2,13 @@
 
 This preset gives each current Claude model a few working rules, taken from Anthropic's prompting guide for that exact model.
 This page lists where each rule and each scope comes from, what the source reports the rule changes, and what it costs.
-`preset.json` holds the same source, effect and cost for each rule, and `sextant models` prints them.
+`preset.json` holds the same source, effect and cost for each rule, and `noonsight models` prints them.
 
 ## How the rules were chosen
 
 1. **Only what has a public source.**
    Every rule names the page, the section and the date it was read.
-   `sextant check` refuses a preset rule without them, and without an effect and a cost.
+   `noonsight check` refuses a preset rule without them, and without an effect and a cost.
 2. **Nothing Claude Code already sends.**
    A rule is not delivered in a place where Claude Code's own system prompt already gives the same advice (see [What Claude Code already sends](#what-claude-code-already-sends)).
 3. **The cost comes with the rule.**
@@ -43,7 +43,7 @@ All read on 2026-11-16.
 ## Scopes
 
 A scope names a kind of task.
-A session takes its scope from `SEXTANT_SCOPE`, which `sextant run` sets from `--scope` or from its task text; a subagent from the matchers a scope declares; and with the classifier on, a task neither placed can take its scope from the classifier, which reads the descriptions below.
+A session takes its scope from `NOONSIGHT_SCOPE`, which `noonsight run` sets from `--scope` or from its task text; a subagent from the matchers a scope declares; and with the classifier on, a task neither placed can take its scope from the classifier, which reads the descriptions below.
 The preset's scopes declare no matchers; [Detecting a scope](#detecting-a-scope) says why, and what the user can do instead.
 
 | Scope | Covers | Source |
@@ -69,7 +69,7 @@ Each guide asks to measure a change on one's own tasks, so the table is a source
 | `digest` | Sonnet, `medium` | Haiku, `medium` | Haiku 5.5 "pairs well with Opus 5.5 and Sonnet 5.5 as a subagent on coding work", while "Sonnet 5.5 and Opus 5.5 remain better choices for complex agentic coding tasks", so a session runs on Sonnet and a subagent on Haiku. The Haiku 5.5 guide makes `medium` the starting point and warns that at `low` the model "is more likely to skip a search, stop early, or skip a check" | https://www.anthropic.com/claude-haiku-5-5, opening paragraphs and "Further updates"; https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, "Use effort to control thinking"; the Sonnet 5.5 guide, "Calibrate effort" |
 
 The first option whose model the user declares wins, so a configuration that does not declare `claude-fable-5-2` sends `investigate` to Opus and never to Fable.
-`preset.json` holds the same rows with their basis and sources, and `sextant check` shows the table in use.
+`preset.json` holds the same rows with their basis and sources, and `noonsight check` shows the table in use.
 
 ## How the rules are scoped
 
@@ -116,7 +116,7 @@ Each rule was scoped by these principles:
 The preset's scopes declare no matchers, and the preset ships no other way to tell a task's scope.
 A scope reaches a task only from what the user, or the program that starts Claude Code, gives:
 
-- **A session**: `sextant run --scope <scope>`, a `SEXTANT_SCOPE` set by whoever starts the session, or `sextant run --task <text>` (or the prompt after `-p`) read by the matchers the user declares ([launcher.md](../../docs/launcher.md)).
+- **A session**: `noonsight run --scope <scope>`, a `NOONSIGHT_SCOPE` set by whoever starts the session, or `noonsight run --task <text>` (or the prompt after `-p`) read by the matchers the user declares ([launcher.md](../../docs/launcher.md)).
 - **A subagent**: the matchers the user declares on a scope in their own configuration (`scopes.<name>.match`, [configuration.md](../../docs/configuration.md#scopes)), which can be added to the preset's scopes; a subagent never takes the session's scope.
 
 Default matchers were considered and left out, as a judgment, for two reasons:
@@ -127,7 +127,7 @@ Default matchers were considered and left out, as a judgment, for two reasons:
    With routing on, a misfire also changes the task's model and effort: the first example above would send a subagent that has a bug to fix to Haiku, as a digest.
    A matcher shipped in the preset would make that choice for every user who turns routing on.
 
-A user who knows the words of their own tasks can declare matchers, and `sextant check` reports two scopes whose matchers overlap.
+A user who knows the words of their own tasks can declare matchers, and `noonsight check` reports two scopes whose matchers overlap.
 
 Until a scope is detected some other way, the rules with a list are dormant in every task whose scope is not known.
 Of the rules on by default, that is `fable-5-2/finish-work`, `sonnet-5-5/stay-in-scope`, `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes`; of those off by default, `fable-5-2/code-ownership`, `sonnet-5-5/no-self-review-rounds`, `sonnet-5-5/check-current-facts` and `haiku-5-5/search-recent-facts`.
@@ -145,7 +145,7 @@ A change of a rule's scopes changes two things: which tasks the rule reaches, an
 - **Reach** comes from the decision log ([hooks.md](../../docs/hooks.md#the-decision-log)).
   Every `session-start`, `launch` and `agent-call` line records the model, `scope`, `scope_source`, `place` and the `rules` delivered.
   Counting lines by rule and by scope, before and after a preset version, shows where a rule still arrives; the share of lines with no scope shows how much of the work the rules with a list miss for want of a scope.
-- **Effect** is what the measurement planned in [#12](https://github.com/bpsanti/sextant-ai/issues/12) reports: a controlled test of the rules as sextant delivers them, giving the effect and the token cost of each rule.
+- **Effect** is what the measurement planned in [#12](https://github.com/bpsanti/noonsight/issues/12) reports: a controlled test of the rules as noonsight delivers them, giving the effect and the token cost of each rule.
   For a scope decision, that comparison runs scope by scope: the same tasks of one scope, with and without the rule.
   A scope stays in a rule's list where the measured effect is worth the measured cost, and leaves it otherwise; the rule's scope basis then gives the measurement in place of the judgment.
 
@@ -155,7 +155,7 @@ The judgment calls with a cost the source measured come first: `fable-5-2/finish
 
 A rule applies to the scopes it lists, or to every scope, and to the places it lists: `session` (a session someone is watching), `unattended` (a session nobody is watching) and `subagent` (the task of a subagent).
 Each rule below gives its scopes, why, and the basis of that choice, by the principles in [How the rules are scoped](#how-the-rules-are-scoped).
-A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when sextant delivered it; those are small samples, so they give a direction, not a significant result.
+A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when noonsight delivered it; those are small samples, so they give a direction, not a significant result.
 
 ### Claude Fable 5.2 (`claude-fable-5-2`)
 
@@ -182,7 +182,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Make reports easy to follow", read 2026-11-16.
 - Effect: On agentic tasks, final reports were less dense and used fewer semicolons; on workflow automation tasks, sentences were shorter.
 - Cost: Not reported by the source.
-- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered by sextant to unattended sessions, reports had shorter sentences (11.7 words against 15.3 on the question, 5 runs each) and almost no semicolons (0.8 per 1,000 words against 19.9), with no added cost.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered by noonsight to unattended sessions, reports had shorter sentences (11.7 words against 15.3 on the question, 5 runs each) and almost no semicolons (0.8 per 1,000 words against 19.9), with no added cost.
 - Places: where the reader comes back to a finished report, rather than following the work as it happens.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: every kind of task ends in a report that someone reads after the fact, a summary or a review most of all, and the source reports no cost.
@@ -425,7 +425,7 @@ When Anthropic publishes a guide for a new model, or changes a section a rule ci
 1. Read the guide; its list of sections by symptom is a good starting point.
 2. Write each new rule with its source, section, date, effect and cost, here and in `preset.json`.
    Give it the scopes where its effect is worth its cost, by the principles in [How the rules are scoped](#how-the-rules-are-scoped), and record why and the basis of that choice here.
-3. Run the live test `system-prompt` (`SEXTANT_LIVE_LOGIN=1 npm run test:live`) to see what Claude Code already sends the new model, and keep each rule out of the places where it does.
+3. Run the live test `system-prompt` (`NOONSIGHT_LIVE_LOGIN=1 npm run test:live`) to see what Claude Code already sends the new model, and keep each rule out of the places where it does.
 4. Raise the preset's `version` and `claude_code`, and list each new, changed or removed rule in the changelog.
 
 A model that has no entry here stays undeclared for every user, who gets a warning instead of rules carried over from an earlier version.

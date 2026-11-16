@@ -2,7 +2,7 @@
 // explicit did. Pure, like the rest of the core: this file writes the question and reads the answer,
 // and the adapter asks it (adapters/claude-code/classifier.ts).
 //
-//   off       a scope comes only from SEXTANT_SCOPE, --scope or the matchers.
+//   off       a scope comes only from NOONSIGHT_SCOPE, --scope or the matchers.
 //   fallback  the classifier places a task that no explicit scope and no matcher placed.
 //   always    the classifier places every task without an explicit scope, over the matchers.
 //

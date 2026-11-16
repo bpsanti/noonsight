@@ -82,7 +82,7 @@ export interface SessionSettings {
 
 export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [] };
 
-/** Where routing can act: the session `sextant run` starts, and the subagents a session starts. */
+/** Where routing can act: the session `noonsight run` starts, and the subagents a session starts. */
 export const ROUTE_TARGETS = ['launcher', 'subagents'] as const;
 export type RouteTarget = (typeof ROUTE_TARGETS)[number];
 
@@ -133,7 +133,7 @@ export const DEFAULT_ROUTING_SETTINGS: RoutingSettings = {
 
 /**
  * When the classifier, a small model asked through `claude -p`, picks a task's scope.
- *   off       never: a scope comes only from SEXTANT_SCOPE, --scope or the matchers.
+ *   off       never: a scope comes only from NOONSIGHT_SCOPE, --scope or the matchers.
  *   fallback  only for a task no explicit scope and no matcher placed.
  *   always    for every task without an explicit scope, over the matchers.
  */

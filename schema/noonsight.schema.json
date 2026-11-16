@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://unpkg.com/sextant-ai@0/schema/sextant.schema.json",
-  "title": "sextant configuration",
-  "description": "The sextant configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. sextant looks for it at $SEXTANT_CONFIG, then ~/.config/sextant/sextant.json.",
+  "$id": "https://unpkg.com/noonsight@0/schema/noonsight.schema.json",
+  "title": "noonsight configuration",
+  "description": "The noonsight configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. noonsight looks for it at $NOONSIGHT_CONFIG, then ~/.config/noonsight/noonsight.json.",
   "type": "object",
   "required": ["version"],
   "additionalProperties": false,
@@ -38,7 +38,7 @@
       "default": "warn"
     },
     "scopes": {
-      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here. A session takes its scope from SEXTANT_SCOPE; a subagent from the scope whose matcher matches earliest in its task.",
+      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here. A session takes its scope from NOONSIGHT_SCOPE; a subagent from the scope whose matcher matches earliest in its task.",
       "type": "object",
       "propertyNames": {
         "pattern": "^[a-z][a-z0-9-]*$",
@@ -77,12 +77,12 @@
           "default": "prompt"
         },
         "permission": {
-          "description": "The permission decision returned with a call whose task text sextant changed. allow: the call runs without a permission prompt, though deny and ask rules still apply. ask: the person confirms each such call. passthrough: no decision, so the session's permission mode decides, and auto mode can deny a changed call.",
+          "description": "The permission decision returned with a call whose task text noonsight changed. allow: the call runs without a permission prompt, though deny and ask rules still apply. ask: the person confirms each such call. passthrough: no decision, so the session's permission mode decides, and auto mode can deny a changed call.",
           "enum": ["allow", "ask", "passthrough"],
           "default": "allow"
         },
         "on_mismatch": {
-          "description": "What to do when a subagent starts on another model than the one sextant chose its rules for. The decision log records it either way.",
+          "description": "What to do when a subagent starts on another model than the one noonsight chose its rules for. The decision log records it either way.",
           "enum": ["warn", "ignore"],
           "default": "warn"
         }
@@ -95,12 +95,12 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "description": "Turns routing on. With false, sextant only delivers rules and never changes a model or an effort.",
+          "description": "Turns routing on. With false, noonsight only delivers rules and never changes a model or an effort.",
           "type": "boolean",
           "default": false
         },
         "targets": {
-          "description": "Where routing acts. launcher: sextant run adds --model and --effort to the claude command line. subagents: the agent call hook sets the call's model and effort.",
+          "description": "Where routing acts. launcher: noonsight run adds --model and --effort to the claude command line. subagents: the agent call hook sets the call's model and effort.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,

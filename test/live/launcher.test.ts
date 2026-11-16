@@ -1,11 +1,11 @@
-// Live launcher tests: real `claude -p` sessions started through `sextant run`, from the login of the
+// Live launcher tests: real `claude -p` sessions started through `noonsight run`, from the login of the
 // person running them. They send prompts to the models, so they spend a little usage, and they only
 // run when asked:
 //
-//   SEXTANT_LIVE_LOGIN=1 npm run test:live
+//   NOONSIGHT_LIVE_LOGIN=1 npm run test:live
 //
 // login.ts describes what they need, and what they touch in the person's Claude Code directory.
-// sextant run keeps its state, the system prompt files included, in the lab's home: it runs with HOME
+// noonsight run keeps its state, the system prompt files included, in the lab's home: it runs with HOME
 // set to that home, and starts a `claude` that sets HOME back before it runs the real one.
 
 import assert from 'node:assert/strict';
@@ -54,24 +54,24 @@ interface Run {
   readonly result: string;
 }
 
-/** One `sextant run [sextantArgs] -- -p QUESTION [claude arguments]` session in the lab. */
-function launch(l: Lab, sextantArgs: readonly string[], claude: readonly string[]): Run {
+/** One `noonsight run [noonsightArgs] -- -p QUESTION [claude arguments]` session in the lab. */
+function launch(l: Lab, noonsightArgs: readonly string[], claude: readonly string[]): Run {
   const realClaude = spawnSync('/bin/sh', ['-c', 'command -v claude'], { encoding: 'utf8', env: baseEnv() }).stdout.trim();
   assert.ok(realClaude, 'claude is not on PATH');
   const bin = path.join(l.root, 'launcher-bin');
   fs.mkdirSync(bin, { recursive: true });
-  fs.writeFileSync(path.join(bin, 'claude'), `#!/bin/sh\nHOME="$SEXTANT_LIVE_HOME" exec '${realClaude.replace(/'/g, `'\\''`)}' "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'claude'), `#!/bin/sh\nHOME="$NOONSIGHT_LIVE_HOME" exec '${realClaude.replace(/'/g, `'\\''`)}' "$@"\n`, { mode: 0o755 });
   const env = baseEnv();
   const r = spawnSync(
     process.execPath,
-    [CLI_FILE, 'run', ...sextantArgs, '--', '-p', QUESTION, '--output-format', 'stream-json', '--verbose', ...claude],
+    [CLI_FILE, 'run', ...noonsightArgs, '--', '-p', QUESTION, '--output-format', 'stream-json', '--verbose', ...claude],
     {
       cwd: l.project,
       env: {
         ...env,
         HOME: l.home,
-        SEXTANT_LIVE_HOME: env.HOME ?? '',
-        SEXTANT_CONFIG: path.join(l.root, 'rules', 'sextant.json'),
+        NOONSIGHT_LIVE_HOME: env.HOME ?? '',
+        NOONSIGHT_CONFIG: path.join(l.root, 'rules', 'noonsight.json'),
         PATH: `${bin}${path.delimiter}${env.PATH ?? ''}`,
       },
       encoding: 'utf8',

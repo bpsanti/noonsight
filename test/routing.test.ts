@@ -18,7 +18,7 @@ const SESSION = 'dbef0a98-a930-44c9-9a0c-9f41dae960c8';
 function routingConfig(routing: Record<string, unknown> = {}, extra: Record<string, unknown> = {}): string {
   const lab = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, any>;
   const dir = tempTree({
-    'sextant.json': {
+    'noonsight.json': {
       ...lab,
       scopes: {
         ...lab.scopes,
@@ -42,7 +42,7 @@ function routingConfig(routing: Record<string, unknown> = {}, extra: Record<stri
     },
   });
   fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(dir, 'rules'), { recursive: true });
-  return path.join(dir, 'sextant.json');
+  return path.join(dir, 'noonsight.json');
 }
 
 const load = (file: string): Config => loadConfig(file, { presetsDir: LAB_PRESETS });
@@ -124,15 +124,15 @@ test('route: no scope, no row, an empty row, and a row that leaves a target out'
     );
 });
 
-test('route: it yields to a target it does not list, to SEXTANT_ROUTING=off, and to a variable of yield_when_env', () => {
+test('route: it yields to a target it does not list, to NOONSIGHT_ROUTING=off, and to a variable of yield_when_env', () => {
   const config = load(routingConfig({ targets: ['launcher'], yield_when_env: ['ORCH_TASK_ID'] }));
   assert.deepEqual(route(config, request()), { routing: 'yielded', reason: 'target-off' });
   const both = load(routingConfig({ yield_when_env: ['ORCH_TASK_ID', 'OTHER'] }));
   assert.deepEqual(route(both, request({ env: { OTHER: '1' } })), { routing: 'yielded', reason: 'yield-env', env: 'OTHER' });
   assert.equal(route(both, request({ env: { ORCH_TASK_ID: '' } })).routing, 'routed', 'an empty variable is not set');
   for (const value of ['off', 'OFF', '0', 'false', 'no'])
-    assert.deepEqual(route(both, request({ env: { SEXTANT_ROUTING: value } })), { routing: 'yielded', reason: 'routing-env', env: 'SEXTANT_ROUTING' });
-  assert.equal(route(both, request({ env: { SEXTANT_ROUTING: 'on' } })).routing, 'routed');
+    assert.deepEqual(route(both, request({ env: { NOONSIGHT_ROUTING: value } })), { routing: 'yielded', reason: 'routing-env', env: 'NOONSIGHT_ROUTING' });
+  assert.equal(route(both, request({ env: { NOONSIGHT_ROUTING: 'on' } })).routing, 'routed');
 });
 
 test('route: a model the caller chose wins under respect_explicit, a model Claude Code fixes always wins, and an explicit effort is kept', () => {
@@ -166,8 +166,8 @@ test('config: routing defaults to off, both targets, respect_explicit, no yield 
   assert.deepEqual([r.enabled, r.targets, r.respectExplicit, r.yieldWhenEnv, r.table.size, r.default], [false, ['launcher', 'subagents'], true, [], 0, null]);
 
   // The package's preset ships a table; a user row replaces the preset's row for its scope.
-  const dir = tempTree({ 'sextant.json': { version: 1, routing: { table: { build: [{ model: 'sonnet' }] } } } });
-  const real = loadConfig(path.join(dir, 'sextant.json')).routing;
+  const dir = tempTree({ 'noonsight.json': { version: 1, routing: { table: { build: [{ model: 'sonnet' }] } } } });
+  const real = loadConfig(path.join(dir, 'noonsight.json')).routing;
   assert.deepEqual([...real.table.keys()], ['investigate', 'build', 'review', 'routine', 'digest']);
   assert.deepEqual(real.table.get('investigate')?.subagents, [
     { model: 'fable', effort: 'high' },
@@ -261,12 +261,12 @@ test('route-subagents: the hook sets the call\'s model and effort from its scope
   const { prompt: original, ...originalRest } = input.tool_input;
   assert.deepEqual([model, effort], ['haiku', 'low']);
   assert.deepEqual(rest, originalRest, 'every other field of the call is kept');
-  assert.ok(prompt.startsWith(`${original}\n\n<sextant-rules model="claude-haiku-5-5" scope="summarize">`), prompt);
+  assert.ok(prompt.startsWith(`${original}\n\n<noonsight-rules model="claude-haiku-5-5" scope="summarize">`), prompt);
   assert.match(prompt, /HAIKU-GEN-9047[\s\S]*HAIKU-SUM-6610/);
   assert.equal(out.permissionDecision, 'allow');
   assert.equal(
     out.permissionDecisionReason,
-    "sextant set the subagent's model haiku and effort low from its task scope, and added the working rules for the subagent's model to the end of its task text",
+    "noonsight set the subagent's model haiku and effort low from its task scope, and added the working rules for the subagent's model to the end of its task text",
   );
 
   const [line] = calls(h);
@@ -299,7 +299,7 @@ test('explicit-model: a call that names a model keeps it under respect_explicit,
   const kept = h.hook('agent-call', call({ ...SUMMARY, model: 'sonnet' })).out?.hookSpecificOutput;
   assert.deepEqual([kept.updatedInput.model, kept.updatedInput.effort], ['sonnet', undefined]);
   assert.match(kept.updatedInput.prompt, /SONNET-GEN-3306/);
-  assert.equal(kept.permissionDecisionReason, "sextant added the working rules for the subagent's model to the end of its task text");
+  assert.equal(kept.permissionDecisionReason, "noonsight added the working rules for the subagent's model to the end of its task text");
   assert.deepEqual([calls(h)[0]?.routing, calls(h)[0]?.routing_reason, calls(h)[0]?.model], ['yielded', 'explicit-model', 'claude-sonnet-5-5']);
 
   // An effort the call sets is kept, and only the model is routed.
@@ -358,11 +358,11 @@ test('explicit-model: CLAUDE_CODE_SUBAGENT_MODEL_FORCE fixes the model, so routi
   assert.equal(calls(level)[0]?.route_effort_overridden_by, 'CLAUDE_CODE_EFFORT_LEVEL');
 });
 
-test('orchestrator-env: a variable of yield_when_env, or SEXTANT_ROUTING=off, leaves the model alone and still delivers the rules', () => {
+test('orchestrator-env: a variable of yield_when_env, or NOONSIGHT_ROUTING=off, leaves the model alone and still delivers the rules', () => {
   const config = routingConfig({ yield_when_env: ['ORCH_TASK_ID'] });
   for (const [env, reason, variable] of [
     [{ ORCH_TASK_ID: 'task-7' }, 'yield-env', 'ORCH_TASK_ID'],
-    [{ SEXTANT_ROUTING: 'off' }, 'routing-env', 'SEXTANT_ROUTING'],
+    [{ NOONSIGHT_ROUTING: 'off' }, 'routing-env', 'NOONSIGHT_ROUTING'],
   ] as const) {
     const h = hookHome(config, env);
     startOn(h, 'claude-sonnet-5-5');
@@ -384,7 +384,7 @@ test('routing off: no call changes beyond the rules, and every call line says ro
       const { prompt, ...rest } = out.updatedInput;
       const { prompt: original, ...originalRest } = input.tool_input;
       assert.deepEqual(rest, originalRest);
-      assert.ok(prompt.startsWith(`${original}\n\n<sextant-rules `));
+      assert.ok(prompt.startsWith(`${original}\n\n<noonsight-rules `));
     }
     assert.deepEqual(
       calls(h).map((l) => [l.routing, l.routing_reason]),
@@ -403,7 +403,7 @@ test('routing for subagents with subagents.delivery "off": the model and effort 
   const input = JSON.parse(call(SUMMARY)) as Record<string, any>;
   const out = h.hook('agent-call', call(SUMMARY)).out?.hookSpecificOutput;
   assert.deepEqual(out.updatedInput, { ...input.tool_input, model: 'haiku', effort: 'low' });
-  assert.equal(out.permissionDecisionReason, "sextant set the subagent's model haiku and effort low from its task scope");
+  assert.equal(out.permissionDecisionReason, "noonsight set the subagent's model haiku and effort low from its task scope");
   assert.deepEqual([calls(h)[0]?.delivered, calls(h)[0]?.routing, calls(h)[0]?.permission], ['off', 'routed', 'allow']);
 });
 
@@ -419,7 +419,7 @@ test('a row that leaves subagents out, a call with no scope, and a refused confi
       [null, 'inherit', 'no-scope', undefined],
     ],
   );
-  const bad = hookHome(path.join(tempTree({ 'sextant.json': { version: 1, routing: { enabled: 'yes' } } }), 'sextant.json'));
+  const bad = hookHome(path.join(tempTree({ 'noonsight.json': { version: 1, routing: { enabled: 'yes' } } }), 'noonsight.json'));
   bad.hook('agent-call', call(SUMMARY));
   assert.deepEqual(
     bad.log().map((l) => [l.event, l.status, l.routing, l.routing_reason]),
@@ -435,7 +435,7 @@ test('every agent-result line says what routing did and why: a call that yielded
   const yielded = h.log().find((l) => l.event === 'agent-result');
   assert.deepEqual([yielded?.result, yielded?.routing, yielded?.routing_reason], ['match', 'yielded', 'explicit-model']);
 
-  const bad = hookHome(path.join(tempTree({ 'sextant.json': { version: 1, routing: { enabled: 'yes' } } }), 'sextant.json'));
+  const bad = hookHome(path.join(tempTree({ 'noonsight.json': { version: 1, routing: { enabled: 'yes' } } }), 'noonsight.json'));
   bad.hook('agent-call', call(SUMMARY));
   assert.equal(bad.hook('agent-result', result('claude-haiku-5-5')).raw, '', 'the call already warned');
   assert.deepEqual(
@@ -450,7 +450,7 @@ test('every agent-result line says what routing did and why: a call that yielded
   const failing = hookHome(routingConfig());
   const env = new Proxy({ ...failing.env } as Record<string, string | undefined>, {
     get: (target, key) => {
-      if (key === 'SEXTANT_CONFIG') throw new Error('environment unreadable');
+      if (key === 'NOONSIGHT_CONFIG') throw new Error('environment unreadable');
       return Reflect.get(target, key);
     },
   });
@@ -462,13 +462,13 @@ test('every agent-result line says what routing did and why: a call that yielded
   );
 });
 
-test('sextant check shows whether routing is on, its table, and whether sessions from this environment yield', () => {
-  const off = runCli(['check'], { SEXTANT_CONFIG: LAB_CONFIG, SEXTANT_PRESETS_DIR: LAB_PRESETS, SEXTANT_SYSTEM_ROOT: tempTree({}) });
-  assert.match(off.stdout, /^ok: routing: off, so sextant never changes a model or an effort$/m);
+test('noonsight check shows whether routing is on, its table, and whether sessions from this environment yield', () => {
+  const off = runCli(['check'], { NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}) });
+  assert.match(off.stdout, /^ok: routing: off, so noonsight never changes a model or an effort$/m);
   const on = runCli(['check'], {
-    SEXTANT_CONFIG: routingConfig({ yield_when_env: ['ORCH_TASK_ID'] }),
-    SEXTANT_PRESETS_DIR: LAB_PRESETS,
-    SEXTANT_SYSTEM_ROOT: tempTree({}),
+    NOONSIGHT_CONFIG: routingConfig({ yield_when_env: ['ORCH_TASK_ID'] }),
+    NOONSIGHT_PRESETS_DIR: LAB_PRESETS,
+    NOONSIGHT_SYSTEM_ROOT: tempTree({}),
     ORCH_TASK_ID: '1',
   });
   assert.match(
