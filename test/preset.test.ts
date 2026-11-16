@@ -51,7 +51,7 @@ test('the preset ships 16 rules for the four current models and the five scopes'
   // id: [scopes, places, on by default]
   const table = Object.fromEntries(rules.map((r) => [r.id, [r.scopes.join(' '), r.where.join(' '), r.enabled]]));
   assert.deepEqual(table, {
-    'fable-5-2/finish-work': ['*', 'subagent', true],
+    'fable-5-2/finish-work': ['investigate build', 'subagent', true],
     'fable-5-2/low-context-report': ['*', 'unattended subagent', true],
     'fable-5-2/code-ownership': ['build', 'session unattended', false],
     'fable-5-2/progress-updates': ['*', 'session', false],
@@ -60,13 +60,13 @@ test('the preset ships 16 rules for the four current models and the five scopes'
     'opus-5-5/explore-before-acting': ['*', 'session unattended', false],
     'sonnet-5-5/carry-through': ['*', 'unattended subagent', true],
     'sonnet-5-5/stay-in-scope': ['routine', 'session unattended subagent', true],
-    'sonnet-5-5/verify-changes': ['build routine', 'session unattended subagent', true],
-    'sonnet-5-5/no-self-review-rounds': ['*', 'session unattended subagent', false],
+    'sonnet-5-5/verify-changes': ['investigate build routine', 'session unattended subagent', true],
+    'sonnet-5-5/no-self-review-rounds': ['build routine', 'session unattended subagent', false],
     'sonnet-5-5/ideas-first': ['*', 'session', false],
-    'sonnet-5-5/check-current-facts': ['digest', 'session unattended subagent', false],
+    'sonnet-5-5/check-current-facts': ['investigate digest', 'session unattended subagent', false],
     'haiku-5-5/carry-through': ['*', 'unattended subagent', true],
-    'haiku-5-5/verify-changes': ['build routine', 'session unattended subagent', true],
-    'haiku-5-5/search-recent-facts': ['digest', 'session unattended subagent', false],
+    'haiku-5-5/verify-changes': ['investigate build routine', 'session unattended subagent', true],
+    'haiku-5-5/search-recent-facts': ['investigate digest', 'session unattended subagent', false],
   });
   for (const [model, list] of preset.models) assert.ok(list.some((r) => r.enabled && r.scopes.includes('*')), `${model} has a rule on for every scope`);
 });
@@ -106,6 +106,42 @@ test('SOURCES.md documents every rule and scope with the same source, effect and
   }
 });
 
+test('SOURCES.md gives every rule its scopes, the scopes it leaves out, why, and which scopes rest on its source and which on judgment', () => {
+  const all = [...preset.scopes.keys()];
+  const names = (text: string | undefined = '') => [...text.matchAll(/`([a-z-]+)`/g)].map((m) => m[1] ?? '');
+  for (const r of rules) {
+    const at = SOURCES.indexOf(`#### \`${r.id}\`\n`);
+    const end = SOURCES.indexOf('\n#', at + 1);
+    const section = SOURCES.slice(at, end === -1 ? undefined : end);
+    const scopes = section.match(/^- Scopes: (.*)$/m)?.[1];
+    assert.ok(scopes !== undefined, `SOURCES.md, ${r.id}: no "Scopes" line`);
+    if (r.scopes.includes('*')) assert.equal(scopes, 'every scope, including a task whose scope is not known.', r.id);
+    else {
+      const [inList, outList] = scopes.split('. Not ');
+      assert.deepEqual(names(inList), r.scopes, `SOURCES.md, ${r.id}: scopes`);
+      assert.deepEqual(names(outList), all.filter((s) => !r.scopes.includes(s)), `SOURCES.md, ${r.id}: scopes left out`);
+      assert.ok(outList?.endsWith('nor a task whose scope is not known.'), r.id);
+    }
+    assert.match(section, /^- Why these scopes: \S/m, r.id);
+    // Scope by scope: "judgment", or the scopes the source's own words support, then the rest as judgment.
+    const basis = section.match(/^- Scope basis: (?:judgment|sourced for ([^;]+?)(?:; judgment for (.+?))?)\.\n {2}(.*)$/m);
+    assert.ok(basis, `SOURCES.md, ${r.id}: no "Scope basis" line`);
+    const sourced = names(basis[1]);
+    if (sourced.length > 0) {
+      const listed = r.scopes.includes('*') ? all : r.scopes;
+      assert.ok(sourced.every((s) => listed.includes(s)), `SOURCES.md, ${r.id}: sourced for a scope it does not reach`);
+      if (r.scopes.includes('*')) assert.equal(basis[2], 'the other scopes, and for a task whose scope is not known', r.id);
+      else assert.deepEqual(names(basis[2]), r.scopes.filter((s) => !sourced.includes(s)), `SOURCES.md, ${r.id}: scopes left as judgment`);
+      // A sourced scope quotes the section of the rule's own source whose words it rests on.
+      assert.match(basis[3] ?? '', new RegExp(`^Section "${r.source.section.replace(/[()]/g, '\\$&')}" .*"[^"]+"`), `SOURCES.md, ${r.id}: ${basis[3]}`);
+    }
+    const row = SOURCES.split('\n').find((l) => l.startsWith(`| \`${r.id}\` |`));
+    const cells = r.scopes.includes('*') ? 'Every scope' : r.scopes.map((s) => `\`${s}\``).join(', ');
+    const label = sourced.length > 0 ? sourced.map((s) => `\`${s}\``).join(', ') : 'None';
+    assert.equal(row, `| \`${r.id}\` | ${r.enabled ? 'Yes' : 'No'} | ${cells} | ${label} |`, `SOURCES.md, summary row of ${r.id}`);
+  }
+});
+
 test('the rule texts for Fable 5.2 never use "never", which that model reads as having no exception', () => {
   for (const r of preset.models.get('claude-fable-5-2') ?? []) assert.doesNotMatch(r.text, /\bnever\b/i, r.id);
 });
@@ -141,7 +177,9 @@ test('as shipped, a model receives only the rules on by default, filtered by sco
     return d.status === 'matched' ? d.rules : [];
   };
   assert.deepEqual(ids('claude-fable-5-2', null, 'session'), []);
-  assert.deepEqual(ids('claude-fable-5-2', null, 'subagent'), ['fable-5-2/finish-work', 'fable-5-2/low-context-report']);
+  assert.deepEqual(ids('claude-fable-5-2', null, 'subagent'), ['fable-5-2/low-context-report']);
+  assert.deepEqual(ids('claude-fable-5-2', 'investigate', 'subagent'), ['fable-5-2/finish-work', 'fable-5-2/low-context-report']);
+  assert.deepEqual(ids('claude-fable-5-2', 'review', 'subagent'), ['fable-5-2/low-context-report']);
   assert.deepEqual(ids('claude-fable-5-2', 'build', 'unattended'), ['fable-5-2/low-context-report']);
   assert.deepEqual(ids('claude-opus-5-5', null, 'unattended'), ['opus-5-5/unattended-run']);
   assert.deepEqual(ids('claude-opus-5-5', 'review', 'subagent'), []);
@@ -150,6 +188,64 @@ test('as shipped, a model receives only the rules on by default, filtered by sco
   assert.deepEqual(ids('claude-sonnet-5-5', 'digest', 'session'), []);
   assert.deepEqual(ids('claude-haiku-5-5', 'digest', 'subagent'), ['haiku-5-5/carry-through']);
   assert.deepEqual(ids('claude-haiku-5-5', 'routine', 'session'), ['haiku-5-5/verify-changes']);
+  assert.deepEqual(ids('claude-haiku-5-5', 'investigate', 'subagent'), ['haiku-5-5/carry-through', 'haiku-5-5/verify-changes']);
+  assert.deepEqual(ids('claude-haiku-5-5', null, 'subagent'), ['haiku-5-5/carry-through']);
+});
+
+/**
+ * The scopes each rule is meant to reach, written out here rather than read from preset.json, so a
+ * change of scopes in the preset fails until this table and SOURCES.md agree with it. EVERY is a rule
+ * for every scope, which also reaches a task whose scope is not known (null).
+ */
+const EVERY = [null, 'investigate', 'build', 'review', 'routine', 'digest'] as const;
+const REACH: Readonly<Record<string, readonly (string | null)[]>> = {
+  'fable-5-2/finish-work': ['investigate', 'build'],
+  'fable-5-2/low-context-report': EVERY,
+  'fable-5-2/code-ownership': ['build'],
+  'fable-5-2/progress-updates': EVERY,
+  'opus-5-5/unattended-run': EVERY,
+  'opus-5-5/progress-updates': EVERY,
+  'opus-5-5/explore-before-acting': EVERY,
+  'sonnet-5-5/carry-through': EVERY,
+  'sonnet-5-5/stay-in-scope': ['routine'],
+  'sonnet-5-5/verify-changes': ['investigate', 'build', 'routine'],
+  'sonnet-5-5/no-self-review-rounds': ['build', 'routine'],
+  'sonnet-5-5/ideas-first': EVERY,
+  'sonnet-5-5/check-current-facts': ['investigate', 'digest'],
+  'haiku-5-5/carry-through': EVERY,
+  'haiku-5-5/verify-changes': ['investigate', 'build', 'routine'],
+  'haiku-5-5/search-recent-facts': ['investigate', 'digest'],
+};
+
+test('each rule, turned on, reaches exactly its scopes in each of its places, and no task in any other place', () => {
+  assert.deepEqual(Object.keys(REACH).sort(), rules.map((r) => r.id).sort());
+  const everyRule = loadConfig(
+    path.join(
+      tempTree({
+        'sextant.json': {
+          version: 1,
+          preset: 'claude',
+          models: Object.fromEntries([...preset.models].map(([k, list]) => [k, { use: 'preset', enable: list.filter((r) => !r.enabled).map((r) => r.id) }])),
+        },
+      }),
+      'sextant.json',
+    ),
+    { presetsDir: PRESETS },
+  );
+  for (const [model, list] of preset.models)
+    for (const rule of list)
+      for (const place of ['session', 'unattended', 'subagent'] as const) {
+        const reached = EVERY.filter((scope) => {
+          const d = resolve(everyRule, { model, scope, place });
+          return d.status === 'matched' && d.rules.includes(rule.id);
+        });
+        const expected = rule.where.includes(place) ? REACH[rule.id] : [];
+        assert.deepEqual(reached, EVERY.filter((s) => expected?.includes(s)), `${rule.id} in place ${place}`);
+      }
+});
+
+test('the preset declares no matchers, so its scopes come only from what the user gives', () => {
+  for (const [name, scope] of preset.scopes) assert.deepEqual(scope.match, [], name);
 });
 
 test('a preset rule without a source, a section, a date, an effect or a cost is refused', () => {

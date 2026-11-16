@@ -43,8 +43,8 @@ All read on 2026-11-16.
 ## Scopes
 
 A scope names a kind of task.
-A session takes its scope from `SEXTANT_SCOPE`; a subagent from the matchers a scope declares.
-The preset's scopes declare no matchers: a keyword guess would put rules into tasks they were not written for, so a user who wants subagents sorted into these scopes adds `match` to them in their own configuration.
+A session takes its scope from `SEXTANT_SCOPE`, which `sextant run` sets from `--scope` or from its task text; a subagent from the matchers a scope declares.
+The preset's scopes declare no matchers; [Detecting a scope](#detecting-a-scope) says why, and what the user can do instead.
 
 | Scope | Covers | Source |
 | --- | --- | --- |
@@ -71,138 +71,308 @@ Each guide asks to measure a change on one's own tasks, so the table is a source
 The first option whose model the user declares wins, so a configuration that does not declare `claude-fable-5-2` sends `investigate` to Opus and never to Fable.
 `preset.json` holds the same rows with their basis and sources, and `sextant check` shows the table in use.
 
+## How the rules are scoped
+
+A rule lists the scopes it applies to, or `*` for every scope.
+A rule with `*` also reaches a task whose scope is not known; a rule with a list reaches only a task whose scope is in it.
+Most tasks have no known scope today ([Detecting a scope](#detecting-a-scope)), so the `*` rules are what nearly every task receives, and a rule with a list stays dormant until the task's scope is known.
+
+Each rule was scoped by these principles:
+
+1. **`*` is for a rule whose effect is worth its cost in every scope**, or whose trigger is a situation the five scopes do not separate, such as a person following the work or a request for ideas.
+   A task whose scope is not known receives only these rules, so they must be right for any kind of task.
+2. **A list is for a rule whose effect is limited to some kinds of task, or is not worth its cost in some.**
+   The list names the scopes where the effect is worth the cost.
+   A rule is not widened to `*` only to reach tasks whose scope is not known, since `*` would also put it in the scopes it was kept out of.
+3. **A rule is kept out of a scope where it works against the task**, whatever it costs there.
+4. **The basis is stated, scope by scope.**
+   A scope is `sourced` for a rule only where the text of the rule's own source section ties the advice to that kind of task; each rule quotes those words.
+   Every other scope, and a task whose scope is not known, is `judgment`, and the rule says why in plain words.
+   Quotes drop the guides' code formatting.
+   No guide names one of these five scopes, so a scope counts as sourced when the guide names the kind of task the scope describes, such as "agentic coding tasks" for `build` and `routine`.
+   A judgment stands until a measurement replaces it ([Measuring a change of scopes](#measuring-a-change-of-scopes)).
+
+| Rule | On by default | Scopes | Sourced for |
+| --- | --- | --- | --- |
+| `fable-5-2/finish-work` | Yes | `investigate`, `build` | `investigate` |
+| `fable-5-2/low-context-report` | Yes | Every scope | None |
+| `fable-5-2/code-ownership` | No | `build` | None |
+| `fable-5-2/progress-updates` | No | Every scope | None |
+| `opus-5-5/unattended-run` | Yes | Every scope | None |
+| `opus-5-5/progress-updates` | No | Every scope | None |
+| `opus-5-5/explore-before-acting` | No | Every scope | None |
+| `sonnet-5-5/carry-through` | Yes | Every scope | `build`, `routine` |
+| `sonnet-5-5/stay-in-scope` | Yes | `routine` | None |
+| `sonnet-5-5/verify-changes` | Yes | `investigate`, `build`, `routine` | `build`, `routine` |
+| `sonnet-5-5/no-self-review-rounds` | No | `build`, `routine` | `build`, `routine` |
+| `sonnet-5-5/ideas-first` | No | Every scope | None |
+| `sonnet-5-5/check-current-facts` | No | `investigate`, `digest` | `digest` |
+| `haiku-5-5/carry-through` | Yes | Every scope | None |
+| `haiku-5-5/verify-changes` | Yes | `investigate`, `build`, `routine` | `build`, `routine` |
+| `haiku-5-5/search-recent-facts` | No | `investigate`, `digest` | None |
+
+### Detecting a scope
+
+The preset's scopes declare no matchers, and the preset ships no other way to tell a task's scope.
+A scope reaches a task only from what the user, or the program that starts Claude Code, gives:
+
+- **A session**: `sextant run --scope <scope>`, a `SEXTANT_SCOPE` set by whoever starts the session, or `sextant run --task <text>` (or the prompt after `-p`) read by the matchers the user declares ([launcher.md](../../docs/launcher.md)).
+- **A subagent**: the matchers the user declares on a scope in their own configuration (`scopes.<name>.match`, [configuration.md](../../docs/configuration.md#scopes)), which can be added to the preset's scopes; a subagent never takes the session's scope.
+
+Default matchers were considered and left out, as a judgment, for two reasons:
+
+1. A matcher reads words, and the words that name one kind of task often appear in a task of another kind: "summarize" in "Summarize why the nightly export fails, then fix it", or "review" in "Review the failing tests and fix them".
+   A misfire gives the task the rules of the wrong scope.
+2. The scope a matcher picks is also the scope routing uses ([configuration.md](../../docs/configuration.md#routing)).
+   With routing on, a misfire also changes the task's model and effort: the first example above would send a subagent that has a bug to fix to Haiku, as a digest.
+   A matcher shipped in the preset would make that choice for every user who turns routing on.
+
+A user who knows the words of their own tasks can declare matchers, and `sextant check` reports two scopes whose matchers overlap.
+
+Until a scope is detected some other way, the rules with a list are dormant in every task whose scope is not known.
+Of the rules on by default, that is `fable-5-2/finish-work`, `sonnet-5-5/stay-in-scope`, `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes`; of those off by default, `fable-5-2/code-ownership`, `sonnet-5-5/no-self-review-rounds`, `sonnet-5-5/check-current-facts` and `haiku-5-5/search-recent-facts`.
+Meanwhile, a user who wants one of them in every task can leave the preset's rule off (`disable` turns off one that ships on) and add the same text as their own rule with `"scopes": ["*"]` (`add`, [configuration.md](../../docs/configuration.md#keys)).
+
+The classifier planned in [#11](https://github.com/bpsanti/sextant-ai/issues/11) is the way the preset waits for: it is to give a scope to tasks that no explicit scope and no matcher placed, and to fall back to no scope when it fails or takes too long.
+With it on, the dormant rules start to reach the tasks it places, with no change to the preset, and a task it cannot place still receives the `*` rules.
+That fallback is why the `*` rules are held to principle 1: they are what a task of unknown kind receives, with or without the classifier.
+
+### Measuring a change of scopes
+
+A change of a rule's scopes changes two things: which tasks the rule reaches, and what it does in them.
+
+- **Reach** comes from the decision log ([hooks.md](../../docs/hooks.md#the-decision-log)).
+  Every `session-start`, `launch` and `agent-call` line records the model, `scope`, `scope_source`, `place` and the `rules` delivered.
+  Counting lines by rule and by scope, before and after a preset version, shows where a rule still arrives; the share of lines with no scope shows how much of the work the rules with a list miss for want of a scope.
+- **Effect** is what the measurement planned in [#12](https://github.com/bpsanti/sextant-ai/issues/12) reports: a controlled test of the rules as sextant delivers them, giving the effect and the token cost of each rule.
+  For a scope decision, that comparison runs scope by scope: the same tasks of one scope, with and without the rule.
+  A scope stays in a rule's list where the measured effect is worth the measured cost, and leaves it otherwise; the rule's scope basis then gives the measurement in place of the judgment.
+
+The judgment calls with a cost the source measured come first: `fable-5-2/finish-work` left out of `routine`, `review` and `digest` (about 30 percent more output), and `fable-5-2/code-ownership` kept to `build` (70 to 80 percent more output).
+
 ## Rules
 
 A rule applies to the scopes it lists, or to every scope, and to the places it lists: `session` (a session someone is watching), `unattended` (a session nobody is watching) and `subagent` (the task of a subagent).
+Each rule below gives its scopes, why, and the basis of that choice, by the principles in [How the rules are scoped](#how-the-rules-are-scoped).
 
 ### Claude Fable 5.2 (`claude-fable-5-2`)
 
 #### `fable-5-2/finish-work`
 
-- On by default. Every scope. Places: `subagent`.
+- On by default. Places: `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Finish the whole task", read 2026-11-16.
 - Effect: In replays of recorded sessions from an agentic coding product at medium effort, a version of this text left about half as many sessions ending with work that could have been continued.
 - Cost: Output tokens rose by about 30 percent.
 - Places: Claude Code already sends a block with this advice to every Fable 5.2 session, so the preset only gives it to subagents, whose system prompt has none.
+- Scopes: `investigate`, `build`. Not `review`, `routine` or `digest`, nor a task whose scope is not known.
+- Why these scopes: the rule pays where a subagent owes many steps of work and can stop before the last one: an investigation, or an implementation that needs reasoning.
+  A routine change is short and well-scoped, so it seldom stops early, and a review or a digest ends with a report on material that already exists; in those three, about 30 percent more output would buy little.
+  Its push to take the next step rather than list it could also turn a review into fixing what the review found.
+- Scope basis: sourced for `investigate`; judgment for `build`.
+  Section "Finish the whole task" says: "On long, multistep tasks, Claude Fable 5.2 sometimes ends a turn before the work is done", and `investigate` is described as long work of many steps.
+  Including `build` is judgment: an implementation that needs reasoning is usually multistep, and the source measured the text on "recorded sessions from an agentic coding product" without saying which kinds of coding task they were.
+  Leaving out `routine`, `review` and `digest` is judgment too.
 
 #### `fable-5-2/low-context-report`
 
-- On by default. Every scope. Places: `unattended`, `subagent`.
+- On by default. Places: `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Make reports easy to follow", read 2026-11-16.
 - Effect: On agentic tasks, final reports were less dense and used fewer semicolons; on workflow automation tasks, sentences were shorter.
 - Cost: Not reported by the source.
 - Places: where the reader comes back to a finished report, rather than following the work as it happens.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: every kind of task ends in a report that someone reads after the fact, a summary or a review most of all, and the source reports no cost.
+- Scope basis: judgment.
+  Section "Make reports easy to follow" ties the text to final reports and handoffs ("If you ask Claude Fable 5.2 to write final reports or handoffs"), which every scope produces, and names no kind of task.
 
 #### `fable-5-2/code-ownership`
 
-- Off by default. Scope `build`. Places: `session`, `unattended`.
+- Off by default. Places: `session`, `unattended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Say who owns the code", read 2026-11-16.
 - Effect: On small coding tasks, duplicated code was consolidated into one shared function in about 75 percent of runs, against under 10 percent without the sentence.
 - Cost: Output tokens rose by about 70 to 80 percent, and the model made changes nobody asked for, many of them new tests and documentation, and in some runs changed how an existing feature behaves.
 - Places: not for subagents, which work on a part of a task someone else owns.
+- Scopes: `build`. Not `investigate`, `review`, `routine` or `digest`, nor a task whose scope is not known.
+- Why these scopes: folding duplicated code into one shared function is a design improvement wanted in an implementation that needs reasoning, such as a refactor or a change of contract.
+  It costs 70 to 80 percent more output and brings changes nobody asked for, which a routine change, an investigation, a review or a digest does not want.
+- Scope basis: judgment.
+  Section "Say who owns the code" offers the sentence "If you want the model to improve the structure as it works", and says to leave it out "where the user owns the code and wants it changed as little as possible".
+  Both are what the user wants rather than kinds of task; reading the first as `build` and the second as `routine` is judgment.
 
 #### `fable-5-2/progress-updates`
 
-- Off by default. Every scope. Places: `session`.
+- Off by default. Places: `session`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Keep users informed during long turns: Signal intent", read 2026-11-16.
 - Effect: On coding tasks, the model wrote a message before its first tool call in every run.
 - Cost: Output tokens per task rose by roughly 20 percent.
 - Places: the guide suggests it where a person is in the loop. Claude Code already sends the guide's other remedy, a reminder after a long silent stretch.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: what decides whether it helps is a person following the work, which its place already says, and not the kind of task.
+  A session someone watches usually starts without a task text, so its scope is rarely known, and a list would keep the rule dormant exactly where it belongs.
+- Scope basis: judgment.
+  Section "Keep users informed during long turns: Signal intent" says to "Use this text where a human is directly in the loop", which is a place, and names no kind of task.
 
 ### Claude Opus 5.5 (`claude-opus-5-5`)
 
 #### `opus-5-5/unattended-run`
 
-- On by default. Every scope. Places: `unattended`.
+- On by default. Places: `unattended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "Unattended agentic runs", read 2026-11-16.
 - Effect: Fewer turns that end early in unattended agent loops: the model carries on where it would otherwise stop to check in. The source says to leave it out where someone is there to answer.
 - Cost: Somewhat more tool calls and output tokens per task; the source gives no figure.
 - Places: only sessions nobody is watching, as the guide asks.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: in a session nobody watches, a turn that ends before the work is done halts the work until someone comes back, whatever the kind of task.
+  The source describes the stops on long tasks with several parts, and a digest or a review can be long too.
+  Unlike `fable-5-2/finish-work`, which reaches subagents whose parent is still running and can carry on, here nobody picks the work up, and the source puts no figure on the cost.
+- Scope basis: judgment.
+  Section "Unattended agentic runs" writes the text "for agents that run fully unattended" and says to leave it out of "human-in-the-loop applications", which is a place.
+  The stops it describes come "On long tasks with several parts", which is not one of the five scopes.
 
 #### `opus-5-5/progress-updates`
 
-- Off by default. Every scope. Places: `session`.
+- Off by default. Places: `session`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "User-facing progress updates (the third lever)", read 2026-11-16.
 - Effect: More frequent and predictable updates, such as a line of intent before the first tool call and a recap at the end; helps most where a person is in the loop.
 - Cost: Not reported by the source.
 - Places: where a person follows the work as it happens.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: as for `fable-5-2/progress-updates`, what decides whether it helps is a person following the work, not the kind of task, and a session someone watches rarely has a known scope.
+- Scope basis: judgment.
+  Section "User-facing progress updates (the third lever)" says it "helps most in human-in-the-loop work", which is a place, and names no kind of task.
 
 #### `opus-5-5/explore-before-acting`
 
-- Off by default. Every scope. Places: `session`, `unattended`.
+- Off by default. Places: `session`, `unattended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "Explore context in multiapp workflows", read 2026-11-16.
 - Effect: On automation tasks across several connected apps, noticeably more tasks were completed correctly, at medium and at max effort.
 - Cost: Slightly more tool calls and tokens. Because the model acts on what it finds, keep untrusted content out of what it searches.
 - Places: the guide writes it for agents that work across connected apps such as email, documents and spreadsheets, so it ships off; turning it on applies it to every scope.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: what decides whether it helps is the setting, an agent that works across connected apps such as email, documents and spreadsheets, and not one of the five kinds of task.
+  Whoever works in that setting turns it on, and it then applies to all of their work.
+- Scope basis: judgment.
+  Section "Explore context in multiapp workflows" ties it to "workflow automation across several connected apps", which is a setting and not one of the five scopes.
 
 ### Claude Sonnet 5.5 (`claude-sonnet-5-5`)
 
 #### `sonnet-5-5/carry-through`
 
-- On by default. Every scope. Places: `unattended`, `subagent`.
+- On by default. Places: `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Carrying work through", read 2026-11-16.
 - Effect: At low and medium effort, the model carries more of the work through instead of checking in before it is done.
 - Cost: Sessions at low and medium effort run longer and cost more; the source gives no figure.
 - Places: where nobody can answer a check-in. The guide's suggested prompt has a second paragraph, which is the rule `sonnet-5-5/stay-in-scope`.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: where nobody can answer a check-in, a stop before the end leaves the work undone in any kind of task.
+  The rule asks for no more than what was asked, so the longer sessions the source names are that work being done.
+- Scope basis: sourced for `build`, `routine`; judgment for the other scopes, and for a task whose scope is not known.
+  Section "Steer initiative and scope: Carrying work through" describes the check-ins "On agentic coding tasks at low and medium effort", which is what `build` and `routine` cover.
+  Applying it to `investigate`, `review`, `digest` and a task whose scope is not known is judgment, for the reason above.
 
 #### `sonnet-5-5/stay-in-scope`
 
-- On by default. Scope `routine`. Places: `session`, `unattended`, `subagent`.
+- On by default. Places: `session`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Unrequested additions when coding", read 2026-11-16.
 - Effect: Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.
 - Cost: Not reported by the source.
+- Scopes: `routine`. Not `investigate`, `build`, `review` or `digest`, nor a task whose scope is not known.
+- Why these scopes: a well-scoped change is where tests, documentation and files nobody asked for are least welcome.
+  In an investigation or an implementation that needs reasoning, such additions are often wanted, and a review or a digest changes no files, so the rule has nothing to do there.
+- Scope basis: judgment.
+  Section "Steer initiative and scope: Unrequested additions when coding" says of these additions "Most teams will welcome this", and offers the text "If you prefer changes limited to what was explicitly requested".
+  That is a preference rather than a kind of task; reading it as `routine` is judgment.
 
 #### `sonnet-5-5/verify-changes`
 
-- On by default. Scopes `build`, `routine`. Places: `session`, `unattended`, `subagent`.
+- On by default. Places: `session`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Verification on coding tasks", read 2026-11-16.
 - Effect: At low effort, skipped or superficial checks became rare, with no measurable change in task quality.
 - Cost: Slightly higher cost per task.
+- Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
+- Why these scopes: the rule acts on a code change, and an investigation that ends in a fix, an implementation and a routine change all make one.
+  A review and a digest change no code, so there the rule would only add text to read.
+- Scope basis: sourced for `build`, `routine`; judgment for `investigate`.
+  Section "Verification on coding tasks" describes the skipped checks "On agentic coding tasks", which is what `build` and `routine` cover.
+  Including `investigate`, where a fix often ends the work, is judgment.
 
 #### `sonnet-5-5/no-self-review-rounds`
 
-- Off by default. Every scope. Places: `session`, `unattended`, `subagent`.
+- Off by default. Places: `session`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Thoroughness at xhigh and max effort", read 2026-11-16.
 - Effect: On coding tasks at max effort, the model stopped launching reviewer subagents, with no change in quality; review rounds the main agent starts itself became less frequent. It only matters at xhigh and max effort.
 - Cost: Session cost fell by about a third: a saving, not a cost.
 - Off because a rule cannot tell the effort a session runs at, and the guide advises running routine work at high effort or below instead.
+- Scopes: `build`, `routine`. Not `investigate`, `review` or `digest`, nor a task whose scope is not known.
+- Why these scopes: it stops extra review rounds once an implementation is done and its checks pass, which is where the source measured the saving.
+  In a review, the review is the task, so a rule against review rounds works against it.
+  In an investigation, checking a finding again is part of the work rather than an extra round, and a digest starts no review rounds.
+- Scope basis: sourced for `build`, `routine`.
+  Section "Steer initiative and scope: Thoroughness at xhigh and max effort" measured the text "on coding tasks at max effort", which is what `build` and `routine` cover; the same section advises to "run routine work at high or below", where the rule has little to do.
+  Leaving out `investigate`, `review` and `digest` is judgment.
 
 #### `sonnet-5-5/ideas-first`
 
-- Off by default. Every scope. Places: `session`.
+- Off by default. Places: `session`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Open-ended requests", read 2026-11-16.
 - Effect: On open-ended requests, the model gives ideas or a plan and stops, instead of starting to build.
 - Cost: Not reported by the source.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: it acts only on a request for ideas, options or a plan, and such a request is not one of the five scopes: it comes up in any of them, such as an architecture decision in an investigation.
+  A list would keep it dormant in exactly those requests.
+- Scope basis: judgment.
+  Section "Steer initiative and scope: Open-ended requests" ties it to open-ended requests, such as "show me what you can do with this", a kind of request the five scopes do not separate.
 
 #### `sonnet-5-5/check-current-facts`
 
-- Off by default. Scope `digest`. Places: `session`, `unattended`, `subagent`.
+- Off by default. Places: `session`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Tool use in chat and knowledge work", read 2026-11-16.
 - Effect: The model searches for details that may have changed since its training instead of answering from training knowledge; matters most for research and support work.
 - Cost: Not reported by the source.
+- Scopes: `investigate`, `digest`. Not `build`, `review` or `routine`, nor a task whose scope is not known.
+- Why these scopes: research is where facts that change after training, such as versions, prices or what a service permits, decide the answer: a digest that searches or extracts, and an investigation such as an architecture decision.
+  An implementation, a routine change and a review rest on the code at hand, where the extra searches would add cost without changing the result.
+- Scope basis: sourced for `digest`; judgment for `investigate`.
+  Section "Tool use in chat and knowledge work" describes the problem "On chat and knowledge-work tasks" and says the text "matters most for research and support products"; `digest`, reading existing material to summarize, extract or search, is knowledge work.
+  Including `investigate` is judgment.
 
 ### Claude Haiku 5.5 (`claude-haiku-5-5`)
 
 #### `haiku-5-5/carry-through`
 
-- On by default. Every scope. Places: `unattended`, `subagent`.
+- On by default. Places: `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Prevent early stopping in long agent prompts", read 2026-11-16.
 - Effect: Fewer early stops that hand the task back to the user, which appear with a long coding-agent system prompt at low effort.
 - Cost: Not reported for the text. For comparison, raising effort from low to medium roughly halved early stopping and more than doubled output tokens.
+- Scopes: every scope, including a task whose scope is not known.
+- Why these scopes: a subagent or an unattended session that hands the task back before the end leaves half a search or half a change, whatever the kind of task, and with routing on the preset's table sends digest subagents to Haiku 5.5.
+  Its last sentences keep out work nobody asked for, as `sonnet-5-5/stay-in-scope` does in `routine` only; the Haiku 5.5 guide writes them into the same prompt, so they come with it in every scope.
+- Scope basis: judgment.
+  Section "Prevent early stopping in long agent prompts" ties the stops to "a long coding-agent system prompt at low effort", which is a property of the prompt and the effort, not a kind of task.
 
 #### `haiku-5-5/verify-changes`
 
-- On by default. Scopes `build`, `routine`. Places: `session`, `unattended`, `subagent`.
+- On by default. Places: `session`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Tell coding agents to verify their changes", read 2026-11-16.
 - Effect: The model checked its changes more often, and its performance improved.
 - Cost: More tokens; the source gives no figure.
+- Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
+- Why these scopes: as for `sonnet-5-5/verify-changes`, the rule acts on a code change, which an investigation that ends in a fix, an implementation and a routine change all make, and a review or a digest does not.
+- Scope basis: sourced for `build`, `routine`; judgment for `investigate`.
+  Section "Tell coding agents to verify their changes" addresses coding agents that report "a code change as done without running a check", which is what `build` and `routine` cover.
+  Including `investigate` is judgment.
 
 #### `haiku-5-5/search-recent-facts`
 
-- Off by default. Scope `digest`. Places: `session`, `unattended`, `subagent`.
+- Off by default. Places: `session`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Accurate search results", read 2026-11-16.
 - Effect: More searches on questions whose answers had changed; on prompts that need no search, it added searches in only 0 to 3 percent of tries. The source pairs it with today's date in the context.
 - Cost: Only the extra searches; the source gives no other figure.
+- Scopes: `investigate`, `digest`. Not `build`, `review` or `routine`, nor a task whose scope is not known.
+- Why these scopes: as for `sonnet-5-5/check-current-facts`, research is where facts that change after training decide the answer.
+  The source found it adds a search to few prompts that need none, so it would cost little in an implementation, a routine change or a review, but it would also do little there.
+- Scope basis: judgment.
+  Section "Accurate search results" ties it to giving the model a search tool and to "questions whose answers had changed", not to a kind of task; counting `investigate` and `digest` as the scopes where those questions decide the result is judgment.
 
 ## What Claude Code already sends
 
@@ -244,6 +414,7 @@ When Anthropic publishes a guide for a new model, or changes a section a rule ci
 
 1. Read the guide; its list of sections by symptom is a good starting point.
 2. Write each new rule with its source, section, date, effect and cost, here and in `preset.json`.
+   Give it the scopes where its effect is worth its cost, by the principles in [How the rules are scoped](#how-the-rules-are-scoped), and record why and the basis of that choice here.
 3. Run the live test `system-prompt` (`SEXTANT_LIVE_LOGIN=1 npm run test:live`) to see what Claude Code already sends the new model, and keep each rule out of the places where it does.
 4. Raise the preset's `version` and `claude_code`, and list each new, changed or removed rule in the changelog.
 
