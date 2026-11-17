@@ -440,6 +440,60 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   for (const j of wasInterrupted) append(journalFile, { event: 'retry', key: j.key, night: j.night, at: new Date().toISOString(), cost_usd: j.budget_usd ?? 0, why: 'interrupted' } satisfies JournalLine);
 
   let planned = plannedCells.length;
+  const runOne = async (cell: Cell): Promise<void> => {
+    const key = cellKey(cell);
+    const budget = o.plan.models[cell.model]?.budget_usd ?? 0;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      append(journalFile, { event: 'start', key, night, at: new Date().toISOString(), budget_usd: budget } satisfies JournalLine);
+      o.log(`start ${key}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+      const left = o.stopBy ? o.stopBy.getTime() - Date.now() : 3 * 60 * 60 * 1000;
+      const res = await runCell(o, base, taskFor(cell), cell, night, attempt, jobsDir, undefined, Math.max(60_000, Math.min(3 * 60 * 60 * 1000, left)));
+      if (o.stopBy && Date.now() >= o.stopBy.getTime() - 5_000 && !res.record) {
+        // Stopped by the morning deadline: the open start line makes it an interrupted run for the next night.
+        stop = `the night's stop time (${o.stopBy.toISOString()}) ended runs in flight`;
+        o.log(`stopped ${key} at the night's stop time; it runs again next night`);
+        return;
+      }
+      if (res.record) {
+        append(runsFile, res.record);
+        append(journalFile, { event: 'end', key, night, at: new Date().toISOString(), cost_usd: res.record.cost_counted_usd } satisfies JournalLine);
+        total += res.record.cost_counted_usd;
+        tonight += res.record.cost_counted_usd;
+        completed++;
+        done.add(key);
+        o.log(`done  ${key}: ${res.record.outcome}, $${(res.record.cost_usd ?? 0).toFixed(3)}, resolved=${res.record.resolved}, rules=${res.record.noonsight.rules.join('+') || res.record.noonsight.status}; tonight $${tonight.toFixed(2)}, total $${total.toFixed(2)}`);
+        if (OPEN_SETS.includes(cell.set)) {
+          const g = gradePending(o, key);
+          total += g;
+          tonight += g;
+        }
+        return;
+      }
+      const lost = res.cost_usd ?? 0;
+      append(journalFile, { event: 'retry', key, night, at: new Date().toISOString(), cost_usd: lost, why: res.failure ?? 'unknown' } satisfies JournalLine);
+      total += lost;
+      tonight += lost;
+      failedAttempts++;
+      o.log(`fail  ${key}: ${res.failure}`);
+    }
+    // Three attempts never reached the model or the hook: an infrastructure failure, recorded so it is not run again.
+    infra++;
+    const failed: InfraFailure = { ...cell, key, model_id: o.plan.models[cell.model]?.id ?? cell.model, night, started: new Date().toISOString(), attempts: MAX_ATTEMPTS, infra_failure: 'no run reached the model and the hook in three attempts', cost_counted_usd: 0 };
+    append(runsFile, failed);
+    done.add(key);
+  };
+  const pool = Math.max(1, o.plan.concurrency);
+  // Whole units are gathered into a batch until it holds `pool` runs, and the batch runs together, so a
+  // placebo unit (one run) does not leave the second slot idle; every stop falls between batches, so
+  // between units, and the quota is read before each batch.
+  let batch: Cell[] = [];
+  let quota: QuotaReading | null = null;
+  const flush = async (): Promise<void> => {
+    const cells = batch;
+    batch = [];
+    quota = null;
+    for (let i = 0; i < cells.length; i += pool) await Promise.all(cells.slice(i, i + pool).map(runOne));
+  };
   outer: for (;;) {
     let startedThisPass = 0;
     for (const r of plan.rounds)
@@ -455,71 +509,34 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
             continue;
           }
         }
-        if (o.until && Date.now() >= o.until.getTime()) {
-          stop = `the night's end time (${o.until.toISOString()}) was reached`;
-          break outer;
+        if (batch.length === 0) {
+          if (o.until && Date.now() >= o.until.getTime()) {
+            stop = `the night's end time (${o.until.toISOString()}) was reached`;
+            break outer;
+          }
+          if (!dockerUp()) {
+            stop = 'Docker is not reachable';
+            break outer;
+          }
+          quota = readQuota(o.account);
         }
-        const unitBudget = cells.reduce((s, c) => s + (o.plan.models[c.model]?.budget_usd ?? 0) + (OPEN_SETS.includes(c.set) ? o.plan.judge.budget_usd : 0), 0);
-        if (total + unitBudget > o.plan.cap_usd) {
+        const budgetOf = (cs: readonly Cell[]): number => cs.reduce((s, c) => s + (o.plan.models[c.model]?.budget_usd ?? 0) + (OPEN_SETS.includes(c.set) ? o.plan.judge.budget_usd : 0), 0);
+        if (total + budgetOf([...batch, ...cells]) > o.plan.cap_usd) {
+          await flush();
           stop = `the next unit could pass the $${o.plan.cap_usd} cap`;
           break outer;
         }
-        if (!dockerUp()) {
-          stop = 'Docker is not reachable';
-          break outer;
-        }
-        const q = readQuota(o.account);
-        const floor = aboveFloor(q, o.plan.quota_floor_percent, (cells[0] as Cell).model);
+        const floor = aboveFloor(quota ?? readQuota(o.account), o.plan.quota_floor_percent, first.model);
         if (!floor.ok) {
+          await flush();
           stop = `quota floor: ${floor.why}`;
           break outer;
         }
+        batch.push(...cells);
         startedThisPass++;
-        const runOne = async (cell: Cell): Promise<void> => {
-          const key = cellKey(cell);
-          const budget = o.plan.models[cell.model]?.budget_usd ?? 0;
-          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            append(journalFile, { event: 'start', key, night, at: new Date().toISOString(), budget_usd: budget } satisfies JournalLine);
-            o.log(`start ${key}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
-            const left = o.stopBy ? o.stopBy.getTime() - Date.now() : 3 * 60 * 60 * 1000;
-            const res = await runCell(o, base, taskFor(cell), cell, night, attempt, jobsDir, undefined, Math.max(60_000, Math.min(3 * 60 * 60 * 1000, left)));
-            if (o.stopBy && Date.now() >= o.stopBy.getTime() - 5_000 && !res.record) {
-              // Stopped by the morning deadline: the open start line makes it an interrupted run for the next night.
-              stop = `the night's stop time (${o.stopBy.toISOString()}) ended runs in flight`;
-              o.log(`stopped ${key} at the night's stop time; it runs again next night`);
-              return;
-            }
-            if (res.record) {
-              append(runsFile, res.record);
-              append(journalFile, { event: 'end', key, night, at: new Date().toISOString(), cost_usd: res.record.cost_counted_usd } satisfies JournalLine);
-              total += res.record.cost_counted_usd;
-              tonight += res.record.cost_counted_usd;
-              completed++;
-              done.add(key);
-              o.log(`done  ${key}: ${res.record.outcome}, $${(res.record.cost_usd ?? 0).toFixed(3)}, resolved=${res.record.resolved}, rules=${res.record.noonsight.rules.join('+') || res.record.noonsight.status}; tonight $${tonight.toFixed(2)}, total $${total.toFixed(2)}`);
-              if (OPEN_SETS.includes(cell.set)) {
-                const g = gradePending(o, key);
-                total += g;
-                tonight += g;
-              }
-              return;
-            }
-            const lost = res.cost_usd ?? 0;
-            append(journalFile, { event: 'retry', key, night, at: new Date().toISOString(), cost_usd: lost, why: res.failure ?? 'unknown' } satisfies JournalLine);
-            total += lost;
-            tonight += lost;
-            failedAttempts++;
-            o.log(`fail  ${key}: ${res.failure}`);
-          }
-          // Three attempts never reached the model or the hook: an infrastructure failure, recorded so it is not run again.
-          infra++;
-          const failed: InfraFailure = { ...cell, key, model_id: o.plan.models[cell.model]?.id ?? cell.model, night, started: new Date().toISOString(), attempts: MAX_ATTEMPTS, infra_failure: 'no run reached the model and the hook in three attempts', cost_counted_usd: 0 };
-          append(runsFile, failed);
-          done.add(key);
-        };
-        const pool = Math.max(1, o.plan.concurrency);
-        for (let i = 0; i < cells.length; i += pool) await Promise.all(cells.slice(i, i + pool).map(runOne));
+        if (batch.length >= pool) await flush();
       }
+    await flush();
     // Units held back (a digest without its rubric) leave their round open; with nothing else to start, the night ends.
     if (startedThisPass === 0) {
       stop = 'the units left wait for something outside the night (a digest rubric)';
