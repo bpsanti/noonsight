@@ -80,6 +80,7 @@ A night continues the first unfinished round and then starts whole rounds while 
 A round is cut into units, one per task and model with every condition of its phase, and a night only ever stops between units, so every recorded run has its partners under the other conditions.
 Before each unit the runner reads the account's quota with `quota-axi --provider claude` and stops below the floor; it also stops when the next unit, at full budgets, could pass the cap, or at the `--until` time.
 At the `--stop-by` time, runs still going are stopped and left interrupted.
+`--quota-floor` replaces the plan's floor for one night, and `--quota-floor-fallback` gives a lower floor the night falls back to when its floor would stop it; the night's summary records the floor in force when it ended and the lowest quota it read.
 Every run is recorded the moment it ends; a run that was in flight when the machine slept or rebooted is counted at its full budget and run again on the next night.
 The night runs under `caffeinate -ims` and ends with a summary line: runs planned, completed and interrupted, spend, and quota before and after.
 

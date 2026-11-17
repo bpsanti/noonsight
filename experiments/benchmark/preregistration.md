@@ -207,3 +207,6 @@ Mechanism signals, as in the study's design:
   Since the benchmark's tasks start no subagent and switch no model (none of night 1's 192 runs did), delivery on those paths is measured by a separate deterministic probe that records Claude Code's requests on a local server, not by the benchmark.
   The placebo texts and their hashes stay in `placebo/`, unused.
   What section 9 reports for each condition is reported for `claudemd` and `scattered` as it would have been for `placebo`, with the delivery measures above added.
+- 2026-11-17, before night 2: the quota floor may be lowered from 50 to 35 percent of the account's weekly quota for the remaining nights, when 50 would stop a night (`run --quota-floor-fallback 35`: the night keeps 50 until a batch would start below it, then goes on with 35).
+  Reason: the author allowed the account's daytime use by other work to keep going, which would otherwise leave too little of the week above 50 percent for the nights.
+  Each night's summary records the floor in force when it ended and the lowest quota read before a batch.

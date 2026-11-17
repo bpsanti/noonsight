@@ -90,6 +90,10 @@ export interface RunnerOptions {
   readonly nightUsd: number;
   /** No unit starts after this time. */
   readonly until: Date | null;
+  /** The quota floor for this night, when it is not the plan's (a deviation the pre-registration records). */
+  readonly quotaFloor?: number;
+  /** A lower floor the night falls back to when its floor would stop it (a deviation the pre-registration records). */
+  readonly quotaFloorFallback?: number;
   /** Runs still going at this time are stopped and left interrupted: counted at their budget, and run again on the next night. */
   readonly stopBy: Date | null;
   readonly dryRun: boolean;
@@ -407,6 +411,9 @@ export interface NightSummary {
   readonly total_spend_usd: number;
   readonly quota_before: number | null;
   readonly quota_after: number | null;
+  /** The quota floor in force that night, and the lowest weekly quota read before a batch. */
+  readonly quota_floor?: number;
+  readonly quota_min?: number | null;
   readonly stop: string;
 }
 
@@ -511,6 +518,8 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   // between units, and the quota is read before each batch.
   let batch: Cell[] = [];
   let quota: QuotaReading | null = null;
+  let quotaFloor = o.quotaFloor ?? o.plan.quota_floor_percent;
+  let quotaMin: number | null = quotaBefore.all_models;
   const flush = async (): Promise<void> => {
     const cells = batch;
     batch = [];
@@ -542,6 +551,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
             break outer;
           }
           quota = readQuota(o.account);
+          if (quota.all_models !== null) quotaMin = Math.min(quotaMin ?? quota.all_models, quota.all_models);
         }
         const budgetOf = (cs: readonly Cell[]): number => cs.reduce((s, c) => s + (o.plan.models[c.model]?.budget_usd ?? 0) + (OPEN_SETS.includes(c.set) ? o.plan.judge.budget_usd : 0), 0);
         if (total + budgetOf([...batch, ...cells]) > o.plan.cap_usd) {
@@ -549,7 +559,12 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
           stop = `the next unit could pass the $${o.plan.cap_usd} cap`;
           break outer;
         }
-        const floor = aboveFloor(quota ?? readQuota(o.account), o.plan.quota_floor_percent, first.model);
+        let floor = aboveFloor(quota ?? readQuota(o.account), quotaFloor, first.model);
+        if (!floor.ok && o.quotaFloorFallback !== undefined && o.quotaFloorFallback < quotaFloor) {
+          o.log(`quota floor: ${floor.why}; the night goes on with the ${o.quotaFloorFallback}% floor the author allowed`);
+          quotaFloor = o.quotaFloorFallback;
+          floor = aboveFloor(quota ?? readQuota(o.account), quotaFloor, first.model);
+        }
         if (!floor.ok) {
           await flush();
           stop = `quota floor: ${floor.why}`;
@@ -589,6 +604,8 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
     total_spend_usd: round(total),
     quota_before: quotaBefore.all_models,
     quota_after: quotaAfter.all_models,
+    quota_floor: quotaFloor,
+    quota_min: quotaMin,
     stop,
   };
   append(nightsFile, summary);
@@ -598,7 +615,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
 }
 
 export function summaryLine(s: NightSummary): string {
-  return `night ${s.night}: planned ${s.planned_runs}, completed ${s.completed_runs}, interrupted earlier ${s.interrupted_runs}, failed attempts ${s.failed_attempts}, infra failures ${s.infra_failures}; spend $${s.spend_usd.toFixed(2)} (total $${s.total_spend_usd.toFixed(2)}); quota ${s.quota_before ?? '?'}% -> ${s.quota_after ?? '?'}%; stopped: ${s.stop}`;
+  return `night ${s.night}: planned ${s.planned_runs}, completed ${s.completed_runs}, interrupted earlier ${s.interrupted_runs}, failed attempts ${s.failed_attempts}, infra failures ${s.infra_failures}; spend $${s.spend_usd.toFixed(2)} (total $${s.total_spend_usd.toFixed(2)}); quota ${s.quota_before ?? '?'}% -> ${s.quota_after ?? '?'}%${s.quota_floor !== undefined ? ` (floor ${s.quota_floor}%, lowest ${s.quota_min ?? '?'}%)` : ''}; stopped: ${s.stop}`;
 }
 
 function round(n: number): number {
