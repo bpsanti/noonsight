@@ -135,7 +135,7 @@ The rules go to every model declared with `"use": "preset"` or `"use": "custom"`
 A model declared with `"use": "none"`, by an exact key or a wildcard, receives none of them, and a model that is not declared stays undeclared: the block declares no model.
 
 A rule id is unique for each model that receives it: an id in `all_models.add` cannot repeat in the block, be the id of one of that model's preset rules (on or off), or be the id of one of its own `add` rules.
-The same id may appear under `all_models.add` and under a model declared `none`, since that model never receives it.
+A model declared `none` never receives the block, so an id in `all_models.add` may be the id of one of that model's preset rules.
 
 The block counts for every model that receives it.
 The limit on the delivered text (9,500 characters, see [Validation](#validation)) is checked for each model with the block's rules among its rules, so a block that fits beside one model's rules can still be refused because of another model's, and the problem names that model.
