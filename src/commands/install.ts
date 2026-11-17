@@ -71,6 +71,8 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     return 1;
   }
 
+  const setup = command === 'install' && mode.kind !== 'managed' && options.hooksOnly !== true;
+  let wrote: string[] | null = null;
   const lines: string[] = [];
   let current: InstallTarget | undefined = targets[0];
   try {
@@ -79,6 +81,20 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
       for (const target of targets) {
         current = target;
         checkInstallable(target, runtime);
+      }
+      if (setup) {
+        const file = configPath(env, home);
+        try {
+          wrote = writeConfig(env);
+        } catch (e) {
+          if (!isPermissionError(e)) throw e;
+          io.err(
+            `noonsight: this account cannot write ${(e as NodeJS.ErrnoException).path ?? file}, so the configuration file ${file} was not written. Nothing was changed. ` +
+              'Make that directory writable, or set NOONSIGHT_CONFIG to a file this account can write, then run `noonsight install` again.',
+          );
+          return 1;
+        }
+        lines.push(...(wrote ?? [`config ${file}: already there, left as it is`]));
       }
       for (const target of targets) {
         current = target;
@@ -127,7 +143,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     throw e;
   }
 
-  if (command === 'install' && mode.kind !== 'managed' && options.hooksOnly !== true) return finishSetup(lines, targets, env, home, io);
+  if (setup) return finishSetup(lines, wrote !== null, targets, env, home, io);
   if (command === 'install') lines.push(...installNotes(targets, env, home, true));
   else if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
   io.out(lines.join('\n'));
@@ -135,30 +151,13 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
 }
 
 /**
- * The rest of the one-command setup, after the hooks are in: the configuration file when there is
- * none, then what each declared model receives, then the check, then one line on what changed.
- * It composes init, models and check, and holds no logic of its own about them. Its exit status
- * covers what it set up, the hooks and the configuration; the check's lines report the rest of the
- * machine without changing it.
+ * The rest of the one-command setup, once the configuration file and the hooks are in: what each
+ * declared model receives, then the check, then one line on what changed. It composes models and
+ * check, and holds no logic of its own about them. Its exit status covers what it set up, the hooks
+ * and the configuration; the check's lines report the rest of the machine without changing it.
  */
-function finishSetup(hookLines: readonly string[], targets: readonly InstallTarget[], env: Env, home: string, io: Io): number {
-  const out = [...hookLines];
-  const file = configPath(env, home);
-  let wrote: string[] | null;
-  try {
-    wrote = writeConfig(env);
-  } catch (e) {
-    if (!isPermissionError(e)) throw e;
-    if (out.length) io.out(out.join('\n'));
-    io.err(
-      `noonsight: this account cannot write ${(e as NodeJS.ErrnoException).path ?? file}, so the configuration file ${file} was not written. ` +
-        `${out.length ? 'The hooks above are in place, but sessions' : 'Sessions'} get no rules until it exists: ` +
-        'make that directory writable, or set NOONSIGHT_CONFIG to a file this account can write, then run `noonsight install` again.',
-    );
-    return 1;
-  }
-  if (wrote !== null) out.push(...wrote);
-  else out.push(`config ${file}: already there, left as it is`);
+function finishSetup(setupLines: readonly string[], wroteConfig: boolean, targets: readonly InstallTarget[], env: Env, home: string, io: Io): number {
+  const out = [...setupLines];
 
   let usable = true;
   try {
@@ -173,10 +172,10 @@ function finishSetup(hookLines: readonly string[], targets: readonly InstallTarg
   if (checkStatus === 2) usable = false;
   out.push(...checked, ...installNotes(targets, env, home, false));
 
-  const hooks = hookLines.filter((l) => /^hooks .*: (created|added)\b/.test(l)).length;
-  const pointer = hookLines.some((l) => /^hook pointer .*: (written|rewritten)\b/.test(l));
+  const hooks = setupLines.filter((l) => /^hooks .*: (created|added)\b/.test(l)).length;
+  const pointer = setupLines.some((l) => /^hook pointer .*: (written|rewritten)\b/.test(l));
   const changes = [
-    ...(wrote !== null ? ['the configuration file was written'] : []),
+    ...(wroteConfig ? ['the configuration file was written'] : []),
     ...(hooks > 0 ? [`hooks were added to ${hooks} Claude Code configuration ${hooks === 1 ? 'directory' : 'directories'}`] : []),
     ...(pointer && hooks === 0 ? ['the hook pointer was updated'] : []),
   ];

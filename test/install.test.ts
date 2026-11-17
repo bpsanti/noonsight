@@ -297,17 +297,21 @@ test('install --account exits 0 for what it set up while check reports a problem
   assert.match(ready.stdout, /^Done: /m);
 });
 
-test('a configuration this account cannot write: install reports the hooks it added and the path, and exits 1', { skip: process.getuid?.() === 0 }, () => {
+test('a configuration this account cannot write: install says which path, changes nothing, and exits 1', { skip: process.getuid?.() === 0 }, () => {
   const locked = tempTree({});
   fs.chmodSync(locked, 0o500);
   try {
     const config = path.join(locked, 'noonsight', 'noonsight.json');
-    const r = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), NOONSIGHT_CONFIG: config });
+    const claudeDir = tempTree({});
+    const home = tempTree({});
+    const r = runCli(['install', '--account', claudeDir], { HOME: home, NOONSIGHT_CONFIG: config });
     assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stdout, /^hooks .*settings\.json: (created|added)/m);
     assert.ok(r.stderr.includes(`noonsight: this account cannot write ${path.join(locked, 'noonsight')}`), r.stderr);
+    assert.match(r.stderr, /Nothing was changed\./);
     assert.doesNotMatch(r.stderr, /\n {4}at /, 'no stack trace');
     assert.equal(fs.existsSync(config), false);
+    assert.deepEqual(fs.readdirSync(claudeDir), [], 'no hooks were written');
+    assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')), false, 'no hook pointer was written');
   } finally {
     fs.chmodSync(locked, 0o755);
   }

@@ -20,6 +20,7 @@ It takes these steps in order, and a step with a command named in brackets does 
 1. **The configuration** [`noonsight init`].
    When `~/.config/noonsight/noonsight.json` (or the file `NOONSIGHT_CONFIG` names) does not exist, it is written from the preset, declaring every model the preset has rules for with `"use": "preset"`.
    A file that exists is never opened for writing, and the output says it was left as it is.
+   When this account cannot write it, the command stops here, before any hook is written, and says which path it could not write.
 2. **The hooks.**
    They go into every Claude Code configuration directory of your account, as [described below](#every-login-of-your-account-the-default).
 3. **What each model receives** [`noonsight models`].
