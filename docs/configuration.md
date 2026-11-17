@@ -70,7 +70,8 @@ The preset also suggests a routing table, which applies only when the user turns
 | `models.<id>.use` | `preset`, `custom`, `none` | Required | `preset`: the preset's rules for this exact model. `custom`: only the rules in `add`. `none`: decided that this model needs no rules. |
 | `models.<id>.enable` | Rule ids | Empty | Preset rules that ship off and should be on. Only with `preset`. |
 | `models.<id>.disable` | Rule ids | Empty | Preset rules that ship on and should be off. Only with `preset`. |
-| `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules. Required, with at least one rule, for `custom`. |
+| `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules and the rules of `all_models`. With `custom` the model must receive at least one rule, from `add` or from `all_models`. |
+| `all_models.add` | User rules | Absent | Rules for every model, in one place: team conventions, commit style, anything that is not specific to a model. See [Rules for every model](#rules-for-every-model). |
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
 | `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
@@ -94,7 +95,7 @@ A user rule has these keys:
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `id` | Required | A name for the rule, unique for that model, such as `team/commit-style`. |
+| `id` | Required | A name for the rule, unique for each model that receives it, such as `team/commit-style`. |
 | `file` | Required | The rule text. |
 | `scopes` | `["*"]` | The scopes the rule applies to, or `["*"]` for every scope. |
 | `where` | All three places | The places the rule applies to: `session` (someone is watching), `unattended` (nobody is watching), `subagent` (a subagent's task, delivered by the subagent hooks). |
@@ -110,6 +111,36 @@ Rules always need the exact identifier, so a new model version never inherits ru
 
 An exact key always wins over a wildcard.
 Between wildcards, the one with more literal text wins, and a tie goes to the key that sorts first.
+
+## Rules for every model
+
+A rule that is not specific to a model, such as a team convention or the commit style, goes under `all_models.add` once, instead of under `add` of every model.
+`all_models.add` takes the same rules as `models.<id>.add`, with the same keys (`id`, `file`, `scopes`, `where`, `triggers`), and a rule keeps its own scopes, places and triggers.
+
+```json
+{
+  "version": 1,
+  "all_models": {
+    "add": [{ "id": "team/commit-style", "file": "rules/commit-style.md" }]
+  },
+  "models": {
+    "claude-sonnet-5-5": { "use": "preset" },
+    "claude-haiku-5-5": { "use": "custom" },
+    "claude-opus-5-5": { "use": "none" }
+  }
+}
+```
+
+The rules go to every model declared with `"use": "preset"` or `"use": "custom"`, in this order: the preset's rules, then the rules of `all_models.add`, then the model's own `add`.
+A model declared with `"use": "none"`, by an exact key or a wildcard, receives none of them, and a model that is not declared stays undeclared: the block declares no model.
+Since a `custom` model can then get all its rules from the block, `add` is optional for `custom`; a `custom` model with neither its own rules nor any rule in `all_models` is refused.
+
+A rule id is unique for each model that receives it: an id in `all_models.add` cannot repeat in the block, be the id of one of that model's preset rules (on or off), or be the id of one of its own `add` rules.
+The same id may appear under `all_models.add` and under a model declared `none`, since that model never receives it.
+
+The block counts for every model that receives it.
+The limit on the delivered text (9,500 characters, see [Validation](#validation)) is checked for each model with the block's rules among its rules, so a block that fits beside one model's rules can still be refused because of another model's, and the problem names that model.
+`noonsight models` lists the block and, under each model, its rules in delivery order with the block's marked `from all_models`; `noonsight check` says which models receive the block, and refuses a configuration whose block overflows a model.
 
 ## Scopes
 
@@ -382,7 +413,7 @@ A user row replaces the preset's row for the same scope; to stop routing a scope
    A scope that is not declared only means "rules for every scope"; it never blocks and never warns.
 3. The place narrows them again.
 
-The rules that remain are joined in order (the preset's first, then the user's) and hashed.
+The rules that remain are joined in order (the preset's first, then those of `all_models`, then the model's own) and hashed.
 The joined text is then wrapped in a short envelope that says where it came from; the hash covers the rules only, not the envelope.
 The same configuration and the same request always give the same text and the same hash.
 
@@ -397,7 +428,7 @@ Beyond the schema, noonsight checks that:
 
 - every model key is already in bare form;
 - every rule file exists and is not empty;
-- rule ids are unique for each model;
+- rule ids are unique for each model, counting the preset's rules, the rules of `all_models` and the model's own;
 - every scope a rule names is declared;
 - a rule that lists a trigger is not for every scope (`["*"]`, where a trigger adds nothing), and is for the place `session` or `unattended`, where triggers act;
 - every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
@@ -405,7 +436,8 @@ Beyond the schema, noonsight checks that:
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - every scope in `routing.table` is declared, and every model a routing option names is an alias or a model declared with its exact key;
 - a routing row written as an object lists at least one target;
-- the delivered text fits in 9,500 characters for every combination of scope and place, with and without the triggers revealed, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
+- every model declared with `use: "custom"` receives at least one rule, from `add` or from `all_models`;
+- the delivered text fits in 9,500 characters for every model and every combination of scope and place, with the rules of `all_models` among the model's rules and with and without the triggers revealed, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
 
 The preset is checked the same way, and more strictly:
 
@@ -422,7 +454,7 @@ noonsight models [--json]
 ```
 
 Lists, for each declared model, how it is declared and the rules it receives.
-For `"use": "preset"` that is every preset rule of the model, on or off, with its scopes, places, source, effect and cost; the user's own rules follow, with their files.
+For `"use": "preset"` that is every preset rule of the model, on or off, with its scopes, places, source, effect and cost; the rules of `all_models` and the user's own rules follow, with their files; a section at the top lists the rules of `all_models` once.
 It also lists the preset's models that are not declared, and the models the decision log ([hooks.md](hooks.md#the-decision-log)) has seen that are not declared, which get a warning and no rules.
 A wildcard key lists the models from the log that it covers.
 `--json` prints the same as one JSON object.

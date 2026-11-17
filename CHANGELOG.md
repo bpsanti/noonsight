@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Rules for every model in one block: `all_models.add` takes the same rules as `models.<id>.add` (`id`, `file`, `scopes`, `where`, `triggers`) and delivers them to every model declared with `"use": "preset"` or `"use": "custom"`, after the preset's rules and before the model's own `add`, so team conventions no longer have to be repeated under each model.
+  A model declared `"use": "none"`, by an exact key or a wildcard, receives none of them, and the block declares no model.
+  A rule id must be new for each model that receives it, across the preset's rules, the block and the model's own `add`; the delivery limit of 9,500 characters is checked for each model with the block's rules among its rules, and the problem names the model it overflows.
+  `add` is now optional for `"use": "custom"`, which is refused only when the model receives no rule at all, so a model can take only the block's rules.
+  `noonsight models` lists the block and marks its rules under each model (`all_models` in `--json`, `from` on a rule), and `noonsight check` reports the models that receive it.
+  See `docs/configuration.md` ("Rules for every model").
 - Triggers: a rule can list `triggers`, actions that also deliver it to a session whose scope is not one of the rule's scopes, once the session does one; a plain interactive session has no scope, so every rule written for a list of scopes used to stay dormant in it.
   The one trigger is `code-edit`: the session edits, with Edit or Write, a file with a code extension that the git repository of its project, or of one of its worktrees, already tracks, so reports, notes, `.md` and `.html` files, new files, ignored files and files outside the project never count.
   A sixth hook entry, `PostToolUse` on `Edit|Write`, delivers the rules the trigger adds with the first such edit, as `additionalContext`, which Claude Code adds right after the edit's result; it runs `git ls-files` and `git rev-parse` until the session reveals the trigger, and nothing after.

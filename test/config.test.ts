@@ -64,7 +64,7 @@ test('model keys are full identifiers: no aliases, no capitals, no suffixes, no 
 
 test('"none" takes no other key, and "custom" needs at least one rule and nothing else', () => {
   assertProblem(problemsOf({ version: 1, models: { 'claude-sonnet-5-5': { use: 'none', add: [] } } }), /^\/models\/claude-sonnet-5-5\/add: unknown key \(a model declared with "use": "none" takes no other key\)/);
-  assertProblem(problemsOf({ version: 1, models: { 'claude-sonnet-5-5': { use: 'custom' } } }), /^\/models\/claude-sonnet-5-5: missing required key "add"/);
+  assertProblem(problemsOf({ version: 1, models: { 'claude-sonnet-5-5': { use: 'custom' } } }), /^\/models\/claude-sonnet-5-5: a model declared with "use": "custom" must receive at least one rule/);
   assertProblem(problemsOf({ version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [] } } }), /^\/models\/claude-sonnet-5-5\/add: must not be empty/);
   assertProblem(
     problemsOf({ version: 1, models: { 'claude-sonnet-5-5': { ...custom(), disable: ['x'] } } }, { 'r.md': 'x' }),
