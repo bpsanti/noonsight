@@ -94,10 +94,15 @@ function modelChanges(
 ): ModelChanges {
   const empty = { nowOn: [], nowOff: [], renamed: [], changed: [], newOff: [], staleEntries: [] };
   if (to === undefined) return { model, dropped: true, ...empty };
-  const onBefore = onRules(from, enable, disable);
-  const onAfter = onRules(to, enable, disable);
   const predecessor = (r: PresetRule): PresetRule | undefined =>
     from.find((p) => p.id === r.id) ?? from.find((p) => r.renamedFrom.includes(p.id));
+  const asBefore = (id: string): string => {
+    if (from.some((p) => p.id === id || p.renamedFrom.includes(id))) return id;
+    const r = to.find((r) => r.id === id || r.renamedFrom.includes(id));
+    return (r === undefined ? undefined : predecessor(r)?.id) ?? id;
+  };
+  const onBefore = onRules(from, enable.map(asBefore), disable.map(asBefore));
+  const onAfter = onRules(to, enable, disable);
   const successor = (p: PresetRule): PresetRule | undefined => to.find((r) => predecessor(r) === p);
 
   const nowOn: ModelChanges['nowOn'][number][] = [];
@@ -165,7 +170,9 @@ export function describeChanges(m: ModelChanges, held = false): string {
   for (const e of m.staleEntries)
     parts.push(
       e.now !== null
-        ? `"${e.list}" names "${e.id}", which is now "${e.now}"; it still applies to it, and "${e.now}" is the name to write`
+        ? held
+          ? `"${e.list}" names "${e.id}", which the installed preset renames "${e.now}"; it will still apply to it, and after accepting, "${e.now}" is the name to write`
+          : `"${e.list}" names "${e.id}", which is now "${e.now}"; it still applies to it, and "${e.now}" is the name to write`
         : held
           ? `"${e.list}" names "${e.id}", which the installed preset no longer has; remove it before accepting`
           : `"${e.list}" names "${e.id}", which the preset no longer has, so that choice no longer applies; remove it`,

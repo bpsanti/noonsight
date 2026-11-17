@@ -119,6 +119,22 @@ test('an entry that names a rule by its id before a rename still applies to the 
   assert.ok(problemsOf(both, presets).some((p) => p.includes('rule "sonnet/follow-through" is both enabled and disabled (as "sonnet/follow-through" and "sonnet/carry-through")')));
 });
 
+test('an entry already written with the name a rename gives applies to the rule in both versions', () => {
+  const sonnetOf = (presets: string, sonnet: Record<string, unknown>) => {
+    const details = loadConfigDetails(configFile(labConfig({}, sonnet)), { presetsDir: presets });
+    return comparePresets(details.presetVersions, details.declared, { presetsDir: presets })?.models.find((m) => m.model === SONNET);
+  };
+  const off = sonnetOf(updatedPresets(), { disable: ['sonnet/follow-through'] });
+  assert.deepEqual(off?.nowOff, [{ id: 'sonnet/investigate', why: 'removed' }], 'follow-through was off before and after');
+  assert.deepEqual(off?.staleEntries, []);
+  const renameOff = (p: Record<string, any>): void => {
+    const rule = (p.models[SONNET].rules as Record<string, any>[]).find((r) => r.id === 'sonnet/progress-updates') as Record<string, any>;
+    Object.assign(rule, { id: 'sonnet/updates', renamed_from: ['sonnet/progress-updates'], enabled: false });
+  };
+  const on = sonnetOf(updatedPresets(renameOff), { enable: ['sonnet/updates'] });
+  assert.deepEqual(on?.nowOn, [{ id: 'sonnet/new-on', why: 'new' }], 'updates was on before and after');
+});
+
 test('under "warn", an entry for a rule the update removed is reported, not refused; without a kept version it is refused as before', () => {
   const presets = updatedPresets();
   const stale = labConfig({}, { disable: ['sonnet/investigate'] });
@@ -214,6 +230,7 @@ test('"hold" keeps delivering the accepted version from the copy the package kee
   const env = cliEnv(file, presets);
   const check = runCli(['check'], env);
   assert.match(check.stdout, /^warning: preset lab: held at 0\.1\.0 \("on_preset_change": "hold"\) while the package ships 0\.2\.0, so sessions keep the rules of 0\.1\.0; accepting 0\.2\.0 would change them as listed below; run `noonsight accept` to accept 0\.2\.0$/m);
+  assert.match(check.stdout, /"disable" names "sonnet\/carry-through", which the installed preset renames "sonnet\/follow-through"; it will still apply to it, and after accepting, "sonnet\/follow-through" is the name to write/);
   const models = runCli(['models'], env);
   assert.match(models.stdout, /^preset lab 0\.1\.0 \(held; the package ships 0\.2\.0\)/m);
 
