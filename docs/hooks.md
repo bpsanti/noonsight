@@ -230,7 +230,8 @@ Claude Code applies the call's `effort` only from version 2.1.292 ([Choose an ef
   Such a subagent is predicted on its parent's model, logged with `definition: "not-read"`, and the check reports a difference.
 - An installed mod that sets the model in its `agent.spawn` hook replaces the call's parameter; the check reports a difference.
 - Subagents that do not start through the agent tool, such as agent team teammates and workflow agents, get nothing from these hooks.
-- The subagents given with `--agents` and managed subagent definitions are subagent types noonsight does not know: they get no rules, and the person is warned.
+- The subagents given with `--agents` and managed subagent definitions are not read.
+  Such a subagent is predicted like `general-purpose`, on `CLAUDE_CODE_SUBAGENT_MODEL`, else its parent's model, and the check reports a difference.
 
 ## The decision log
 
