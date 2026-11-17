@@ -47,7 +47,7 @@ A session with no scope gets only the rules its model has for every scope, which
 [docs/install.md](docs/install.md#the-one-command) lists the steps it takes and how to undo them.
 
 Three of its steps are also commands of their own: `noonsight init`, `noonsight models` and `noonsight check`.
-Turn a preset rule on or off with `enable` and `disable`, add your own rule files (under `all_models` for rules every model should get), and declare the models you use; [docs/configuration.md](docs/configuration.md) explains each key.
+Turn a preset rule on or off with `enable` and `disable`, add your own rule files (under `all_models` for rules every model should get; [when that beats a `CLAUDE.md`](docs/configuration.md#when-all_models-is-worth-it-and-when-a-claudemd-is-enough)), and declare the models you use; [docs/configuration.md](docs/configuration.md) explains each key.
 
 `noonsight watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `noonsight watch disable` turns it off.
 
