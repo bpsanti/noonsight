@@ -155,19 +155,18 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
 
   // The rules are handed to the subagent when it starts, not added to the task text: a changed call
   // costs the other calls of the same response their auto mode review.
-  const delivered: AgentCall['delivered'] =
+  const planned: AgentCall['delivered'] =
     decision.status !== 'matched' ? 'nothing' : prompt !== null && prompt.includes(decision.text) ? 'already-delivered' : 'at-start';
   const specific = Object.keys(changes).length > 0 ? changed(config, { ...ti, ...changes }, changes) : null;
 
-  const messages = [...unplaced, ...undeclaredMessages(decision, prediction, subagentType, ctx.file)];
   const call: AgentCall = {
     session_id: str(input.session_id),
     subagent_type: subagentType,
     predicted: decision.model,
     status: decision.status,
     sha256: decision.status === 'matched' ? decision.sha256 : null,
-    delivered,
-    ...(delivered === 'at-start' && decision.status === 'matched' ? { text: decision.text, rules: decision.rules, scope: decision.scope } : {}),
+    delivered: planned,
+    ...(planned === 'at-start' && decision.status === 'matched' ? { text: decision.text, rules: decision.rules, scope: decision.scope } : {}),
     routing: routed.routing,
     routing_reason: routed.reason,
     at: ctx.now.toISOString(),
@@ -175,12 +174,24 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const toolUseId = str(input.tool_use_id);
   const sessionId = str(input.session_id);
   // A call with no rules is recorded too, so that its subagent's start never takes another call's rules.
-  writeRecord(callFile, call);
-  if (callFile !== null && toolUseId !== null && sessionId !== null)
-    changePool(ctx.state, sessionId, (pool) => ({
-      pool: { open: [...pool.open, { id: toolUseId, type: subagentType, at: call.at }], shared: pool.shared },
-      value: undefined,
-    }));
+  let failure: string | null = null;
+  try {
+    writeRecord(callFile, call);
+    if (callFile !== null && toolUseId !== null && sessionId !== null)
+      changePool(ctx.state, sessionId, (pool) => ({
+        pool: { open: [...pool.open, { id: toolUseId, type: subagentType, at: call.at }], shared: pool.shared },
+        value: undefined,
+      }));
+  } catch (e) {
+    failure = e instanceof Error ? e.message : String(e);
+  }
+  // Without the record, the subagent's start finds no call, so it gets no rules, and its result is not checked.
+  const delivered = failure !== null && planned === 'at-start' ? 'nothing' : planned;
+  const messages = [
+    ...unplaced,
+    ...undeclaredMessages(decision, prediction, subagentType, ctx.file),
+    ...(failure !== null && planned === 'at-start' ? [`noonsight: noonsight could not record the call of subagent ${subagentType} (${failure}), so it gets no rules.`] : []),
+  ];
   return {
     record: {
       ...base,
@@ -196,6 +207,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       ...(prediction.why !== undefined ? { unresolved_why: prediction.why } : {}),
       ...routing,
       delivered,
+      ...(failure !== null ? { error: failure } : {}),
       ...(specific !== null ? { permission: config.subagents.permission } : {}),
       warned: messages.length > 0,
     },
@@ -217,8 +229,12 @@ function changed(config: Config, updatedInput: Record<string, unknown>, routed: 
   };
 }
 
-/** How long an open call can wait for its subagent to start; a call denied after its hook ran never starts. */
-const OPEN_FOR_MS = 30 * 60 * 1000;
+/**
+ * How long an open call can wait for its subagent to start. A subagent starts within seconds of its
+ * call's hook, while a call denied after its hook ran never starts and no hook says so; until it is
+ * left out, it makes a later start of its type wait for a result and share rules with it.
+ */
+const OPEN_FOR_MS = 2 * 60 * 1000;
 /** How long a start that several open calls could own waits for a result to name it. */
 const LINK_WAIT_MS = 2000;
 const LINK_POLL_MS = 25;

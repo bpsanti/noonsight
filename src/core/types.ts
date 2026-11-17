@@ -45,15 +45,15 @@ export interface WildcardKey {
 
 /** How subagents get their rules; the keys under "subagents" in the configuration. */
 export interface SubagentSettings {
-  /** on: each subagent gets the rules for its model when it starts. off: subagents are left alone. */
-  readonly delivery: 'on' | 'off';
+  /** prompt: each subagent gets the rules for its model when it starts. off: subagents are left alone. */
+  readonly delivery: 'prompt' | 'off';
   /** The permission decision returned with a call routing changed; passthrough returns none. */
   readonly permission: 'allow' | 'ask' | 'passthrough';
   /** What to do when a subagent starts on another model than the one its rules were chosen for. */
   readonly onMismatch: 'warn' | 'ignore';
 }
 
-export const DEFAULT_SUBAGENT_SETTINGS: SubagentSettings = { delivery: 'on', permission: 'allow', onMismatch: 'warn' };
+export const DEFAULT_SUBAGENT_SETTINGS: SubagentSettings = { delivery: 'prompt', permission: 'allow', onMismatch: 'warn' };
 
 /** One way a task names its scope: a case-insensitive regular expression run over the task text. */
 export interface ScopeMatcher {

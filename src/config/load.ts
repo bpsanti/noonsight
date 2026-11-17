@@ -87,7 +87,7 @@ interface RawConfig {
   on_undeclared?: 'warn' | 'ignore';
   scopes?: Record<string, RawScope>;
   session?: { unattended_when_env?: string[] };
-  subagents?: { delivery?: 'on' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
+  subagents?: { delivery?: 'prompt' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
   routing?: {
     enabled?: boolean;
     targets?: RouteTarget[];

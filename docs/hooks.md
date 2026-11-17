@@ -132,17 +132,15 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    | 3 | The `model` parameter of the call | `parameter` |
    | 4 | The `model` field of the subagent's definition | `definition` |
    | 5 | A built-in subagent's own model (below) | `built-in` |
-   | 6 | A subagent type noonsight does not know: no prediction, so no rules | `unknown` |
-   | 7 | `CLAUDE_CODE_SUBAGENT_MODEL` | `env` |
-   | 8 | The parent's model | `parent` |
+   | 6 | `CLAUDE_CODE_SUBAGENT_MODEL` | `env` |
+   | 7 | The parent's model | `parent` |
 
    `inherit` means the parent's model.
    A family alias (`opus`, `sonnet`, `haiku`, `fable`) means the parent's own model when the parent is of that family, as in Claude Code ([Which version a model alias selects](https://code.claude.com/docs/en/sub-agents)); otherwise an alias resolves as for the session (see [SessionStart](#sessionstart)).
    Definitions are read from every `.claude/agents/` from the project directory (`CLAUDE_PROJECT_DIR`, else the input's `cwd`) up to the repository root, the closest first, then from `agents/` in the Claude Code configuration directory; both are scanned recursively, and a subagent is known by the `name` in its frontmatter.
    A definition of the same name replaces a built-in subagent.
-   The built-in subagents ([Built-in subagents](https://code.claude.com/docs/en/sub-agents#built-in-subagents)): Explore runs on its parent's model, except that under a Fable parent it runs on the model the `opus` alias selects, unless Claude Code runs on Amazon Bedrock, Google Cloud or Microsoft Foundry; Explore and Plan ignore `CLAUDE_CODE_SUBAGENT_MODEL`; `statusline-setup` runs on Sonnet and `claude-code-guide` on Haiku; `general-purpose` and `claude` follow the order.
+   The built-in subagents ([Built-in subagents](https://code.claude.com/docs/en/sub-agents#built-in-subagents)): Explore runs on its parent's model, except that under a Fable parent it runs on the model the `opus` alias selects, unless Claude Code runs on Amazon Bedrock, Google Cloud or Microsoft Foundry; Explore and Plan ignore `CLAUDE_CODE_SUBAGENT_MODEL`; `statusline-setup` runs on Sonnet and `claude-code-guide` on Haiku.
    `web-fetch`, which the documentation does not list, runs on the model the `haiku` alias selects, and on its parent's model on another provider than the Anthropic API, as its built-in definition in Claude Code 2.1.326 reads.
-   Any other type that is neither a definition noonsight reads nor a plugin's subagent may be a built-in subagent with a model of its own, or a definition noonsight does not read (below), so its model is not predicted: the subagent gets no rules rather than the rules of a model it may not run on, and the person is warned.
 2. The parent's model, for a call the session makes, comes from noonsight's record of the session, which `SessionStart` and `PostModelSwitch` keep current (`parent_source: session-record`); else from the session's transcript (`session-transcript`); else from the settings the session started with, as for `SessionStart`.
    For a call made inside a subagent, it comes from noonsight's record of that subagent, written when the result of the call that started it named its model, which happens at once for a subagent started in the background (`agent-record`); else from the model of that subagent's own transcript (`agent-transcript`).
    When neither knows, noonsight does not guess the session's model: the subagent gets no rules, and the person is warned.
@@ -152,6 +150,7 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    The rules are resolved for the scope, the place `subagent` and the model the subagent will run on.
 5. The hook records the rules for the subagent's start, and puts the call among its session's calls whose subagent has not started yet.
    A call whose task text already holds the exact rules gets none again (`delivered: "already-delivered"`).
+   When the record cannot be written, the subagent gets no rules, the person is warned, and the line records `error`; a call routing changed is still returned changed.
 6. It returns nothing for the call, unless routing changed its model or effort.
 7. An undeclared model warns the person, unless `on_undeclared` is `ignore`.
 
@@ -172,7 +171,9 @@ So noonsight finds the call among its session's open calls of that type:
 A shared start never gives a subagent rules chosen for another subagent.
 Several calls of one response run at the same time, so the hooks of their calls, starts and results interleave in any order; the session's open calls are changed under a lock, one hook at a time.
 A start that matches no open call, such as an agent team teammate's, gets nothing and leaves no log line.
-A call whose subagent never starts, because something denied it after the hook ran, stays open for 30 minutes.
+A call whose subagent never starts, because something denied it after the hook ran, stays open for 2 minutes, since no hook says it was denied.
+A subagent starts within seconds of its call's hook, so 2 minutes leaves a wide margin while keeping a denied call from making the later starts of its type wait for a result and share their rules with it.
+A call that waits longer than that to start, such as one held on a permission prompt, is no longer open when its subagent starts, which then gets no rules.
 
 The rules arrive as `additionalContext`, in the same envelope as the session's, at the start of the subagent's conversation, before its task.
 The start is recorded in `~/.local/state/noonsight/agent-starts/`, under the subagent's id.

@@ -10,10 +10,6 @@
 // that family. With CLAUDE_CODE_SUBAGENT_MODEL_FORCE set, definitions and the call's parameter are
 // ignored. A fork always runs on its parent's model.
 //
-// A subagent type that is neither a definition noonsight reads, a plugin's subagent, nor a built-in
-// subagent noonsight knows may set its own model, as some built-in subagents do, so its model is not
-// predicted: the subagent gets no rules, rather than the rules of a model it may not run on.
-//
 // The prediction is checked after the subagent starts: the result of the agent call names the model
 // it started on (resolvedModel), and a difference is logged and shown.
 
@@ -24,7 +20,7 @@ import { normalizeModel } from '../../core/normalize.js';
 import { isSet, otherProvider, resolveModelValue } from './launch.js';
 
 /** Where the prediction came from, as the decision log records it. */
-export type PredictionSource = 'fork' | 'forced' | 'parameter' | 'definition' | 'built-in' | 'unknown' | 'env' | 'parent';
+export type PredictionSource = 'fork' | 'forced' | 'parameter' | 'definition' | 'built-in' | 'env' | 'parent';
 
 export interface Prediction {
   /** The normalized model, or null when noonsight cannot tell. */
@@ -71,12 +67,6 @@ const BUILT_IN_MODELS: Readonly<Record<string, string>> = {
 const PARENT_BUILT_INS = new Set(['Explore', 'Plan']);
 
 /**
- * Built-ins with no model of their own, which follow the order above: general-purpose, and claude, the
- * documented catch-all. A fork is handled before any of them.
- */
-const ORDERED_BUILT_INS = new Set(['general-purpose', 'claude']);
-
-/**
  * The built-in web-fetch subagent, which the documentation does not list. Claude Code 2.1.326 gives it
  * the model the haiku alias selects when it runs on the Anthropic API, and its parent's model on
  * another provider, as its built-in definition reads.
@@ -117,12 +107,6 @@ export function predict(input: PredictInput): Prediction {
     if (type === WEB_FETCH) return otherProvider(env) !== undefined ? fromParent(parent, 'built-in') : fromValue('haiku', parent, env, 'built-in');
     const builtIn = BUILT_IN_MODELS[type];
     if (builtIn !== undefined) return fromValue(builtIn, parent, env, 'built-in');
-    if (!ORDERED_BUILT_INS.has(type))
-      return {
-        model: null,
-        source: 'unknown',
-        why: `${type} is neither a subagent definition noonsight reads nor a built-in subagent it knows, so its model may be its own`,
-      };
   }
 
   if (subagentModel !== null) return fromValue(subagentModel, parent, env, 'env');

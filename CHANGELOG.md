@@ -6,11 +6,11 @@
   In auto mode, a call a hook changed left the other calls of the same response without the classifier's verdict, so a Bash call or another subagent made next to it was refused until Claude made it again; those calls now run.
   A call routing changes is still returned changed, with `subagents.permission`, so with routing on in auto mode a routed call still has that effect (see `docs/hooks.md`, "Routing").
   `SubagentStart` does not name the call that started the subagent, so the hook takes the one open call of the subagent's type in the session, or the call whose result already named the subagent; when several calls of the type are open and no result names it within two seconds, the subagent gets only the rules all of them would give, never another call's.
+  A call whose subagent never starts, because something denied it after the hook ran, stays open for 2 minutes.
+  When the call's record cannot be written, a call routing changed is still returned changed, and its subagent gets no rules (`error` on the `agent-call` line, with a warning).
   Run `noonsight install` again: `noonsight check` reports an install without the `SubagentStart` entry, whose subagents get no rules.
-- `subagents.delivery` takes `on` (the default) or `off`; `prompt` is no longer accepted.
 - The decision log records `subagent-start` lines (`start_match`, `call_id` or `calls`, `shared_rules`, and `reason: "calls-differ"`), an agent call whose rules go to its start records `delivered: "at-start"`, and an `agent-result` line's `delivered` says what the start gave.
 - The built-in `web-fetch` subagent is predicted on the model the `haiku` alias selects, and on its parent's model on another provider, as its definition in Claude Code 2.1.326 reads; before, it received its parent's rules.
-  A subagent type that is neither a definition noonsight reads, a plugin's subagent nor a built-in subagent noonsight knows gets no rules and a warning, instead of its parent's rules, since it may run on a model of its own (`model_source: "unknown"`, and routing yields with `unknown-subagent`).
 - `noonsight report` has a classifier section: the tasks the classifier was meant to place, by result, and the median and longest time and the total cost of the classifications that ran (`classifier` in `--json`).
 - The version is 0.0.1, read from `package.json` by `noonsight check`, the hook pointer and every line of the decision log.
 

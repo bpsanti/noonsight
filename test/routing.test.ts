@@ -287,6 +287,21 @@ test('route-subagents: the hook sets the call\'s model and effort from its scope
   assert.deepEqual([checked?.predicted, checked?.result, checked?.routing, checked?.routing_reason], ['claude-haiku-5-5', 'match', 'routed', 'table']);
 });
 
+test('route-subagents: a call whose record cannot be written is still routed, and its subagent gets no rules, with a warning', () => {
+  const h = hookHome(routingConfig());
+  startOn(h, 'claude-sonnet-5-5');
+  const state = path.join(h.dir, '.local', 'state', 'noonsight');
+  fs.mkdirSync(state, { recursive: true });
+  fs.writeFileSync(path.join(state, 'agent-calls'), 'not a directory');
+  const r = h.hook('agent-call', call(SUMMARY));
+  assert.equal(r.status, 0);
+  assert.deepEqual([r.out?.hookSpecificOutput?.updatedInput?.model, r.out?.hookSpecificOutput?.permissionDecision], ['haiku', 'allow']);
+  assert.match(r.out?.systemMessage, /^noonsight: noonsight could not record the call of subagent general-purpose \(.+\), so it gets no rules\.$/);
+  const [line] = calls(h);
+  assert.deepEqual([line?.routing, line?.delivered, typeof line?.error, line?.warned], ['routed', 'nothing', 'string', true]);
+  assert.equal(rulesAtStart(h), '');
+});
+
 test('route-subagents: an option that is not declared is passed over, and the log says why', () => {
   const h = hookHome(routingConfig());
   startOn(h, 'claude-haiku-5-5');
@@ -336,7 +351,6 @@ test('explicit-model: a definition\'s model and a built-in subagent\'s own model
     ['claude-code-guide', 'built-in-model'],
     ['web-fetch', 'built-in-model'],
     ['kit:helper', 'plugin-definition'],
-    ['deep-research', 'unknown-subagent'],
     ['fork', 'fork'],
   ] as const) {
     const { input, line } = run(config, type);

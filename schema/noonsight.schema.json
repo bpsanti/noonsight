@@ -72,9 +72,9 @@
       "additionalProperties": false,
       "properties": {
         "delivery": {
-          "description": "on: each subagent receives the rules for the model it runs on when it starts. off: subagents are left alone.",
-          "enum": ["on", "off"],
-          "default": "on"
+          "description": "prompt: each subagent receives the rules for the model it runs on when it starts. off: subagents are left alone.",
+          "enum": ["prompt", "off"],
+          "default": "prompt"
         },
         "permission": {
           "description": "The permission decision returned with a call whose model or effort routing changed. allow: the call runs without a permission prompt, though deny and ask rules still apply. ask: the person confirms each such call. passthrough: no decision, so the session's permission mode decides, and auto mode can deny a changed call.",

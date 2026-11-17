@@ -207,6 +207,19 @@ test('parallel calls of one type that no result names in time: each subagent get
   assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.delivered, startLines(h).at(-1)?.reason], ['shared', 'nothing', 'calls-differ']);
 });
 
+test('a call whose subagent never starts, such as one denied after its hook, is left out after 2 minutes, so a later call of its type is matched alone', () => {
+  const h = hookHome(SCOPED());
+  startOn(h, 'claude-haiku-5-5');
+  h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_denied' }));
+  const poolPath = path.join(h.dir, '.local', 'state', 'noonsight', 'agent-pools', `${SESSION}.json`);
+  const pool = JSON.parse(fs.readFileSync(poolPath, 'utf8')) as { open: { at: string }[] };
+  for (const c of pool.open) c.at = new Date(Date.parse(c.at) - 3 * 60 * 1000).toISOString();
+  fs.writeFileSync(poolPath, JSON.stringify(pool));
+
+  assert.match(rulesFor(h, call({ model: undefined, description: 'Condense', prompt: 'Summarize the notes.' }, { tool_use_id: 'toolu_later' })), /HAIKU-SUM-6610/);
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id], ['single', 'toolu_later']);
+});
+
 test('an undeclared model warns the person and leaves the call alone; on_undeclared "ignore" silences it', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
@@ -371,22 +384,13 @@ test('built-in subagents: Explore follows its parent, except on Opus under a Fab
   assert.deepEqual(webFetch({ CLAUDE_CODE_USE_VERTEX: '1' }).slice(0, 2), ['claude-sonnet-5-5', 'built-in']);
 });
 
-test('a subagent type noonsight does not know may set its own model, so it gets no rules rather than its parent\'s, with a warning', () => {
+test('a subagent type noonsight does not know follows the model order, as general-purpose does', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
-  const r = h.hook('agent-call', call({ model: undefined, subagent_type: 'deep-research' }));
-  assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
-  assert.match(r.out?.systemMessage, /^noonsight: noonsight cannot tell which model subagent deep-research will run on \(deep-research is neither a subagent definition noonsight reads nor a built-in subagent it knows, so its model may be its own\), so it gets no rules\./);
-  const l = agentLines(h).at(-1);
-  assert.deepEqual([l?.model, l?.model_source, l?.status, l?.delivered], [null, 'unknown', 'undeclared', 'nothing']);
-  assert.equal(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID), 'deep-research')).raw, '', 'its subagent starts with no rules');
-  // A model the call names, or CLAUDE_CODE_SUBAGENT_MODEL_FORCE, still decides.
-  assert.match(rulesFor(h, call({ model: 'haiku', subagent_type: 'deep-research' }, { tool_use_id: 'toolu_named' })), /HAIKU-GEN-9047/);
-  h.hook('agent-call', call({ model: undefined, subagent_type: 'deep-research' }, { tool_use_id: 'toolu_forced' }), { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' });
-  assert.deepEqual([agentLines(h).at(-1)?.model, agentLines(h).at(-1)?.model_source], ['claude-sonnet-5-5', 'forced']);
-  // The general-purpose subagent and the documented catch-all follow the model order.
-  h.hook('agent-call', call({ model: undefined, subagent_type: 'claude' }, { tool_use_id: 'toolu_claude' }));
+  assert.match(rulesFor(h, call({ model: undefined, subagent_type: 'deep-research' })), /SONNET-GEN-3306/);
   assert.deepEqual([agentLines(h).at(-1)?.model, agentLines(h).at(-1)?.model_source], ['claude-sonnet-5-5', 'parent']);
+  h.hook('agent-call', call({ model: undefined, subagent_type: 'deep-research' }, { tool_use_id: 'toolu_env' }), { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' });
+  assert.deepEqual([agentLines(h).at(-1)?.model, agentLines(h).at(-1)?.model_source], ['claude-haiku-5-5', 'env']);
 });
 
 test('subagent definitions: the closest project definition, then the user\'s, set the model; inherit and a definition without a model follow the parent', () => {
@@ -428,7 +432,7 @@ test('subagent definitions without a repository: only the working directory\'s o
     const l = agentLines(h).at(-1);
     return [l?.model, l?.model_source];
   };
-  assert.deepEqual(predicted('reviewer'), [null, 'unknown'], 'the haiku definition in a parent directory is not the session\'s');
+  assert.deepEqual(predicted('reviewer'), ['claude-sonnet-5-5', 'parent'], 'the haiku definition in a parent directory is not the session\'s');
   assert.deepEqual(predicted('helper'), ['claude-opus-5-5', 'definition'], 'the working directory\'s own definition is still read');
 });
 
