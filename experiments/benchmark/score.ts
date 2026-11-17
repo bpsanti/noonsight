@@ -1,0 +1,98 @@
+// What one pilot run left behind, turned into its result line. The signal definitions are phase 9's
+// (experiments/rules/score.ts), with the test commands widened to the ecosystems these tasks use.
+// Every function here is pure over its inputs.
+
+import { handsBack, prose, toolCalls, type Prose, type ToolCall } from '../rules/score.js';
+
+/** Claude Code's stream-json events, from the log Harbor keeps (agent/claude-code.txt). */
+export function parseStream(text: string): Record<string, any>[] {
+  return text
+    .split('\n')
+    .filter((line) => line.startsWith('{'))
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as Record<string, any>];
+      } catch {
+        return [];
+      }
+    });
+}
+
+export interface Usage {
+  /** The result event's subtype: success, or why the run stopped, such as error_max_budget_usd. */
+  readonly outcome: string;
+  readonly cost_usd: number | null;
+  readonly tokens: { readonly input: number; readonly cache_creation: number; readonly cache_read: number; readonly output: number };
+  readonly turns: number;
+  readonly duration_ms: number;
+  readonly models_used: readonly string[];
+  readonly final: string;
+}
+
+/** The totals the last result event reports, summed over every model the session used. */
+export function usage(stream: readonly Record<string, any>[]): Usage {
+  const result = stream.filter((e) => e.type === 'result').at(-1);
+  const t = { input: 0, cache_creation: 0, cache_read: 0, output: 0 };
+  for (const u of Object.values((result?.modelUsage ?? {}) as Record<string, Record<string, number>>)) {
+    t.input += u.inputTokens ?? 0;
+    t.cache_creation += u.cacheCreationInputTokens ?? 0;
+    t.cache_read += u.cacheReadInputTokens ?? 0;
+    t.output += u.outputTokens ?? 0;
+  }
+  return {
+    outcome: result ? String(result.subtype ?? 'unknown') : 'no-result',
+    cost_usd: result && typeof result.total_cost_usd === 'number' ? result.total_cost_usd : null,
+    tokens: t,
+    turns: Number(result?.num_turns ?? 0),
+    duration_ms: Number(result?.duration_ms ?? 0),
+    models_used: Object.keys(result?.modelUsage ?? {}),
+    final: String(result?.result ?? ''),
+  };
+}
+
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+/** Commands that run code or its checks: test runners, builds and type checkers of the tasks' ecosystems. */
+export const CHECK_COMMAND =
+  /\b(py\.?test|python[0-9.]*\s+(-m\s+(pytest|unittest|tox|mypy)|\S*(test|runtests)\S*\.py|-c\b)|tox\b|mypy\b|bin\/test\b|runtests\.py|setup\.py\s+test|make\s+(test|check|all)?\b|npm\s+(run\s+)?(test|build)\b|npm\s+t\b|node\s+--test|go\s+(test|build|vet)\b|cargo\s+(test|build|check)\b|gcc\b|g\+\+|clang\b|bash\s+\S*test\S*|\.\/\S*test\S*)/;
+
+/**
+ * Whether the run checked its change for real: a check or run command, allowed to run, after the
+ * last edit of a file outside /logs (where the answers of open tasks go). Commands run through Bash
+ * after an edit made through Bash (sed -i, a heredoc) are not seen as edits; the diff saved after
+ * the run says what changed.
+ */
+export function verification(calls: readonly ToolCall[]): { edited: boolean; ran_checks: boolean; verified: boolean } {
+  let lastEdit = -1;
+  calls.forEach((c, i) => {
+    if (!EDIT_TOOLS.has(c.name) || c.denied) return;
+    const file = String(c.input.file_path ?? c.input.notebook_path ?? '');
+    if (!file.startsWith('/logs/')) lastEdit = i;
+  });
+  const checks = calls.map((c, i) => [c, i] as const).filter(([c]) => c.name === 'Bash' && !c.denied && CHECK_COMMAND.test(String(c.input.command ?? '')));
+  return { edited: lastEdit >= 0, ran_checks: checks.length > 0, verified: lastEdit >= 0 && checks.some(([, i]) => i > lastEdit) };
+}
+
+export interface Signals {
+  readonly handed_back: boolean;
+  readonly edited: boolean;
+  readonly ran_checks: boolean;
+  readonly verified: boolean;
+  readonly tool_calls: number;
+  readonly denied: number;
+  readonly subagents: number;
+  readonly report: Prose;
+}
+
+/** The mechanism signals of a run; `report` is the answer of an open task, or the final message. */
+export function signals(stream: readonly Record<string, any>[], report: string): Signals {
+  const calls = toolCalls(stream);
+  const final = usage(stream).final;
+  return {
+    handed_back: handsBack(final),
+    ...verification(calls),
+    tool_calls: calls.length,
+    denied: calls.filter((c) => c.denied).length,
+    subagents: calls.filter((c) => c.name === 'Agent' || c.name === 'Task').length,
+    report: prose(report),
+  };
+}

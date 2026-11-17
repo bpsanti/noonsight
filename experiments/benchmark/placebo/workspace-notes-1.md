@@ -1,0 +1,1 @@
+The user keeps this project in a folder on a local disk, and its files are plain text with Unix line endings. Their editor shows line numbers and wraps long lines at the edge of the window. Dates in this workspace are written as year, month and day. The user's keyboard has a layout for their own language, and the terminal uses a monospaced font at a medium size.
