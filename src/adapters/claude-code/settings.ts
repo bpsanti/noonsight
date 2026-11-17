@@ -11,6 +11,7 @@ export const HOOK_EVENTS = {
   SessionStart: 'session-start',
   PostModelSwitch: 'model-switch',
   PreToolUse: 'agent-call',
+  SubagentStart: 'subagent-start',
   PostToolUse: 'agent-result',
 } as const;
 export type HookEvent = keyof typeof HOOK_EVENTS;
@@ -25,11 +26,13 @@ export const AGENT_TOOLS: readonly string[] = ['Agent', 'Task'];
 /**
  * The matcher of each event's entry, or undefined for an entry with no matcher. The tool events only
  * run noonsight for the agent tool, under either name; the hook checks the tool name again itself.
+ * SubagentStart matches on the subagent's type, and runs for every type.
  */
 export const HOOK_MATCHERS: Readonly<Record<HookEvent, string | undefined>> = {
   SessionStart: undefined,
   PostModelSwitch: undefined,
   PreToolUse: AGENT_TOOLS.join('|'),
+  SubagentStart: undefined,
   PostToolUse: AGENT_TOOLS.join('|'),
 };
 

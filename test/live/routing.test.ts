@@ -108,7 +108,7 @@ test('live, login: route-subagents: the hook sets a subagent\'s model and effort
   const routed = calls(log).find((c) => c.scope === 'probe');
   assert.deepEqual(
     [routed?.routing, routed?.route_value, routed?.route_effort, routed?.model, routed?.model_source, routed?.delivered],
-    ['routed', 'haiku', 'high', 'claude-haiku-5-5', 'parameter', 'rules'],
+    ['routed', 'haiku', 'high', 'claude-haiku-5-5', 'parameter', 'at-start'],
   );
   assert.deepEqual(
     started(l).sort((a, b) => a.routing.localeCompare(b.routing)),

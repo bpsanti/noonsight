@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { managedTarget } from '../src/adapters/claude-code/locations.js';
+import { PACKAGE_ROOT } from '../src/config/paths.js';
 import { fakeClaude, FIXTURES, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, tempTree } from './helpers.js';
 
 const supported = process.platform === 'darwin' || process.platform === 'linux';
@@ -26,6 +27,12 @@ function lines(stdout: string): string[] {
   return stdout.trimEnd().split('\n');
 }
 
+/** The decision log in the home the environment names. */
+function logLines(env: { HOME: string }): Record<string, unknown>[] {
+  const file = path.join(env.HOME, '.local', 'state', 'noonsight', 'decisions.jsonl');
+  return lines(fs.readFileSync(file, 'utf8')).map((l) => JSON.parse(l) as Record<string, unknown>);
+}
+
 test('after an account install, check reports every part as ok and exits 0', () => {
   const { env } = setup();
   const claudeDir = tempTree({});
@@ -36,9 +43,13 @@ test('after an account install, check reports every part as ok and exits 0', () 
   const out = lines(r.stdout);
   assert.ok(out.every((l) => /^(ok|warning|problem): /.test(l)), r.stdout);
   assert.ok(out.every((l) => l.startsWith('ok: ')), r.stdout);
-  assert.match(r.stdout, /ok: config .*noonsight\.json: valid \(3 model entries; subagents: rules in the task text, permission allow, on mismatch warn\)/);
-  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, PostToolUse on Agent\\|Task\\)`));
-  assert.match(r.stdout, /ok: account install .*: hook pointer .*noonsight-hook runs noonsight \d+\.\d+\.\d+/);
+  assert.match(r.stdout, /ok: config .*noonsight\.json: valid \(3 model entries; subagents: rules when each subagent starts, permission allow for a routed call, on mismatch warn\)/);
+  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, SubagentStart, PostToolUse on Agent\\|Task\\)`));
+  // The version comes from package.json, in check and in every line of the decision log.
+  const version = (JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { version: string }).version;
+  assert.equal(version, '0.0.1');
+  assert.match(r.stdout, new RegExp(`ok: account install .*: hook pointer .*noonsight-hook runs noonsight ${version.replaceAll('.', '\\.')}\n`));
+  assert.ok(logLines(env).every((l) => l.version === version), 'every log line records the version');
   assert.match(r.stdout, /ok: claude: 2\.1\.325/);
   assert.match(r.stdout, /ok: last decision: \S+ session-start matched claude-haiku-5-5 \(rules\)/);
   assert.doesNotMatch(r.stderr, /NETWORK-ATTEMPT/);
@@ -108,7 +119,7 @@ test('an account install whose entries were removed by hand, or that sets disabl
   assert.match(runCli(['check'], env).stdout, /problem: account install .*sets disableAllHooks, so Claude Code runs none of this account's hooks/);
 });
 
-test('an install from before the subagent hooks, or one whose agent-tool matcher was widened, is a problem until install runs again', () => {
+test('an install from before the subagent hooks or the SubagentStart hook, or one whose agent-tool matcher was widened, is a problem until install runs again', () => {
   const { env } = setup();
   const claudeDir = tempTree({});
   assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
@@ -121,6 +132,12 @@ test('an install from before the subagent hooks, or one whose agent-tool matcher
   const old = runCli(['check'], env);
   assert.equal(old.status, 1);
   assert.match(old.stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: PreToolUse, PostToolUse\); run `noonsight install` again/);
+
+  // An install from before SubagentStart delivered the rules: its subagents would get none.
+  const beforeStart = structuredClone(full);
+  delete beforeStart.hooks.SubagentStart;
+  fs.writeFileSync(file, JSON.stringify(beforeStart));
+  assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: SubagentStart\); run `noonsight install` again/);
 
   full.hooks.PreToolUse[0].matcher = '*';
   fs.writeFileSync(file, JSON.stringify(full));
@@ -136,6 +153,7 @@ test('the last decision can be a subagent result', () => {
   runCli(['hook', 'session-start'], env, [], hookInput('session-start-startup', { session_id: session.session_id, model: 'claude-sonnet-5-5' }));
   runCli(['hook', 'agent-call'], env, [], JSON.stringify(session));
   const post = JSON.parse(hookInput('post-tool-use-agent')) as Record<string, any>;
+  runCli(['hook', 'subagent-start'], env, [], hookInput('subagent-start', { session_id: session.session_id, agent_id: post.tool_response.agentId }));
   runCli(['hook', 'agent-result'], env, [], JSON.stringify({ ...post, session_id: session.session_id, tool_use_id: session.tool_use_id }));
   assert.match(runCli(['check'], env, NO_NETWORK).stdout, /ok: last decision: \S+ agent-result match claude-haiku-5-5 \(rules\)/);
 });

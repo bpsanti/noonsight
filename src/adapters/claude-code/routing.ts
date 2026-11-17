@@ -47,8 +47,9 @@ export function subagentTranslation(select: (alias: string) => string | null): (
 /**
  * The model a subagent call already has, from the prediction of its model without routing. A fork and
  * CLAUDE_CODE_SUBAGENT_MODEL_FORCE fix the model whatever the call asks; a model parameter, a
- * definition, a built-in subagent's own model and a plugin's definition, which noonsight does not read,
- * are the caller's or the author's choice.
+ * definition, a built-in subagent's own model, a plugin's definition, which noonsight does not read,
+ * and a subagent type noonsight does not know, which may set its own model, are the caller's or the
+ * author's choice.
  */
 export function subagentHeld(prediction: Prediction): Held | null {
   switch (prediction.source) {
@@ -62,6 +63,8 @@ export function subagentHeld(prediction: Prediction): Held | null {
       return { reason: 'definition-model', explicit: true };
     case 'built-in':
       return { reason: 'built-in-model', explicit: true };
+    case 'unknown':
+      return { reason: 'unknown-subagent', explicit: true };
     default:
       return prediction.definition === 'not-read' ? { reason: 'plugin-definition', explicit: true } : null;
   }

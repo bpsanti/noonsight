@@ -244,9 +244,16 @@ function call(toolInput: Record<string, unknown> = {}, fields: Record<string, un
 
 const CALL_ID = (JSON.parse(hookInput('pre-tool-use-agent')) as { tool_use_id: string }).tool_use_id;
 
-function result(resolvedModel: string): string {
+function result(resolvedModel: string, agentId?: string): string {
   const recorded = JSON.parse(hookInput('post-tool-use-agent')) as Record<string, any>;
-  return JSON.stringify({ ...recorded, session_id: SESSION, agent_id: undefined, tool_use_id: CALL_ID, tool_response: { ...recorded.tool_response, resolvedModel } });
+  const tool_response = { ...recorded.tool_response, resolvedModel, ...(agentId !== undefined ? { agentId } : {}) };
+  return JSON.stringify({ ...recorded, session_id: SESSION, agent_id: undefined, tool_use_id: CALL_ID, tool_response });
+}
+
+/** The rules the subagent of a call receives when it starts. */
+function rulesAtStart(h: HookHome, toolUseId: string = CALL_ID): string {
+  const r = h.hook('subagent-start', hookInput('subagent-start', { session_id: SESSION, agent_id: `a-${toolUseId}` }));
+  return r.out?.hookSpecificOutput?.additionalContext ?? '';
 }
 
 const SUMMARY = { description: 'Summarize the log', prompt: 'Summarize the build log in five lines.' };
@@ -257,27 +264,25 @@ test('route-subagents: the hook sets the call\'s model and effort from its scope
   startOn(h, 'claude-sonnet-5-5');
   const input = JSON.parse(call(SUMMARY)) as Record<string, any>;
   const out = h.hook('agent-call', call(SUMMARY)).out?.hookSpecificOutput;
-  const { prompt, model, effort, ...rest } = out.updatedInput;
-  const { prompt: original, ...originalRest } = input.tool_input;
+  const { model, effort, ...rest } = out.updatedInput;
+  const { ...originalRest } = input.tool_input;
   assert.deepEqual([model, effort], ['haiku', 'low']);
-  assert.deepEqual(rest, originalRest, 'every other field of the call is kept');
-  assert.ok(prompt.startsWith(`${original}\n\n<noonsight-rules model="claude-haiku-5-5" scope="summarize">`), prompt);
-  assert.match(prompt, /HAIKU-GEN-9047[\s\S]*HAIKU-SUM-6610/);
+  assert.deepEqual(rest, originalRest, 'every other field of the call is kept, its task text included');
   assert.equal(out.permissionDecision, 'allow');
-  assert.equal(
-    out.permissionDecisionReason,
-    "noonsight set the subagent's model haiku and effort low from its task scope, and added the working rules for the subagent's model to the end of its task text",
-  );
+  assert.equal(out.permissionDecisionReason, "noonsight set the subagent's model haiku and effort low from its task scope");
+  const rules = rulesAtStart(h);
+  assert.ok(rules.startsWith('<noonsight-rules model="claude-haiku-5-5" scope="summarize">'), rules);
+  assert.match(rules, /HAIKU-GEN-9047[\s\S]*HAIKU-SUM-6610/);
 
   const [line] = calls(h);
   assert.deepEqual(
     [line?.routing, line?.routing_reason, line?.route_model, line?.route_value, line?.route_effort, line?.route_option],
     ['routed', 'table', 'claude-haiku-5-5', 'haiku', 'low', 0],
   );
-  assert.deepEqual([line?.model, line?.model_source, line?.scope, line?.scope_source, line?.delivered], ['claude-haiku-5-5', 'parameter', 'summarize', 'task-text', 'rules']);
+  assert.deepEqual([line?.model, line?.model_source, line?.scope, line?.scope_source, line?.delivered], ['claude-haiku-5-5', 'parameter', 'summarize', 'task-text', 'at-start']);
 
   // The check after the start compares with the routed model, and the result line says the call was routed.
-  h.hook('agent-result', result('claude-haiku-5-5'));
+  h.hook('agent-result', result('claude-haiku-5-5', `a-${CALL_ID}`));
   const checked = h.log().find((l) => l.event === 'agent-result');
   assert.deepEqual([checked?.predicted, checked?.result, checked?.routing, checked?.routing_reason], ['claude-haiku-5-5', 'match', 'routed', 'table']);
 });
@@ -287,7 +292,7 @@ test('route-subagents: an option that is not declared is passed over, and the lo
   startOn(h, 'claude-haiku-5-5');
   const out = h.hook('agent-call', call({ description: 'Investigate the outage', prompt: 'Find the root cause.' })).out?.hookSpecificOutput;
   assert.deepEqual([out.updatedInput.model, out.updatedInput.effort], ['sonnet', 'high']);
-  assert.match(out.updatedInput.prompt, /SONNET-INV-5182/);
+  assert.match(rulesAtStart(h), /SONNET-INV-5182/);
   const [line] = calls(h);
   assert.deepEqual(line?.route_skipped, [{ model: 'fable', why: 'claude-fable-5-2 is not declared under "models"' }]);
   assert.equal(line?.route_option, 1);
@@ -296,14 +301,12 @@ test('route-subagents: an option that is not declared is passed over, and the lo
 test('explicit-model: a call that names a model keeps it under respect_explicit, and is routed without it', () => {
   const h = hookHome(routingConfig());
   startOn(h, 'claude-sonnet-5-5');
-  const kept = h.hook('agent-call', call({ ...SUMMARY, model: 'sonnet' })).out?.hookSpecificOutput;
-  assert.deepEqual([kept.updatedInput.model, kept.updatedInput.effort], ['sonnet', undefined]);
-  assert.match(kept.updatedInput.prompt, /SONNET-GEN-3306/);
-  assert.equal(kept.permissionDecisionReason, "noonsight added the working rules for the subagent's model to the end of its task text");
+  assert.equal(h.hook('agent-call', call({ ...SUMMARY, model: 'sonnet' })).raw, '', 'a call routing leaves alone is not changed');
+  assert.match(rulesAtStart(h), /SONNET-GEN-3306/);
   assert.deepEqual([calls(h)[0]?.routing, calls(h)[0]?.routing_reason, calls(h)[0]?.model], ['yielded', 'explicit-model', 'claude-sonnet-5-5']);
 
   // An effort the call sets is kept, and only the model is routed.
-  const effort = h.hook('agent-call', call({ ...SUMMARY, effort: 'high' })).out?.hookSpecificOutput;
+  const effort = h.hook('agent-call', call({ ...SUMMARY, effort: 'high' }, { tool_use_id: 'toolu_effort' })).out?.hookSpecificOutput;
   assert.deepEqual([effort.updatedInput.model, effort.updatedInput.effort], ['haiku', 'high']);
   assert.deepEqual([calls(h)[1]?.requested_effort, calls(h)[1]?.route_effort, calls(h)[1]?.route_effort_kept], ['high', undefined, true]);
 
@@ -311,7 +314,7 @@ test('explicit-model: a call that names a model keeps it under respect_explicit,
   startOn(table, 'claude-sonnet-5-5');
   const replaced = table.hook('agent-call', call({ ...SUMMARY, model: 'sonnet', effort: 'high' })).out?.hookSpecificOutput;
   assert.deepEqual([replaced.updatedInput.model, replaced.updatedInput.effort], ['haiku', 'low']);
-  assert.match(replaced.updatedInput.prompt, /HAIKU-GEN-9047/);
+  assert.match(rulesAtStart(table), /HAIKU-GEN-9047/);
 });
 
 test('explicit-model: a definition\'s model and a built-in subagent\'s own model are kept; a fork always is', () => {
@@ -331,7 +334,9 @@ test('explicit-model: a definition\'s model and a built-in subagent\'s own model
     ['reviewer', 'definition-model'],
     ['Explore', 'built-in-model'],
     ['claude-code-guide', 'built-in-model'],
+    ['web-fetch', 'built-in-model'],
     ['kit:helper', 'plugin-definition'],
+    ['deep-research', 'unknown-subagent'],
     ['fork', 'fork'],
   ] as const) {
     const { input, line } = run(config, type);
@@ -366,25 +371,23 @@ test('orchestrator-env: a variable of yield_when_env, or NOONSIGHT_ROUTING=off, 
   ] as const) {
     const h = hookHome(config, env);
     startOn(h, 'claude-sonnet-5-5');
-    const out = h.hook('agent-call', call(SUMMARY)).out?.hookSpecificOutput;
-    assert.deepEqual([out.updatedInput.model, out.updatedInput.effort], [undefined, undefined]);
-    assert.match(out.updatedInput.prompt, /SONNET-GEN-3306/, 'the rules for the model the subagent inherits');
+    assert.equal(h.hook('agent-call', call(SUMMARY)).raw, '', 'the call is not changed');
+    assert.match(rulesAtStart(h), /SONNET-GEN-3306/, 'the rules for the model the subagent inherits');
     const [line] = calls(h);
     assert.deepEqual([line?.routing, line?.routing_reason, line?.routing_env, line?.scope], ['yielded', reason, variable, 'summarize']);
   }
 });
 
-test('routing off: no call changes beyond the rules, and every call line says routing is off and why', () => {
+test('routing off: no call changes, and every call line says routing is off and why', () => {
   for (const config of [routingConfig({ enabled: false }), LAB_CONFIG]) {
     const h = hookHome(config);
     startOn(h, 'claude-sonnet-5-5');
-    for (const toolInput of [SUMMARY, { ...SUMMARY, model: 'haiku' }, { prompt: 'Reply OK.', subagent_type: 'Explore' }]) {
-      const input = JSON.parse(call(toolInput)) as Record<string, any>;
-      const out = h.hook('agent-call', call(toolInput)).out?.hookSpecificOutput;
-      const { prompt, ...rest } = out.updatedInput;
-      const { prompt: original, ...originalRest } = input.tool_input;
-      assert.deepEqual(rest, originalRest);
-      assert.ok(prompt.startsWith(`${original}\n\n<noonsight-rules `));
+    const inputs: Record<string, string>[] = [SUMMARY, { ...SUMMARY, model: 'haiku' }, { prompt: 'Reply OK.', subagent_type: 'Explore' }];
+    for (const [i, toolInput] of inputs.entries()) {
+      const id = `toolu_off_${i}`;
+      assert.equal(h.hook('agent-call', call(toolInput, { tool_use_id: id })).raw, '');
+      const r = h.hook('subagent-start', hookInput('subagent-start', { session_id: SESSION, agent_id: `a-${id}`, agent_type: toolInput.subagent_type ?? 'general-purpose' }));
+      assert.match(r.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules /);
     }
     assert.deepEqual(
       calls(h).map((l) => [l.routing, l.routing_reason]),

@@ -68,9 +68,9 @@ function assertThreeModels(l: Lab, line: string): void {
       .map((d) => [d.requested_model, d.model, d.status, d.delivered, d.warned])
       .sort(),
     [
-      ['haiku', 'claude-haiku-5-5', 'matched', 'rules', false],
+      ['haiku', 'claude-haiku-5-5', 'matched', 'at-start', false],
       ['opus', 'claude-opus-5-5', 'undeclared', 'nothing', true],
-      ['sonnet', 'claude-sonnet-5-5', 'matched', 'rules', false],
+      ['sonnet', 'claude-sonnet-5-5', 'matched', 'at-start', false],
     ],
   );
   assert.deepEqual(
@@ -111,8 +111,8 @@ test('live, login: inherit-explore: a subagent with no model and the built-in Ex
       .map((d) => [d.subagent_type, d.model, d.model_source, d.parent_source, d.delivered])
       .sort(),
     [
-      ['Explore', 'claude-sonnet-5-5', 'built-in', 'session-record', 'rules'],
-      ['general-purpose', 'claude-sonnet-5-5', 'parent', 'session-record', 'rules'],
+      ['Explore', 'claude-sonnet-5-5', 'built-in', 'session-record', 'at-start'],
+      ['general-purpose', 'claude-sonnet-5-5', 'parent', 'session-record', 'at-start'],
     ],
   );
   assert.deepEqual(results(l.log()).map((d) => d.result), ['match', 'match']);
@@ -136,11 +136,11 @@ test('live, login: nested: a subagent that starts subagents passes on its own mo
   assert.match(reply(r.result, 'opus'), /^NONE\.?$/, r.result);
   const log = l.log();
   const [outer, ...children] = calls(log);
-  assert.deepEqual([outer?.agent_id, outer?.model, outer?.delivered], [undefined, 'claude-haiku-5-5', 'rules']);
+  assert.deepEqual([outer?.agent_id, outer?.model, outer?.delivered], [undefined, 'claude-haiku-5-5', 'at-start']);
   assert.equal(children.length, 3);
   for (const child of children) assert.ok(typeof child.agent_id === 'string' && child.agent_id.length > 0, 'a call made inside a subagent carries its agent_id');
   const inherited = children.find((d) => d.requested_model === null);
-  assert.deepEqual([inherited?.parent_model, inherited?.model, inherited?.delivered], ['claude-haiku-5-5', 'claude-haiku-5-5', 'rules']);
+  assert.deepEqual([inherited?.parent_model, inherited?.model, inherited?.delivered], ['claude-haiku-5-5', 'claude-haiku-5-5', 'at-start']);
   assert.ok(['agent-record', 'agent-transcript'].includes(inherited?.parent_source), String(inherited?.parent_source));
   assert.ok(results(log).every((d) => d.result === 'match'), JSON.stringify(results(log)));
 });
@@ -156,13 +156,41 @@ test('live, login: a subagent that starts on another model than predicted: a war
   );
   assert.equal(r.status, 0, r.result);
   const [call] = calls(l.log());
-  assert.deepEqual([call?.subagent_type, call?.model, call?.definition, call?.delivered], ['noonsight-live:probe', 'claude-sonnet-5-5', 'not-read', 'rules']);
+  assert.deepEqual([call?.subagent_type, call?.model, call?.definition, call?.delivered], ['noonsight-live:probe', 'claude-sonnet-5-5', 'not-read', 'at-start']);
   const [checked] = results(l.log());
   assert.deepEqual([checked?.predicted, checked?.model, checked?.result, checked?.warned], ['claude-sonnet-5-5', 'claude-haiku-5-5', 'MISMATCH', true]);
   assert.ok(
     JSON.stringify(r.stream).includes('not on claude-sonnet-5-5 as noonsight predicted'),
     'the warning reaches the person through the session output',
   );
+});
+
+test('live, login: auto-mode: in auto mode, a subagent call with rules leaves the other calls of its response to the classifier, which lets them run', { skip: !enabled }, () => {
+  preconditions();
+  const l = lab(CONFIG);
+  const marker = 'sibling-ran.txt';
+  const r = print(
+    l,
+    'This is a configuration test. In one single message, make exactly two tool calls so that they run in parallel: ' +
+      `(1) an Agent call with subagent_type "general-purpose", description "Probe", the model parameter set to "haiku", and exactly this prompt: "${PROBE}"; ` +
+      `(2) a Bash call that runs: touch ${marker} . Do not retry any call. ` +
+      'After both results arrive, reply with exactly one line in this form, copying the subagent reply verbatim: agent=<reply> bash=<ran, or the error message copied verbatim>',
+    ['--permission-mode', 'auto', '--model', 'haiku'],
+  );
+  assert.equal(r.status, 0, r.result);
+  assert.ok(fs.existsSync(path.join(l.project, marker)), `the Bash call next to the agent call ran\n${r.result}`);
+  const stream = JSON.stringify(r.stream);
+  assert.doesNotMatch(stream, /gave no verdict/, 'no call of the response lost its auto mode review');
+  const bashCalls = r.stream
+    .filter((e) => e.type === 'assistant')
+    .flatMap((e) => (Array.isArray(e.message?.content) ? e.message.content : []))
+    .filter((c: Record<string, any>) => c.type === 'tool_use' && c.name === 'Bash');
+  assert.equal(bashCalls.length, 1, 'the Bash call ran the first time, without being issued again');
+  assert.match(reply(r.result, 'agent'), new RegExp(HAIKU_WORD), r.result);
+  const [call] = calls(l.log());
+  assert.deepEqual([call?.permission_mode, call?.model, call?.delivered, call?.permission], ['auto', 'claude-haiku-5-5', 'at-start', undefined]);
+  const given = l.log().find((d) => d.event === 'subagent-start');
+  assert.deepEqual([given?.model, given?.delivered], ['claude-haiku-5-5', 'rules']);
 });
 
 test('live, login: interactive: three-models in an interactive session', { skip: !enabled }, () => {

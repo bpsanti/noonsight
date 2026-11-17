@@ -56,7 +56,7 @@ test('per account: install twice adds one entry per event and keeps every third-
 
   const first = runCli(['install', '--account', claudeDir], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
+  assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch, PreToolUse, SubagentStart, PostToolUse\)/);
   assert.match(first.stdout, /hook pointer .*noonsight-hook: written/);
   const once = fs.readFileSync(file, 'utf8');
 
@@ -72,6 +72,7 @@ test('per account: install twice adds one entry per event and keeps every third-
     { event: 'SessionStart', matcher: undefined, type: 'command', command: pointer, args: ['session-start'], timeout: 10 },
     { event: 'PostModelSwitch', matcher: undefined, type: 'command', command: pointer, args: ['model-switch'], timeout: 10 },
     { event: 'PreToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-call'], timeout: 10 },
+    { event: 'SubagentStart', matcher: undefined, type: 'command', command: pointer, args: ['subagent-start'], timeout: 10 },
     { event: 'PostToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-result'], timeout: 10 },
   ]);
   // The third-party PreToolUse group comes first and is left as it was; noonsight's has its own group.
@@ -100,7 +101,7 @@ test('per account: a missing settings file is created, and a broken one is refus
   const r = runCli(['install', '--account', empty], env);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /settings\.json: created/);
-  assert.equal(noonsightHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 4);
+  assert.equal(noonsightHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 5);
 
   for (const [content, message] of [
     ['{ "hooks": ', /is not valid JSON/],
@@ -145,6 +146,7 @@ test('per account: install repairs a moved, duplicated or outdated noonsight ent
     ['SessionStart', pointer, 'session-start'],
     ['PostModelSwitch', pointer, 'model-switch'],
     ['PreToolUse', pointer, 'agent-call'],
+    ['SubagentStart', pointer, 'subagent-start'],
     ['PostToolUse', pointer, 'agent-result'],
   ]);
   assert.deepEqual(settings.hooks.SessionStart[0], { matcher: 'startup', hooks: [{ type: 'command', command: 'echo keep' }] });
@@ -175,6 +177,7 @@ test('per account: an install from before the subagent hooks gains them, and a n
     ['PostToolUse', 'Agent|Task', 'agent-result'],
     ['PreToolUse', 'Agent|Task', 'agent-call'],
     ['SessionStart', undefined, 'session-start'],
+    ['SubagentStart', undefined, 'subagent-start'],
   ]);
   assert.deepEqual(settings.hooks.PreToolUse[0], { matcher: 'Bash', hooks: [{ type: 'command', command: '/opt/acme/bin/guard' }] });
   assert.equal(settings.hooks.PreToolUse.length, 2);
@@ -191,7 +194,7 @@ test('machine-wide: noonsight writes its own drop-in file and never edits the ma
 
   const first = runCli(['install', '--managed'], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /managed-settings\.d\/noonsight\.json: created \(SessionStart, PostModelSwitch, PreToolUse, PostToolUse\)/);
+  assert.match(first.stdout, /managed-settings\.d\/noonsight\.json: created \(SessionStart, PostModelSwitch, PreToolUse, SubagentStart, PostToolUse\)/);
   assert.match(first.stdout, /built-in guard for the mods users install: https:\/\/code\.claude\.com\/docs\/en\/plugins\/mods\/admin/);
   assert.match(first.stdout, /NOONSIGHT_DISABLE=1/);
   const dropIn = fs.readFileSync(target.settingsFile, 'utf8');
@@ -200,6 +203,7 @@ test('machine-wide: noonsight writes its own drop-in file and never edits the ma
     ['SessionStart', target.pointer],
     ['PostModelSwitch', target.pointer],
     ['PreToolUse', target.pointer],
+    ['SubagentStart', target.pointer],
     ['PostToolUse', target.pointer],
   ]);
   const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
@@ -342,6 +346,7 @@ test('by default: install reaches every Claude Code configuration directory of t
       ['SessionStart', pointer],
       ['PostModelSwitch', pointer],
       ['PreToolUse', pointer],
+      ['SubagentStart', pointer],
       ['PostToolUse', pointer],
     ]);
   }
@@ -395,7 +400,7 @@ test('by default: install creates ~/.claude when Claude Code has not run yet', (
   const home = tempTree({});
   const r = runCli(['install'], { HOME: home });
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(noonsightHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 4);
+  assert.equal(noonsightHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 5);
 });
 
 test('by default: one broken settings file refuses the whole install and leaves every directory as it was', () => {

@@ -223,7 +223,9 @@ test('live, login: preset-hash: the real preset reaches a session and a subagent
     [MODELS.sonnet, 'routine', 'unattended', 'rules', session.rules, session.sha256],
   );
   const call = calls(log).at(0);
-  assert.deepEqual([call?.model, call?.place, call?.delivered, call?.rules, call?.sha256], [MODELS.haiku, 'subagent', 'rules', subagent.rules, subagent.sha256]);
+  assert.deepEqual([call?.model, call?.place, call?.delivered, call?.rules, call?.sha256], [MODELS.haiku, 'subagent', 'at-start', subagent.rules, subagent.sha256]);
+  const given = log.find((d) => d.event === 'subagent-start');
+  assert.deepEqual([given?.model, given?.delivered, given?.rules, given?.sha256], [MODELS.haiku, 'rules', subagent.rules, subagent.sha256]);
   t.diagnostic(`session ${session.rules.join(', ')}: sha256 ${session.sha256}; subagent ${subagent.rules.join(', ')}: sha256 ${subagent.sha256}`);
 
   for (const id of session.rules) assert.ok(reply(r.result, 'session').includes(id), r.result);

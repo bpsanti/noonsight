@@ -149,6 +149,62 @@ test('report without a configuration still reports the log, and says what it lea
   assert.match(r2.stdout, /is refused \(`noonsight check` lists why\)/);
 });
 
+test('report counts a subagent\'s rules once, where its start delivered them, and the rules a shared start could not give', () => {
+  const home = tempTree({});
+  writeLog(home, [
+    // The call hands its rules to the start; the start delivers them.
+    { ts: '2026-11-17T10:00:00.000Z', event: 'agent-call', session_id: 's1', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'subagent', delivered: 'at-start' },
+    { ts: '2026-11-17T10:00:01.000Z', event: 'subagent-start', session_id: 's1', start_match: 'single', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'subagent', delivered: 'rules' },
+    // A call with no rules: counted at the call, not again at its start.
+    { ts: '2026-11-17T10:01:00.000Z', event: 'agent-call', session_id: 's1', model: 'claude-opus-5-5', status: 'none', reason: 'declared-none', place: 'subagent', delivered: 'nothing' },
+    { ts: '2026-11-17T10:01:01.000Z', event: 'subagent-start', session_id: 's1', start_match: 'single', model: 'claude-opus-5-5', status: 'none', place: 'subagent', delivered: 'nothing' },
+    // Two calls with different rules whose starts could not be told apart.
+    { ts: '2026-11-17T10:02:01.000Z', event: 'subagent-start', session_id: 's1', start_match: 'shared', model: null, place: 'subagent', reason: 'calls-differ', delivered: 'nothing' },
+  ]);
+  const report = JSON.parse(runCli(['report', '--json'], { HOME: home }).stdout) as Record<string, any>;
+  assert.deepEqual(report.delivering, { 'subagent-start': 1 });
+  assert.deepEqual(report.not_delivering, { 'calls-differ': 1, 'declared-none': 1 });
+  assert.deepEqual(
+    report.rules.map((x: Record<string, any>) => [x.id, x.deliveries, x.events]),
+    [['team/general', 1, { 'subagent-start': 1 }]],
+  );
+});
+
+test('report summarizes the classifier: tasks by result, the median and longest run, and the total cost', () => {
+  const home = tempTree({});
+  const at = (n: number): string => `2026-11-17T11:00:0${n}.000Z`;
+  writeLog(home, [
+    { ts: at(0), event: 'agent-call', classifier: 'scoped', classifier_ms: 2100, classifier_cost_usd: 0.0004, delivered: 'nothing', status: 'none' },
+    { ts: at(1), event: 'agent-call', classifier: 'scoped', classifier_ms: 1500, classifier_cost_usd: 0.0003, delivered: 'nothing', status: 'none' },
+    { ts: at(2), event: 'agent-call', classifier: 'timeout', classifier_ms: 8000, classifier_error: 'stopped after 8000 ms', delivered: 'nothing', status: 'none' },
+    { ts: at(3), event: 'launch', classifier: 'none', classifier_ms: 1700, classifier_cost_usd: 0.0002, delivered: 'nothing', status: 'none' },
+    // Not run: the scope could change nothing, or a launch had no task text.
+    { ts: at(4), event: 'agent-call', classifier: 'not-needed', delivered: 'nothing', status: 'none' },
+    { ts: at(5), event: 'launch', classifier: 'no-task', delivered: 'nothing', status: 'none' },
+    { ts: at(6), event: 'agent-call', delivered: 'nothing', status: 'none' },
+  ]);
+  const r = runCli(['report'], { HOME: home });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(
+    r.stdout,
+    /\nClassifier:\n {2}tasks: 6 \(scoped 2, no-task 1, none 1, not-needed 1, timeout 1\)\n {2}runs: 4, median 1900 ms, longest 8000 ms, cost US\$ 0\.0009\n/,
+  );
+  const report = JSON.parse(runCli(['report', '--json'], { HOME: home }).stdout) as Record<string, any>;
+  assert.deepEqual(report.classifier, {
+    results: { scoped: 2, 'no-task': 1, none: 1, 'not-needed': 1, timeout: 1 },
+    runs: 4,
+    median_ms: 1900,
+    max_ms: 8000,
+    cost_usd: 0.0009,
+  });
+
+  // A log in which the classifier never acted has no classifier section.
+  const quiet = tempTree({});
+  writeLog(quiet, [LOG[0] as Record<string, unknown>]);
+  assert.doesNotMatch(runCli(['report'], { HOME: quiet }).stdout, /Classifier/);
+  assert.equal((JSON.parse(runCli(['report', '--json'], { HOME: quiet }).stdout) as Record<string, any>).classifier, null);
+});
+
 test('report with an empty log says so', () => {
   const r = runCli(['report'], {});
   assert.equal(r.status, 0, r.stderr);

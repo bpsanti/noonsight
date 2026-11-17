@@ -1,6 +1,6 @@
-// The subagent hooks, PreToolUse and PostToolUse on the agent tool, driven as Claude Code drives
-// them: a separate process per event, with recorded Claude Code inputs. Each test has its own home
-// directory, so the decision log and the records start empty.
+// The subagent hooks, PreToolUse and PostToolUse on the agent tool and SubagentStart, driven as Claude
+// Code drives them: a separate process per event, with recorded Claude Code inputs. Each test has its
+// own home directory, so the decision log and the records start empty.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -39,6 +39,26 @@ function result(toolUseId: string, resolvedModel: string | undefined, response: 
 
 const MAIN_CALL_ID = (JSON.parse(hookInput('pre-tool-use-agent')) as { tool_use_id: string }).tool_use_id;
 
+/** The id Claude Code would give the subagent a call starts; any id works, so tests derive one from the call's. */
+const agentOf = (toolUseId: string): string => `a-${toolUseId}`;
+
+/** The start of a subagent, as SubagentStart reports it: its id and its type, not the call. */
+function start(agentId: string, agentType = 'general-purpose', fields: Record<string, unknown> = {}): string {
+  return hookInput('subagent-start', { session_id: SESSION, agent_id: agentId, agent_type: agentType, ...fields });
+}
+
+/** The context SubagentStart gave a subagent, or the empty string. */
+const contextOf = (r: { out: Record<string, any> | null }): string => r.out?.hookSpecificOutput?.additionalContext ?? '';
+
+/** Run an agent call, then the start of the subagent it starts; the rules that subagent received. */
+function rulesFor(h: HookHome, input: string, extra: Record<string, string> = {}): string {
+  const parsed = JSON.parse(input) as { session_id: string; tool_use_id: string; tool_input: { subagent_type?: string } };
+  assert.equal(h.hook('agent-call', input, extra).status, 0);
+  const r = h.hook('subagent-start', start(agentOf(parsed.tool_use_id), parsed.tool_input.subagent_type ?? 'general-purpose', { session_id: parsed.session_id }), extra);
+  assert.equal(r.status, 0);
+  return contextOf(r);
+}
+
 function config(fields: Record<string, unknown>): string {
   const lab = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, unknown>;
   const dir = tempTree({ 'noonsight.json': { ...lab, ...fields } });
@@ -47,24 +67,21 @@ function config(fields: Record<string, unknown>): string {
 }
 
 const agentLines = (h: HookHome): Record<string, any>[] => h.log().filter((l) => l.event === 'agent-call' || l.event === 'agent-result');
+const startLines = (h: HookHome): Record<string, any>[] => h.log().filter((l) => l.event === 'subagent-start');
 
-test('a call that names a model: its rules go at the end of the task text, the rest of the call is kept, and the call is allowed', () => {
+test('a call that names a model: the call is left untouched, and its subagent gets the rules for its model when it starts', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
-  const input = JSON.parse(call()) as Record<string, any>;
   const r = h.hook('agent-call', call());
   assert.equal(r.status, 0);
-  assert.deepEqual(Object.keys(r.out ?? {}), ['hookSpecificOutput']);
-  const out = r.out?.hookSpecificOutput;
-  assert.equal(out.hookEventName, 'PreToolUse');
-  assert.equal(out.permissionDecision, 'allow');
-  assert.match(out.permissionDecisionReason, /noonsight added the working rules/);
-  const { prompt, ...rest } = out.updatedInput;
-  const { prompt: original, ...originalRest } = input.tool_input;
-  assert.deepEqual(rest, originalRest, 'every other field of the call is passed on unchanged');
-  assert.ok(prompt.startsWith(`${original}\n\n<noonsight-rules model="claude-haiku-5-5">\n`), prompt);
-  assert.match(prompt, /HAIKU-GEN-9047/);
-  assert.match(prompt, /<\/noonsight-rules>$/);
+  assert.equal(r.raw, '', 'no updatedInput and no permission decision, so auto mode keeps its review of the response');
+  const s = h.hook('subagent-start', start(agentOf(MAIN_CALL_ID)));
+  assert.deepEqual(Object.keys(s.out ?? {}), ['hookSpecificOutput']);
+  assert.equal(s.out?.hookSpecificOutput.hookEventName, 'SubagentStart');
+  const context: string = s.out?.hookSpecificOutput.additionalContext;
+  assert.ok(context.startsWith('<noonsight-rules model="claude-haiku-5-5">\n'), context);
+  assert.match(context, /HAIKU-GEN-9047/);
+  assert.match(context, /<\/noonsight-rules>$/);
 
   const [line] = agentLines(h);
   assert.equal(line?.event, 'agent-call');
@@ -76,40 +93,118 @@ test('a call that names a model: its rules go at the end of the task text, the r
     [line?.subagent_type, line?.requested_model, line?.parent_model, line?.parent_source, line?.model, line?.model_source, line?.model_value],
     ['general-purpose', 'haiku', 'claude-sonnet-5-5', 'session-record', 'claude-haiku-5-5', 'parameter', 'haiku'],
   );
-  assert.deepEqual([line?.status, line?.delivered, line?.permission, line?.warned], ['matched', 'rules', 'allow', false]);
+  assert.deepEqual([line?.status, line?.delivered, line?.permission, line?.warned], ['matched', 'at-start', undefined, false]);
   assert.deepEqual(line?.rules, ['haiku/general']);
+  const [started] = startLines(h);
+  assert.deepEqual(
+    [started?.session_id, started?.agent_id, started?.agent_type, started?.start_match, started?.call_id, started?.model, started?.delivered, started?.place],
+    [SESSION, agentOf(MAIN_CALL_ID), 'general-purpose', 'single', MAIN_CALL_ID, 'claude-haiku-5-5', 'rules', 'subagent'],
+  );
+  assert.deepEqual([started?.rules, started?.sha256], [line?.rules, line?.sha256]);
+
+  // The same subagent resumed: the same rules again, which Claude Code adds only when its context no longer holds them.
+  assert.equal(contextOf(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID)))), context);
+  assert.deepEqual([startLines(h)[1]?.start_match, startLines(h)[1]?.delivered], ['resumed', 'already-delivered']);
+  // A subagent no call noonsight saw started, such as a teammate: nothing, and no line.
+  assert.equal(h.hook('subagent-start', start('a-teammate')).raw, '');
+  assert.equal(startLines(h).length, 2);
 });
 
 test('a call that names no model: the subagent inherits the session\'s model and gets the rules for the place "subagent"', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
-  const r = h.hook('agent-call', call({ model: undefined }));
-  const prompt: string = r.out?.hookSpecificOutput.updatedInput.prompt;
+  const prompt = rulesFor(h, call({ model: undefined }));
   assert.match(prompt, /<noonsight-rules model="claude-sonnet-5-5">/);
   assert.match(prompt, /SONNET-GEN-3306/);
   assert.match(prompt, /SONNET-CARRY-4471/, 'a rule for subagents is delivered to a subagent');
-  assert.equal(r.out?.hookSpecificOutput.updatedInput.model, undefined, 'noonsight never sets the model');
   const line = agentLines(h)[0];
   assert.deepEqual([line?.model, line?.model_source, line?.parent_source], ['claude-sonnet-5-5', 'parent', 'session-record']);
   assert.deepEqual(line?.rules, ['sonnet/general', 'sonnet/carry-through']);
 });
 
-test('the permission returned with a changed call follows subagents.permission; a call left alone gets none', () => {
-  for (const [permission, expected] of [
-    ['allow', 'allow'],
-    ['ask', 'ask'],
-    ['passthrough', undefined],
-  ] as const) {
+test('a call that only gets rules is never changed and gets no permission decision, whatever subagents.permission says', () => {
+  for (const permission of ['allow', 'ask', 'passthrough'] as const) {
     const h = hookHome(config({ subagents: { permission } }));
     startOn(h, 'claude-sonnet-5-5');
-    const out = h.hook('agent-call', call()).out?.hookSpecificOutput;
-    assert.equal(out.permissionDecision, expected, permission);
-    assert.equal(out.permissionDecisionReason === undefined, expected === undefined);
-    assert.match(out.updatedInput.prompt, /HAIKU-GEN-9047/);
+    assert.equal(h.hook('agent-call', call()).raw, '', permission);
+    assert.match(contextOf(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID)))), /HAIKU-GEN-9047/);
   }
-  const h = hookHome(config({ subagents: { permission: 'allow' } }));
+  const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
-  assert.equal(h.hook('agent-call', call({ model: 'opus' })).raw, '', 'a model declared "none": no change, no decision');
+  assert.equal(rulesFor(h, call({ model: 'opus' })), '', 'a model declared "none" gets nothing');
+  assert.deepEqual(startLines(h).map((l) => [l.status, l.delivered]), [['none', 'nothing']]);
+});
+
+test('parallel calls: each subagent gets its own call\'s rules when only one call of its type is open, or when a result names it first', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const haiku = call({ model: 'haiku' }, { tool_use_id: 'toolu_h' });
+  const sonnet = call({ model: 'sonnet', subagent_type: 'Explore' }, { tool_use_id: 'toolu_s' });
+  h.hook('agent-call', haiku);
+  h.hook('agent-call', sonnet);
+  // One open call of each type: each start finds its own.
+  assert.match(contextOf(h.hook('subagent-start', start('a-s', 'Explore'))), /SONNET-GEN-3306/);
+  assert.match(contextOf(h.hook('subagent-start', start('a-h'))), /HAIKU-GEN-9047/);
+  h.hook('agent-result', result('toolu_s', 'claude-sonnet-5-5', { agentId: 'a-s' }));
+  h.hook('agent-result', result('toolu_h', 'claude-haiku-5-5', { agentId: 'a-h' }));
+
+  // Two open calls of one type: the result of a call that runs in the background names its subagent,
+  // before or after that subagent's start, so each start still finds its own call.
+  const second = call({ model: 'sonnet' }, { tool_use_id: 'toolu_s2' });
+  h.hook('agent-call', haiku.replace('toolu_h', 'toolu_h2'));
+  h.hook('agent-call', second);
+  const async = (toolUseId: string, agentId: string, model: string): string => {
+    const launched = JSON.parse(hookInput('post-tool-use-agent-async')) as Record<string, any>;
+    return JSON.stringify({ ...launched, session_id: SESSION, tool_use_id: toolUseId, tool_response: { ...launched.tool_response, agentId, resolvedModel: model } });
+  };
+  assert.equal(h.hook('agent-result', async('toolu_s2', 'a-s2', 'claude-sonnet-5-5')).raw, '');
+  assert.match(contextOf(h.hook('subagent-start', start('a-s2'))), /SONNET-GEN-3306/);
+  assert.match(contextOf(h.hook('subagent-start', start('a-h2'))), /HAIKU-GEN-9047/, 'the other call is then the only one open');
+  assert.equal(h.hook('agent-result', async('toolu_h2', 'a-h2', 'claude-haiku-5-5')).raw, '');
+  assert.deepEqual(
+    startLines(h).map((l) => [l.agent_id, l.start_match, l.call_id, l.model]),
+    [
+      ['a-s', 'single', 'toolu_s', 'claude-sonnet-5-5'],
+      ['a-h', 'single', 'toolu_h', 'claude-haiku-5-5'],
+      ['a-s2', 'result', 'toolu_s2', 'claude-sonnet-5-5'],
+      ['a-h2', 'single', 'toolu_h2', 'claude-haiku-5-5'],
+    ],
+  );
+  assert.deepEqual(agentLines(h).filter((l) => l.event === 'agent-result').map((l) => l.result), ['match', 'match', 'match', 'match']);
+  const state = path.join(h.dir, '.local', 'state', 'noonsight');
+  assert.deepEqual(fs.readdirSync(path.join(state, 'agent-calls')), [], 'every call record is removed once its start and its result are both seen');
+  assert.ok(!fs.existsSync(path.join(state, 'agent-pools', `${SESSION}.json`)), 'no call is left open');
+});
+
+test('parallel calls of one type that no result names in time: each subagent gets only the rules every one of those calls would give', () => {
+  const h = hookHome(SCOPED());
+  startOn(h, 'claude-haiku-5-5');
+  // Two tasks on one model with different scopes: the rules for every scope are what both hold.
+  h.hook('agent-call', call({ model: undefined, description: 'Condense', prompt: 'Summarize the notes.' }, { tool_use_id: 'toolu_a' }));
+  h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_b' }));
+  const first = contextOf(h.hook('subagent-start', start('a-1')));
+  const second = contextOf(h.hook('subagent-start', start('a-2')));
+  for (const context of [first, second]) {
+    assert.match(context, /<noonsight-rules model="claude-haiku-5-5">/);
+    assert.match(context, /HAIKU-GEN-9047/);
+    assert.doesNotMatch(context, /HAIKU-SUM-6610/, 'the summarize rule, which only one of them has, is given to neither');
+  }
+  assert.deepEqual(
+    startLines(h).map((l) => [l.start_match, l.calls, l.delivered, l.shared_rules]),
+    [
+      ['shared', ['toolu_a', 'toolu_b'], 'rules', 'every-scope'],
+      ['shared', ['toolu_a', 'toolu_b'], 'rules', 'every-scope'],
+    ],
+  );
+  // Both subagents have started, so a later call of the type is matched alone again.
+  assert.match(rulesFor(h, call({ model: undefined, description: 'Digest', prompt: 'Write a digest.' }, { tool_use_id: 'toolu_c' })), /HAIKU-SUM-6610/);
+  assert.equal(startLines(h).at(-1)?.start_match, 'single');
+
+  // Two calls on different models: nothing both would give, so neither subagent gets rules.
+  h.hook('agent-call', call({ model: 'haiku' }, { tool_use_id: 'toolu_d' }));
+  h.hook('agent-call', call({ model: 'sonnet' }, { tool_use_id: 'toolu_e' }));
+  assert.equal(h.hook('subagent-start', start('a-4')).raw, '');
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.delivered, startLines(h).at(-1)?.reason], ['shared', 'nothing', 'calls-differ']);
 });
 
 test('an undeclared model warns the person and leaves the call alone; on_undeclared "ignore" silences it', () => {
@@ -130,6 +225,8 @@ test('the result of the call: the model the subagent started on matches the pred
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
   h.hook('agent-call', call());
+  // The subagent the recorded result names.
+  h.hook('subagent-start', start('a92fbba5fa2c7141c'));
   const calls = path.join(h.dir, '.local', 'state', 'noonsight', 'agent-calls');
   assert.deepEqual(fs.readdirSync(calls), [`${MAIN_CALL_ID}.json`]);
   const r = h.hook('agent-result', result(MAIN_CALL_ID, 'claude-haiku-5-5'));
@@ -148,7 +245,7 @@ test('the result of the call: the model the subagent started on matches the pred
 test('a subagent that starts on another model than predicted: a warning and a MISMATCH line; on_mismatch "ignore" only logs', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
-  h.hook('agent-call', call());
+  rulesFor(h, call());
   const r = h.hook('agent-result', result(MAIN_CALL_ID, 'claude-sonnet-5-5', { modelsUsed: ['claude-sonnet-5-5', 'claude-opus-5-5'] }));
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
   assert.equal(
@@ -185,8 +282,7 @@ test('a call made inside a subagent inherits that subagent\'s model: from the re
   startOn(background, 'claude-sonnet-5-5');
   const launched = JSON.parse(hookInput('post-tool-use-agent-async')) as Record<string, any>;
   background.hook('agent-result', JSON.stringify({ ...launched, session_id: SESSION, tool_response: { ...launched.tool_response, agentId: NESTED_AGENT, resolvedModel: 'claude-haiku-5-5' } }));
-  const r = background.hook('agent-call', nestedCall());
-  assert.match(r.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-GEN-9047/);
+  assert.match(rulesFor(background, nestedCall()), /HAIKU-GEN-9047/);
   const line = agentLines(background).at(-1);
   assert.deepEqual([line?.agent_id, line?.parent_model, line?.parent_source, line?.model, line?.model_source], [NESTED_AGENT, 'claude-haiku-5-5', 'agent-record', 'claude-haiku-5-5', 'parent']);
 
@@ -207,8 +303,7 @@ test('a call made inside a subagent inherits that subagent\'s model: from the re
       .map((l) => (typeof l === 'string' ? l : JSON.stringify(l)))
       .join('\n') + '\n',
   );
-  const nested = foreground.hook('agent-call', nestedCall({}, { transcript_path: sessionTranscript }));
-  assert.match(nested.out?.hookSpecificOutput.updatedInput.prompt, /SONNET-GEN-3306/);
+  assert.match(rulesFor(foreground, nestedCall({}, { transcript_path: sessionTranscript })), /SONNET-GEN-3306/);
   const nestedLine = agentLines(foreground).at(-1);
   assert.deepEqual([nestedLine?.parent_model, nestedLine?.parent_source, nestedLine?.model], ['claude-sonnet-5-5', 'agent-transcript', 'claude-sonnet-5-5']);
 
@@ -220,8 +315,9 @@ test('a call made inside a subagent inherits that subagent\'s model: from the re
   assert.match(u.out?.systemMessage, /^noonsight: noonsight cannot tell which model subagent general-purpose will run on \(the model of the session or subagent that starts it is not known\), so it gets no rules\./);
   assert.deepEqual(agentLines(unknown).map((l) => [l.model, l.status, l.reason, l.parent_source, l.delivered]), [[null, 'undeclared', 'model-not-reported', null, 'nothing']]);
 
-  // A model named in the nested call needs no parent.
-  assert.match(unknown.hook('agent-call', nestedCall({ model: 'sonnet' })).out?.hookSpecificOutput.updatedInput.prompt, /SONNET-GEN-3306/);
+  // A model named in the nested call needs no parent; the earlier call's subagent started with no rules.
+  assert.equal(unknown.hook('subagent-start', start(agentOf(JSON.parse(nestedCall()).tool_use_id))).raw, '');
+  assert.match(rulesFor(unknown, nestedCall({ model: 'sonnet' }, { tool_use_id: 'toolu_nested_sonnet' })), /SONNET-GEN-3306/);
 });
 
 test('without a record of the session, the session\'s transcript, then the settings it started with, name the parent\'s model', () => {
@@ -238,16 +334,15 @@ test('without a record of the session, the session\'s transcript, then the setti
       .map((l) => JSON.stringify(l))
       .join('\n'),
   );
-  const fromTranscript = h.hook('agent-call', call({ model: undefined }, { transcript_path: transcript }));
-  assert.match(fromTranscript.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-GEN-9047/);
+  assert.match(rulesFor(h, call({ model: undefined }, { transcript_path: transcript })), /HAIKU-GEN-9047/);
   assert.equal(agentLines(h)[0]?.parent_source, 'session-transcript');
 
-  const fromEnv = h.hook('agent-call', call({ model: undefined }, { transcript_path: path.join(project, 'missing.jsonl') }), { ANTHROPIC_MODEL: 'sonnet' });
-  assert.match(fromEnv.out?.hookSpecificOutput.updatedInput.prompt, /SONNET-GEN-3306/);
+  const fromEnv = rulesFor(h, call({ model: undefined }, { transcript_path: path.join(project, 'missing.jsonl'), tool_use_id: 'toolu_env' }), { ANTHROPIC_MODEL: 'sonnet' });
+  assert.match(fromEnv, /SONNET-GEN-3306/);
   assert.deepEqual([agentLines(h)[1]?.parent_model, agentLines(h)[1]?.parent_source], ['claude-sonnet-5-5', 'env']);
 });
 
-test('built-in subagents: Explore follows its parent, except on Opus under a Fable parent on the Anthropic API; the guide runs on Haiku', () => {
+test('built-in subagents: Explore follows its parent, except on Opus under a Fable parent on the Anthropic API; the guide and web-fetch run on Haiku', () => {
   const h = hookHome();
   const explore = (parent: string, extra: Record<string, string> = {}): Record<string, any> | undefined => {
     startOn(h, parent);
@@ -263,6 +358,35 @@ test('built-in subagents: Explore follows its parent, except on Opus under a Fab
   startOn(h, 'claude-sonnet-5-5');
   h.hook('agent-call', call({ model: undefined, subagent_type: 'claude-code-guide' }));
   assert.deepEqual([agentLines(h).at(-1)?.model, agentLines(h).at(-1)?.model_source], ['claude-haiku-5-5', 'built-in']);
+
+  // web-fetch: the model the haiku alias selects on the Anthropic API, its parent's on another provider.
+  const webFetch = (extra: Record<string, string> = {}): unknown[] => {
+    h.hook('agent-call', call({ model: undefined, subagent_type: 'web-fetch' }), extra);
+    const l = agentLines(h).at(-1);
+    return [l?.model, l?.model_source, l?.rules];
+  };
+  assert.deepEqual(webFetch(), ['claude-haiku-5-5', 'built-in', ['haiku/general']]);
+  assert.deepEqual(webFetch({ CLAUDE_CODE_SUBAGENT_MODEL: 'sonnet' }).slice(0, 2), ['claude-haiku-5-5', 'built-in'], 'its own model wins over CLAUDE_CODE_SUBAGENT_MODEL');
+  assert.deepEqual(webFetch({ ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku-4-5' }).slice(0, 2), ['claude-haiku-4-5', 'built-in']);
+  assert.deepEqual(webFetch({ CLAUDE_CODE_USE_VERTEX: '1' }).slice(0, 2), ['claude-sonnet-5-5', 'built-in']);
+});
+
+test('a subagent type noonsight does not know may set its own model, so it gets no rules rather than its parent\'s, with a warning', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const r = h.hook('agent-call', call({ model: undefined, subagent_type: 'deep-research' }));
+  assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
+  assert.match(r.out?.systemMessage, /^noonsight: noonsight cannot tell which model subagent deep-research will run on \(deep-research is neither a subagent definition noonsight reads nor a built-in subagent it knows, so its model may be its own\), so it gets no rules\./);
+  const l = agentLines(h).at(-1);
+  assert.deepEqual([l?.model, l?.model_source, l?.status, l?.delivered], [null, 'unknown', 'undeclared', 'nothing']);
+  assert.equal(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID), 'deep-research')).raw, '', 'its subagent starts with no rules');
+  // A model the call names, or CLAUDE_CODE_SUBAGENT_MODEL_FORCE, still decides.
+  assert.match(rulesFor(h, call({ model: 'haiku', subagent_type: 'deep-research' }, { tool_use_id: 'toolu_named' })), /HAIKU-GEN-9047/);
+  h.hook('agent-call', call({ model: undefined, subagent_type: 'deep-research' }, { tool_use_id: 'toolu_forced' }), { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' });
+  assert.deepEqual([agentLines(h).at(-1)?.model, agentLines(h).at(-1)?.model_source], ['claude-sonnet-5-5', 'forced']);
+  // The general-purpose subagent and the documented catch-all follow the model order.
+  h.hook('agent-call', call({ model: undefined, subagent_type: 'claude' }, { tool_use_id: 'toolu_claude' }));
+  assert.deepEqual([agentLines(h).at(-1)?.model, agentLines(h).at(-1)?.model_source], ['claude-sonnet-5-5', 'parent']);
 });
 
 test('subagent definitions: the closest project definition, then the user\'s, set the model; inherit and a definition without a model follow the parent', () => {
@@ -304,7 +428,7 @@ test('subagent definitions without a repository: only the working directory\'s o
     const l = agentLines(h).at(-1);
     return [l?.model, l?.model_source];
   };
-  assert.deepEqual(predicted('reviewer'), ['claude-sonnet-5-5', 'parent'], 'the haiku definition in a parent directory is not the session\'s');
+  assert.deepEqual(predicted('reviewer'), [null, 'unknown'], 'the haiku definition in a parent directory is not the session\'s');
   assert.deepEqual(predicted('helper'), ['claude-opus-5-5', 'definition'], 'the working directory\'s own definition is still read');
 });
 
@@ -346,17 +470,19 @@ test('subagents.delivery "off": calls are left alone and their results are not c
   const h = hookHome(config({ subagents: { delivery: 'off' } }));
   startOn(h, 'claude-sonnet-5-5');
   assert.equal(h.hook('agent-call', call({ model: 'fable' })).raw, '');
+  assert.equal(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID))).raw, '');
   assert.equal(h.hook('agent-result', result(MAIN_CALL_ID, 'claude-opus-5-5')).raw, '');
-  assert.deepEqual(agentLines(h).map((l) => [l.event, l.delivered, l.warned]), [['agent-call', 'off', false]]);
+  assert.deepEqual(h.log().filter((l) => l.event !== 'session-start').map((l) => [l.event, l.delivered, l.warned]), [['agent-call', 'off', false]]);
 });
 
-test('a task text that already holds the exact rules is not changed again', () => {
+test('a task text that already holds the exact rules is not given them again', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
-  const first = h.hook('agent-call', call());
-  const again = h.hook('agent-call', call({ prompt: first.out?.hookSpecificOutput.updatedInput.prompt }));
-  assert.equal(again.raw, '');
+  const rules = rulesFor(h, call());
+  const original = (JSON.parse(call()) as { tool_input: { prompt: string } }).tool_input.prompt;
+  assert.equal(rulesFor(h, call({ prompt: `${original}\n\n${rules}` }, { tool_use_id: 'toolu_again' })), '');
   assert.equal(agentLines(h).at(-1)?.delivered, 'already-delivered');
+  assert.equal(startLines(h).at(-1)?.delivered, 'already-delivered');
 });
 
 test('only the agent tool, under either name, reaches the subagent hooks; other input is ignored silently', () => {
@@ -367,8 +493,9 @@ test('only the agent tool, under either name, reaches the subagent hooks; other 
   assert.equal(h.hook('agent-call', call({}, { hook_event_name: 'PostToolUse' })).raw, '');
   assert.equal(h.hook('agent-call', 'not json').raw, '');
   assert.equal(agentLines(h).length, 0);
-  assert.match(h.hook('agent-call', call({}, { tool_name: 'Task' })).out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-GEN-9047/);
+  assert.match(rulesFor(h, call({}, { tool_name: 'Task' })), /HAIKU-GEN-9047/);
   assert.equal(agentLines(h)[0]?.tool_name, 'Task');
+  assert.equal(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID), 'general-purpose', { hook_event_name: 'SubagentStop' })).raw, '');
 });
 
 test('a refused configuration: the call goes ahead unchanged, the person is warned once per call, and its result is logged without a warning', () => {
@@ -377,6 +504,7 @@ test('a refused configuration: the call goes ahead unchanged, the person is warn
   const r = h.hook('agent-call', call());
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
   assert.match(r.out?.systemMessage, /was refused \(1 problem\), so no rules were delivered/);
+  assert.equal(h.hook('subagent-start', start(agentOf(MAIN_CALL_ID))).raw, '', 'the start neither warns again nor logs');
   assert.equal(h.hook('agent-result', result(MAIN_CALL_ID, 'claude-haiku-5-5')).raw, '');
   assert.deepEqual(
     h.log().map((l) => [l.event, l.status, l.warned]),
@@ -399,7 +527,11 @@ test('the hook pointer written by install runs the subagent hooks', () => {
   assert.equal(runProgram(pointer, ['session-start'], env, hookInput('session-start-startup', { session_id: SESSION, model: 'claude-sonnet-5-5' })).status, 0);
   const r = runProgram(pointer, entry.hooks[0].args, env, call());
   assert.equal(r.status, 0, r.stderr);
-  assert.match(JSON.parse(r.stdout).hookSpecificOutput.updatedInput.prompt, /HAIKU-GEN-9047/);
+  assert.equal(r.stdout, '');
+  const [startEntry] = settings.hooks.SubagentStart;
+  assert.equal(startEntry.matcher, undefined, 'every subagent type starts noonsight');
+  const s = runProgram(pointer, startEntry.hooks[0].args, env, start(agentOf(MAIN_CALL_ID)));
+  assert.match(JSON.parse(s.stdout).hookSpecificOutput.additionalContext, /HAIKU-GEN-9047/);
   const post = runProgram(pointer, settings.hooks.PostToolUse[0].hooks[0].args, env, result(MAIN_CALL_ID, 'claude-sonnet-5-5'));
   assert.match(JSON.parse(post.stdout).systemMessage, /not on claude-haiku-5-5 as noonsight predicted/);
   assert.ok(fs.existsSync(CLI));
@@ -418,6 +550,9 @@ test('subagent records nobody wrote for 7 days are removed when a session starts
   const old = Date.now() / 1000 - 8 * 24 * 60 * 60;
   for (const [dir, name, age] of [
     ['agent-calls', 'toolu_old.json', old],
+    ['agent-pools', 'old-session.json', old],
+    ['agent-starts', 'aold.json', old],
+    ['agent-links', 'aold.json', old],
     ['agents', 'aold.json', old],
     ['agents', 'anew.json', Date.now() / 1000],
   ] as const) {
@@ -427,7 +562,7 @@ test('subagent records nobody wrote for 7 days are removed when a session starts
     fs.utimesSync(file, age, age);
   }
   startOn(h, 'claude-sonnet-5-5');
-  assert.deepEqual(fs.readdirSync(path.join(state, 'agent-calls')), []);
+  for (const dir of ['agent-calls', 'agent-pools', 'agent-starts', 'agent-links']) assert.deepEqual(fs.readdirSync(path.join(state, dir)), [], dir);
   assert.deepEqual(fs.readdirSync(path.join(state, 'agents')), ['anew.json']);
 });
 
@@ -445,7 +580,7 @@ const SCOPED = (): string =>
 test('a subagent\'s scope comes from its own task text, so two tasks on one model get different rules', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-sonnet-5-5');
-  const prompt = (input: string): string => h.hook('agent-call', input).out?.hookSpecificOutput.updatedInput.prompt ?? '';
+  const prompt = (input: string): string => rulesFor(h, input);
   const summarize = prompt(call({ model: 'haiku', description: 'Condense the notes', prompt: 'Summarize the meeting notes.' }, { tool_use_id: 'toolu_sum' }));
   assert.match(summarize, /<noonsight-rules model="claude-haiku-5-5" scope="summarize">/);
   assert.match(summarize, /HAIKU-SUM-6610/);
@@ -454,7 +589,7 @@ test('a subagent\'s scope comes from its own task text, so two tasks on one mode
   assert.match(investigate, /SONNET-CARRY-4471/, 'a subagent is in the place subagent');
   const plain = prompt(call({ model: 'haiku', description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_none' }));
   assert.doesNotMatch(plain, /HAIKU-SUM-6610/);
-  assert.match(plain, /^Rename the variable\.\n\n<noonsight-rules model="claude-haiku-5-5">\n/);
+  assert.match(plain, /^<noonsight-rules model="claude-haiku-5-5">\n/);
 
   assert.deepEqual(
     agentLines(h).map((l) => [l.model, l.scope, l.scope_source, l.scope_matcher ?? null, l.place]),
@@ -483,8 +618,9 @@ test('a task text longer than the matchers read is logged as cut, so a scope mis
 test('the session\'s NOONSIGHT_SCOPE never carries over to a subagent, whose scope comes from its own task only', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');
-  const other = h.hook('agent-call', call({ model: undefined, prompt: 'Rename the variable.' }), { NOONSIGHT_SCOPE: 'summarize' });
-  assert.doesNotMatch(other.out?.hookSpecificOutput.updatedInput.prompt, /HAIKU-SUM-6610/);
+  const other = rulesFor(h, call({ model: undefined, prompt: 'Rename the variable.' }), { NOONSIGHT_SCOPE: 'summarize' });
+  assert.match(other, /HAIKU-GEN-9047/);
+  assert.doesNotMatch(other, /HAIKU-SUM-6610/);
   assert.deepEqual(
     agentLines(h).map((l) => [l.subagent_type, l.scope, l.scope_source]),
     [['general-purpose', null, null]],

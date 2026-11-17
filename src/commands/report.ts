@@ -1,7 +1,8 @@
 // noonsight report: what the decision log says the hooks and the launcher did. For each rule, how
 // often it was delivered, and to which models, scopes, places and events; the rules the
-// configuration has on that the log never shows delivered; and the decisions that delivered
-// nothing, by why. It reads local files only and changes nothing.
+// configuration has on that the log never shows delivered; the decisions that delivered nothing, by
+// why; and what the classifier did, how long it took and what it cost. It reads local files only and
+// changes nothing.
 
 import fs from 'node:fs';
 import os from 'node:os';
@@ -16,7 +17,8 @@ export const REPORT_USAGE = `usage: noonsight report [--json] [--log <file>]
 
 Report what the decision log records: for each rule, how often it was delivered and to which
 models, scopes, places and events, with the length of its text; the rules the configuration has on
-that the log never shows delivered; and the decisions that delivered nothing, by why.
+that the log never shows delivered; the decisions that delivered nothing, by why; and the
+classifier's results, time and cost.
 
   --log <file>  read this log file instead of the account's decision log
   --json        print the same as JSON
@@ -59,6 +61,19 @@ export interface IdleRule {
   readonly where: readonly Place[];
 }
 
+/** What the classifier did, from the decisions that record a `classifier` field. */
+export interface ClassifierReport {
+  /** Decisions the classifier was meant to place, by its result. */
+  readonly results: Tally;
+  /** The classifications that were run: those that record how long they took. */
+  readonly runs: number;
+  /** Their median and longest time in milliseconds, or null without a run. */
+  readonly median_ms: number | null;
+  readonly max_ms: number | null;
+  /** The cost Claude Code reported, summed over the runs that report one. */
+  readonly cost_usd: number;
+}
+
 export interface Report {
   readonly log: readonly string[];
   readonly decisions: number;
@@ -75,6 +90,8 @@ export interface Report {
   readonly config: { readonly file: string; readonly status: 'read' | 'missing' | 'refused' };
   /** Rules on in the configuration for an exact model that no delivery in this log carries. */
   readonly never_delivered: readonly IdleRule[];
+  /** Null when no decision in the log records the classifier. */
+  readonly classifier: ClassifierReport | null;
 }
 
 interface Options {
@@ -113,6 +130,9 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
   const delivering: Record<string, number> = {};
   const notDelivering: Record<string, number> = {};
   const agentResults: Record<string, number> = {};
+  const classifierResults: Record<string, number> = {};
+  const classifierMs: number[] = [];
+  let classifierCost = 0;
   const rules = new Map<string, MutableRule>();
   let first: string | null = null;
   let last: string | null = null;
@@ -124,13 +144,23 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
       if (last === null || ts > last) last = ts;
     }
     const event = text(r.event) ?? NOT_RECORDED;
+    const outcome = text(r.classifier);
+    if (outcome !== null) {
+      count(classifierResults, outcome);
+      if (typeof r.classifier_ms === 'number' && Number.isFinite(r.classifier_ms)) classifierMs.push(r.classifier_ms);
+      if (typeof r.classifier_cost_usd === 'number' && Number.isFinite(r.classifier_cost_usd)) classifierCost += r.classifier_cost_usd;
+    }
     if (event === 'agent-result') {
       count(agentResults, text(r.result) ?? NOT_RECORDED);
       continue;
     }
+    // A subagent's rules are counted once: delivered at its start, or not delivered at its call.
+    if (event === 'agent-call' && r.delivered === 'at-start') continue;
     const ids = Array.isArray(r.rules) ? r.rules.filter((x): x is string => typeof x === 'string') : [];
     if (!(DELIVERING as readonly unknown[]).includes(r.delivered) || ids.length === 0) {
-      count(notDelivering, whyNothing(r));
+      if (event !== 'subagent-start') count(notDelivering, whyNothing(r));
+      // Rules the call had that a start shared between several calls could not give.
+      else if (text(r.reason) === 'calls-differ') count(notDelivering, 'calls-differ');
       continue;
     }
     count(delivering, event);
@@ -202,7 +232,25 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
     rules: listed,
     config: { file, status },
     never_delivered: neverDelivered,
+    classifier:
+      total(classifierResults) === 0
+        ? null
+        : {
+            results: sorted(classifierResults),
+            runs: classifierMs.length,
+            median_ms: median(classifierMs),
+            max_ms: classifierMs.length ? Math.max(...classifierMs) : null,
+            cost_usd: Math.round(classifierCost * 1e6) / 1e6,
+          },
   };
+}
+
+/** The middle value, or the mean of the two middle values; null for none. */
+function median(values: readonly number[]): number | null {
+  if (values.length === 0) return null;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? (s[mid] as number) : ((s[mid - 1] as number) + (s[mid] as number)) / 2;
 }
 
 interface MutableRule {
@@ -296,6 +344,17 @@ export function renderReport(r: Report): string {
       if (rule.characters)
         lines.push(`     text: ${Object.entries(rule.characters).map(([model, n]) => `${n} characters for ${model}`).join(', ')}`);
     }
+  }
+
+  if (r.classifier !== null) {
+    const c = r.classifier;
+    lines.push('', 'Classifier:');
+    lines.push(`  tasks: ${total(c.results)} (${pairs(c.results)})`);
+    lines.push(
+      c.runs === 0
+        ? '  runs: 0'
+        : `  runs: ${c.runs}, median ${c.median_ms} ms, longest ${c.max_ms} ms, cost US$ ${c.cost_usd.toFixed(4)}`,
+    );
   }
 
   if (r.config.status === 'read') {
