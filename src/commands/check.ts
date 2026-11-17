@@ -13,7 +13,8 @@ import { accountTarget, discoverConfigDirs, managedTarget, type InstallTarget } 
 import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSettings } from '../adapters/claude-code/managed.js';
 import { readPointer } from '../adapters/claude-code/pointer.js';
 import { findNoonsightHandlers, handlersFor, HOOK_HANDLERS, matcherOf, type HookHandlerSpec } from '../adapters/claude-code/settings.js';
-import { ConfigError, loadConfig } from '../config/load.js';
+import { ConfigError, loadConfigDetails, type ConfigDetails } from '../config/load.js';
+import { changesDelivery, comparePresets, describeChanges } from '../config/preset-changes.js';
 import { scopeOverlaps } from '../core/overlap.js';
 import { SCOPE_ENV, sessionPlace, sessionScope } from '../core/scope.js';
 import { ROUTING_ENV, routingEnvOff } from '../core/route.js';
@@ -48,7 +49,8 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   const file = configPath(env, home);
   let configOk = false;
   try {
-    const config = loadConfig(file, {}, env);
+    const details = loadConfigDetails(file, {}, env);
+    const config = details.config;
     configOk = true;
     const sub = config.subagents;
     add(
@@ -57,6 +59,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
         (sub.delivery === 'off' ? 'off' : `rules when each subagent starts, permission ${sub.permission} for a routed call, on mismatch ${sub.onMismatch}`) +
         ')',
     );
+    checkPreset(details, env, add);
     checkAllModels(config, add);
     checkScopes(config, env, add);
     checkTriggers(config, add);
@@ -125,6 +128,56 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   out(lines.map(([level, text]) => `${level}: ${text}`).join('\n'));
   if (!configOk) return 2;
   return lines.some(([level]) => level === 'problem') ? 1 : 0;
+}
+
+/**
+ * The preset version the configuration accepted against the installed one, and, model by model, what
+ * the installed version changes: rules turned on or off, renamed or changed, and enable or disable
+ * entries that no longer name a rule.
+ */
+function checkPreset(details: ConfigDetails, env: Env, add: (level: Level, text: string) => void): void {
+  const v = details.presetVersions;
+  let c;
+  try {
+    c = comparePresets(v, details.declared, {}, env);
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    add('problem', `preset ${v.name}: the copy of ${String(v.accepted)} the package keeps was refused, so what changed since cannot be listed: ${e.problems.join('; ')}`);
+    return;
+  }
+  // A configuration that declares no model with "use": "preset" takes only the preset's scopes and routing table.
+  if (c === null || (c.accepted === null && ![...details.declared.values()].some((m) => m.use === 'preset'))) return;
+  const to = c.installed.version;
+  const accept = `run \`noonsight accept\` to accept ${to}`;
+  if (c.accepted === null)
+    add(
+      'warning',
+      `preset ${c.name} ${to}: the configuration records no "preset_version", so nothing can say what a preset update changes in the rules sessions receive; ` +
+        `run \`noonsight accept\` to record ${to}`,
+    );
+  else if (c.accepted === to)
+    add('ok', `preset ${c.name} ${to}: the version the configuration accepted` + (v.onChange === 'hold' ? ', held ("on_preset_change": "hold")' : ''));
+  else if (c.from === null)
+    add(
+      'warning',
+      `preset ${c.name}: the configuration accepted ${c.accepted}, but the package ships ${to} and keeps no copy of ${c.accepted}, so what changed cannot be listed; ` +
+        `sessions receive the rules of ${to}. Review them with \`noonsight models\`, then ${accept}`,
+    );
+  else if (c.held)
+    add(
+      'warning',
+      `preset ${c.name}: held at ${c.accepted} ("on_preset_change": "hold") while the package ships ${to}, so sessions keep the rules of ${c.accepted}; ` +
+        (c.models.some(changesDelivery) ? `accepting ${to} would change them as listed below; ` : `${to} changes no rule a declared model receives; `) +
+        accept,
+    );
+  else
+    add(
+      'warning',
+      `preset ${c.name}: the package ships ${to}, and the configuration accepted ${c.accepted}, so sessions receive the rules of ${to}` +
+        (c.models.some(changesDelivery) ? ', which changed as listed below' : ', which change no rule a declared model receives') +
+        `; ${accept} once reviewed`,
+    );
+  for (const m of c.models) add('warning', `preset ${c.name}, ${m.model}: ${describeChanges(m, c.held)}`);
 }
 
 /**

@@ -55,6 +55,8 @@ export class ConfigError extends Error {
 export interface LoadOptions {
   /** Directory that holds the presets; defaults to the package's own (see presetsDir). */
   readonly presetsDir?: string;
+  /** The configuration file's content, read instead of the file; rule files are still found next to the file. */
+  readonly content?: string;
 }
 
 // Shapes after schema validation. The schemas are the owners of these shapes.
@@ -86,6 +88,8 @@ type RawRouteRow = RawRouteOption[] | Partial<Record<RouteTarget, RawRouteOption
 interface RawConfig {
   version: 1;
   preset?: string;
+  preset_version?: string;
+  on_preset_change?: PresetChangePolicy;
   all_models?: { add: RawUserRule[] };
   models?: Record<string, RawModelEntry>;
   on_undeclared?: 'warn' | 'ignore';
@@ -108,6 +112,7 @@ interface RawPresetRule {
   scopes: string[];
   where: Place[];
   triggers?: Trigger[];
+  renamed_from?: string[];
   enabled?: boolean;
   source: Source;
   effect: string;
@@ -133,6 +138,8 @@ export interface Source {
 export interface PresetRule extends Rule {
   /** Whether the rule is on unless the user turns it off. */
   readonly enabled: boolean;
+  /** The ids this rule had in earlier versions of the preset, for the same model. */
+  readonly renamedFrom: readonly string[];
   /** The rule file, relative to the preset directory. */
   readonly file: string;
   readonly source: Source;
@@ -167,6 +174,9 @@ export interface Preset {
 export interface DeclaredModel {
   readonly use: 'preset' | 'custom' | 'none';
   readonly wildcard: boolean;
+  /** The preset rule ids the entry turns on and off, as the configuration writes them. */
+  readonly enable: readonly string[];
+  readonly disable: readonly string[];
   /** The user's own rules, with their files as the configuration writes them. */
   readonly add: readonly { readonly id: string; readonly file: string }[];
 }
@@ -177,11 +187,29 @@ export interface AllModelsRule {
   readonly file: string;
 }
 
+/**
+ * What a preset update does to a configuration: "warn" delivers the installed preset's rules and
+ * reports what changed since the accepted version; "hold" keeps delivering the accepted version's.
+ */
+export type PresetChangePolicy = 'warn' | 'hold';
+
+/** The preset version a configuration accepted, against the one the package ships. */
+export interface PresetVersions {
+  readonly name: string;
+  /** The "preset_version" of the configuration, or null when it records none. */
+  readonly accepted: string | null;
+  readonly onChange: PresetChangePolicy;
+  /** The preset the installed package ships, or null when it is not installed. */
+  readonly installed: Preset | null;
+}
+
 /** The loaded configuration, plus what describes it: the preset it draws from and each model as declared. */
 export interface ConfigDetails {
   readonly config: Config;
-  /** The preset, or null when it is not installed and nothing needs it. */
+  /** The preset the rules come from, or null when it is not installed and nothing needs it. Under "hold", the accepted version's copy. */
   readonly preset: Preset | null;
+  /** The accepted preset version and the installed one. */
+  readonly presetVersions: PresetVersions;
   /** The model keys in the order the file writes them. */
   readonly declared: ReadonlyMap<string, DeclaredModel>;
   /** The rules of the "all_models" block, in the order the file writes them; empty when there is none. */
@@ -191,13 +219,39 @@ export interface ConfigDetails {
 /** The preset a configuration draws from when it names none. */
 export const DEFAULT_PRESET = 'claude';
 
+/** What a configuration does on a preset update when it names no policy. */
+export const DEFAULT_PRESET_CHANGE_POLICY: PresetChangePolicy = 'warn';
+
+/** Where a preset keeps the earlier versions the package still ships, inside its own directory. */
+export const PRESET_VERSIONS_DIR = 'versions';
+
 /** Read and check one installed preset on its own; a missing or failing preset throws a ConfigError. */
 export function readPreset(name: string, options: LoadOptions = {}, env: Env = process.env): Preset {
   const dir = options.presetsDir ?? defaultPresetsDir(env);
   const problems: string[] = [];
-  const preset = loadPreset(name, dir, true, problems);
+  const preset = loadPreset(name, path.join(dir, name), null, true, problems);
   if (preset === null || problems.length) throw new ConfigError(path.join(dir, name, 'preset.json'), problems);
   return preset;
+}
+
+/**
+ * Read and check one version of a preset: the installed preset when it is that version, else the
+ * copy of that version the package keeps. Returns null when the package ships neither; a copy that
+ * fails its checks throws a ConfigError.
+ */
+export function readPresetVersion(name: string, version: string, options: LoadOptions = {}, env: Env = process.env): Preset | null {
+  const dir = options.presetsDir ?? defaultPresetsDir(env);
+  const installed = readPreset(name, options, env);
+  if (installed.version === version) return installed;
+  const problems: string[] = [];
+  const copy = loadPreset(name, versionDir(dir, name, version), version, false, problems);
+  if (problems.length) throw new ConfigError(path.join(versionDir(dir, name, version), 'preset.json'), problems);
+  return copy;
+}
+
+/** The directory of the copy of one earlier version of a preset. */
+function versionDir(presetsDir: string, name: string, version: string): string {
+  return path.join(presetsDir, name, PRESET_VERSIONS_DIR, version);
 }
 
 export function loadConfig(file: string, options: LoadOptions = {}, env: Env = process.env): Config {
@@ -215,7 +269,10 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     throw new ConfigError(configFile, problems);
   };
 
-  const raw = readJson(configFile, problems, 'no configuration file here; create one, or point NOONSIGHT_CONFIG at one');
+  const raw =
+    options.content !== undefined
+      ? parseJson(options.content, problems)
+      : readJson(configFile, problems, 'no configuration file here; create one, or point NOONSIGHT_CONFIG at one');
   if (raw === undefined) refuse();
   problems.push(...validateSchema(schema('noonsight.schema.json'), raw));
   if (problems.length) refuse();
@@ -225,8 +282,47 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   // The preset: always read when present, required when named or when a model uses it.
   const presetName = cfg.preset ?? DEFAULT_PRESET;
   const presetNeeded = cfg.preset !== undefined || Object.values(models).some((m) => m.use === 'preset');
-  const preset = loadPreset(presetName, options.presetsDir ?? defaultPresetsDir(env), presetNeeded, problems);
+  const presetsRoot = options.presetsDir ?? defaultPresetsDir(env);
+  const installed = loadPreset(presetName, path.join(presetsRoot, presetName), null, presetNeeded, problems);
   if (problems.length) refuse();
+
+  // Under "hold", the rules, scopes and routing table come from the accepted version, as the package keeps it.
+  const accepted = cfg.preset_version ?? null;
+  const onChange = cfg.on_preset_change ?? DEFAULT_PRESET_CHANGE_POLICY;
+  let preset = installed;
+  if (onChange === 'hold') {
+    if (accepted === null)
+      report(
+        '/on_preset_change',
+        `"hold" keeps the rules of the preset version in "preset_version", and the configuration records none; ` +
+          `run \`noonsight accept\` to record ${installed ? `${installed.version}, the installed version` : 'the installed version'}`,
+      );
+    else if (installed !== null && installed.version !== accepted) {
+      preset = loadPreset(presetName, versionDir(presetsRoot, presetName, accepted), accepted, false, problems);
+      if (preset === null && !problems.length)
+        report(
+          '/preset_version',
+          `preset "${presetName}" ${accepted} is held ("on_preset_change": "hold"), but the installed package ships ${installed.version} and keeps no copy of ${accepted}; ` +
+            `run \`noonsight accept\` to take ${installed.version}, or install a noonsight version that ships ${accepted}`,
+        );
+    }
+  }
+  if (problems.length) refuse();
+
+  // Under "warn", an enable or disable entry can name a rule the accepted version had and the installed
+  // one no longer has: the update dropped it, so the entry is left out and reported, not refused.
+  let former: Preset | null | undefined;
+  const formerIds = (model: string): ReadonlySet<string> => {
+    if (former === undefined) {
+      former = null;
+      if (accepted !== null && installed !== null && preset === installed && accepted !== installed.version) {
+        const own: string[] = [];
+        former = loadPreset(presetName, versionDir(presetsRoot, presetName, accepted), accepted, false, own);
+        if (own.length) former = null;
+      }
+    }
+    return new Set(former?.models.get(model)?.map((r) => r.id) ?? []);
+  };
 
   const scopes = mergeScopes(preset?.scopes ?? new Map(), cfg.scopes ?? {}, report);
   const configDir = path.dirname(configFile);
@@ -259,11 +355,24 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
         report(at, `preset "${presetName}" has no rules for ${key}; declare it with "use": "custom" or "use": "none"`);
       } else if (presetRules) {
         const ids = new Set(presetRules.map((r) => r.id));
-        const enable = new Set(entry.enable ?? []);
-        const disable = new Set(entry.disable ?? []);
-        for (const [list, set] of [['enable', enable], ['disable', disable]] as const)
-          for (const id of set) if (!ids.has(id)) report(`${at}/${list}`, `preset "${presetName}" has no rule "${id}" for ${key}`);
-        for (const id of enable) if (disable.has(id)) report(at, `rule "${id}" is both enabled and disabled`);
+        // An entry that names a rule by an id it had before a rename still applies to the rule.
+        const renamed = new Map(presetRules.flatMap((r) => r.renamedFrom.map((old) => [old, r.id] as const)));
+        const pick = (list: 'enable' | 'disable'): Map<string, string> => {
+          const picked = new Map<string, string>();
+          for (const id of entry[list] ?? []) {
+            const current = ids.has(id) ? id : renamed.get(id);
+            if (current !== undefined) picked.set(current, id);
+            else if (!formerIds(key).has(id)) report(`${at}/${list}`, `preset "${presetName}" has no rule "${id}" for ${key}`);
+          }
+          return picked;
+        };
+        const enable = pick('enable');
+        const disable = pick('disable');
+        for (const [id, written] of enable) {
+          const other = disable.get(id);
+          if (other !== undefined)
+            report(at, `rule "${id}" is both enabled and disabled` + (written !== id || other !== id ? ` (as "${written}" and "${other}")` : ''));
+        }
         for (const r of presetRules) {
           const on = (r.enabled || enable.has(r.id)) && !disable.has(r.id);
           if (on) rules.push({ id: r.id, origin: r.origin, scopes: r.scopes, where: r.where, triggers: r.triggers, text: r.text });
@@ -324,6 +433,8 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       {
         use: entry.use,
         wildcard: /[*?]/.test(key),
+        enable: entry.enable ?? [],
+        disable: entry.disable ?? [],
         add: (entry.add ?? []).map((u) => ({ id: u.id, file: u.file })),
       },
     ]),
@@ -331,6 +442,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   return {
     config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', allModels, scopes, session, subagents, routing, classifier },
     preset,
+    presetVersions: { name: presetName, accepted, onChange, installed },
     declared,
     allModels: (cfg.all_models?.add ?? []).map((u) => ({ id: u.id, file: u.file })),
   };
@@ -364,8 +476,12 @@ function loadAllModels(
   return rules;
 }
 
-function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {
-  const presetDir = path.join(dir, name);
+/**
+ * Read and check the preset in one directory: the installed preset (version null), or the copy of
+ * one earlier version, which must say it is that version. A missing preset is a problem only when
+ * needed.
+ */
+function loadPreset(name: string, presetDir: string, version: string | null, needed: boolean, problems: string[]): Preset | null {
   const file = path.join(presetDir, 'preset.json');
   if (!fs.existsSync(file)) {
     if (needed) problems.push(`/preset: preset "${name}" is not installed (looked for ${file})`);
@@ -384,6 +500,7 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
 
   const p = raw as RawPreset;
   if (p.id !== name) report('/id', `is "${p.id}", but the preset is installed as "${name}"`);
+  if (version !== null && p.version !== version) report('/version', `is "${p.version}", but the copy is kept as version ${version}`);
   const scopes = new Map(Object.entries(p.scopes ?? {}).map(([name, raw]) => [name, toScope(name, raw, `/scopes/${name}`, report)]));
   const scopeSources = new Map(Object.entries(p.scopes ?? {}).flatMap(([name, raw]) => (raw.source ? [[name, raw.source] as const] : [])));
   const routing = new Map<string, PresetRoute>();
@@ -414,12 +531,14 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
           triggers: r.triggers ?? [],
           text,
           enabled: r.enabled ?? true,
+          renamedFrom: r.renamed_from ?? [],
           file: r.file,
           source: r.source,
           effect: r.effect,
           cost: r.cost,
         });
     });
+    checkRenames(key, entry.rules, at, report);
     // A user can turn on any preset rule, so the preset must fit with every rule on, not only as it ships.
     if (rules.length === entry.rules.length) checkPresetSize(key, rules, scopes, at, report);
     models.set(key, rules);
@@ -429,6 +548,23 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
     return null;
   }
   return { name, version: p.version, claudeCode: p.claude_code ?? null, scopes, scopeSources, routing, models };
+}
+
+/**
+ * A rule's earlier ids map an enable or disable entry, and an earlier version's rule, to the rule, so
+ * each earlier id names one rule and no rule the version has.
+ */
+function checkRenames(model: string, rules: readonly RawPresetRule[], at: string, report: (at: string, message: string) => void): void {
+  const current = new Set(rules.map((r) => r.id));
+  const owner = new Map<string, string>();
+  rules.forEach((r, i) =>
+    (r.renamed_from ?? []).forEach((old, j) => {
+      const oldAt = `${at}/rules/${i}/renamed_from/${j}`;
+      if (current.has(old)) report(oldAt, `"${old}" is the id of a rule of ${model} in this version; renamed_from lists only ids the rule had in earlier versions`);
+      else if (owner.has(old)) report(oldAt, `"${old}" is already an earlier id of rule "${owner.get(old)}"`);
+      owner.set(old, r.id);
+    }),
+  );
 }
 
 /**
@@ -693,6 +829,10 @@ function readJson(file: string, problems: string[], missing: string): unknown {
     problems.push(code === 'ENOENT' ? missing : `cannot read the file (${code ?? String(e)})`);
     return undefined;
   }
+  return parseJson(text, problems);
+}
+
+function parseJson(text: string, problems: string[]): unknown {
   try {
     return JSON.parse(text);
   } catch (e) {

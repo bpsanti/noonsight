@@ -18,7 +18,7 @@ On a clean machine `noonsight install` is all of the setup.
 It takes these steps in order, and a step with a command named in brackets does what that command does, with no logic of its own:
 
 1. **The configuration** [`noonsight init`].
-   When `~/.config/noonsight/noonsight.json` (or the file `NOONSIGHT_CONFIG` names) does not exist, it is written from the preset, declaring every model the preset has rules for with `"use": "preset"`.
+   When `~/.config/noonsight/noonsight.json` (or the file `NOONSIGHT_CONFIG` names) does not exist, it is written from the preset, declaring every model the preset has rules for with `"use": "preset"` and recording the preset's version as `preset_version`.
    A file that exists is never opened for writing, and the output says it was left as it is.
    When this account cannot write it, the command stops here, before any hook is written, and says which path it could not write.
 2. **The hooks.**

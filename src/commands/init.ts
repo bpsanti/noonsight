@@ -54,6 +54,7 @@ export function writeConfig(env: Env): string[] | null {
     $schema: CONFIG_SCHEMA_URL,
     version: 1,
     preset: preset.name,
+    preset_version: preset.version,
     models: Object.fromEntries([...preset.models.keys()].map((key) => [key, { use: 'preset' }])),
   };
   fs.mkdirSync(path.dirname(file), { recursive: true });

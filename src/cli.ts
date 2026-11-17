@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // noonsight command line. Exit codes: 0 for success and for every decision (matched, none,
 // undeclared); 1 when install, uninstall, watch or check finds a problem; 2 for a usage error or a
-// refused configuration. `noonsight init` exits 1 when the configuration file already exists.
+// refused configuration. `noonsight init` exits 1 when the configuration file already exists, and
+// `noonsight accept` when it cannot write it.
 // `noonsight hook` always exits 0, `noonsight watch run` keeps running, and `noonsight run` exits with
 // claude's exit status.
 
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { ACCEPT_USAGE, runAccept } from './commands/accept.js';
 import { CHECK_USAGE, runCheck } from './commands/check.js';
 import { HOOK_USAGE, runHookCommand } from './commands/hook.js';
 import { INIT_USAGE, runInit } from './commands/init.js';
@@ -34,6 +36,8 @@ Commands:
   watch enable|disable              turn on or off the watcher that installs the hooks into each
                                     new Claude Code login as it appears; off unless turned on
   check                             check the configuration, the installs, the watcher and Claude Code
+  accept                            accept the installed preset version: list what it changes, then
+                                    record it as "preset_version" in the configuration
   models [--json]                   list the declared models and their rules, with source and cost
   resolve <model> [scope] [place]   show the rules a model receives
   report [--json] [--log <file>]
@@ -62,6 +66,7 @@ const COMMAND_USAGE: Record<string, string> = {
   install: INSTALL_USAGE,
   uninstall: INSTALL_USAGE,
   check: CHECK_USAGE,
+  accept: ACCEPT_USAGE,
   watch: WATCH_USAGE,
   hook: HOOK_USAGE,
 };
@@ -103,6 +108,8 @@ export function main(argv: readonly string[], env: Env, io: Io): number | Promis
         return runInstall(command, rest, env, io);
       case 'check':
         return runCheck(rest, env, io.out);
+      case 'accept':
+        return runAccept(rest, env, io);
       case 'watch':
         return runWatch(rest, env, io);
       case undefined:
