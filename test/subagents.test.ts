@@ -220,6 +220,25 @@ test('a call whose subagent never starts, such as one denied after its hook, is 
   assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id], ['single', 'toolu_later']);
 });
 
+test('a call whose subagent starts after the open window gives it no rules, and its result says so', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  h.hook('agent-call', call({ model: 'haiku' }, { tool_use_id: 'toolu_late' }));
+  const state = path.join(h.dir, '.local', 'state', 'noonsight');
+  const poolPath = path.join(state, 'agent-pools', `${SESSION}.json`);
+  const pool = JSON.parse(fs.readFileSync(poolPath, 'utf8')) as { open: { at: string }[] };
+  for (const c of pool.open) c.at = new Date(Date.parse(c.at) - 3 * 60 * 1000).toISOString();
+  fs.writeFileSync(poolPath, JSON.stringify(pool));
+
+  assert.equal(h.hook('subagent-start', start('a-late')).raw, '', 'the subagent gets no rules');
+  const r = h.hook('agent-result', result('toolu_late', 'claude-sonnet-5-5', { agentId: 'a-late' }));
+  assert.match(r.out?.systemMessage, /started on claude-sonnet-5-5, not on claude-haiku-5-5 as noonsight predicted, so it received no rules\./);
+  const line = agentLines(h).at(-1);
+  assert.deepEqual([line?.event, line?.result, line?.delivered], ['agent-result', 'MISMATCH', 'nothing']);
+  assert.ok(!fs.existsSync(path.join(state, 'agent-links', 'a-late.json')), 'no link is left for a start that already passed');
+  assert.deepEqual(fs.readdirSync(path.join(state, 'agent-calls')), [], 'the call record is removed');
+});
+
 test('an undeclared model warns the person and leaves the call alone; on_undeclared "ignore" silences it', () => {
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
@@ -259,11 +278,11 @@ test('a subagent that starts on another model than predicted: a warning and a MI
   const h = hookHome();
   startOn(h, 'claude-sonnet-5-5');
   rulesFor(h, call());
-  const r = h.hook('agent-result', result(MAIN_CALL_ID, 'claude-sonnet-5-5', { modelsUsed: ['claude-sonnet-5-5', 'claude-opus-5-5'] }));
+  const r = h.hook('agent-result', result(MAIN_CALL_ID, 'claude-sonnet-5-5', { agentId: agentOf(MAIN_CALL_ID), modelsUsed: ['claude-sonnet-5-5', 'claude-opus-5-5'] }));
   assert.deepEqual(Object.keys(r.out ?? {}), ['systemMessage']);
   assert.equal(
     r.out?.systemMessage,
-    'noonsight: subagent general-purpose (a92fbba5fa2c7141c) started on claude-sonnet-5-5, not on claude-haiku-5-5 as noonsight predicted, so it received the rules for claude-haiku-5-5.',
+    `noonsight: subagent general-purpose (${agentOf(MAIN_CALL_ID)}) started on claude-sonnet-5-5, not on claude-haiku-5-5 as noonsight predicted, so it received the rules for claude-haiku-5-5.`,
   );
   const line = agentLines(h)[1];
   assert.deepEqual([line?.result, line?.predicted, line?.model, line?.warned], ['MISMATCH', 'claude-haiku-5-5', 'claude-sonnet-5-5', true]);

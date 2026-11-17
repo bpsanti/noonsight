@@ -195,7 +195,7 @@ The line also repeats the `routing` and `routing_reason` recorded for the call.
 `models_used`, when Claude Code reports it, lists the models a subagent switched between while it ran.
 The result also records the subagent's model under its agent id, in `~/.local/state/noonsight/agents/`, for the calls that subagent makes in turn.
 When the subagent's start has not been seen yet, it records which call started it, in `agent-links/`, so the start finds its own call.
-The line's `delivered` says what the subagent's start gave it (`rules` or `nothing`), or `at-start` when the start comes after the result.
+The line's `delivered` says what the subagent's start gave it (`rules` or `nothing`), or `at-start` when the start comes after the result; a call no longer open when its subagent started, which gave it nothing, records `nothing`.
 
 ### Routing
 

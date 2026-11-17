@@ -429,7 +429,8 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
   let start: AgentStart | null = readAgentStart(startFile);
   let linked = false;
   if (toolUseId !== null && sessionId !== null && subagentId !== null && startFile !== null)
-    ({ start, linked } = changePool(ctx.state, sessionId, (pool) => {
+    ({ start, linked } = changePool(ctx.state, sessionId, (found) => {
+      const pool = current(found, ctx.now.getTime());
       const seen = readAgentStart(startFile);
       if (!pool.open.some((c) => c.id === toolUseId)) return { pool: null, value: { start: seen, linked: false } };
       const shared = { ...pool.shared };
@@ -443,8 +444,10 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
   const result = resolved === null ? 'unknown' : call.predicted === null ? 'unpredicted' : resolved === call.predicted ? 'match' : 'MISMATCH';
   const warn = result === 'MISMATCH' && config.subagents.onMismatch === 'warn';
   const usedModels = Array.isArray(r.modelsUsed) ? r.modelsUsed.filter((m): m is string => typeof m === 'string') : null;
-  const gotRules = start !== null ? start.text !== null : call.delivered !== 'nothing';
-  const got = gotRules ? `the rules for ${call.predicted}` : 'no rules';
+  // What the subagent's start gave it, once seen; before, what its call hands over. A call neither
+  // started nor still open, such as one past the open window, gave its subagent nothing.
+  const delivered = start !== null ? (start.text !== null ? 'rules' : 'nothing') : !linked && call.delivered === 'at-start' ? 'nothing' : call.delivered;
+  const got = delivered !== 'nothing' ? `the rules for ${call.predicted}` : 'no rules';
   return {
     record: {
       subagent_type: call.subagent_type,
@@ -453,8 +456,7 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
       model: resolved,
       ...(usedModels !== null ? { models_used: usedModels } : {}),
       result,
-      // What the subagent's start gave it, once seen; before, what its call handed over.
-      delivered: start !== null ? (start.text !== null ? 'rules' : 'nothing') : call.delivered,
+      delivered,
       ...(call.routing !== undefined ? { routing: call.routing } : {}),
       ...(call.routing_reason !== undefined ? { routing_reason: call.routing_reason } : {}),
       warned: warn,
