@@ -51,6 +51,8 @@ export interface RunRecord extends Cell {
   readonly resolved: boolean | null;
   readonly answer_written: boolean | null;
   readonly changed_files: readonly string[];
+  /** Every instruction load the InstructionsLoaded hook recorded (claudemd and scattered only): file, memory type, reason, and the subagent it was for. */
+  readonly instruction_loads?: readonly { readonly file_path: string | null; readonly memory_type: string | null; readonly load_reason: string | null; readonly agent_id: string | null }[];
   readonly signals: Signals;
   /** Set when the run never reached the model or its hook, after every retry: the task leaves the analysis. */
   readonly infra_failure: string | null;
@@ -306,10 +308,30 @@ export async function runCell(
     resolved: open ? null : trial.reward === 1,
     answer_written: open ? answer !== null && answer.trim() !== '' : null,
     changed_files: (read('changed-files.txt') ?? '').split('\n').filter(Boolean),
+    ...(o.plan.conditions[cell.condition]?.claude_md ? { instruction_loads: instructionLoads(agentDir) } : {}),
     signals: signals(stream, open ? (answer ?? '') : u.final),
     infra_failure: null,
   };
   return { record, failure: null, cost_usd: u.cost_usd };
+}
+
+/** The instruction loads the InstructionsLoaded hook wrote under the agent's logs, in the order they happened. */
+export function instructionLoads(agentDir: string | null): NonNullable<RunRecord['instruction_loads']> {
+  const dir = agentDir ? path.join(agentDir, 'instructions') : null;
+  if (!dir || !fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.json'))
+    .sort()
+    .flatMap((f) => {
+      try {
+        const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Record<string, unknown>;
+        const str = (k: string): string | null => (typeof d[k] === 'string' ? (d[k] as string) : null);
+        return [{ file_path: str('file_path'), memory_type: str('memory_type'), load_reason: str('load_reason'), agent_id: str('agent_id') }];
+      } catch {
+        return [];
+      }
+    });
 }
 
 /** An open task's answer: under /logs/agent it comes back with the agent's logs; elsewhere Harbor downloads it as an artifact. */

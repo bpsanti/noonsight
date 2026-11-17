@@ -31,6 +31,7 @@ POINTER = f"{ROOT}/bin/noonsight-hook"
 CONFIG = f"{ROOT}/config/noonsight.json"
 HOME = "/logs/agent/noonsight-home"
 UPLOAD = "/installed-agent/noonsight"
+RULES_DIR = "/opt/agent-notes"
 
 
 class NoonsightClaudeCode(ClaudeCode):
@@ -95,6 +96,20 @@ class NoonsightClaudeCode(ClaudeCode):
             environment,
             command=f"printf '%s' {shlex.quote(pointer)} > {POINTER} && chmod 755 {POINTER} && chmod -R a+rX {ROOT} && mkdir -p {HOME} && chmod 777 {HOME}",
         )
+        # The Markdown of the conditions that stand for the usual alternative to noonsight: a user
+        # CLAUDE.md where Claude Code reads it ($CLAUDE_CONFIG_DIR, which Harbor sets to the sessions
+        # directory under the agent's logs), and the rules file the scattered condition points to.
+        # Neither touches the task's repository, so the diff and the verifier see nothing of them.
+        extra = bundle / "condition" / "claude"
+        if (extra / "CLAUDE.md").is_file():
+            config_dir = (self.environment_logs_dir / "sessions").as_posix()
+            await environment.exec(command=f"mkdir -p {config_dir} && chmod 777 {config_dir}", user="root")
+            await environment.upload_file(extra / "CLAUDE.md", f"{config_dir}/CLAUDE.md")
+            await environment.exec(command=f"chmod 644 {config_dir}/CLAUDE.md", user="root")
+        if (extra / "rules.md").is_file():
+            await environment.exec(command=f"mkdir -p {RULES_DIR}", user="root")
+            await environment.upload_file(extra / "rules.md", f"{RULES_DIR}/rules.md")
+            await environment.exec(command=f"chmod -R a+rX {RULES_DIR}", user="root")
         # The commit the run starts from, for the diff after it.
         await environment.exec(command="git rev-parse HEAD > /logs/agent/base-commit.txt 2>/dev/null || true", user="root")
 

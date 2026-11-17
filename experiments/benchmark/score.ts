@@ -3,6 +3,7 @@
 // Every function here is pure over its inputs.
 
 import { handsBack, prose, toolCalls, type Prose, type ToolCall } from '../rules/score.js';
+import { CONTAINER } from './conditions.js';
 
 /** Claude Code's stream-json events, from the log Harbor keeps (agent/claude-code.txt). */
 export function parseStream(text: string): Record<string, any>[] {
@@ -104,6 +105,29 @@ export function verification(calls: readonly ToolCall[]): { edited: boolean; ran
   return { edited: lastEdit >= 0, ran_checks: checks.length > 0, verified: lastEdit >= 0 && (checkedInEdit || checks.some(([, i]) => i > lastEdit)) };
 }
 
+/** The index of the first call that edits a file outside /logs, or -1. */
+function firstEdit(calls: readonly ToolCall[]): number {
+  return calls.findIndex((c) => {
+    if (EDIT_TOOLS.has(c.name) && !c.denied) return !String(c.input.file_path ?? c.input.notebook_path ?? '').startsWith('/logs/');
+    return isBash(c) && positions(String(c.input.command ?? '')).edit >= 0;
+  });
+}
+
+/**
+ * Whether the run read a given file: a Read of it, a Grep in it, or a shell command that names it
+ * (cat, head, sed and the like); and whether it did before its first edit. For the scattered
+ * condition, whose rules reach the session only if the agent reads them.
+ */
+export function readFile(calls: readonly ToolCall[], file: string): { read: boolean; before_first_edit: boolean } {
+  const reads = calls
+    .map((c, i) => [c, i] as const)
+    .filter(([c]) => !c.denied && ((c.name === 'Read' && c.input.file_path === file) || (c.name === 'Grep' && c.input.path === file) || (isBash(c) && String(c.input.command ?? '').includes(file))))
+    .map(([, i]) => i);
+  if (reads.length === 0) return { read: false, before_first_edit: false };
+  const edit = firstEdit(calls);
+  return { read: true, before_first_edit: edit < 0 || (reads[0] as number) < edit };
+}
+
 export interface Signals {
   readonly handed_back: boolean;
   readonly edited: boolean;
@@ -112,6 +136,8 @@ export interface Signals {
   readonly tool_calls: number;
   readonly denied: number;
   readonly subagents: number;
+  /** Whether the run read the scattered condition's rules file, and before its first edit. */
+  readonly read_rules: { readonly read: boolean; readonly before_first_edit: boolean };
   readonly report: Prose;
 }
 
@@ -125,6 +151,7 @@ export function signals(stream: readonly Record<string, any>[], report: string):
     tool_calls: calls.length,
     denied: calls.filter((c) => c.denied).length,
     subagents: calls.filter((c) => c.name === 'Agent' || c.name === 'Task').length,
+    read_rules: readFile(calls, CONTAINER.rulesFile),
     report: prose(report),
   };
 }

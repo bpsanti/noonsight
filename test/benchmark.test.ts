@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { pickCalibration } from '../experiments/benchmark/calibration.js';
-import { conditionConfig, defaultOnRules, hookSettings, placeboText, presetText } from '../experiments/benchmark/conditions.js';
+import { CONTAINER, conditionConfig, defaultOnRules, hookSettings, modelName, ownShare, placeboText, POINTER_CLAUDE_MD, presetText, unionRules, writeCondition } from '../experiments/benchmark/conditions.js';
 import { excludedBy, unchecked, type GoldRecord } from '../experiments/benchmark/gold.js';
 import { reward } from '../experiments/benchmark/harbor.js';
 import { judgeMessage, parseRatings, scrub, tally, type Item } from '../experiments/benchmark/judge.js';
@@ -15,7 +15,7 @@ import { BENCH_DIR, loadPlan, selection, wanted } from '../experiments/benchmark
 import { aboveFloor, parseQuota } from '../experiments/benchmark/quota.js';
 import { interrupted, measured, spent, type Recorded } from '../experiments/benchmark/run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from '../experiments/benchmark/schedule.js';
-import { parseStream, usage, verification } from '../experiments/benchmark/score.js';
+import { parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
 import { chooseSwebench, chooseTerminalBench, rank, type SwebenchInstance } from '../experiments/benchmark/select.js';
 import { tomlValue } from '../experiments/benchmark/sources.js';
 import { dropKey, dropSection, useArm64Image } from '../experiments/benchmark/tasks.js';
@@ -122,7 +122,7 @@ test('rounds run in the priority order: build off and on, then the other sets of
   const all = rounds(plan, twoTasks, ['opus', 'haiku']);
   assert.deepEqual(
     all.map((r) => `${r.phase}#${r.rep}`),
-    ['build off-on#1', 'build off-on#2', 'other sets off-on#1', 'other sets off-on#2', 'placebo#1', 'placebo#2'],
+    ['build off-on#1', 'build off-on#2', 'other sets off-on#1', 'other sets off-on#2', 'claudemd#1', 'claudemd#2', 'scattered#1'],
   );
   const first = all[0];
   assert.ok(first);
@@ -135,7 +135,8 @@ test('rounds run in the priority order: build off and on, then the other sets of
   assert.deepEqual(rounds(plan, twoTasks, ['opus', 'haiku']), all, 'the order is the same every time');
   const keys = all.flatMap((r) => r.units.flatMap((u) => u.cells.map(cellKey)));
   assert.equal(new Set(keys).size, keys.length, 'no run twice');
-  assert.equal(keys.length, (2 * 2 + 2 * 2) * 2 * 2 + 4 * 2 * 2);
+  // Build and the other sets under off and on, 2 rounds; every set under claudemd, 2 rounds, and under scattered, 1.
+  assert.equal(keys.length, (2 * 2 + 2 * 2) * 2 * 2 + 4 * 2 * 2 + 4 * 2);
 });
 
 test('a night continues the unfinished round and starts whole rounds while they fit its budget and the cap', () => {
@@ -239,6 +240,61 @@ test('the placebo texts give no instruction and name none of the things the rule
   }
   const sums = fs.readFileSync(path.join(BENCH_DIR, 'placebo', 'SHA256SUMS'), 'utf8');
   for (const f of fs.readdirSync(path.join(BENCH_DIR, 'placebo')).filter((f) => f.endsWith('.md'))) assert.match(sums, new RegExp(`  ${f}$`, 'm'));
+});
+
+const MODELS = ['claude-fable-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
+
+test('claudemd puts every default-on rule of every model, unchanged, under a heading per model, in the user CLAUDE.md, with noonsight declared none', () => {
+  const c = conditionConfig(plan, 'claude-sonnet-5-5', 'claudemd');
+  assert.deepEqual((c.config as any).models, { 'claude-sonnet-5-5': { use: 'none' } });
+  assert.equal(c.rulesFile, null);
+  const md = c.claudeMd as string;
+  for (const model of MODELS) {
+    assert.match(md, new RegExp(`^## For ${modelName(model).replace('.', '\\.')}$`, 'm'));
+    for (const r of defaultOnRules(model)) assert.ok(md.includes(presetText(r).trim()), `${r.id} is in the CLAUDE.md as written`);
+  }
+  assert.equal(modelName('claude-sonnet-5-5'), 'Claude Sonnet 5.5');
+  assert.match(md, /Applies to: tasks of kind investigate, build, routine; when someone is watching, when nobody is watching, in subagents\./);
+  assert.ok(!md.includes('enabled'), 'no rule shipped off');
+  assert.equal(md, unionRules(MODELS), 'the same text for every model');
+});
+
+test('scattered puts only a pointer in the user CLAUDE.md, without an import, and the same rules in a file outside the repository', () => {
+  const c = conditionConfig(plan, 'claude-opus-5-5', 'scattered');
+  assert.equal(c.claudeMd, POINTER_CLAUDE_MD);
+  assert.ok(POINTER_CLAUDE_MD.includes(CONTAINER.rulesFile));
+  assert.ok(!POINTER_CLAUDE_MD.includes('@'), 'a pointer, not an @ import that would load the file');
+  assert.equal(c.rulesFile, unionRules(MODELS));
+});
+
+test('the share of the rules written for the receiving model is its own text over all of them, and the shares sum to one', () => {
+  const shares = MODELS.map((m) => ownShare(m, MODELS));
+  assert.ok(Math.abs(shares.reduce((a, b) => a + b, 0) - 1) < 1e-9);
+  for (const s of shares) assert.ok(s > 0.1 && s < 0.4);
+});
+
+test('a condition writes its Markdown beside the configuration, and only claudemd and scattered log instruction loads', () => {
+  const dir = tempTree({});
+  const onSha = writeCondition(plan, 'claude-haiku-5-5', 'on', path.join(dir, 'on'));
+  assert.ok(!fs.existsSync(path.join(dir, 'on', 'claude')));
+  assert.ok(!('InstructionsLoaded' in (JSON.parse(fs.readFileSync(path.join(dir, 'on', 'settings.json'), 'utf8')).hooks as object)));
+  const sha = writeCondition(plan, 'claude-haiku-5-5', 'scattered', path.join(dir, 'sc'));
+  assert.notEqual(sha, onSha);
+  assert.equal(fs.readFileSync(path.join(dir, 'sc', 'claude', 'CLAUDE.md'), 'utf8'), POINTER_CLAUDE_MD);
+  assert.equal(fs.readFileSync(path.join(dir, 'sc', 'claude', 'rules.md'), 'utf8'), unionRules(MODELS));
+  const hooks = JSON.parse(fs.readFileSync(path.join(dir, 'sc', 'settings.json'), 'utf8')).hooks as Record<string, unknown>;
+  assert.match(JSON.stringify(hooks.InstructionsLoaded), new RegExp(CONTAINER.instructions));
+  assert.ok(hooks.SessionStart, 'noonsight hooks stay');
+  assert.ok(JSON.stringify(hookSettings(true)).includes('InstructionsLoaded'));
+});
+
+test('read_rules: the scattered rules file read by Read, Grep or a shell command, and whether before the first edit', () => {
+  const call = (name: string, input: Record<string, unknown>) => ({ id: name, name, input, denied: false });
+  const f = CONTAINER.rulesFile;
+  assert.deepEqual(readFile([call('Read', { file_path: f }), call('Edit', { file_path: '/testbed/a.py' })], f), { read: true, before_first_edit: true });
+  assert.deepEqual(readFile([call('Bash', { command: "sed -i 's/a/b/' x.py" }), call('Bash', { command: `cat ${f}` })], f), { read: true, before_first_edit: false });
+  assert.deepEqual(readFile([call('Bash', { command: 'ls /opt' })], f), { read: false, before_first_edit: false });
+  assert.deepEqual(readFile([call('Grep', { pattern: 'rules', path: f })], f), { read: true, before_first_edit: true });
 });
 
 test('the hook settings run every noonsight hook through the pointer the agent installs', () => {

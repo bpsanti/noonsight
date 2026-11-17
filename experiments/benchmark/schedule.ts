@@ -43,7 +43,7 @@ function seeded(seed: string, label: string): string {
 export function rounds(plan: Plan, tasks: Readonly<Record<SetName, readonly string[]>>, models: readonly string[]): Round[] {
   const out: Round[] = [];
   for (const phase of plan.phases)
-    for (let rep = 1; rep <= plan.rounds; rep++) {
+    for (let rep = 1; rep <= (phase.rounds ?? plan.rounds); rep++) {
       const units: Unit[] = [];
       for (const set of phase.sets)
         for (const task of tasks[set] ?? [])

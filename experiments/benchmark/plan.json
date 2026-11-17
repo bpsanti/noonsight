@@ -56,6 +56,14 @@
     "placebo": {
       "use": "custom",
       "placebo": true
+    },
+    "claudemd": {
+      "use": "none",
+      "claude_md": "union"
+    },
+    "scattered": {
+      "use": "none",
+      "claude_md": "pointer"
     }
   },
   "phases": [
@@ -83,7 +91,7 @@
       ]
     },
     {
-      "name": "placebo",
+      "name": "claudemd",
       "sets": [
         "build",
         "routine",
@@ -92,8 +100,22 @@
         "digest"
       ],
       "conditions": [
-        "placebo"
+        "claudemd"
       ]
+    },
+    {
+      "name": "scattered",
+      "sets": [
+        "build",
+        "routine",
+        "investigate",
+        "review",
+        "digest"
+      ],
+      "conditions": [
+        "scattered"
+      ],
+      "rounds": 1
     }
   ],
   "sets": {

@@ -22,6 +22,8 @@ export interface Phase {
   readonly name: string;
   readonly sets: readonly SetName[];
   readonly conditions: readonly string[];
+  /** Rounds of this phase, when it has fewer than the plan's. */
+  readonly rounds?: number;
 }
 
 export interface Placebo {
@@ -48,7 +50,7 @@ export interface Plan {
     readonly datasets: Readonly<Record<string, string>>;
   };
   readonly models: Readonly<Record<string, ModelPlan>>;
-  readonly conditions: Readonly<Record<string, { readonly use: 'none' | 'preset' | 'custom'; readonly placebo?: boolean }>>;
+  readonly conditions: Readonly<Record<string, { readonly use: 'none' | 'preset' | 'custom'; readonly placebo?: boolean; readonly claude_md?: 'union' | 'pointer' }>>;
   readonly phases: readonly Phase[];
   readonly sets: {
     readonly build: BuildRule & { readonly scope: string };
