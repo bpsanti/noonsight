@@ -179,7 +179,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
     writeRecord(callFile, call);
     if (callFile !== null && toolUseId !== null && sessionId !== null)
       changePool(ctx.state, sessionId, (pool) => ({
-        pool: { open: [...pool.open, { id: toolUseId, type: subagentType, at: call.at }], shared: pool.shared },
+        pool: { open: [...pool.open, { id: toolUseId, type: subagentType, at: call.at }] },
         value: undefined,
       }));
   } catch (e) {
@@ -232,14 +232,14 @@ function changed(config: Config, updatedInput: Record<string, unknown>, routed: 
 /**
  * How long an open call can wait for its subagent to start. A subagent starts within seconds of its
  * call's hook, while a call denied after its hook ran never starts and no hook says so; until it is
- * left out, it makes a later start of its type wait for a result and share rules with it.
+ * left out, it makes a later start of its type wait for a result before taking the most recent call.
  */
 const OPEN_FOR_MS = 2 * 60 * 1000;
-/** How long a start that several open calls could own waits for a result to name it. */
+/** How long a start that several open calls could own waits for a result to name it, before it takes the most recent. */
 const LINK_WAIT_MS = 2000;
 const LINK_POLL_MS = 25;
 
-type Taken = { readonly match: StartMatch; readonly calls: readonly string[] } | null;
+type Taken = { readonly match: StartMatch; readonly call: string } | null;
 type Decided = { readonly taken: NonNullable<Taken>; readonly given: Given } | null;
 
 /**
@@ -270,29 +270,20 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
       const pool = current(found, now);
       const link = readAgentLink(linkFile);
       let taken: Taken | 'wait';
-      let next: Pool = pool;
       const candidates = pool.open.filter((c) => c.type === type);
-      if (link !== null) {
-        taken = { match: 'result', calls: [link.call] };
-        next = without(pool, link.call);
-      } else if (candidates.length === 0) taken = null;
-      else if (candidates.length === 1 && !((pool.shared[type] ?? 0) > 0)) {
-        const only = candidates[0]?.id as string;
-        taken = { match: 'single', calls: [only] };
-        next = without(pool, only);
-      } else if (!final) taken = 'wait';
-      else {
-        taken = { match: 'shared', calls: candidates.map((c) => c.id) };
-        next = settled({ open: pool.open, shared: { ...pool.shared, [type]: (pool.shared[type] ?? 0) + 1 } });
-      }
+      if (link !== null) taken = { match: 'result', call: link.call };
+      else if (candidates.length === 0) taken = null;
+      else if (candidates.length === 1) taken = { match: 'single', call: candidates[0]?.id as string };
+      else if (!final) taken = 'wait';
+      else taken = { match: 'recent', call: candidates.reduce((a, b) => (Date.parse(b.at) >= Date.parse(a.at) ? b : a)).id };
       // Nothing taken: the pool stays as recorded; calls too old to start are left out when it is read.
       if (taken === null || taken === 'wait') return { pool: null, value: taken };
-      const given = startText(config, taken, ctx.state);
+      const given = startText(taken, ctx.state);
       writeRecord(startFile, {
         session_id: sessionId,
         subagent_type: type,
         match: taken.match,
-        calls: taken.calls,
+        call: taken.call,
         text: given.text,
         at: ctx.now.toISOString(),
       } satisfies AgentStart);
@@ -301,7 +292,7 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
         removeRecord(agentCallFile(ctx.state, link.call));
         removeRecord(linkFile);
       }
-      return { pool: next, value: { taken, given } };
+      return { pool: without(pool, taken.call), value: { taken, given } };
     });
 
   let decided = decide(false);
@@ -318,7 +309,7 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
     record: {
       agent_type: type,
       start_match: taken.match,
-      ...(taken.match === 'shared' ? { calls: taken.calls } : { call_id: taken.calls[0] ?? null }),
+      call_id: taken.call,
       ...given.fields,
       delivered: given.text !== null ? 'rules' : given.delivered,
       warned: false,
@@ -340,68 +331,30 @@ interface Given {
   readonly delivered: 'nothing' | 'already-delivered';
 }
 
-/**
- * The rules a start gives. A start matched with one call gives that call's rules. A shared start gives
- * what every call it could have been would give: their rules when all are the same; when they are for
- * one model but differ by scope, that model's rules for every scope, which each of them holds; and
- * otherwise nothing, so a subagent never gets rules chosen for another subagent.
- */
-function startText(config: Config, taken: NonNullable<Taken>, state: string): Given {
-  const calls = taken.calls.map((id) => readAgentCall(agentCallFile(state, id)));
-  const give = (c: AgentCall | null): string | null => (c !== null && c.delivered === 'at-start' && c.text !== undefined ? c.text : null);
-  if (taken.match !== 'shared') {
-    const c = calls[0] ?? null;
-    if (c === null) return { text: null, fields: { error: 'the record of the call is missing' }, delivered: 'nothing' };
-    return {
-      text: give(c),
-      fields: {
-        model: c.predicted,
-        status: c.status,
-        ...(c.rules !== undefined ? { rules: c.rules, sha256: c.sha256 } : {}),
-        scope: c.scope ?? null,
-        place: 'subagent',
-      },
-      delivered: c.delivered === 'already-delivered' ? 'already-delivered' : 'nothing',
-    };
-  }
-  const texts = calls.map(give);
-  const first = calls[0] ?? null;
-  if (first !== null && calls.every((c) => c !== null && give(c) === give(first)) && texts[0] !== null)
-    return {
-      text: texts[0] ?? null,
-      fields: { model: first.predicted, status: first.status, rules: first.rules, sha256: first.sha256, scope: first.scope ?? null, place: 'subagent' },
-      delivered: 'nothing',
-    };
-  const models = new Set(calls.map((c) => c?.predicted ?? null));
-  const model = models.size === 1 ? ([...models][0] ?? null) : null;
-  if (model !== null && texts.every((t) => t !== null)) {
-    const common = resolve(config, { model, scope: null, place: 'subagent' });
-    if (common.status === 'matched')
-      return { text: common.text, fields: { ...decisionFields(common), shared_rules: 'every-scope' }, delivered: 'nothing' };
-  }
-  const lost = texts.some((t) => t !== null);
-  return { text: null, fields: { model, place: 'subagent', ...(lost ? { reason: 'calls-differ' } : {}) }, delivered: 'nothing' };
+/** The rules a start gives: those of the call it was matched with. */
+function startText(taken: NonNullable<Taken>, state: string): Given {
+  const c = readAgentCall(agentCallFile(state, taken.call));
+  if (c === null) return { text: null, fields: { error: 'the record of the call is missing' }, delivered: 'nothing' };
+  return {
+    text: c.delivered === 'at-start' && c.text !== undefined ? c.text : null,
+    fields: {
+      model: c.predicted,
+      status: c.status,
+      ...(c.rules !== undefined ? { rules: c.rules, sha256: c.sha256 } : {}),
+      scope: c.scope ?? null,
+      place: 'subagent',
+    },
+    delivered: c.delivered === 'already-delivered' ? 'already-delivered' : 'nothing',
+  };
 }
 
-/** The pool without calls too old to start, and with every type whose open calls have all started emptied. */
+/** The pool without calls too old to start. */
 function current(pool: Pool, now: number): Pool {
-  return settled({ open: pool.open.filter((c) => now - Date.parse(c.at) < OPEN_FOR_MS), shared: pool.shared });
-}
-
-/** When as many subagents of a type started on shared starts as calls of that type are open, all of them have started. */
-function settled(pool: Pool): Pool {
-  const shared: Record<string, number> = {};
-  let open = pool.open;
-  for (const [type, n] of Object.entries(pool.shared)) {
-    const count = open.filter((c) => c.type === type).length;
-    if (n >= count) open = open.filter((c) => c.type !== type);
-    else shared[type] = n;
-  }
-  return { open, shared };
+  return { open: pool.open.filter((c) => now - Date.parse(c.at) < OPEN_FOR_MS) };
 }
 
 function without(pool: Pool, id: string): Pool {
-  return settled({ open: pool.open.filter((c) => c.id !== id), shared: pool.shared });
+  return { open: pool.open.filter((c) => c.id !== id) };
 }
 
 export function agentResult(input: Record<string, unknown>, config: Config, ctx: SubagentContext): SubagentOutcome | null {
@@ -424,8 +377,7 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
   if (call === null) return null;
   const startFile = agentStartFile(ctx.state, subagentId);
   const sessionId = str(input.session_id);
-  // The result names the subagent the call started. A start not seen yet finds its call by it; a
-  // shared start among this call's open calls now knows one more of them has started.
+  // The result names the subagent the call started. A start not seen yet finds its call by it.
   let start: AgentStart | null = readAgentStart(startFile);
   let linked = false;
   if (toolUseId !== null && sessionId !== null && subagentId !== null && startFile !== null)
@@ -433,10 +385,8 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
       const pool = current(found, ctx.now.getTime());
       const seen = readAgentStart(startFile);
       if (!pool.open.some((c) => c.id === toolUseId)) return { pool: null, value: { start: seen, linked: false } };
-      const shared = { ...pool.shared };
-      if (seen?.match === 'shared') shared[call.subagent_type] = Math.max(0, (shared[call.subagent_type] ?? 0) - 1);
-      else if (seen === null) writeRecord(agentLinkFile(ctx.state, subagentId), { call: toolUseId, at: ctx.now.toISOString() });
-      return { pool: without({ open: pool.open, shared }, toolUseId), value: { start: seen, linked: seen === null } };
+      if (seen === null) writeRecord(agentLinkFile(ctx.state, subagentId), { call: toolUseId, at: ctx.now.toISOString() });
+      return { pool: without(pool, toolUseId), value: { start: seen, linked: seen === null } };
     }));
   // Kept for a start not seen yet, which reads the rules from it and then removes it.
   if (!linked) removeRecord(callFile);

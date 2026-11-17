@@ -159,8 +159,6 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
     const ids = Array.isArray(r.rules) ? r.rules.filter((x): x is string => typeof x === 'string') : [];
     if (!(DELIVERING as readonly unknown[]).includes(r.delivered) || ids.length === 0) {
       if (event !== 'subagent-start') count(notDelivering, whyNothing(r));
-      // Rules the call had that a start shared between several calls could not give.
-      else if (text(r.reason) === 'calls-differ') count(notDelivering, 'calls-differ');
       continue;
     }
     count(delivering, event);

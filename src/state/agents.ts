@@ -57,25 +57,20 @@ export interface OpenCall {
   readonly at: string;
 }
 
-/**
- * A session's calls whose subagent has not started yet. `shared` counts, by subagent type, the
- * subagents that started while several calls of their type were open, so that which of those calls
- * started them is not known: that many of the open calls of the type have in fact started.
- */
+/** A session's calls whose subagent has not started yet. */
 export interface Pool {
   readonly open: readonly OpenCall[];
-  readonly shared: Readonly<Record<string, number>>;
 }
 
 /** How a subagent's start was matched with the call that started it. */
-export type StartMatch = 'single' | 'result' | 'shared';
+export type StartMatch = 'single' | 'result' | 'recent';
 
 export interface AgentStart {
   readonly session_id: string;
   readonly subagent_type: string;
   readonly match: StartMatch;
-  /** The call, when the match names one; for a shared start, the calls it could have been. */
-  readonly calls: readonly string[];
+  /** The call the start was matched with. */
+  readonly call: string;
   /** The rules given, or null when it was given none. */
   readonly text: string | null;
   readonly at: string;
@@ -143,9 +138,8 @@ export function readAgentStart(file: string | null): AgentStart | null {
     v !== null &&
     typeof v.session_id === 'string' &&
     typeof v.subagent_type === 'string' &&
-    (v.match === 'single' || v.match === 'result' || v.match === 'shared') &&
-    Array.isArray(v.calls) &&
-    v.calls.every((c) => typeof c === 'string') &&
+    (v.match === 'single' || v.match === 'result' || v.match === 'recent') &&
+    typeof v.call === 'string' &&
     (v.text === null || typeof v.text === 'string')
   )
     return v as unknown as AgentStart;
@@ -163,10 +157,7 @@ export function readPool(file: string | null): Pool {
   const open = Array.isArray(v?.open)
     ? v.open.filter((c): c is OpenCall => isObject(c) && typeof c.id === 'string' && typeof c.type === 'string' && typeof c.at === 'string')
     : [];
-  const shared: Record<string, number> = {};
-  if (isObject(v?.shared))
-    for (const [type, n] of Object.entries(v.shared)) if (typeof n === 'number' && Number.isInteger(n) && n > 0) shared[type] = n;
-  return { open, shared };
+  return { open };
 }
 
 export function writeRecord(file: string | null, record: AgentCall | AgentModel | AgentStart | AgentLink | Pool): void {

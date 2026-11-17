@@ -165,14 +165,14 @@ So noonsight finds the call among its session's open calls of that type:
 | --- | --- | --- |
 | `single` | One call of the type is open | That call's rules |
 | `result` | The result of a call already named this subagent, as it does at once for a subagent run in the background | That call's rules |
-| `shared` | Several calls of the type are open, and no result names this subagent within two seconds | What every one of those calls would give: their rules when all are the same; when they are for one model and differ only by scope, that model's rules for every scope, which each of them holds (`shared_rules: "every-scope"`); otherwise none (`reason: "calls-differ"`) |
+| `recent` | Several calls of the type are open, and no result names this subagent within two seconds | The rules of the most recent of those calls |
 | `resumed` | The same subagent started before, and resumes | The rules it was given then; Claude Code adds them only when its context no longer holds them |
 
-A shared start never gives a subagent rules chosen for another subagent.
+A `recent` start can give a subagent the rules of a sibling call of the same type made in the same response, when the siblings differ in model or scope; a later start takes the call left open.
 Several calls of one response run at the same time, so the hooks of their calls, starts and results interleave in any order; the session's open calls are changed under a lock, one hook at a time.
 A start that matches no open call, such as an agent team teammate's, gets nothing and leaves no log line.
 A call whose subagent never starts, because something denied it after the hook ran, stays open for 2 minutes, since no hook says it was denied.
-A subagent starts within seconds of its call's hook, so 2 minutes leaves a wide margin while keeping a denied call from making the later starts of its type wait for a result and share their rules with it.
+A subagent starts within seconds of its call's hook, so 2 minutes leaves a wide margin while keeping a denied call from making the later starts of its type wait two seconds for a result before taking the most recent call.
 A call that waits longer than that to start, such as one held on a permission prompt, is no longer open when its subagent starts, which then gets no rules.
 
 The rules arrive as `additionalContext`, in the same envelope as the session's, at the start of the subagent's conversation, before its task.
@@ -251,7 +251,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
 | `tool_name`, `tool_use_id`, `permission_mode` | For the subagent events: the agent tool's name, the call's id and the session's permission mode |
 | `agent_id` | For a call made inside a subagent: that subagent's id. For `subagent-start`: the subagent that started |
-| `agent_type`, `start_match`, `call_id`, `calls`, `shared_rules` | For `subagent-start`: the subagent's type; how its call was found (`single`, `result`, `shared`, `resumed`, see [SubagentStart](#subagentstart-the-rules)); the call's `tool_use_id`, or for a shared start the calls it could have been; and `every-scope` when a shared start gave the rules for every scope |
+| `agent_type`, `start_match`, `call_id` | For `subagent-start`: the subagent's type; how its call was found (`single`, `result`, `recent`, `resumed`, see [SubagentStart](#subagentstart-the-rules)); and the call's `tool_use_id` |
 | `subagent_type`, `requested_model` | The call's subagent type (`general-purpose` when it names none) and `model` parameter |
 | `parent_model`, `parent_source` | The model of whoever made the call, and where it came from (see [Subagents](#subagents)) |
 | `model_value`, `definition`, `unresolved_why` | What the prediction's source named, the definition file that decided, and why a model could not be told |
