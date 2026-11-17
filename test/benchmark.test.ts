@@ -155,6 +155,9 @@ test('a night continues the unfinished round and starts whole rounds while they 
   const n3 = planNight(all, done, cost, 100, 3);
   assert.equal(n3.rounds.length, 1, 'a night always takes at least the next round');
   assert.match(n3.stop, /cap/);
+  // Planning again within a night takes a round only if it fits what is left.
+  assert.equal(planNight(all, done, cost, 3, 100, false).rounds.length, 0);
+  assert.equal(planNight(all, done, cost, 4, 100, false).rounds.length, 1);
   const everything = new Set(all.flatMap((r) => r.units.flatMap((u) => u.cells.map(cellKey))));
   assert.equal(planNight(all, everything, cost, 100, 100).rounds.length, 0);
 });

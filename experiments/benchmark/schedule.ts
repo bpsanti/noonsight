@@ -75,10 +75,12 @@ export interface NightDecision {
 
 /**
  * The rounds a night takes on. It continues the first unfinished round, then starts whole rounds
- * while tonight's projected spend stays within the night's budget and the total within the cap;
- * a night always takes at least the unfinished round, so a round larger than one night still ends.
+ * while tonight's projected spend stays within the night's budget and the total within the cap.
+ * At the start of a night (`first`), it always takes at least the next round, so a round larger
+ * than one night still ends; when the night plans again after its rounds are done, it takes a
+ * further round only if it fits what is left of the night's budget.
  */
-export function planNight(all: readonly Round[], done: ReadonlySet<string>, cost: (c: Cell) => number, nightUsd: number, capLeftUsd: number): NightDecision {
+export function planNight(all: readonly Round[], done: ReadonlySet<string>, cost: (c: Cell) => number, nightUsd: number, capLeftUsd: number, first = true): NightDecision {
   const pending = all
     .map((r) => ({ ...r, units: r.units.filter((u) => u.cells.some((c) => !done.has(cellKey(c)))) }))
     .filter((r) => r.units.length > 0);
@@ -86,9 +88,9 @@ export function planNight(all: readonly Round[], done: ReadonlySet<string>, cost
   let projected = 0;
   for (const r of pending) {
     const c = r.units.flatMap((u) => u.cells.filter((x) => !done.has(cellKey(x)))).reduce((s, x) => s + cost(x), 0);
-    if (chosen.length > 0 && projected + c > nightUsd) return { rounds: chosen, projected_usd: projected, stop: `the next round (${r.phase}, round ${r.rep}) would pass the night's budget` };
+    if ((chosen.length > 0 || !first) && projected + c > nightUsd) return { rounds: chosen, projected_usd: projected, stop: `the next round (${r.phase}, round ${r.rep}) would pass the night's budget` };
     if (projected + c > capLeftUsd) {
-      if (chosen.length === 0) chosen.push(r);
+      if (chosen.length === 0 && first) chosen.push(r);
       return { rounds: chosen, projected_usd: projected + (chosen.length === 1 && chosen[0] === r ? c : 0), stop: `the round (${r.phase}, round ${r.rep}) would pass the total cap` };
     }
     chosen.push(r);

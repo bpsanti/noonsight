@@ -400,9 +400,9 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   const all = rounds(o.plan, o.selection, o.models);
   const totalBefore = spent(runs, journal, readJsonl<Grade>(path.join(results, 'grades.jsonl')));
   const capLeft = o.plan.cap_usd - totalBefore;
-  const means = measured(runs);
+  let means = measured(runs);
   const cost = (c: Cell): number => expectedCost(o.plan, c, means, OPEN_SETS);
-  const plan = planNight(all, done, cost, o.nightUsd, capLeft);
+  let plan = planNight(all, done, cost, o.nightUsd, capLeft);
   const plannedCells = plan.rounds.flatMap((r) => r.units.flatMap((u) => u.cells)).filter((c) => !done.has(cellKey(c)));
   const quotaBefore = readQuota(o.account);
   o.log(`night ${night}: ${plannedCells.length} runs in ${plan.rounds.length} round(s), projected $${plan.projected_usd.toFixed(2)}; $${totalBefore.toFixed(2)} of $${o.plan.cap_usd} spent; quota ${quotaBefore.all_models ?? '?'}% left; ${plan.stop}`);
@@ -437,81 +437,92 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   // Close the interrupted runs in the journal at their full budget: counted once, and run again below.
   for (const j of wasInterrupted) append(journalFile, { event: 'retry', key: j.key, night: j.night, at: new Date().toISOString(), cost_usd: j.budget_usd ?? 0, why: 'interrupted' } satisfies JournalLine);
 
-  outer: for (const r of plan.rounds)
-    for (const unit of r.units) {
-      const cells = unit.cells.filter((c) => !done.has(cellKey(c)));
-      if (cells.length === 0) continue;
-      if (o.until && Date.now() >= o.until.getTime()) {
-        stop = `the night's end time (${o.until.toISOString()}) was reached`;
-        break outer;
-      }
-      const unitBudget = cells.reduce((s, c) => s + (o.plan.models[c.model]?.budget_usd ?? 0) + (OPEN_SETS.includes(c.set) ? o.plan.judge.budget_usd : 0), 0);
-      if (total + unitBudget > o.plan.cap_usd) {
-        stop = `the next unit could pass the $${o.plan.cap_usd} cap`;
-        break outer;
-      }
-      if (!dockerUp()) {
-        stop = 'Docker is not reachable';
-        break outer;
-      }
-      const q = readQuota(o.account);
-      const floor = aboveFloor(q, o.plan.quota_floor_percent, (cells[0] as Cell).model);
-      if (!floor.ok) {
-        stop = `quota floor: ${floor.why}`;
-        break outer;
-      }
-      const runOne = async (cell: Cell): Promise<void> => {
-        const key = cellKey(cell);
-        const budget = o.plan.models[cell.model]?.budget_usd ?? 0;
-        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-          append(journalFile, { event: 'start', key, night, at: new Date().toISOString(), budget_usd: budget } satisfies JournalLine);
-          o.log(`start ${key}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
-          const left = o.stopBy ? o.stopBy.getTime() - Date.now() : 3 * 60 * 60 * 1000;
-          const res = await runCell(o, base, taskFor(cell), cell, night, attempt, jobsDir, undefined, Math.max(60_000, Math.min(3 * 60 * 60 * 1000, left)));
-          if (o.stopBy && Date.now() >= o.stopBy.getTime() - 5_000 && !res.record) {
-            // Stopped by the morning deadline: the open start line makes it an interrupted run for the next night.
-            stop = `the night's stop time (${o.stopBy.toISOString()}) ended runs in flight`;
-            o.log(`stopped ${key} at the night's stop time; it runs again next night`);
-            return;
-          }
-          if (res.record) {
-            append(runsFile, res.record);
-            append(journalFile, { event: 'end', key, night, at: new Date().toISOString(), cost_usd: res.record.cost_counted_usd } satisfies JournalLine);
-            total += res.record.cost_counted_usd;
-            tonight += res.record.cost_counted_usd;
-            completed++;
-            done.add(key);
-            o.log(`done  ${key}: ${res.record.outcome}, $${(res.record.cost_usd ?? 0).toFixed(3)}, resolved=${res.record.resolved}, rules=${res.record.noonsight.rules.join('+') || res.record.noonsight.status}; tonight $${tonight.toFixed(2)}, total $${total.toFixed(2)}`);
-            if (OPEN_SETS.includes(cell.set)) {
-              const g = gradePending(o, key);
-              total += g;
-              tonight += g;
-            }
-            return;
-          }
-          const lost = res.cost_usd ?? 0;
-          append(journalFile, { event: 'retry', key, night, at: new Date().toISOString(), cost_usd: lost, why: res.failure ?? 'unknown' } satisfies JournalLine);
-          total += lost;
-          tonight += lost;
-          failedAttempts++;
-          o.log(`fail  ${key}: ${res.failure}`);
+  let planned = plannedCells.length;
+  outer: for (;;) {
+    for (const r of plan.rounds)
+      for (const unit of r.units) {
+        const cells = unit.cells.filter((c) => !done.has(cellKey(c)));
+        if (cells.length === 0) continue;
+        if (o.until && Date.now() >= o.until.getTime()) {
+          stop = `the night's end time (${o.until.toISOString()}) was reached`;
+          break outer;
         }
-        // Three attempts never reached the model or the hook: an infrastructure failure, recorded so it is not run again.
-        infra++;
-        const failed: InfraFailure = { ...cell, key, model_id: o.plan.models[cell.model]?.id ?? cell.model, night, started: new Date().toISOString(), attempts: MAX_ATTEMPTS, infra_failure: 'no run reached the model and the hook in three attempts', cost_counted_usd: 0 };
-        append(runsFile, failed);
-        done.add(key);
-      };
-      const pool = Math.max(1, o.plan.concurrency);
-      for (let i = 0; i < cells.length; i += pool) await Promise.all(cells.slice(i, i + pool).map(runOne));
-    }
+        const unitBudget = cells.reduce((s, c) => s + (o.plan.models[c.model]?.budget_usd ?? 0) + (OPEN_SETS.includes(c.set) ? o.plan.judge.budget_usd : 0), 0);
+        if (total + unitBudget > o.plan.cap_usd) {
+          stop = `the next unit could pass the $${o.plan.cap_usd} cap`;
+          break outer;
+        }
+        if (!dockerUp()) {
+          stop = 'Docker is not reachable';
+          break outer;
+        }
+        const q = readQuota(o.account);
+        const floor = aboveFloor(q, o.plan.quota_floor_percent, (cells[0] as Cell).model);
+        if (!floor.ok) {
+          stop = `quota floor: ${floor.why}`;
+          break outer;
+        }
+        const runOne = async (cell: Cell): Promise<void> => {
+          const key = cellKey(cell);
+          const budget = o.plan.models[cell.model]?.budget_usd ?? 0;
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            append(journalFile, { event: 'start', key, night, at: new Date().toISOString(), budget_usd: budget } satisfies JournalLine);
+            o.log(`start ${key}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+            const left = o.stopBy ? o.stopBy.getTime() - Date.now() : 3 * 60 * 60 * 1000;
+            const res = await runCell(o, base, taskFor(cell), cell, night, attempt, jobsDir, undefined, Math.max(60_000, Math.min(3 * 60 * 60 * 1000, left)));
+            if (o.stopBy && Date.now() >= o.stopBy.getTime() - 5_000 && !res.record) {
+              // Stopped by the morning deadline: the open start line makes it an interrupted run for the next night.
+              stop = `the night's stop time (${o.stopBy.toISOString()}) ended runs in flight`;
+              o.log(`stopped ${key} at the night's stop time; it runs again next night`);
+              return;
+            }
+            if (res.record) {
+              append(runsFile, res.record);
+              append(journalFile, { event: 'end', key, night, at: new Date().toISOString(), cost_usd: res.record.cost_counted_usd } satisfies JournalLine);
+              total += res.record.cost_counted_usd;
+              tonight += res.record.cost_counted_usd;
+              completed++;
+              done.add(key);
+              o.log(`done  ${key}: ${res.record.outcome}, $${(res.record.cost_usd ?? 0).toFixed(3)}, resolved=${res.record.resolved}, rules=${res.record.noonsight.rules.join('+') || res.record.noonsight.status}; tonight $${tonight.toFixed(2)}, total $${total.toFixed(2)}`);
+              if (OPEN_SETS.includes(cell.set)) {
+                const g = gradePending(o, key);
+                total += g;
+                tonight += g;
+              }
+              return;
+            }
+            const lost = res.cost_usd ?? 0;
+            append(journalFile, { event: 'retry', key, night, at: new Date().toISOString(), cost_usd: lost, why: res.failure ?? 'unknown' } satisfies JournalLine);
+            total += lost;
+            tonight += lost;
+            failedAttempts++;
+            o.log(`fail  ${key}: ${res.failure}`);
+          }
+          // Three attempts never reached the model or the hook: an infrastructure failure, recorded so it is not run again.
+          infra++;
+          const failed: InfraFailure = { ...cell, key, model_id: o.plan.models[cell.model]?.id ?? cell.model, night, started: new Date().toISOString(), attempts: MAX_ATTEMPTS, infra_failure: 'no run reached the model and the hook in three attempts', cost_counted_usd: 0 };
+          append(runsFile, failed);
+          done.add(key);
+        };
+        const pool = Math.max(1, o.plan.concurrency);
+        for (let i = 0; i < cells.length; i += pool) await Promise.all(cells.slice(i, i + pool).map(runOne));
+      }
+    // The planned rounds are done: plan again with the costs measured so far and what is left of the night's budget.
+    means = measured(readJsonl<Recorded>(runsFile));
+    plan = planNight(all, done, cost, o.nightUsd - tonight, o.plan.cap_usd - total, false);
+    stop = plan.stop;
+    if (plan.rounds.length === 0) break;
+    const more = plan.rounds.flatMap((r) => r.units.flatMap((u) => u.cells)).filter((c) => !done.has(cellKey(c))).length;
+    planned += more;
+    o.log(`planning again: ${more} more runs in ${plan.rounds.map((r) => `${r.phase} round ${r.rep}`).join(', ')}, projected $${plan.projected_usd.toFixed(2)}, $${(o.nightUsd - tonight).toFixed(2)} of the night's budget left`);
+  }
 
   const quotaAfter = readQuota(o.account);
   const summary: NightSummary = {
     night,
     started: startedAt,
     ended: new Date().toISOString(),
-    planned_runs: plannedCells.length,
+    planned_runs: planned,
     completed_runs: completed,
     interrupted_runs: wasInterrupted.length,
     failed_attempts: failedAttempts,
