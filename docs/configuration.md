@@ -17,7 +17,7 @@ Paths inside the file (the `file` of a rule) are relative to the file itself.
 Presets are read from the installed package, so a preset always follows the package version.
 `NOONSIGHT_PRESETS_DIR` replaces that directory, for tests and for preset development.
 
-`noonsight init` writes a first file there: it declares every model the preset has rules for with `"use": "preset"`, and it never replaces a file that exists.
+`noonsight init` writes a first file there, and so does `noonsight install` when there is none ([install.md](install.md#the-one-command)): it declares every model the preset has rules for with `"use": "preset"`, and it never replaces a file that exists.
 
 ## The preset
 

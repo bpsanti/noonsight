@@ -151,7 +151,8 @@ Claude Code rewrites `~/.claude.json` often; each rewrite wakes the watcher for 
 
 When a new directory appears directly in the home directory, the watcher waits for the `.claude.json` file that marks a Claude Code configuration directory, the same marker the default install looks for, because Claude Code writes it just after it creates the directory.
 It checks every 100 ms for the first ten seconds, then every five seconds, until the marker appears or the directory goes away.
-It then installs into that directory alone, exactly as `noonsight install --account <dir>` does, so a broken settings file in another login does not hold it back.
+It then installs the hooks into that directory alone, as `noonsight install --account <dir>` does, so a broken settings file in another login does not hold it back.
+It only installs the hooks: it neither writes the configuration file nor runs the check.
 `~/.claude` is installed into without a marker, because Claude Code keeps that directory's marker in the home directory.
 A directory that never gets the marker is checked every five seconds for as long as it stays, which costs almost nothing; a marker written later still gets it installed.
 
