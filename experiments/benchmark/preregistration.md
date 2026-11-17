@@ -196,3 +196,14 @@ Mechanism signals, as in the study's design:
   Night 1's signals were computed again from each run's saved event stream (`rescore`); with the fix, the edits found match the saved diff in 192 of 192 runs.
 - 2026-11-17, after night 1: runs are batched by whole units, up to two runs at a time, instead of the two conditions of one unit side by side, because a placebo unit holds a single run and would leave the second slot idle.
   The order of the units and every stop rule are unchanged, and a stop still falls between units.
+- 2026-11-17, before any placebo run: the `placebo` condition is replaced by a `claudemd` condition, and a `scattered` condition is added for one round.
+  Reason: the author restated what noonsight is for: (1) delivering the rules for certain, where rules in Markdown files may or may not be read, and (2) giving each rule only to the model it was written for, where one Markdown file is read by every model.
+  The placebo measured the effect of adding neutral text, which neither point needs; the new conditions compare noonsight with the usual alternative.
+  `claudemd`: noonsight declares every model `"use": "none"`, as under `off`, and the user's `CLAUDE.md` (`$CLAUDE_CONFIG_DIR/CLAUDE.md`) holds every default-on rule of the four models, under one heading per model, each with its scopes and places as one line of text, generated from the preset at the pre-registration commit; its sha256 is recorded in every result line.
+  It runs on every set and model, 2 rounds, as phase 3 in place of the placebo, and is compared with `off` and `on` paired by task and round.
+  `scattered`: the same rules in a file the user's `CLAUDE.md` only points to, without importing it; 1 round on every set and model, as phase 4.
+  New measures: for `claudemd` and `scattered`, every instruction load the `InstructionsLoaded` hook reports; for `scattered`, whether the run read the rules file, and whether before its first edit; for every condition, the share of the delivered rule text that was written for the model receiving it.
+  Claude Code places `CLAUDE.md` in the first user message, after a preamble of its own, so `claudemd` differs from `on` in both content and framing; the comparison speaks for noonsight against a `CLAUDE.md`, not for the other models' rules alone.
+  Since the benchmark's tasks start no subagent and switch no model (none of night 1's 192 runs did), delivery on those paths is measured by a separate deterministic probe that records Claude Code's requests on a local server, not by the benchmark.
+  The placebo texts and their hashes stay in `placebo/`, unused.
+  What section 9 reports for each condition is reported for `claudemd` and `scattered` as it would have been for `placebo`, with the delivery measures above added.
