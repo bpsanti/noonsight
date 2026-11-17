@@ -7,6 +7,7 @@
 //   npm run benchmark -- run    --work <dir> --account <claude config dir> --token-file <file> [--night-usd 45] [--until 07:30] [--stop-by 07:45] [--dry-run]
 //   npm run benchmark -- smoke  --work <dir> --account <dir> --token-file <file> --set build --task <id> --model fable --condition off --budget 0.9
 //   npm run benchmark -- grade  --work <dir> --account <dir>
+//   npm run benchmark -- rescore --work <dir>     (the signals again, from the saved streams, into results/signals.jsonl)
 //   npm run benchmark -- calibration --work <dir> [--n 15]
 //   npm run benchmark -- status --work <dir> [--account <dir>]
 //   npm run benchmark -- project --work <dir> [--night-usd 45] [--night-hours 6.5] [--concurrency 2]
@@ -25,7 +26,8 @@ import { arm64Instances, fetchSwebenchRows, hubImageHasArm64, readSwebenchRows, 
 import { readQuota } from './quota.js';
 import { bundleBase, gradePending, measured, readJsonl, resultsDir, runCell, runNight, summaryLine, type NightSummary, type Recorded } from './run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from './schedule.js';
-import { materialize, OPEN_SETS, SETS, type SetName, type Sources } from './tasks.js';
+import { parseStream, signals } from './score.js';
+import { ANSWER_FILE, materialize, OPEN_SETS, SETS, type SetName, type Sources } from './tasks.js';
 
 export const ARM64_FILE = path.join(BENCH_DIR, 'tasks', 'swebench-arm64.json');
 export const GOLD_FILE = path.join(BENCH_DIR, 'tasks', 'gold.json');
@@ -253,6 +255,28 @@ export async function main(argv: readonly string[]): Promise<number> {
       commit,
       log,
     });
+    return 0;
+  }
+  if (command === 'rescore') {
+    // The signals of every recorded run, computed again from its saved event stream by this checkout's scorer.
+    const results = resultsDir(work);
+    const out: string[] = [];
+    for (const r of readJsonl<Recorded>(path.join(results, 'runs.jsonl'))) {
+      if (r.infra_failure !== null) continue;
+      const job = path.join(work, 'jobs', `night-${r.night}`, `${r.key}.a${r.attempts}`);
+      const trial = fs.existsSync(job) ? fs.readdirSync(job, { withFileTypes: true }).find((d) => d.isDirectory()) : undefined;
+      const stream = trial ? path.join(job, trial.name, 'agent', 'claude-code.txt') : '';
+      if (!stream || !fs.existsSync(stream)) {
+        log(`no saved stream for ${r.key}`);
+        continue;
+      }
+      const events = parseStream(fs.readFileSync(stream, 'utf8'));
+      const answerFile = path.join(results, 'answers', `${r.key}${path.extname(ANSWER_FILE[r.set] ?? '')}`);
+      const answer = OPEN_SETS.includes(r.set) ? (fs.existsSync(answerFile) ? fs.readFileSync(answerFile, 'utf8') : '') : null;
+      out.push(JSON.stringify({ key: r.key, scorer: headCommit(true), signals: signals(events, answer ?? String(events.filter((e) => e.type === 'result').at(-1)?.result ?? '')) }));
+    }
+    fs.writeFileSync(path.join(results, 'signals.jsonl'), out.length ? `${out.join('\n')}\n` : '');
+    log(`${out.length} runs scored again into ${path.join(results, 'signals.jsonl')}`);
     return 0;
   }
   if (command === 'grade') {

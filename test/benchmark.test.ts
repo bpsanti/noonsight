@@ -253,6 +253,15 @@ test('verification counts a check command after the last edit outside /logs, in 
   assert.deepEqual(verification([call('Bash', { command: './tests/runtests.py admin_utils' }), call('Edit', { file_path: '/testbed/a.py' })]), { edited: true, ran_checks: true, verified: false });
   assert.equal(verification([call('Edit', { file_path: '/testbed/a.py' }), call('Write', { file_path: '/logs/agent/digest.md' }), call('Bash', { command: 'bin/test sympy/core' })]).verified, true);
   assert.equal(verification([call('Edit', { file_path: '/testbed/a.py' }), call('Bash', { command: 'ls' })]).verified, false);
+  // Edits made through the shell count as edits, and a check after the edit in the same command counts.
+  assert.deepEqual(verification([call('bash', { command: "cd /testbed && sed -i '697s/a/b/' sympy/x.py && sed -n 695,699p sympy/x.py" }), call('Bash', { command: 'python -c "import sympy"' })]), { edited: true, ran_checks: true, verified: true });
+  assert.equal(verification([call('Bash', { command: 'python -m pytest x' }), call('Bash', { command: "sed -i 's/a/b/' x.py" })]).verified, false);
+  assert.equal(verification([call('Bash', { command: "sed -i 's/a/b/' x.py && python -m pytest x" })]).verified, true);
+  assert.equal(verification([call('Bash', { command: 'cat > src/fix.py <<EOF\nx\nEOF' })]).edited, true);
+  assert.equal(verification([call('Bash', { command: 'echo done > /logs/agent/answer.txt 2>&1' })]).edited, false);
+  assert.equal(verification([call('Bash', { command: 'python -m pytest x 2>&1 | tail' })]).edited, false);
+  assert.equal(verification([call('Bash', { command: "python - <<'E'\np='a.py'\ns=open(p).read()\nopen(p,'w').write(s)\nE" }), call('Bash', { command: 'conda run -n testbed python -m pytest t -q' })]).verified, true);
+  assert.equal(verification([call('Bash', { command: "python -c 'import a; print(a.f())'" })]).edited, false);
 });
 
 test('usage reads the last result event: subtype, cost, tokens over every model, turns and the final message', () => {

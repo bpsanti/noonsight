@@ -56,20 +56,52 @@ export const CHECK_COMMAND =
   /\b(py\.?test|python[0-9.]*\s+(-m\s+(pytest|unittest|tox|mypy)|\S*(test|runtests)\S*\.py|-c\b)|tox\b|mypy\b|bin\/test\b|runtests\.py|setup\.py\s+test|make\s+(test|check|all)?\b|npm\s+(run\s+)?(test|build)\b|npm\s+t\b|node\s+--test|go\s+(test|build|vet)\b|cargo\s+(test|build|check)\b|gcc\b|g\+\+|clang\b|bash\s+\S*test\S*|\.\/\S*test\S*)/;
 
 /**
+ * A shell command that changes a file in place: a Python script that writes a file, sed or perl in
+ * place, a patch, or output redirected into a file outside /logs and /tmp (where the answers of open
+ * tasks and scratch files go). A heuristic: the diff saved after the run is what changed for sure.
+ */
+export const EDIT_COMMAND = /\bpython[0-9.]*\s+(-\s*<<|-c\s)[\s\S]*?(\.write(_text|_bytes)?\(|open\([^)]*,\s*['"][wa]b?['"])|\bsed\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*i|\bperl\s+-[a-zA-Z]*i|\bpatch\s|\bgit\s+apply\b|\btee\s+(-a\s+)?(?!\/logs\/|\/tmp\/|\/dev\/)\S|(^|[^0-9&>])>>?\s*(?!\/logs\/|\/tmp\/|\/dev\/|&)[\w./-]+\.\w+/;
+
+function isBash(c: ToolCall): boolean {
+  return c.name.toLowerCase() === 'bash' && !c.denied;
+}
+
+/** Where in a shell command the last in-place edit and the last check start, or -1. */
+function positions(command: string): { edit: number; check: number } {
+  const last = (re: RegExp): number => {
+    let at = -1;
+    for (const m of command.matchAll(new RegExp(re.source, 'g'))) at = m.index ?? at;
+    return at;
+  };
+  return { edit: last(EDIT_COMMAND), check: last(CHECK_COMMAND) };
+}
+
+/**
  * Whether the run checked its change for real: a check or run command, allowed to run, after the
- * last edit of a file outside /logs (where the answers of open tasks go). Commands run through Bash
- * after an edit made through Bash (sed -i, a heredoc) are not seen as edits; the diff saved after
- * the run says what changed.
+ * last edit of a file outside /logs (where the answers of open tasks go). An edit is an Edit or
+ * Write call, or a shell command that changes a file in place; a check in the same shell command,
+ * after its edit, counts.
  */
 export function verification(calls: readonly ToolCall[]): { edited: boolean; ran_checks: boolean; verified: boolean } {
   let lastEdit = -1;
+  let checkedInEdit = false;
   calls.forEach((c, i) => {
-    if (!EDIT_TOOLS.has(c.name) || c.denied) return;
-    const file = String(c.input.file_path ?? c.input.notebook_path ?? '');
-    if (!file.startsWith('/logs/')) lastEdit = i;
+    if (EDIT_TOOLS.has(c.name) && !c.denied) {
+      const file = String(c.input.file_path ?? c.input.notebook_path ?? '');
+      if (!file.startsWith('/logs/')) {
+        lastEdit = i;
+        checkedInEdit = false;
+      }
+    } else if (isBash(c)) {
+      const at = positions(String(c.input.command ?? ''));
+      if (at.edit >= 0) {
+        lastEdit = i;
+        checkedInEdit = at.check > at.edit;
+      }
+    }
   });
-  const checks = calls.map((c, i) => [c, i] as const).filter(([c]) => c.name === 'Bash' && !c.denied && CHECK_COMMAND.test(String(c.input.command ?? '')));
-  return { edited: lastEdit >= 0, ran_checks: checks.length > 0, verified: lastEdit >= 0 && checks.some(([, i]) => i > lastEdit) };
+  const checks = calls.map((c, i) => [c, i] as const).filter(([c]) => isBash(c) && CHECK_COMMAND.test(String(c.input.command ?? '')));
+  return { edited: lastEdit >= 0, ran_checks: checks.length > 0, verified: lastEdit >= 0 && (checkedInEdit || checks.some(([, i]) => i > lastEdit)) };
 }
 
 export interface Signals {
