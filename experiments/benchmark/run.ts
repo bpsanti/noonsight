@@ -269,7 +269,8 @@ export async function runCell(
     return { record: null, failure: `${why}${trial.error ? `; ${trial.error}` : ''}`, cost_usd: u.cost_usd };
   }
   const results = resultsDir(o.work);
-  append(path.join(results, 'decisions.jsonl'), decisions.map((d) => ({ ...d, experiment_run: key })));
+  // One decision per line, as `noonsight report --log` reads it.
+  for (const d of decisions) append(path.join(results, 'decisions.jsonl'), { ...d, experiment_run: key });
   const open = OPEN_SETS.includes(cell.set);
   const answerPath = ANSWER_FILE[cell.set];
   const answer = open && trial.dir && answerPath ? readAnswer(trial.dir, answerPath) : null;
