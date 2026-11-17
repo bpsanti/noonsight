@@ -1,0 +1,11 @@
+{
+  "instance": "django__django-14351",
+  "written": "2026-11-17",
+  "key_points": [
+    "O problema: um __or__ de objetos Q traz todas as colunas padrão do modelo relacionado (lookup com __), e o queryset dispara ProgrammingError.",
+    "Não houve uma proposta de correção clara na discussão.",
+    "Parece uma regressão: em uma versão anterior funcionava corretamente.",
+    "O que se acordou foi pedir a quem abriu a issue que enviasse mais informações.",
+    "A causa e a correção continuam em aberto."
+  ]
+}
