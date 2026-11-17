@@ -8,7 +8,7 @@ import path from 'node:path';
 import { backtrackingRisk, type BacktrackingRisk } from '../core/backtracking.js';
 import { NO_SCOPE_ANSWER } from '../core/classify.js';
 import { normalizeModel } from '../core/normalize.js';
-import { envelope, joinRules, selectRules } from '../core/resolve.js';
+import { deliveryText, envelope, selectRules } from '../core/resolve.js';
 import {
   ANY_SCOPE,
   DEFAULT_CLASSIFIER_SETTINGS,
@@ -22,6 +22,7 @@ import {
   ROUTE_TARGETS,
   RULES_TEXT_LIMIT,
   SWITCH_NOTE_RESERVE,
+  TRIGGERS,
 } from '../core/types.js';
 import type {
   ClassifierMode,
@@ -35,6 +36,7 @@ import type {
   Rule,
   Scope,
   ScopeMatcher,
+  Trigger,
   WildcardKey,
 } from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
@@ -61,6 +63,7 @@ interface RawUserRule {
   file: string;
   scopes?: string[];
   where?: Place[];
+  triggers?: Trigger[];
 }
 interface RawModelEntry {
   use: 'preset' | 'custom' | 'none';
@@ -103,6 +106,7 @@ interface RawPresetRule {
   file: string;
   scopes: string[];
   where: Place[];
+  triggers?: Trigger[];
   enabled?: boolean;
   source: Source;
   effect: string;
@@ -251,7 +255,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
         for (const id of enable) if (disable.has(id)) report(at, `rule "${id}" is both enabled and disabled`);
         for (const r of presetRules) {
           const on = (r.enabled || enable.has(r.id)) && !disable.has(r.id);
-          if (on) rules.push({ id: r.id, origin: r.origin, scopes: r.scopes, where: r.where, text: r.text });
+          if (on) rules.push({ id: r.id, origin: r.origin, scopes: r.scopes, where: r.where, triggers: r.triggers, text: r.text });
         }
       }
     }
@@ -262,10 +266,12 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       if (taken.has(u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key}`);
       taken.add(u.id);
       const ruleScopes = u.scopes ?? [ANY_SCOPE];
+      const where = u.where ?? [...PLACES];
+      const triggers = u.triggers ?? [];
       checkScopes(ruleScopes, scopes, `${ruleAt}/scopes`, report);
+      checkTriggers(ruleScopes, where, triggers, `${ruleAt}/triggers`, report);
       const text = readRuleText(path.resolve(configDir, u.file), `${ruleAt}/file`, report);
-      if (text !== undefined)
-        rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where: u.where ?? [...PLACES], text });
+      if (text !== undefined) rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text });
     });
 
     checkDeliverySize(key, rules, scopes, at, report);
@@ -280,7 +286,9 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     permission: sub.permission ?? DEFAULT_SUBAGENT_SETTINGS.permission,
     onMismatch: sub.on_mismatch ?? DEFAULT_SUBAGENT_SETTINGS.onMismatch,
   };
-  const session = { unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv };
+  const session = {
+    unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv,
+  };
   const routing = loadRouting(cfg.routing ?? {}, preset, scopes, exact, report);
   const c = cfg.classifier ?? {};
   const classifier = {
@@ -344,6 +352,7 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
       if (ids.has(r.id)) report(`${ruleAt}/id`, `rule id "${r.id}" is used more than once for ${key}`);
       ids.add(r.id);
       checkScopes(r.scopes, scopes, `${ruleAt}/scopes`, report);
+      checkTriggers(r.scopes, r.where, r.triggers ?? [], `${ruleAt}/triggers`, report);
       const text = readRuleText(path.resolve(presetDir, r.file), `${ruleAt}/file`, report);
       if (text !== undefined)
         rules.push({
@@ -351,6 +360,7 @@ function loadPreset(name: string, dir: string, needed: boolean, problems: string
           origin: 'preset',
           scopes: r.scopes,
           where: r.where,
+          triggers: r.triggers ?? [],
           text,
           enabled: r.enabled ?? true,
           file: r.file,
@@ -523,8 +533,28 @@ function checkScopes(
 }
 
 /**
- * The text limit applies to what is delivered, so every combination of scope and place is checked.
- * Part of Claude Code's limit is kept for the note sent along when the session's model changes.
+ * A trigger delivers a rule to a session whose scope is not one of the rule's scopes, so it adds
+ * nothing to a rule for every scope, and it acts only in a session's places.
+ */
+function checkTriggers(
+  ruleScopes: readonly string[],
+  where: readonly Place[],
+  triggers: readonly Trigger[],
+  at: string,
+  report: (at: string, message: string) => void,
+): void {
+  if (triggers.length === 0) return;
+  if (ruleScopes.includes(ANY_SCOPE)) report(at, `the rule is for every scope ("${ANY_SCOPE}"), so it already reaches every session; a trigger adds nothing`);
+  if (!where.some((p) => p !== 'subagent')) report(at, 'a trigger acts only in a session, but the rule is only for the place "subagent"; add "session" or "unattended" to "where"');
+}
+
+/** The trigger sets a delivery can be made with: none, and every trigger revealed. */
+const TRIGGER_SETS: readonly (readonly Trigger[])[] = [[], TRIGGERS];
+
+/**
+ * The text limit applies to what is delivered, so every combination of scope, place and revealed
+ * triggers is checked. Part of Claude Code's limit is kept for the note sent along when the session's
+ * model changes.
  */
 function checkDeliverySize(
   model: string,
@@ -535,17 +565,19 @@ function checkDeliverySize(
   prefix = '',
 ): void {
   for (const scope of [null, ...[...scopes.keys()].sort()])
-    for (const place of PLACES) {
-      const picked = selectRules(rules, scope, place);
-      if (picked.length === 0) continue;
-      const size = envelope(model, scope, picked.map((r) => r.id), joinRules(picked)).length;
-      if (size > RULES_TEXT_LIMIT)
-        report(
-          at,
-          `${prefix}the rules delivered for ${scope === null ? 'no scope' : `scope "${scope}"`} in place "${place}" ` +
-            `come to ${size} characters; ${LIMIT_TEXT}`,
-        );
-    }
+    for (const place of PLACES)
+      for (const triggers of TRIGGER_SETS) {
+        const picked = selectRules(rules, scope, place, triggers);
+        // Without a trigger the rules are those checked without one.
+        if (picked.length === 0 || (triggers.length && picked.length === selectRules(rules, scope, place).length)) continue;
+        const size = deliveryText(model, picked, scope, triggers).text.length;
+        if (size > RULES_TEXT_LIMIT)
+          report(
+            at,
+            `${prefix}the rules delivered for ${scope === null ? 'no scope' : `scope "${scope}"`} in place "${place}"` +
+              `${triggers.length ? ` once a session reveals ${triggers.join(', ')}` : ''} come to ${size} characters; ${LIMIT_TEXT}`,
+          );
+      }
 }
 
 const LIMIT_TEXT =
@@ -566,7 +598,13 @@ function checkPresetSize(
   rules.forEach((r, i) => {
     // The envelope names the scope, so the rule is measured under each scope it can be delivered in.
     const under = r.scopes.includes(ANY_SCOPE) ? [null, ...scopes.keys()] : r.scopes;
-    const size = Math.max(...under.map((scope) => envelope(model, scope, [r.id], r.text).length));
+    const size = Math.max(
+      ...under.map((scope) => envelope(model, scope, [r.id], r.text).length),
+      // Delivered by a trigger: under no scope, or under a scope the rule does not list.
+      ...(r.triggers.length
+        ? [null, ...[...scopes.keys()].filter((s) => !r.scopes.includes(s))].map((scope) => envelope(model, scope, [r.id], r.text, r.triggers).length)
+        : []),
+    );
     if (size > RULES_TEXT_LIMIT) {
       alone = false;
       report(`${at}/rules/${i}/file`, `rule "${r.id}" comes to ${size} characters on its own, envelope included; ${LIMIT_TEXT}`);

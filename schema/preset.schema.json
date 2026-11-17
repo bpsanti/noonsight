@@ -128,6 +128,13 @@
           "uniqueItems": true,
           "items": { "enum": ["session", "unattended", "subagent"] }
         },
+        "triggers": {
+          "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes (see the configuration schema). Only for a rule that is cheap when the action was not what the scopes mean; SOURCES.md says why for each.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["code-edit"] }
+        },
         "enabled": {
           "description": "Whether the rule is on unless the user turns it off. Rules with a high cost or a described side effect ship off.",
           "type": "boolean",

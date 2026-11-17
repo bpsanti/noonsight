@@ -6,7 +6,7 @@
 import os from 'node:os';
 import { loadConfigDetails, type DeclaredModel, type Preset, type PresetRule, type Source } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
-import { ANY_SCOPE, type Config, type Place, type Rule } from '../core/types.js';
+import { ANY_SCOPE, type Config, type Place, type Rule, type Trigger } from '../core/types.js';
 import { readDecisions } from '../state/log.js';
 import { UsageError } from './usage.js';
 
@@ -29,6 +29,8 @@ export interface ListedRule {
   readonly on: boolean;
   readonly scopes: readonly string[];
   readonly where: readonly Place[];
+  /** The triggers that also deliver the rule to a session; empty when it lists none. */
+  readonly triggers: readonly Trigger[];
   /** User rules: the file as the configuration writes it. */
   readonly file?: string;
   readonly source?: Source;
@@ -119,11 +121,11 @@ function listRules(key: string, entry: DeclaredModel, config: Config, preset: Pr
 }
 
 function presetRule(r: PresetRule, on: boolean): ListedRule {
-  return { id: r.id, origin: 'preset', on, scopes: r.scopes, where: r.where, source: r.source, effect: r.effect, cost: r.cost };
+  return { id: r.id, origin: 'preset', on, scopes: r.scopes, where: r.where, triggers: r.triggers, source: r.source, effect: r.effect, cost: r.cost };
 }
 
 function userRule(r: Rule, file: string | undefined): ListedRule {
-  return { id: r.id, origin: 'user', on: true, scopes: r.scopes, where: r.where, ...(file !== undefined ? { file } : {}) };
+  return { id: r.id, origin: 'user', on: true, scopes: r.scopes, where: r.where, triggers: r.triggers, ...(file !== undefined ? { file } : {}) };
 }
 
 /** The key that decides for a model, as the core resolves it: the exact key, else the strongest wildcard. */
@@ -176,7 +178,8 @@ export function renderModels(r: ModelsReport): string {
           : `custom, ${m.rules.length} ${m.rules.length === 1 ? 'rule' : 'rules'}`;
     lines.push(`${m.key}: ${head}; ${seenText(m.seen)}`);
     for (const rule of m.rules) {
-      lines.push(`  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')})`);
+      const triggers = rule.triggers.length ? `; triggers: ${rule.triggers.join(', ')}` : '';
+      lines.push(`  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')}${triggers})`);
       if (rule.source) lines.push(`       source: ${rule.source.url}, "${rule.source.section}", read ${rule.source.date}`);
       if (rule.effect !== undefined) lines.push(`       effect: ${rule.effect}`);
       if (rule.cost !== undefined) lines.push(`       cost: ${rule.cost}`);

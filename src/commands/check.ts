@@ -12,12 +12,13 @@ import { readSettings } from '../adapters/claude-code/install.js';
 import { accountTarget, discoverConfigDirs, managedTarget, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSettings } from '../adapters/claude-code/managed.js';
 import { readPointer } from '../adapters/claude-code/pointer.js';
-import { findNoonsightHandlers, HOOK_EVENTS, HOOK_MATCHERS, type HookEvent } from '../adapters/claude-code/settings.js';
+import { findNoonsightHandlers, handlersFor, HOOK_HANDLERS, matcherOf, type HookHandlerSpec } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfig } from '../config/load.js';
 import { scopeOverlaps } from '../core/overlap.js';
 import { SCOPE_ENV, sessionPlace, sessionScope } from '../core/scope.js';
 import { ROUTING_ENV, routingEnvOff } from '../core/route.js';
-import { ROUTE_TARGETS, type Config, type RouteOption, type RouteRow } from '../core/types.js';
+import { TRIGGER_ACTIONS } from '../core/triggers.js';
+import { ROUTE_TARGETS, TRIGGERS, type Config, type RouteOption, type RouteRow, type Trigger } from '../core/types.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
@@ -57,6 +58,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
         ')',
     );
     checkScopes(config, env, add);
+    checkTriggers(config, add);
     checkRouting(config, env, add);
     checkClassifier(config, add);
   } catch (e) {
@@ -161,6 +163,16 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
     );
 }
 
+/** The triggers the hooks act on, and the rules that list each one. */
+function checkTriggers(config: Config, add: (level: Level, text: string) => void): void {
+  const listing = (trigger: Trigger): string[] =>
+    [...config.exact].flatMap(([model, entry]) => (entry.use === 'rules' ? entry.rules.filter((r) => r.triggers.includes(trigger)).map((r) => `${r.id} for ${model}`) : []));
+  for (const t of TRIGGERS) {
+    const rules = listing(t);
+    add('ok', `triggers: ${t}` + (rules.length ? `, which delivers ${rules.join(', ')} to ${TRIGGER_ACTIONS[t]}` : ', which no rule lists'));
+  }
+}
+
 /** Whether routing is on, where it acts, its table, and whether sessions started from this environment are routed. */
 function checkRouting(config: Config, env: Env, add: (level: Level, text: string) => void): void {
   const r = config.routing;
@@ -228,17 +240,15 @@ function checkInstall(
     else add('ok', `${label}: not installed (${target.settingsFile})`);
     return false;
   }
-  const events = Object.keys(HOOK_EVENTS) as HookEvent[];
-  const missing = events.filter((event) => !found.some((f) => f.event === event));
-  const stray = found.filter((f) => f.handler.command !== target.pointer || f.matcher !== HOOK_MATCHERS[f.event as HookEvent]);
-  if (missing.length || stray.length || found.length !== events.length)
+  const missing = HOOK_HANDLERS.filter((spec) => handlersFor(found, spec, target.pointer).length === 0);
+  if (missing.length || found.length !== HOOK_HANDLERS.length)
     add(
       'problem',
       `${label}: the hooks in ${target.settingsFile} are incomplete or point elsewhere` +
-        (missing.length ? ` (missing: ${missing.join(', ')})` : '') +
+        (missing.length ? ` (missing: ${missing.map(describeHandler).join(', ')})` : '') +
         `; run ${again} to repair them`,
     );
-  else add('ok', `${label}: hooks in ${target.settingsFile} (${events.map(describeEvent).join(', ')})`);
+  else add('ok', `${label}: hooks in ${target.settingsFile} (${HOOK_HANDLERS.map(describeHandler).join(', ')})`);
   if (target.kind === 'account' && settings?.disableAllHooks === true)
     add('problem', `${label}: ${target.settingsFile} sets disableAllHooks, so Claude Code runs none of this account's hooks`);
 
@@ -402,10 +412,10 @@ function checkClaude(env: Env, add: (level: Level, text: string) => void): void 
     );
 }
 
-/** An event as check lists it, with the tools its entry matches. */
-function describeEvent(event: HookEvent): string {
-  const matcher = HOOK_MATCHERS[event];
-  return matcher === undefined ? event : `${event} on ${matcher}`;
+/** An entry as check lists it: its event, with the tools it matches. */
+function describeHandler(spec: HookHandlerSpec): string {
+  const matcher = matcherOf(spec);
+  return matcher === undefined ? spec.event : `${spec.event} on ${matcher}`;
 }
 
 /** Why this account cannot use a file in the given mode, as an error code, or null when it can. */

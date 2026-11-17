@@ -44,7 +44,8 @@ test('after an account install, check reports every part as ok and exits 0', () 
   assert.ok(out.every((l) => /^(ok|warning|problem): /.test(l)), r.stdout);
   assert.ok(out.every((l) => l.startsWith('ok: ')), r.stdout);
   assert.match(r.stdout, /ok: config .*noonsight\.json: valid \(3 model entries; subagents: rules when each subagent starts, permission allow for a routed call, on mismatch warn\)/);
-  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, SubagentStart, PostToolUse on Agent\\|Task\\)`));
+  assert.match(r.stdout, /^ok: triggers: code-edit, which no rule lists$/m);
+  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, SubagentStart, PostToolUse on Agent\\|Task, PostToolUse on Edit\\|Write\\)`));
   // The version comes from package.json, in check and in every line of the decision log.
   const version = (JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { version: string }).version;
   assert.equal(version, '0.0.1');
@@ -119,7 +120,7 @@ test('an account install whose entries were removed by hand, or that sets disabl
   assert.match(runCli(['check'], env).stdout, /problem: account install .*sets disableAllHooks, so Claude Code runs none of this account's hooks/);
 });
 
-test('an install from before the subagent hooks or the SubagentStart hook, or one whose agent-tool matcher was widened, is a problem until install runs again', () => {
+test('an install from before the subagent hooks, the SubagentStart hook or the file edit hook, or one whose agent-tool matcher was widened, is a problem until install runs again', () => {
   const { env } = setup();
   const claudeDir = tempTree({});
   assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
@@ -131,7 +132,7 @@ test('an install from before the subagent hooks or the SubagentStart hook, or on
   fs.writeFileSync(file, JSON.stringify(settings));
   const old = runCli(['check'], env);
   assert.equal(old.status, 1);
-  assert.match(old.stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: PreToolUse, PostToolUse\); run `noonsight install` again/);
+  assert.match(old.stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: PreToolUse on Agent\|Task, PostToolUse on Agent\|Task, PostToolUse on Edit\|Write\); run `noonsight install` again/);
 
   // An install from before SubagentStart delivered the rules: its subagents would get none.
   const beforeStart = structuredClone(full);
@@ -139,9 +140,15 @@ test('an install from before the subagent hooks or the SubagentStart hook, or on
   fs.writeFileSync(file, JSON.stringify(beforeStart));
   assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: SubagentStart\); run `noonsight install` again/);
 
+  // An install from before triggers: its sessions never reveal code-edit.
+  const beforeTriggers = structuredClone(full);
+  beforeTriggers.hooks.PostToolUse = beforeTriggers.hooks.PostToolUse.filter((g: { matcher: string }) => g.matcher !== 'Edit|Write');
+  fs.writeFileSync(file, JSON.stringify(beforeTriggers));
+  assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: PostToolUse on Edit\|Write\); run `noonsight install` again/);
+
   full.hooks.PreToolUse[0].matcher = '*';
   fs.writeFileSync(file, JSON.stringify(full));
-  assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere; run/);
+  assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere \(missing: PreToolUse on Agent\|Task\); run/);
   assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
   assert.equal(runCli(['check'], env, NO_NETWORK).status, 0);
 });

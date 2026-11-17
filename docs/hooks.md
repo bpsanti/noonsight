@@ -1,14 +1,14 @@
 # The hooks
 
 noonsight gives each Claude Code session, and each subagent it starts, the rules for the model it actually runs on.
-Five hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, when the session's model changes; `PreToolUse` on the agent tool, before a subagent starts, `SubagentStart`, as it starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
+Six hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`, when the session's model changes, and `PostToolUse` on Edit and Write, when the session's edits reveal a trigger; `PreToolUse` on the agent tool, before a subagent starts, `SubagentStart`, as it starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
 [install.md](install.md) covers putting them in place; this page is the contract they keep.
 
 ## Rules every hook follows
 
 - **It never holds the session, or a subagent call, beyond a bound.**
   It always exits 0, reads only local files and never uses the network itself.
-  It starts no other process, with two exceptions: on macOS, when nothing else names the session's model, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
+  It starts no other process, with three exceptions: on macOS, when nothing else names the session's model, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
   A subagent's start waits at most two seconds more when several calls could have started it ([SubagentStart](#subagentstart-the-rules)).
 - **It never blocks anything.**
@@ -28,7 +28,7 @@ Nothing, or one JSON object with up to two fields:
 
 | Field | Reader | Content |
 | --- | --- | --- |
-| `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The session hooks: the rules, and on a model change, the note below. `SubagentStart`: the subagent's rules, at the start of its conversation |
+| `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The session hooks: the rules, and on a model change, the note below. `PostToolUse` on Edit and Write: the rules a trigger added, right after the edit's result. `SubagentStart`: the subagent's rules, at the start of its conversation |
 | `hookSpecificOutput.updatedInput`, `permissionDecision` | Claude Code | `PreToolUse`, only for a call routing changed: the agent call with its new `model` and `effort`, and the permission decision the configuration asks for (see [Routing](#routing)) |
 | `systemMessage` | The person, on screen | A warning: undeclared model, refused configuration, a subagent that started on another model than predicted, or a failed hook |
 
@@ -85,9 +85,11 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
 The session's task scope is the value of `NOONSIGHT_SCOPE` in the environment Claude Code runs in, which its hooks inherit, so whoever starts the session (a person, a script, an orchestrator) can name it; without it, the session receives only the rules for every scope.
 Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, and `session` otherwise ([Scopes](configuration.md#scopes)).
 A resumed session gets the rules again when a change of scope or place changed which rules apply.
+The rules are resolved with the triggers the session has revealed ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)), which belong to its session id: after compaction the session gets the rules its triggers added again, with the others, and a resumed session that already holds them gets nothing again; after `/clear`, the new session has revealed none.
 
 A session started by `noonsight run` already holds its rules in the system prompt.
 At `startup`, `clear` and `compact`, when the Claude Code process was started with the launcher's file and the file holds exactly the rules decided here, the hook delivers nothing and logs `delivered: "launcher"`.
+After compaction of a session that revealed a trigger, the rules the trigger added are not in the launcher's file, so the hook delivers those, and the line names only them.
 When the launcher's rules are for another model, the hook delivers this model's rules with a note that the others do not apply.
 [launcher.md](launcher.md#with-the-hooks) has the details.
 
@@ -102,10 +104,56 @@ The session's model changed from claude-sonnet-5-5 to claude-opus-5-5. The worki
 </noonsight-rules-change>
 ```
 
-A switch keeps the session's scope and place.
+A switch keeps the session's scope, place and triggers, so the new model also gets the rules the session's triggers add for it.
 A switch to a model with no rules delivers the note alone.
 Resuming a session restores its model and reports it as a switch; when the session's record shows the same model and rules, nothing is delivered again.
 The configuration keeps room for the note: the rules for any model, scope and place must fit in 9,500 characters, so rules and note together stay within the 10,000 characters Claude Code accepts from a hook.
+
+## PostToolUse on Edit and Write: the triggers
+
+A session started without a scope receives only the rules for every scope.
+It still shows what kind of task it is on by what it does, and the hooks see every edit it makes.
+A rule that lists a trigger ([Triggers](configuration.md#triggers)) is delivered to the session once the session reveals it, whatever the session's scope.
+The one trigger is `code-edit`:
+
+| Condition | Keeps out |
+| --- | --- |
+| The tool is `Edit` or `Write`, called by the session itself | Edits a subagent makes: its input carries the subagent's `agent_id`, and a subagent's scope comes from its own task |
+| The file has a code extension (below) | Reports, notes and documents (`.md`, `.html`, `.txt`), styles, data and settings (`.css`, `.json`, `.yaml`, `.toml`), notebooks, and files with no extension |
+| The git repository holding the file already tracks it (`git ls-files --error-unmatch`, run in the file's directory), and that repository is the project's or one of its worktrees: both have the same common git directory (`git rev-parse --git-common-dir`) | Every new file, such as a script or a report the session writes for itself; files git ignores, such as build outputs and temporary files; files of another repository, or of none, such as a temporary directory's; and every file of a project that is not a git repository |
+
+The project is `CLAUDE_PROJECT_DIR`, which Claude Code sets for its hooks, else the input's `cwd`; paths are compared with every symbolic link resolved.
+An edit in a worktree of the project counts, including a worktree inside the project's directory, such as one under `.claude/worktrees/`: a session that moves into a worktree keeps the original checkout as `CLAUDE_PROJECT_DIR`, and that checkout's index does not track the worktree's files.
+The code extensions are those of programming languages, shell scripts and SQL: `c`, `h`, `cc`, `cpp`, `cxx`, `hh`, `hpp`, `hxx`, `m`, `mm`, `cs`, `java`, `kt`, `kts`, `scala`, `groovy`, `gradle`, `clj`, `cljs`, `cljc`, `js`, `jsx`, `mjs`, `cjs`, `ts`, `tsx`, `mts`, `cts`, `vue`, `svelte`, `go`, `rs`, `swift`, `dart`, `py`, `pyi`, `rb`, `php`, `pl`, `pm`, `lua`, `r`, `jl`, `ex`, `exs`, `erl`, `hrl`, `hs`, `ml`, `mli`, `fs`, `fsx`, `elm`, `nim`, `zig`, `sol`, `sh`, `bash`, `zsh`, `fish`, `ps1`, `psm1` and `sql`, in any case.
+
+The first edit that meets all three delivers, as `additionalContext`, the rules the trigger adds for the session's model, scope and place, and only those: the session's conversation already holds the rest.
+The rules arrive in the usual envelope, which names the trigger:
+
+```text
+<noonsight-rules model="claude-sonnet-5-5" trigger="code-edit">
+Working rules the user declared for claude-sonnet-5-5, for a session that has edited the project's code (delivered by noonsight, rules sonnet-5-5/verify-changes):
+...the rules...
+</noonsight-rules>
+```
+
+`PostToolUse` is where Claude Code adds hook context "alongside the tool result" ([PostToolUse decision control](https://code.claude.com/docs/en/hooks#posttooluse-decision-control)), and it runs only after a tool call succeeds, so an edit that was refused or failed reveals nothing.
+Recorded on Claude Code 2.1.326: in a `claude -p` session against a local stand-in for the Messages API, the context a `PostToolUse` hook on `Edit` returned reached the model in the very next request, as a system message right after the edit's tool result, and an `Edit` whose text was not in the file ran no hook at all.
+`PreToolUse` can add context too, and it arrives at the same place; it runs before the edit is allowed, so it is not used.
+
+A session's triggers only grow.
+Each is recorded once per session, in `~/.local/state/noonsight/triggers/<session id>.<trigger>.json`, with the tool and the file, and the record is created exclusively, so of several edits of one response whose hooks run at once exactly one delivers.
+Every later edit of the session costs the hook one file lookup and starts no process.
+The session's own record is updated with the rules it now holds, so a resume does not deliver them again.
+A session reveals a trigger even when its model gets no rule from it, and a later `/model` switch then delivers the new model's rules for it.
+
+The hook warns nobody: the session's start already warned about an undeclared model or a refused configuration, and a hook that fails logs `error` without a warning, since a warning after every edit would only repeat.
+An edit that reveals nothing, and every edit after the trigger, leaves no log line; the edit that reveals it leaves one `file-edit` line, with `trigger`, `file` (relative to its repository's root) and the rules delivered, and `triggered_rules` names the rules the trigger brought.
+
+What the trigger does not see:
+
+- Edits made through the shell, such as `sed -i` or a redirection in `Bash`, and edits of notebooks.
+- Edits a subagent makes; the subagent's rules come from its own task.
+- A new file the session writes as part of its work counts only once git tracks it; editing a tracked file in the same session reveals the trigger as usual.
 
 ## Subagents
 
@@ -238,7 +286,7 @@ Claude Code applies the call's `effort` only from version 2.1.292 ([Choose an ef
 Every decision adds one JSON line to `~/.local/state/noonsight/decisions.jsonl`, in the home of the account that ran the session.
 Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a new log starts.
 
-`noonsight report` reads both files and prints, for each rule, how often it was delivered and to which models, scopes, places and events, with the length of its text; then the rules on in the configuration that the log never shows delivered, and the decisions that delivered no rules, by why.
+`noonsight report` reads both files and prints, for each rule, how often it was delivered and to which models, scopes, places and events, with the length of its text, and, when a trigger brought some of the deliveries, how many it brought (`brought by`); then the triggers sessions revealed, each with the number of sessions, how many of them got rules, and the tools, extensions and files of the edits that revealed it, so an edit that should not have counted can be found; then the rules on in the configuration that the log never shows delivered, and the decisions that delivered no rules, by why.
 When the classifier acted, it also prints a classifier section: the tasks it was meant to place, by result, and for the classifications that ran, their median and longest time and the cost Claude Code reported.
 A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-prompt`; a session start that found the rules already in the launcher's system prompt (`launcher`) is counted once, under `launch`.
 A subagent's rules are counted once, on its `subagent-start` line; its `agent-call` line hands them over (`at-start`) and is not counted.
@@ -250,9 +298,12 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 
 | Field | Values |
 | --- | --- |
-| `event` | `session-start`, `model-switch`, `agent-call` (`PreToolUse`), `subagent-start` (`SubagentStart`), `agent-result` (`PostToolUse`), and `launch` for `noonsight run` ([launcher.md](launcher.md#the-decision-log)) |
+| `event` | `session-start`, `model-switch`, `file-edit` (`PostToolUse` on Edit and Write), `agent-call` (`PreToolUse`), `subagent-start` (`SubagentStart`), `agent-result` (`PostToolUse` on the agent tool), and `launch` for `noonsight run` ([launcher.md](launcher.md#the-decision-log)) |
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
-| `tool_name`, `tool_use_id`, `permission_mode` | For the subagent events: the agent tool's name, the call's id and the session's permission mode |
+| `tool_name`, `tool_use_id`, `permission_mode` | For the tool events: the tool's name, the call's id and the session's permission mode |
+| `trigger`, `file` | For `file-edit`: the trigger the edit revealed, and the edited file, relative to its repository's root |
+| `triggers` | For the session events: the triggers the session has revealed, when it has revealed one |
+| `triggered_rules` | The rules among `rules` that only a trigger brought, when there are some |
 | `agent_id` | For a call made inside a subagent: that subagent's id. For `subagent-start`: the subagent that started |
 | `agent_type`, `start_match`, `call_id`, `calls`, `shared_rules` | For `subagent-start`: the subagent's type; how its call was found (`single`, `result`, `shared`, `resumed`, see [SubagentStart](#subagentstart-the-rules)); the call's `tool_use_id`, or for a shared start the calls it could have been; and `every-scope` when a shared start gave the rules for every scope |
 | `subagent_type`, `requested_model` | The call's subagent type (`general-purpose` when it names none) and `model` parameter |
@@ -287,7 +338,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |
 
-What each session last received is kept in `~/.local/state/noonsight/sessions/` and `processes/`, one small file per session id and per Claude Code process; files nobody wrote for 30 days are removed, and so are the system prompt files of `noonsight run` in `launch/`.
+What each session last received is kept in `~/.local/state/noonsight/sessions/` and `processes/`, one small file per session id and per Claude Code process, and the triggers each session revealed in `triggers/`; files nobody wrote for 30 days are removed, and so are the system prompt files of `noonsight run` in `launch/`.
 The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-links/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
 
 ## Turning noonsight off

@@ -1,0 +1,26 @@
+{
+  "session_id": "da6dc48c-ba32-4b98-9807-4fded2364d84",
+  "transcript_path": "/home/me/.claude/projects/-home-me-project/da6dc48c-ba32-4b98-9807-4fded2364d84.jsonl",
+  "cwd": "/home/me/project",
+  "prompt_id": "e6304222-d4b0-4b63-958c-766ff2ddd2b5",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/home/me/project/report.html",
+    "content": "<p>hi</p>"
+  },
+  "tool_response": {
+    "type": "create",
+    "filePath": "/home/me/project/report.html",
+    "content": "<p>hi</p>",
+    "structuredPatch": [],
+    "originalFile": null,
+    "userModified": false
+  },
+  "tool_use_id": "toolu_3",
+  "duration_ms": 5
+}

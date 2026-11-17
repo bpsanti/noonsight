@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { normalizeModel } from './normalize.js';
 import { ANY_SCOPE, SWITCH_NOTE_RESERVE } from './types.js';
-import type { Config, Decision, ModelEntry, Place, Rule } from './types.js';
+import type { Config, Decision, ModelEntry, Place, Rule, Trigger } from './types.js';
 
 export interface ResolveRequest {
   /** The model as the tool reported it; it is normalized first. */
@@ -9,6 +9,8 @@ export interface ResolveRequest {
   /** The task scope, or null when no scope is known. */
   readonly scope?: string | null;
   readonly place: Place;
+  /** The triggers the session has revealed; none when left out. */
+  readonly triggers?: readonly Trigger[];
 }
 
 /**
@@ -17,11 +19,26 @@ export interface ResolveRequest {
  *
  * 1. The model picks the entry: an exact key wins over any wildcard; among wildcards, more
  *    literal text wins. No entry means "undeclared".
- * 2. The scope narrows the rules: rules for every scope, plus rules for the current scope.
+ * 2. The scope narrows the rules: rules for every scope, plus rules for the current scope, plus
+ *    rules that list a trigger the session revealed.
  *    An unknown scope only means "general rules"; it never blocks and never warns.
  * 3. The place narrows them again.
  */
 export function resolve(config: Config, request: ResolveRequest): Decision {
+  return decide(config, request, null);
+}
+
+/**
+ * The rules a session receives when it reveals more triggers: the decision for the request's
+ * triggers, less every rule the session already received with only the triggers in `held`. A session's
+ * scope only grows, and the rules it received stay in its conversation, so only the new ones are sent.
+ * No new rule gives the status "none" with the reason "no-rule-applies".
+ */
+export function resolveAdded(config: Config, request: ResolveRequest, held: readonly Trigger[]): Decision {
+  return decide(config, request, held);
+}
+
+function decide(config: Config, request: ResolveRequest, held: readonly Trigger[] | null): Decision {
   const model = normalizeModel(request.model);
   const askedScope = request.scope ?? null;
   const scope = askedScope !== null && config.scopes.has(askedScope) ? askedScope : null;
@@ -39,19 +56,24 @@ export function resolve(config: Config, request: ResolveRequest): Decision {
   const { key, entry } = match;
   if (entry.use === 'none') return { status: 'none', reason: 'declared-none', model, key, ...base };
 
-  const picked = selectRules(entry.rules, scope, request.place);
+  const triggers = request.triggers ?? [];
+  let picked = selectRules(entry.rules, scope, request.place, triggers);
+  if (held !== null) {
+    const before = new Set(selectRules(entry.rules, scope, request.place, held).map((r) => r.id));
+    picked = picked.filter((r) => !before.has(r.id));
+  }
   if (picked.length === 0) return { status: 'none', reason: 'no-rule-applies', model, key, ...base };
 
-  const joined = joinRules(picked);
-  const ids = picked.map((r) => r.id);
+  const delivery = deliveryText(model, picked, scope, triggers);
   return {
     status: 'matched',
     model,
     key,
     ...base,
-    rules: ids,
-    sha256: shortHash(joined),
-    text: envelope(model, scope, ids, joined),
+    rules: delivery.ids,
+    ...(delivery.triggered.length ? { triggered: delivery.triggered } : {}),
+    sha256: shortHash(joinRules(picked)),
+    text: delivery.text,
   };
 }
 
@@ -66,27 +88,54 @@ export function scopeChangesRules(config: Config, model: string | null, place: P
   return entry?.use === 'rules' && entry.rules.some((r) => !r.scopes.includes(ANY_SCOPE) && r.where.includes(place));
 }
 
-/** The rules of a rule list that apply to a scope and a place, in declaration order. */
-export function selectRules(rules: readonly Rule[], scope: string | null, place: Place): Rule[] {
-  return rules.filter(
-    (r) => (r.scopes.includes(ANY_SCOPE) || (scope !== null && r.scopes.includes(scope))) && r.where.includes(place),
-  );
+/** Whether a rule applies to a scope by its scopes alone. */
+function inScope(rule: Rule, scope: string | null): boolean {
+  return rule.scopes.includes(ANY_SCOPE) || (scope !== null && rule.scopes.includes(scope));
+}
+
+/**
+ * The rules of a rule list that apply to a scope and a place, in declaration order: those for the
+ * scope, and those that list one of the triggers.
+ */
+export function selectRules(rules: readonly Rule[], scope: string | null, place: Place, triggers: readonly Trigger[] = []): Rule[] {
+  return rules.filter((r) => (inScope(r, scope) || r.triggers.some((t) => triggers.includes(t))) && r.where.includes(place));
+}
+
+/** The text delivered for these rules, with their ids, and those of them only a trigger brought. */
+export function deliveryText(
+  model: string,
+  rules: readonly Rule[],
+  scope: string | null,
+  triggers: readonly Trigger[],
+): { readonly text: string; readonly ids: readonly string[]; readonly triggered: readonly string[] } {
+  const ids = rules.map((r) => r.id);
+  const triggeredRules = rules.filter((r) => !inScope(r, scope));
+  const shown = triggers.filter((t) => triggeredRules.some((r) => r.triggers.includes(t)));
+  return { text: envelope(model, scope, ids, joinRules(rules), shown), ids, triggered: triggeredRules.map((r) => r.id) };
 }
 
 export function joinRules(rules: readonly Rule[]): string {
   return rules.map((r) => r.text).join('\n\n');
 }
 
+/** How the envelope describes a session that revealed a trigger. */
+const TRIGGER_TEXT: Readonly<Record<Trigger, string>> = {
+  'code-edit': "a session that has edited the project's code",
+};
+
 /**
  * The delivered text. It says where the text came from, written as facts, because Claude Code
  * documents that hook context which reads like a system command can trip prompt-injection defenses.
+ * `triggers` are the triggers that brought some of the rules; the envelope names them.
  */
-export function envelope(model: string, scope: string | null, ruleIds: readonly string[], joined: string): string {
+export function envelope(model: string, scope: string | null, ruleIds: readonly string[], joined: string, triggers: readonly Trigger[] = []): string {
   const scopeAttr = scope !== null ? ` scope="${scope}"` : '';
   const scopeText = scope !== null ? `, task scope "${scope}"` : '';
+  const triggerAttr = triggers.length ? ` trigger="${triggers.join(' ')}"` : '';
+  const triggerText = triggers.length ? `, for ${triggers.map((t) => TRIGGER_TEXT[t]).join(' and ')}` : '';
   return (
-    `<noonsight-rules model="${model}"${scopeAttr}>\n` +
-    `Working rules the user declared for ${model}${scopeText} (delivered by noonsight, rules ${ruleIds.join(', ')}):\n` +
+    `<noonsight-rules model="${model}"${scopeAttr}${triggerAttr}>\n` +
+    `Working rules the user declared for ${model}${scopeText}${triggerText} (delivered by noonsight, rules ${ruleIds.join(', ')}):\n` +
     `${joined}\n` +
     `</noonsight-rules>`
   );
