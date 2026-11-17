@@ -4,7 +4,53 @@ noonsight reaches Claude Code through five official settings hooks: `SessionStar
 `noonsight install` puts them in place, `noonsight uninstall` takes them out, and `noonsight check` says whether they will run.
 [hooks.md](hooks.md) describes what the hooks do once they run.
 
-There are three ways to install:
+## The one command
+
+From a clone of this repository, until the package is published:
+
+```bash
+npm install && npm run build && npm link   # puts `noonsight` on PATH
+noonsight install
+```
+
+Once version 0.1 is published, `npx noonsight install` becomes the whole route.
+On a clean machine `noonsight install` is all of the setup.
+It takes these steps in order, and a step with a command named in brackets does what that command does, with no logic of its own:
+
+1. **The configuration** [`noonsight init`].
+   When `~/.config/noonsight/noonsight.json` (or the file `NOONSIGHT_CONFIG` names) does not exist, it is written from the preset, declaring every model the preset has rules for with `"use": "preset"`.
+   A file that exists is never opened for writing, and the output says it was left as it is.
+   When this account cannot write it, the command stops here, before any hook is written, and says which path it could not write.
+2. **The hooks.**
+   They go into every Claude Code configuration directory of your account, as [described below](#every-login-of-your-account-the-default).
+3. **What each model receives** [`noonsight models`].
+   One line per declared model: how many of its rules are on, and for each the places it is delivered in.
+   A rule is delivered only where its scope and place apply.
+   A session with no scope receives only the rules its model has for every scope in that place; the preset has none for the `session` place, so with it such a session gets no rule.
+   A rule limited to scopes reaches a session only when it has one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`.
+   A subagent gets the scope its task matches, or the one the classifier gives it when the classifier is on.
+4. **The check** [`noonsight check`].
+   Its lines are printed as they are.
+5. **The summary.** One line says what changed (the configuration file written, hooks added to N directories), or that nothing changed.
+   A last line says it is done and repeats which sessions get rules, or, when the check reports a problem, that it is not done yet.
+
+The exit status covers what the command set up: 0 once the hooks and a valid configuration are in place, 1 when it could not write the hooks or the configuration file, and 2 when the configuration is refused, which also says that sessions get no rules until it is fixed.
+A problem the check reports elsewhere on the machine, such as another login without the hooks or a Claude Code too old for the hooks, is printed and leaves the status at 0; `noonsight check` exits 1 for it.
+
+Running it again changes nothing: the existing configuration is kept, the hooks are already in place, and the summary says so.
+After it, the first Claude Code session already receives what the configuration gives its model in that scope and place, and `noonsight report` lists each rule delivered with its model, scope and place.
+With the preset, a Sonnet session with no scope gets no rule, and the same session with `NOONSIGHT_SCOPE=build` gets `verify-changes`.
+
+`--account <dir>` runs the same steps for one directory.
+`--managed` only installs the hooks, because it runs as an administrator and the configuration belongs to each account.
+
+To undo it, `noonsight uninstall` removes the hooks and the hook pointer, as [Uninstall](#uninstall) says.
+The configuration file is yours, so uninstall leaves it: delete `~/.config/noonsight/noonsight.json` by hand to remove it too.
+The decision log stays in `~/.local/state/noonsight/`.
+
+## The three installs of the hooks
+
+There are three ways to install the hooks:
 
 | Command | Reaches | Rights |
 | --- | --- | --- |
@@ -105,7 +151,8 @@ Claude Code rewrites `~/.claude.json` often; each rewrite wakes the watcher for 
 
 When a new directory appears directly in the home directory, the watcher waits for the `.claude.json` file that marks a Claude Code configuration directory, the same marker the default install looks for, because Claude Code writes it just after it creates the directory.
 It checks every 100 ms for the first ten seconds, then every five seconds, until the marker appears or the directory goes away.
-It then installs into that directory alone, exactly as `noonsight install --account <dir>` does, so a broken settings file in another login does not hold it back.
+It then installs the hooks into that directory alone, as `noonsight install --account <dir>` does, so a broken settings file in another login does not hold it back.
+It only installs the hooks: it neither writes the configuration file nor runs the check.
 `~/.claude` is installed into without a marker, because Claude Code keeps that directory's marker in the home directory.
 A directory that never gets the marker is checked every five seconds for as long as it stays, which costs almost nothing; a marker written later still gets it installed.
 

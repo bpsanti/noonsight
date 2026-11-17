@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `noonsight install` is now the one command that sets noonsight up: when there is no configuration file it writes one as `noonsight init` does, never replacing an existing file, then installs the hooks as before, runs `noonsight check`, lists the rules each declared model receives, and says what it changed or that nothing changed.
+  Running it again changes nothing.
+  It exits 2 when the configuration is refused and 1 when it cannot write the configuration file, where it used to exit 0 once the hooks were in; a problem the check reports elsewhere on the machine is printed and leaves the status at 0.
+  `--managed` still installs only the hooks, and so does the watcher for each new login.
+  The step-by-step commands (`init`, `models`, `install`, `check`) all still work.
+
 - A subagent's rules now reach it through a fifth hook, `SubagentStart`, as `additionalContext`, instead of being added to the end of its task text: the agent call hook no longer changes a call it only gives rules to.
   In auto mode, a call a hook changed left the other calls of the same response without the classifier's verdict, so a Bash call or another subagent made next to it was refused until Claude made it again; those calls now run.
   A call routing changes is still returned changed, with `subagents.permission`, so with routing on in auto mode a routed call still has that effect (see `docs/hooks.md`, "Routing").

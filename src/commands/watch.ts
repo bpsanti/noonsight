@@ -144,7 +144,7 @@ function run(env: Env, io: Io): number {
       home,
       log,
       install: (dir) => {
-        const status = runInstall('install', ['--account', dir], env, { out: log, err: log });
+        const status = runInstall('install', ['--account', dir], env, { out: log, err: log }, { hooksOnly: true });
         // A summary last, so the last line of the log, which `noonsight check` shows, says how it went.
         log(status === 0 ? `new Claude Code configuration ${dir}: installed` : `problem: install into ${dir} failed; see the lines above`);
       },

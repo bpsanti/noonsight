@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { accountTarget, managedTarget, UnsupportedPlatformError } from '../src/adapters/claude-code/locations.js';
-import { CLI, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
+import { CLI, fakeClaude, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
 
 /** A settings file that already has hooks of its own, and other settings, before noonsight arrives. */
 const THIRD_PARTY = {
@@ -206,7 +206,7 @@ test('machine-wide: noonsight writes its own drop-in file and never edits the ma
     ['SubagentStart', target.pointer],
     ['PostToolUse', target.pointer],
   ]);
-  const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
+  const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-print', { model: 'claude-sonnet-5-5' }));
   assert.equal(hooked.status, 0, hooked.stderr);
   assert.match(JSON.parse(hooked.stdout).hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
   const decisions = fs.readFileSync(path.join(env.HOME, '.local', 'state', 'noonsight', 'decisions.jsonl'), 'utf8').trimEnd().split('\n');
@@ -273,14 +273,104 @@ test('a per-account install next to a machine-wide one warns that the rules woul
   assert.match(r.stdout, /warning: noonsight is also installed for the whole machine .*sessions that use .* receive the rules twice/);
 });
 
-test('install says what to do next about the configuration', () => {
-  const home = tempTree({});
-  const none = runCli(['install', '--account', tempTree({})], { HOME: home });
-  assert.match(none.stdout, /next: create .*\.config\/noonsight\/noonsight\.json/);
+test('a refused configuration: install keeps the file, exits 2, and does not say it is done', () => {
   const bad = path.join(tempTree({ 'noonsight.json': { version: 9 } }), 'noonsight.json');
-  const refused = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), NOONSIGHT_CONFIG: bad });
-  assert.equal(refused.status, 0);
-  assert.match(refused.stdout, /refused \(1 problem\); run `noonsight check`/);
+  const before = fs.readFileSync(bad, 'utf8');
+  const r = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), NOONSIGHT_CONFIG: bad });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(bad, 'utf8'), before);
+  assert.match(r.stdout, /^Until the configuration is fixed, sessions get no rules\./m);
+  assert.doesNotMatch(r.stdout, /^Done:/m);
+});
+
+test('install --account exits 0 for what it set up while check reports a problem elsewhere, and does not say it is done', () => {
+  const home = tempTree({ '.claude/.keep': '' });
+  const env = { HOME: home, PATH: fakeClaude('2.1.325'), NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}) };
+  const r = runCli(['install', '--account', tempTree({})], env);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^problem: Claude Code configuration .*\.claude: no noonsight hooks reach it/m);
+  assert.match(r.stdout, /^Not done yet: fix the problems the check reports above/m);
+  assert.doesNotMatch(r.stdout, /^Done:/m);
+
+  const ready = runCli(['install'], env);
+  assert.equal(ready.status, 0, ready.stdout + ready.stderr);
+  assert.match(ready.stdout, /^Done: /m);
+});
+
+test('a configuration this account cannot write: install says which path, changes nothing, and exits 1', { skip: process.getuid?.() === 0 }, () => {
+  const locked = tempTree({});
+  fs.chmodSync(locked, 0o500);
+  try {
+    const config = path.join(locked, 'noonsight', 'noonsight.json');
+    const claudeDir = tempTree({});
+    const home = tempTree({});
+    const r = runCli(['install', '--account', claudeDir], { HOME: home, NOONSIGHT_CONFIG: config });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.ok(r.stderr.includes(`noonsight: this account cannot write ${path.join(locked, 'noonsight')}`), r.stderr);
+    assert.match(r.stderr, /no hook was written either\./);
+    assert.doesNotMatch(r.stderr, /\n {4}at /, 'no stack trace');
+    assert.equal(fs.existsSync(config), false);
+    assert.deepEqual(fs.readdirSync(claudeDir), [], 'no hooks were written');
+    assert.equal(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')), false, 'no hook pointer was written');
+  } finally {
+    fs.chmodSync(locked, 0o755);
+  }
+});
+
+test('one command on a clean machine: writes the configuration, installs in every directory, checks, and a second run changes nothing', () => {
+  const home = tempTree({});
+  const work = tempTree({});
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: work };
+  const configFile = path.join(home, '.config', 'noonsight', 'noonsight.json');
+  const dirs = [path.join(home, '.claude'), work];
+
+  const first = runCli(['install'], env);
+  assert.equal(first.status, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, /wrote .*noonsight\.json: preset claude/);
+  assert.match(first.stdout, /Each declared model receives:\n  claude-fable-5-2: \d+ of \d+ rules/);
+  assert.match(first.stdout, /^ok: config .*noonsight\.json: valid/m);
+  assert.match(first.stdout, /^Changed: the configuration file was written; hooks were added to 2 Claude Code configuration directories\./m);
+  assert.ok(fs.existsSync(configFile));
+  for (const dir of dirs) assert.ok(noonsightHandlers(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'))).length > 0, `${dir} has the hooks`);
+
+  const snapshot = [configFile, ...dirs.map((d) => path.join(d, 'settings.json'))].map((f) => fs.readFileSync(f, 'utf8'));
+  const second = runCli(['install'], env);
+  assert.equal(second.status, 0, second.stdout + second.stderr);
+  assert.match(second.stdout, /already there, left as it is/);
+  assert.match(second.stdout, /^Nothing changed: noonsight was already set up here\./m);
+  assert.deepEqual([configFile, ...dirs.map((d) => path.join(d, 'settings.json'))].map((f) => fs.readFileSync(f, 'utf8')), snapshot);
+
+  // The done line promises only what the configuration gives: a session with no scope gets its model's
+  // every-scope rules, and a scope is needed for the rest.
+  assert.match(first.stdout, /^Done: .*a session with no scope receives only the rules its model has for every scope/m);
+  assert.match(first.stdout, /^Done: .*`NOONSIGHT_SCOPE` or `noonsight run --scope`/m);
+
+  // The first session receives exactly what the preset gives its model there, and report sees it:
+  // Sonnet has no rule for a session with no scope, and verify-changes for a session in build.
+  const hook = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
+  const unscoped = runProgram(hook, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
+  assert.equal(unscoped.status, 0, unscoped.stderr);
+  assert.doesNotMatch(unscoped.stdout, /noonsight-rules/);
+  const none = runCli(['report'], env);
+  assert.match(none.stdout, /delivered rules: 0\b/);
+  assert.match(none.stdout, /no-rule-applies 1\b/);
+  const session = runProgram(hook, ['session-start'], { ...env, NOONSIGHT_SCOPE: 'build' }, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
+  assert.match(session.stdout, /noonsight-rules model=\\"claude-sonnet-5-5\\" scope=\\"build/);
+  const report = runCli(['report'], env);
+  assert.match(report.stdout, /sonnet-5-5\/verify-changes/);
+  assert.doesNotMatch(report.stdout, /never delivered in this log:[^]*sonnet-5-5\/verify-changes/);
+});
+
+test('one command with an existing configuration leaves it untouched', () => {
+  const home = tempTree({});
+  const lab = tempTree({});
+  fs.cpSync(path.dirname(LAB_CONFIG), lab, { recursive: true });
+  const config = path.join(lab, 'noonsight.json');
+  const before = fs.readFileSync(config, 'utf8');
+  const r = runCli(['install', '--account', tempTree({})], { HOME: home, NOONSIGHT_CONFIG: config, NOONSIGHT_PRESETS_DIR: LAB_PRESETS });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /already there, left as it is/);
+  assert.equal(fs.readFileSync(config, 'utf8'), before);
 });
 
 test('two account installs share one pointer, which stays until the last one is removed', () => {

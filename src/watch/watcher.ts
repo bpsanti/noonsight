@@ -4,8 +4,8 @@
 //
 // It watches only the entries directly in the home directory, without recursion, so writes below
 // them never wake it. When a new directory appears there, it waits for the file that marks a Claude
-// Code configuration directory, then runs the same install as `noonsight install --account <dir>` for
-// that directory alone. The wait is kept up for as long as the directory stays there, so a marker
+// Code configuration directory, then installs the hooks as `noonsight install --account <dir>` does,
+// for that directory alone and without the rest of the setup. The wait is kept up for as long as the directory stays there, so a marker
 // written late is still picked up.
 
 import fs from 'node:fs';
@@ -14,7 +14,7 @@ import { CONFIG_MARKER } from '../adapters/claude-code/locations.js';
 
 export interface WatcherOptions {
   readonly home: string;
-  /** Install noonsight's hooks into one configuration directory, as `noonsight install --account <dir>` does. */
+  /** Install noonsight's hooks, and only them, into one configuration directory, as `noonsight install --account <dir>` does. */
   readonly install: (dir: string) => void;
   readonly log: (text: string) => void;
   /** How long the marker is checked every POLL_MS before it is checked every slowPollMs. */

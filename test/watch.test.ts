@@ -152,7 +152,10 @@ test('the watcher is off by default: install writes no service, and check says i
   const r = runCli(['install'], env);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(fs.existsSync(service.file), false);
-  assert.deepEqual(calls(), [], 'install asks the service manager nothing');
+  assert.ok(
+    calls().every((c) => /^(launchctl print|systemctl --user is-active) /.test(c)),
+    `install only asks the service manager whether the watcher runs: ${calls().join('; ')}`,
+  );
   const check = runCli(['check'], env);
   assert.match(check.stdout, /^ok: watcher: off; `noonsight watch enable`/m);
 });
@@ -161,6 +164,7 @@ test('watch enable writes only its service file and starts it; again changes not
   const { home, env, service, calls } = machine();
   assert.equal(runCli(['install'], env).status, 0);
   const before = files(home);
+  const callsAtStart = calls().length;
 
   const on = runCli(['watch', 'enable'], env);
   assert.equal(on.status, 0, on.stderr);
@@ -172,7 +176,7 @@ test('watch enable writes only its service file and starts it; again changes not
   assert.deepEqual(argv.slice(0, 2), [process.execPath, fs.realpathSync(CLI)]);
   assert.deepEqual(argv.slice(2), ['watch', 'run']);
   assert.deepEqual(
-    calls(),
+    calls().slice(callsAtStart),
     process.platform === 'darwin'
       ? [`launchctl print gui/${process.getuid?.()}/${SERVICE_LABEL}`, `launchctl bootstrap gui/${process.getuid?.()} ${service.file}`]
       : [`systemctl --user is-active --quiet ${SERVICE_UNIT}`, 'systemctl --user daemon-reload', `systemctl --user enable --now ${SERVICE_UNIT}`],
