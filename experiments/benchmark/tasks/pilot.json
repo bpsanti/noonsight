@@ -1,0 +1,104 @@
+{
+  "seed": "noonsight-eval-2026-11-16",
+  "sets": {
+    "build": [
+      {
+        "id": "sphinx-doc__sphinx-9281",
+        "sha256": "f767fb8135a2b49f86431b27c95e4b6662ac5bd1b74cd1b5b4a34a5f1c97e013"
+      },
+      {
+        "id": "django__django-16145",
+        "sha256": "86929ebbfd857d4ba814d5ed4f3aeeeaa27c70e7c92b88044110a72a9a97f110"
+      },
+      {
+        "id": "sphinx-doc__sphinx-7889",
+        "sha256": "9b1e9285cf48d80aea910d32d4b87942f141af28fe62b964ffb029ac2d4812cc"
+      },
+      {
+        "id": "django__django-13670",
+        "sha256": "17efaa883fe1c0e4759e5dde2658b991deea0dd90294b61a54a6e0d9a51abe98"
+      },
+      {
+        "id": "sympy__sympy-23824",
+        "sha256": "42da15e1c38503c8ee238c3d7828c8476f70935d381212258fe6ce783b7d27c8"
+      },
+      {
+        "id": "django__django-15563",
+        "sha256": "bd6a7655d714d21866377a14f948ff7a6e619f4c9e05e94735a89f29ad87bafe"
+      },
+      {
+        "id": "pytest-dev__pytest-5631",
+        "sha256": "b149df1568743edfae9146f46e57cfaad5cf89a680fd1e914fff90bb795750fe"
+      },
+      {
+        "id": "astropy__astropy-13236",
+        "sha256": "4b54a3dadfb9338fd5966d5899e6c005e55987fce89c0c3b40d110177a62e248"
+      },
+      {
+        "id": "sympy__sympy-24066",
+        "sha256": "1a7a2cbd2343cec54d123f5336a0f9b395f5031ca41883914d50ea14795d192b"
+      },
+      {
+        "id": "django__django-16560",
+        "sha256": "ae60ec1802119cfc8bf617abad2fbb9906305f0605e1ff744b410e409d154e9f"
+      },
+      {
+        "id": "pytest-dev__pytest-6197",
+        "sha256": "8ee8bb952d9a06164125df76a01849a97a6250e8e590af74f650830779af0d9e"
+      },
+      {
+        "id": "pylint-dev__pylint-8898",
+        "sha256": "ffe4f496951e02fac00159203244f2f73a53d737164f68a24f52b13ebc9c738c"
+      }
+    ],
+    "routine": [
+      {
+        "id": "pytorch-model-recovery",
+        "sha256": "871f95379ae4bddbf58f2e97632ca07899e309748143ab601ad6093baad41c20"
+      },
+      {
+        "id": "vulnerable-secret",
+        "sha256": "44a764782dc7f98b9ce2524549bbe0ad16390300d91989a5c56401c023e7b055"
+      },
+      {
+        "id": "prove-plus-comm",
+        "sha256": "4012d81f9029d62c651774620a5b7b2b7b557fd3deab29f4fec5f639e04c3c80"
+      },
+      {
+        "id": "sanitize-git-repo",
+        "sha256": "ceed956f1fdd6f3e2ca65ca667c68a0b9506565f1bded28314b4c7ec1a831661"
+      },
+      {
+        "id": "nginx-request-logging",
+        "sha256": "11fdbcff089718523b7e0d9edb47d0f3f2b7626213b3dcedfbd27a932faee530"
+      },
+      {
+        "id": "kv-store-grpc",
+        "sha256": "b0b684a46c84a36bfa59672941d5f85c6dbfb9df75aa43341de9f2c52c5b12b3"
+      }
+    ],
+    "digest": [
+      {
+        "id": "django__django-15957",
+        "sha256": "5c7fa64cf259cffce5c0aaadd82b06d6a329946725f78671e8a6a00eee9e8557"
+      },
+      {
+        "id": "django__django-14351",
+        "sha256": "738ca6e46c3c7f87443d2149e671e622d2e346f0d3a342268200b57697cdec09"
+      }
+    ],
+    "investigate": [
+      {
+        "id": "qa-6905333b74f22949d97baa05",
+        "sha256": "b7483c440f57f6fd59165e568e266b8aac13e76d5e56d19dca758ac46aa2dea0"
+      }
+    ],
+    "review": [
+      {
+        "id": "NCATSTranslator_translator-ingests_336",
+        "sha256": "58699256d191998b05560b71a6b4eedb18ce83973ee6d52f15e5d2c96c4a6233"
+      }
+    ]
+  },
+  "not_run_here": {}
+}

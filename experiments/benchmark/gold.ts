@@ -109,7 +109,8 @@ export async function goldCheck(o: GoldOptions): Promise<{ selection: Selection;
         sha256: m.sha256,
         passed,
         reward: trial.reward,
-        error: trial.error ?? (passed ? null : `reward ${trial.reward}`),
+        // The record is committed: the reason without Harbor's command line and without this machine's paths.
+        error: trial.error ? trial.error.split('. Command: ')[0]!.replace(/\/(Users|home|private|var|tmp)\/\S*/g, '<path>') : passed ? null : `reward ${trial.reward}`,
         seconds: { total: trial.seconds.total, environment: trial.seconds.environment, agent: trial.seconds.agent, verifier: trial.seconds.verifier },
         at: new Date().toISOString(),
       };

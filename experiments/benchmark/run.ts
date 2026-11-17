@@ -236,6 +236,8 @@ export async function runCell(
       '--ak', `reasoning_effort=${o.plan.effort}`,
       '--ak', `max_budget_usd=${budget}`,
       '--ak', 'disable_web_search=true',
+      // Tasks that hold the agent to a network allowlist (SWE Atlas, ReviewBench) must still reach the API, as their own configs allow; Harbor ignores it where the network is open.
+      '--allow-agent-host', 'api.anthropic.com',
       '--ak', `config=${path.join(bundle, 'condition', 'settings.json')}`,
       '--ae', `NOONSIGHT_SCOPE=${scope}`,
       '--ae', `${o.plan.unattended_env}=1`,

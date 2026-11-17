@@ -85,7 +85,8 @@ export function materialize(set: SetName, id: string, src: Sources, work: string
       writeAnswerCheck(dir, ANSWER_FILE[set] as string);
       const toml = path.join(dir, 'task.toml');
       // The upstream verifier runs apart and needs a judge key; the answer check runs in the task's own container.
-      fs.writeFileSync(toml, dropSection(fs.readFileSync(toml, 'utf8'), 'verifier.env').replace(/^environment_mode = "separate"\n/m, ''));
+      const upstream = fs.readFileSync(toml, 'utf8');
+      fs.writeFileSync(toml, dropSection(dropSection(upstream, 'verifier.env'), 'verifier.environment').replace(/^environment_mode = "separate"\n/m, ''));
       break;
     }
   }

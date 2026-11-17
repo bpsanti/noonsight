@@ -1,0 +1,381 @@
+{
+  "machine": "darwin arm64, 8 CPUs, 16 GB",
+  "entries": [
+    {
+      "set": "build",
+      "id": "sphinx-doc__sphinx-9281",
+      "sha256": "f767fb8135a2b49f86431b27c95e4b6662ac5bd1b74cd1b5b4a34a5f1c97e013",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 89.8,
+        "environment": 60.4,
+        "agent": 0.3,
+        "verifier": 18.1
+      },
+      "at": "2026-11-17T03:28:03.188Z"
+    },
+    {
+      "set": "build",
+      "id": "sphinx-doc__sphinx-9711",
+      "sha256": "832844e8dc115f456e21751e1e7d0a9a6adc395012e1e586bc9b47daaade9231",
+      "passed": false,
+      "reward": 0,
+      "error": "reward 0",
+      "seconds": {
+        "total": 43,
+        "environment": 22.4,
+        "agent": 0.3,
+        "verifier": 9.4
+      },
+      "at": "2026-11-17T03:28:49.862Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-16145",
+      "sha256": "86929ebbfd857d4ba814d5ed4f3aeeeaa27c70e7c92b88044110a72a9a97f110",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 83.5,
+        "environment": 28.7,
+        "agent": 0.3,
+        "verifier": 43.6
+      },
+      "at": "2026-11-17T03:30:17.049Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-13670",
+      "sha256": "17efaa883fe1c0e4759e5dde2658b991deea0dd90294b61a54a6e0d9a51abe98",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 58.3,
+        "environment": 30.5,
+        "agent": 0.3,
+        "verifier": 16.1
+      },
+      "at": "2026-11-17T03:31:19.243Z"
+    },
+    {
+      "set": "build",
+      "id": "sympy__sympy-23824",
+      "sha256": "42da15e1c38503c8ee238c3d7828c8476f70935d381212258fe6ce783b7d27c8",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 48,
+        "environment": 20.9,
+        "agent": 0.3,
+        "verifier": 15.7
+      },
+      "at": "2026-11-17T03:32:11.307Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-15563",
+      "sha256": "bd6a7655d714d21866377a14f948ff7a6e619f4c9e05e94735a89f29ad87bafe",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 70.5,
+        "environment": 42.3,
+        "agent": 0.3,
+        "verifier": 16.8
+      },
+      "at": "2026-11-17T03:33:26.874Z"
+    },
+    {
+      "set": "build",
+      "id": "pytest-dev__pytest-5631",
+      "sha256": "b149df1568743edfae9146f46e57cfaad5cf89a680fd1e914fff90bb795750fe",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 55.5,
+        "environment": 28.5,
+        "agent": 0.3,
+        "verifier": 15.7
+      },
+      "at": "2026-11-17T03:34:26.250Z"
+    },
+    {
+      "set": "build",
+      "id": "astropy__astropy-13236",
+      "sha256": "4b54a3dadfb9338fd5966d5899e6c005e55987fce89c0c3b40d110177a62e248",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 105.3,
+        "environment": 28.4,
+        "agent": 0.4,
+        "verifier": 65.3
+      },
+      "at": "2026-11-17T03:36:15.929Z"
+    },
+    {
+      "set": "build",
+      "id": "sympy__sympy-24066",
+      "sha256": "1a7a2cbd2343cec54d123f5336a0f9b395f5031ca41883914d50ea14795d192b",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 46.5,
+        "environment": 24.4,
+        "agent": 0.3,
+        "verifier": 10.6
+      },
+      "at": "2026-11-17T03:37:06.571Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-16560",
+      "sha256": "ae60ec1802119cfc8bf617abad2fbb9906305f0605e1ff744b410e409d154e9f",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 54.1,
+        "environment": 26.7,
+        "agent": 0.3,
+        "verifier": 16.1
+      },
+      "at": "2026-11-17T03:38:04.464Z"
+    },
+    {
+      "set": "build",
+      "id": "pytest-dev__pytest-6197",
+      "sha256": "8ee8bb952d9a06164125df76a01849a97a6250e8e590af74f650830779af0d9e",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 63.3,
+        "environment": 26.5,
+        "agent": 0.3,
+        "verifier": 25.6
+      },
+      "at": "2026-11-17T03:39:11.480Z"
+    },
+    {
+      "set": "build",
+      "id": "sphinx-doc__sphinx-7889",
+      "sha256": "9b1e9285cf48d80aea910d32d4b87942f141af28fe62b964ffb029ac2d4812cc",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 38.6,
+        "environment": 16.6,
+        "agent": 0.3,
+        "verifier": 10.5
+      },
+      "at": "2026-11-17T03:41:46.997Z"
+    },
+    {
+      "set": "build",
+      "id": "pylint-dev__pylint-8898",
+      "sha256": "ffe4f496951e02fac00159203244f2f73a53d737164f68a24f52b13ebc9c738c",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 45.5,
+        "environment": 21.4,
+        "agent": 0.3,
+        "verifier": 12.7
+      },
+      "at": "2026-11-17T03:42:36.302Z"
+    },
+    {
+      "set": "routine",
+      "id": "pytorch-model-recovery",
+      "sha256": "871f95379ae4bddbf58f2e97632ca07899e309748143ab601ad6093baad41c20",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 64.3,
+        "environment": 13.8,
+        "agent": 6.7,
+        "verifier": 32.5
+      },
+      "at": "2026-11-17T03:43:44.582Z"
+    },
+    {
+      "set": "routine",
+      "id": "vulnerable-secret",
+      "sha256": "44a764782dc7f98b9ce2524549bbe0ad16390300d91989a5c56401c023e7b055",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 37.3,
+        "environment": 18.8,
+        "agent": 0.3,
+        "verifier": 7.4
+      },
+      "at": "2026-11-17T03:44:25.810Z"
+    },
+    {
+      "set": "routine",
+      "id": "qemu-alpine-ssh",
+      "sha256": "7f87299f69cd51ae0e54d260ee8baf9062c6701929060eff28f0057f0c292943",
+      "passed": false,
+      "reward": null,
+      "error": "RuntimeError: Docker compose command failed for environment qemu-alpine-ssh",
+      "seconds": {
+        "total": 32.4,
+        "environment": 31.9,
+        "agent": 0,
+        "verifier": 0
+      },
+      "at": "2026-11-17T03:45:02.052Z"
+    },
+    {
+      "set": "routine",
+      "id": "prove-plus-comm",
+      "sha256": "4012d81f9029d62c651774620a5b7b2b7b557fd3deab29f4fec5f639e04c3c80",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 118.5,
+        "environment": 90.9,
+        "agent": 0.5,
+        "verifier": 15.9
+      },
+      "at": "2026-11-17T03:47:04.799Z"
+    },
+    {
+      "set": "routine",
+      "id": "sanitize-git-repo",
+      "sha256": "ceed956f1fdd6f3e2ca65ca667c68a0b9506565f1bded28314b4c7ec1a831661",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 29.4,
+        "environment": 10.8,
+        "agent": 0.6,
+        "verifier": 7.2
+      },
+      "at": "2026-11-17T03:47:38.272Z"
+    },
+    {
+      "set": "routine",
+      "id": "nginx-request-logging",
+      "sha256": "11fdbcff089718523b7e0d9edb47d0f3f2b7626213b3dcedfbd27a932faee530",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 30,
+        "environment": 9,
+        "agent": 3.5,
+        "verifier": 6.7
+      },
+      "at": "2026-11-17T03:48:12.055Z"
+    },
+    {
+      "set": "digest",
+      "id": "django__django-15957",
+      "sha256": "5c7fa64cf259cffce5c0aaadd82b06d6a329946725f78671e8a6a00eee9e8557",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 30.9,
+        "environment": 19.5,
+        "agent": 0.3,
+        "verifier": 0.4
+      },
+      "at": "2026-11-17T03:48:46.682Z"
+    },
+    {
+      "set": "digest",
+      "id": "django__django-14351",
+      "sha256": "738ca6e46c3c7f87443d2149e671e622d2e346f0d3a342268200b57697cdec09",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 35,
+        "environment": 23.7,
+        "agent": 0.3,
+        "verifier": 0.3
+      },
+      "at": "2026-11-17T03:49:25.672Z"
+    },
+    {
+      "set": "investigate",
+      "id": "qa-6905333b74f22949d97baa05",
+      "sha256": "b7483c440f57f6fd59165e568e266b8aac13e76d5e56d19dca758ac46aa2dea0",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 74.7,
+        "environment": 55.3,
+        "agent": 2.7,
+        "verifier": 0.5
+      },
+      "at": "2026-11-17T03:50:49.416Z"
+    },
+    {
+      "set": "review",
+      "id": "sdsykes_fastimage_165",
+      "sha256": "852f9b0e9494ae3d2256f6a98754e982348854da8dd08e39f6c2fb70b9deaaa6",
+      "passed": false,
+      "reward": null,
+      "error": "RuntimeError: Docker compose command failed for environment rb-public-sdsykes_fastimage_165-8fc7cd32",
+      "seconds": {
+        "total": 38.3,
+        "environment": 37.7,
+        "agent": 0,
+        "verifier": 0
+      },
+      "at": "2026-11-17T03:51:31.881Z"
+    },
+    {
+      "set": "routine",
+      "id": "kv-store-grpc",
+      "sha256": "b0b684a46c84a36bfa59672941d5f85c6dbfb9df75aa43341de9f2c52c5b12b3",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 23.7,
+        "environment": 3,
+        "agent": 6.1,
+        "verifier": 3.8
+      },
+      "at": "2026-11-17T03:51:59.398Z"
+    },
+    {
+      "set": "review",
+      "id": "NCATSTranslator_translator-ingests_336",
+      "sha256": "58699256d191998b05560b71a6b4eedb18ce83973ee6d52f15e5d2c96c4a6233",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 21,
+        "environment": 4.5,
+        "agent": 2.7,
+        "verifier": 2.7
+      },
+      "at": "2026-11-17T03:59:39.933Z"
+    }
+  ],
+  "skipped": {}
+}

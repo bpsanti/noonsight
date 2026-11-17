@@ -39,7 +39,11 @@ Selection: 12 instances, 3 from `<15 min fix`, 6 from `15 min - 1 hour` and 3 fr
 `django/django` takes at most 40 percent of a stratum (1, 2 and 1), and any other repository at most 2 over the list.
 The digest instances (2.3) are drawn first and are not used here.
 
-The final list: see `tasks/pilot.json`; FILLED AFTER THE GOLD CHECK.
+The final list, in rank order within each stratum (gold check on 2026-11-17; `sphinx-doc__sphinx-9711` was dropped, its reference patch failing its tests on the arm64 image):
+
+- `<15 min fix` (3): sphinx-doc__sphinx-9281, django__django-16145, sphinx-doc__sphinx-7889.
+- `15 min - 1 hour` (6): django__django-13670, sympy__sympy-23824, django__django-15563, pytest-dev__pytest-5631, astropy__astropy-13236, sympy__sympy-24066.
+- `1-4 hours` (3): django__django-16560, pytest-dev__pytest-6197, pylint-dev__pylint-8898.
 
 Verifier: the instance's own `FAIL_TO_PASS` and `PASS_TO_PASS` tests, run by Harbor's verifier on the container's final state.
 Resolved means reward 1.
@@ -51,7 +55,8 @@ Eligible: tasks whose `expert_time_estimate_min` is at most 30, whose agent time
 Selection: the first 6 by rank.
 When a task's prebuilt image has no arm64 variant, Harbor builds the task's own Dockerfile here.
 
-The final list: FILLED AFTER THE GOLD CHECK.
+The final list: pytorch-model-recovery, vulnerable-secret, prove-plus-comm, sanitize-git-repo, nginx-request-logging, kv-store-grpc.
+`qemu-alpine-ssh` was dropped: its environment does not build here.
 
 Verifier: the task's own `tests/test.sh`; a task passes only with reward 1.
 
@@ -61,20 +66,22 @@ The agent gets the repository at the instance's base commit, the issue text and 
 It writes the summary to `/logs/agent/digest.md`.
 Selection: from the arm64 pool, instances of `15 min - 1 hour` and `1-4 hours` whose `hints_text` has at least 3,000 characters, at most 2 per repository, the first 2 by rank.
 
-The final list: FILLED AFTER THE GOLD CHECK.
+The final list: django__django-15957, django__django-14351.
+The gold check for a digest task proves only that its environment starts and that the answer file can be written.
 
 ### 2.4 Review: ReviewBench (scope `review`)
 
 Source: `review-bench/reviewbench-public@v1` on Harbor Hub (MIT), whose task image builds from a multi-architecture Node.js image.
-Selection: the first of the design's ranked list of the 25-PR test set: `sdsykes_fastimage_165`, or the next one if it fails the gold check.
+Selection: the first of the design's ranked list of the 25-PR test set that passes the gold check: `NCATSTranslator_translator-ingests_336`.
+`sdsykes_fastimage_165` was dropped: its image is pinned to an amd64 base, and its package install fails under emulation here.
 The agent writes its findings to `/work/out/findings.json`, as the task asks.
 
 ### 2.5 Investigate: SWE Atlas Codebase QnA (scope `investigate`)
 
 Source: `scaleapi/SWE-Atlas` at `b3cdddf44414c0ccca50c6e89fe978bb4d844d26`, lane `data/qa/` (Apache-2.0).
 Selection: the first of the design's ranked list, `qa-6905333b74f22949d97baa05` (kovidgoyal/kitty).
-SWE Atlas publishes its images only for amd64.
-This set runs only if the machine's Docker can run amd64 images on the night of the pilot (for Colima, `--vz-rosetta`); otherwise it is left out and listed in the results, and the pilot has three open tasks.
+SWE Atlas publishes its images only for amd64; Docker here runs them under emulation, and the task passed the gold check that way.
+The agent writes its answer to `/logs/agent/answer.txt`, as the task asks.
 
 ## 3. Models, effort and place
 
@@ -112,7 +119,7 @@ The isolated-rule conditions of the study's design are not part of the pilot.
 
 ## 5. Rounds, order and nights
 
-- 2 rounds per task, model and condition: 21 or 22 tasks (with or without investigate) x 4 models x 3 conditions x 2 rounds = 504 or 528 runs, before the cap.
+- 2 rounds per task, model and condition: 22 tasks (12 build, 6 routine, 2 digest, 1 review, 1 investigate) x 4 models x 3 conditions x 2 rounds = 528 runs, before the cap.
 - Each run is a fresh Harbor trial: a new container from the task's image, a fresh Claude Code configuration directory, a fresh noonsight home.
 - Order of priority: (1) build, `off` and `on`; (2) routine, investigate, review and digest, `off` and `on`; (3) every set, `placebo`.
   Within each phase, round 1 runs before round 2.
@@ -178,7 +185,8 @@ Mechanism signals, as in the study's design:
 
 - Build tasks come only from the 281 SWE-bench Verified instances with a native arm64 image, which over-represent Django, SymPy and Sphinx and include no xarray; results on build speak for that pool.
 - Routine tasks run on images built here for arm64 when their prebuilt image is amd64 only; the gold check proves the reference solution passes on those builds, not that they match the upstream images byte for byte.
-- Investigate runs only if amd64 images can run here.
+- The investigate task and the review task run on amd64 images under emulation, which is slower; their wall times are not comparable with the other sets'.
+- One task each for investigate and review is enough to check the harness and the judge, not to say anything about those kinds of task.
 - The judge is a Claude model grading Claude models.
 - The pilot's machine is a laptop: Docker (Colima) has 6 CPUs and 10 GB for the pilot; the nights run with `caffeinate`, on power, with automatic updates off, and end before the machine is needed in the morning, so a night can stop between units of a round.
 

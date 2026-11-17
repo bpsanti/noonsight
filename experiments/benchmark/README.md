@@ -47,7 +47,7 @@ The conditions ([conditions.ts](conditions.ts)):
 - Routine: the Terminal-Bench 2.1 task; when its prebuilt image has no arm64 variant, Harbor builds the task's Dockerfile here instead.
 - Digest: the instance's issue and discussion, to be summarized for a maintainer; graded against key points the author writes before any run ([rubrics/digest/](rubrics/digest)).
 - Review and investigate: the upstream task, graded afterwards by the pilot's judge against the upstream rubric (ReviewBench's golden findings, SWE Atlas's rubric items).
-  SWE Atlas publishes its images only for amd64, so investigate runs only where Docker can run amd64 images.
+  SWE Atlas publishes its images only for amd64, so investigate runs only where Docker can run amd64 images (here, under emulation).
 
 ### The gold check
 
