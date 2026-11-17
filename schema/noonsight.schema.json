@@ -214,7 +214,7 @@
           "items": { "$ref": "#/$defs/ruleId" }
         },
         "add": {
-          "description": "The user's own rule files, delivered after the preset's rules and the rules of \"all_models\". With \"use\": \"custom\" the model must receive at least one rule, from here or from \"all_models\".",
+          "description": "The user's own rule files, delivered after the preset's rules and the rules of \"all_models\".",
           "type": "array",
           "items": { "$ref": "#/$defs/userRule" }
         }
@@ -231,6 +231,7 @@
         {
           "if": { "required": ["use"], "properties": { "use": { "const": "custom" } } },
           "then": {
+            "required": ["add"],
             "properties": { "use": true, "add": { "minItems": 1 } },
             "additionalProperties": false,
             "x-hint": "a model declared with \"use\": \"custom\" takes only \"add\", with at least one rule"

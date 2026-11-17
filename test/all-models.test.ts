@@ -60,17 +60,6 @@ test('the rules go after the preset\'s and before the model\'s own, and reach a 
   assert.deepEqual(config.allModels.map((r) => r.id), ['team/commits']);
 });
 
-test('a model declared with "use": "custom" can take only the rules of all_models, and needs some rule from one place or the other', () => {
-  const config = loadConfig(configTree({ all_models: { add: [team] }, models: { 'claude-haiku-5-5': { use: 'custom' } } }), { presetsDir: LAB_PRESETS });
-  const haiku = resolve(config, { model: 'claude-haiku-5-5', place: 'subagent' });
-  assert.equal(haiku.status === 'matched' && haiku.rules.join(' '), 'team/commits');
-
-  assert.deepEqual(problemsOf({ models: { 'claude-haiku-5-5': { use: 'custom' } } }), [
-    '/models/claude-haiku-5-5: a model declared with "use": "custom" must receive at least one rule: give "add" at least one, or declare rules under "all_models"',
-  ]);
-  assert.match(problemsOf({ all_models: { add: [team] }, models: { 'claude-haiku-5-5': { use: 'custom', add: [] } } }).join('\n'), /^\/models\/claude-haiku-5-5\/add: must not be empty/);
-});
-
 test('a model declared with "use": "none", by an exact key or a wildcard, receives none of them', () => {
   const config = loadConfig(
     configTree({
@@ -124,7 +113,7 @@ test('a rule id must be new: it cannot repeat in the block, nor be a preset rule
   const config = loadConfig(
     configTree({
       all_models: { add: [team] },
-      models: { 'claude-opus-5-5': { use: 'none' }, 'claude-haiku-5-5': { use: 'custom' }, 'claude-sonnet-5-5': { use: 'preset' } },
+      models: { 'claude-opus-5-5': { use: 'none' }, 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'user/own', file: 'own.md' }] }, 'claude-sonnet-5-5': { use: 'preset' } },
     }),
     { presetsDir: LAB_PRESETS },
   );
@@ -155,7 +144,7 @@ test('the delivery limit counts the block for every model, and names the model i
   // A model declared "none" takes none of it, and a block that alone cannot fit refuses every model that receives it.
   const none = loadConfig(configTree({ all_models: all, models: { 'claude-haiku-5-5': { use: 'preset' }, 'claude-sonnet-5-5': { use: 'none' } } }, big), { presetsDir: LAB_PRESETS });
   assert.equal(none.exact.get('claude-sonnet-5-5')?.use, 'none');
-  const alone = problemsOf({ all_models: { add: [{ id: 'team/huge', file: 'huge.md' }] }, models: { 'claude-haiku-5-5': { use: 'custom' } } }, { 'huge.md': 'x'.repeat(RULES_TEXT_LIMIT) });
+  const alone = problemsOf({ all_models: { add: [{ id: 'team/huge', file: 'huge.md' }] }, models: { 'claude-haiku-5-5': { use: 'preset' } } }, { 'huge.md': 'x'.repeat(RULES_TEXT_LIMIT) });
   assert.match(alone.join('\n'), /^\/models\/claude-haiku-5-5: the rules delivered for no scope in place "session"/);
 });
 

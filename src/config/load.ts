@@ -292,8 +292,6 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       if (text !== undefined) rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text });
     });
 
-    if (entry.use === 'custom' && (entry.add ?? []).length + (cfg.all_models?.add.length ?? 0) === 0)
-      report(at, 'a model declared with "use": "custom" must receive at least one rule: give "add" at least one, or declare rules under "all_models"');
     checkDeliverySize(key, rules, scopes, at, report);
     exact.set(key, { use: 'rules', rules });
   }

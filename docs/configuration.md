@@ -70,7 +70,7 @@ The preset also suggests a routing table, which applies only when the user turns
 | `models.<id>.use` | `preset`, `custom`, `none` | Required | `preset`: the preset's rules for this exact model. `custom`: only the rules in `add`. `none`: decided that this model needs no rules. |
 | `models.<id>.enable` | Rule ids | Empty | Preset rules that ship off and should be on. Only with `preset`. |
 | `models.<id>.disable` | Rule ids | Empty | Preset rules that ship on and should be off. Only with `preset`. |
-| `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules and the rules of `all_models`. With `custom` the model must receive at least one rule, from `add` or from `all_models`. |
+| `models.<id>.add` | User rules | Empty | The user's own rule files, delivered after the preset's rules and the rules of `all_models`. Required, with at least one rule, for `custom`. |
 | `all_models.add` | User rules | Absent | Rules for every model, in one place: team conventions, commit style, anything that is not specific to a model. See [Rules for every model](#rules-for-every-model). |
 | `on_undeclared` | `warn`, `ignore` | `warn` | What to do when a model is undeclared. There is deliberately no option to block. |
 | `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
@@ -125,7 +125,7 @@ A rule that is not specific to a model, such as a team convention or the commit 
   },
   "models": {
     "claude-sonnet-5-5": { "use": "preset" },
-    "claude-haiku-5-5": { "use": "custom" },
+    "claude-haiku-5-5": { "use": "custom", "add": [{ "id": "haiku/brief", "file": "rules/haiku-brief.md" }] },
     "claude-opus-5-5": { "use": "none" }
   }
 }
@@ -133,7 +133,6 @@ A rule that is not specific to a model, such as a team convention or the commit 
 
 The rules go to every model declared with `"use": "preset"` or `"use": "custom"`, in this order: the preset's rules, then the rules of `all_models.add`, then the model's own `add`.
 A model declared with `"use": "none"`, by an exact key or a wildcard, receives none of them, and a model that is not declared stays undeclared: the block declares no model.
-Since a `custom` model can then get all its rules from the block, `add` is optional for `custom`; a `custom` model with neither its own rules nor any rule in `all_models` is refused.
 
 A rule id is unique for each model that receives it: an id in `all_models.add` cannot repeat in the block, be the id of one of that model's preset rules (on or off), or be the id of one of its own `add` rules.
 The same id may appear under `all_models.add` and under a model declared `none`, since that model never receives it.
@@ -436,7 +435,6 @@ Beyond the schema, noonsight checks that:
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - every scope in `routing.table` is declared, and every model a routing option names is an alias or a model declared with its exact key;
 - a routing row written as an object lists at least one target;
-- every model declared with `use: "custom"` receives at least one rule, from `add` or from `all_models`;
 - the delivered text fits in 9,500 characters for every model and every combination of scope and place, with the rules of `all_models` among the model's rules and with and without the triggers revealed, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
 
 The preset is checked the same way, and more strictly:
