@@ -340,8 +340,20 @@ test('one command on a clean machine: writes the configuration, installs in ever
   assert.match(second.stdout, /^Nothing changed: noonsight was already set up here\./m);
   assert.deepEqual([configFile, ...dirs.map((d) => path.join(d, 'settings.json'))].map((f) => fs.readFileSync(f, 'utf8')), snapshot);
 
-  // The first session already receives its model's rules, and report sees it.
+  // The done line promises only what the configuration gives: a session with no scope gets its model's
+  // every-scope rules, and a scope is needed for the rest.
+  assert.match(first.stdout, /^Done: .*a session with no scope receives only the rules its model has for every scope/m);
+  assert.match(first.stdout, /^Done: .*`NOONSIGHT_SCOPE` or `noonsight run --scope`/m);
+
+  // The first session receives exactly what the preset gives its model there, and report sees it:
+  // Sonnet has no rule for a session with no scope, and verify-changes for a session in build.
   const hook = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
+  const unscoped = runProgram(hook, ['session-start'], env, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
+  assert.equal(unscoped.status, 0, unscoped.stderr);
+  assert.doesNotMatch(unscoped.stdout, /noonsight-rules/);
+  const none = runCli(['report'], env);
+  assert.match(none.stdout, /delivered rules: 0\b/);
+  assert.match(none.stdout, /no-rule-applies 1\b/);
   const session = runProgram(hook, ['session-start'], { ...env, NOONSIGHT_SCOPE: 'build' }, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
   assert.match(session.stdout, /noonsight-rules model=\\"claude-sonnet-5-5\\" scope=\\"build/);
   const report = runCli(['report'], env);

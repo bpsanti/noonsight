@@ -25,17 +25,21 @@ It takes these steps in order, and a step with a command named in brackets does 
    They go into every Claude Code configuration directory of your account, as [described below](#every-login-of-your-account-the-default).
 3. **What each model receives** [`noonsight models`].
    One line per declared model: how many of its rules are on, and for each the places it is delivered in.
-   A rule is delivered only where its scope and place apply to the session, so an interactive session with no `NOONSIGHT_SCOPE` receives the rules declared for every scope, and `noonsight models` shows the rest.
+   A rule is delivered only where its scope and place apply.
+   A session with no scope receives only the rules its model has for every scope in that place; the preset has none for the `session` place, so with it such a session gets no rule.
+   A rule limited to scopes reaches a session only when it has one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`.
+   A subagent gets the scope its task matches, or the one the classifier gives it when the classifier is on.
 4. **The check** [`noonsight check`].
    Its lines are printed as they are.
 5. **The summary.** One line says what changed (the configuration file written, hooks added to N directories), or that nothing changed.
-   A last line says it is done, or, when the check reports a problem, that it is not done yet.
+   A last line says it is done and repeats which sessions get rules, or, when the check reports a problem, that it is not done yet.
 
 The exit status covers what the command set up: 0 once the hooks and a valid configuration are in place, 1 when it could not write the hooks or the configuration file, and 2 when the configuration is refused, which also says that sessions get no rules until it is fixed.
 A problem the check reports elsewhere on the machine, such as another login without the hooks or a Claude Code too old for the hooks, is printed and leaves the status at 0; `noonsight check` exits 1 for it.
 
 Running it again changes nothing: the existing configuration is kept, the hooks are already in place, and the summary says so.
-After it, the first Claude Code session already receives the rules of its model that apply to it, and `noonsight report` lists each rule delivered with its model, scope and place.
+After it, the first Claude Code session already receives what the configuration gives its model in that scope and place, and `noonsight report` lists each rule delivered with its model, scope and place.
+With the preset, a Sonnet session with no scope gets no rule, and the same session with `NOONSIGHT_SCOPE=build` gets `verify-changes`.
 
 `--account <dir>` runs the same steps for one directory.
 `--managed` only installs the hooks, because it runs as an administrator and the configuration belongs to each account.

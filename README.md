@@ -41,7 +41,8 @@ noonsight install
 Once version 0.1 is published, `npx noonsight install` becomes the whole route.
 One command sets noonsight up, and running it again is safe.
 It writes the configuration file when there is none (`~/.config/noonsight/noonsight.json`, or the file `NOONSIGHT_CONFIG` names, declaring every model the preset covers; an existing file is never replaced), adds the hooks to every Claude Code login of this account (no administrator rights), runs `noonsight check`, lists the rules each declared model receives, and ends by saying what it changed, or that nothing changed.
-The next Claude Code session already gets the rules of its model that apply to its scope and place, and `noonsight report` shows what was delivered.
+The next Claude Code session already gets what the configuration gives its model in its scope and place, and `noonsight report` shows what was delivered.
+A session with no scope gets only the rules its model has for every scope, which with the preset is none; set a scope with `NOONSIGHT_SCOPE` or `noonsight run --scope` for the rules limited to scopes.
 [docs/install.md](docs/install.md#the-one-command) lists the steps it takes and how to undo them.
 
 Three of its steps are also commands of their own: `noonsight init`, `noonsight models` and `noonsight check`.

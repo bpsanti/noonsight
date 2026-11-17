@@ -184,7 +184,8 @@ function finishSetup(setupLines: readonly string[], wroteConfig: boolean, target
   else if (checkStatus !== 0) out.push('Not done yet: fix the problems the check reports above, then run `noonsight check` again.');
   else
     out.push(
-      'Done: from the next Claude Code session on, each session receives the rules of its model whose scope and place apply to it; ' +
+      'Done: from the next Claude Code session on, a session with no scope receives only the rules its model has for every scope in that place, which may be none. ' +
+        'A rule limited to scopes reaches a session only in one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`, and a subagent in the scope its task matches, or the classifier gives it when the classifier is on. ' +
         '`noonsight report` shows what was delivered. To undo: `noonsight uninstall`.',
     );
   io.out(out.join('\n'));
