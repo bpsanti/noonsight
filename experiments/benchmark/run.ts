@@ -441,10 +441,20 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
 
   let planned = plannedCells.length;
   outer: for (;;) {
+    let startedThisPass = 0;
     for (const r of plan.rounds)
       for (const unit of r.units) {
         const cells = unit.cells.filter((c) => !done.has(cellKey(c)));
         if (cells.length === 0) continue;
+        // A digest runs only once its rubric is committed, so the key points are written before anyone sees a summary.
+        const first = cells[0] as Cell;
+        if (first.set === 'digest') {
+          const rubric = rubricFor(o.work, first.set, first.task);
+          if (typeof rubric === 'string') {
+            o.log(`skip  ${unit.key}: ${rubric}`);
+            continue;
+          }
+        }
         if (o.until && Date.now() >= o.until.getTime()) {
           stop = `the night's end time (${o.until.toISOString()}) was reached`;
           break outer;
@@ -464,6 +474,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
           stop = `quota floor: ${floor.why}`;
           break outer;
         }
+        startedThisPass++;
         const runOne = async (cell: Cell): Promise<void> => {
           const key = cellKey(cell);
           const budget = o.plan.models[cell.model]?.budget_usd ?? 0;
@@ -509,6 +520,11 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
         const pool = Math.max(1, o.plan.concurrency);
         for (let i = 0; i < cells.length; i += pool) await Promise.all(cells.slice(i, i + pool).map(runOne));
       }
+    // Units held back (a digest without its rubric) leave their round open; with nothing else to start, the night ends.
+    if (startedThisPass === 0) {
+      stop = 'the units left wait for something outside the night (a digest rubric)';
+      break;
+    }
     // The planned rounds are done: plan again with the costs measured so far and what is left of the night's budget.
     means = measured(readJsonl<Recorded>(runsFile));
     plan = planNight(all, done, cost, o.nightUsd - tonight, o.plan.cap_usd - total, false);
