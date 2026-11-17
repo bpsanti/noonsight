@@ -1,5 +1,6 @@
 // The Claude Code hook adapter: SessionStart and PostModelSwitch for the session itself, and
-// PreToolUse and PostToolUse on the agent tool for the subagents it starts (subagents.ts).
+// PreToolUse and PostToolUse on the agent tool and SubagentStart for the subagents it starts
+// (subagents.ts).
 //
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session beyond a bound: it reads local files only and never
@@ -7,8 +8,8 @@
 //     line when nothing else names the session's model (launch.ts), or when `noonsight run` started the
 //     session (launcher.ts); and, with classifier.mode on, the classifier for an agent call, stopped
 //     after classifier.timeout_ms (classifier.ts).
-//   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session context, or a
-//     subagent call with its task text extended), systemMessage for the person.
+//   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session or subagent
+//     context, or a subagent call routing changed), systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.
 //   - A configuration with any problem is refused whole: nothing is delivered, the person is warned,
 //     and the log records config-invalid.
@@ -27,7 +28,7 @@ import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
 import { notRouted } from './routing.js';
-import { agentCall, agentResult, choiceFields, decisionFields } from './subagents.js';
+import { agentCall, agentResult, choiceFields, decisionFields, subagentStart } from './subagents.js';
 
 export interface HookContext {
   readonly env: Env;
@@ -51,6 +52,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
   // run, a renamed event) is left alone, silently.
   if (!input || input.hook_event_name !== event) return '';
   const toolEvent = event === 'PreToolUse' || event === 'PostToolUse';
+  const subagentEvent = toolEvent || event === 'SubagentStart';
   // The settings entry only matches the agent tool; a hand-edited or widened matcher must not reach other tools.
   if (toolEvent && !AGENT_TOOLS.includes(str(input.tool_name) ?? '')) return '';
 
@@ -67,7 +69,9 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
           ...(str(input.agent_id) !== null ? { agent_id: str(input.agent_id) } : {}),
           permission_mode: str(input.permission_mode),
         }
-      : { source: str(input.source) }),
+      : event === 'SubagentStart'
+        ? { agent_id: str(input.agent_id) }
+        : { source: str(input.source) }),
     install: ctx.install,
   };
   const log = (fields: Record<string, unknown>): void => {
@@ -88,6 +92,8 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       config = loadConfig(file, {}, ctx.env);
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
+      // The call that started the subagent already warned, and logged that nothing was delivered.
+      if (event === 'SubagentStart') return '';
       // The call this result belongs to already warned.
       if (event === 'PostToolUse') {
         log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), warned: false });
@@ -102,9 +108,10 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
         null,
       );
     }
-    if (toolEvent) {
+    if (subagentEvent) {
       const sub = { env: ctx.env, home: ctx.home, now: ctx.now, state, parentPid: ctx.parentPid, file };
-      const outcome = event === 'PreToolUse' ? agentCall(input, config, sub) : agentResult(input, config, sub);
+      const outcome =
+        event === 'PreToolUse' ? agentCall(input, config, sub) : event === 'SubagentStart' ? subagentStart(input, config, sub) : agentResult(input, config, sub);
       if (outcome === null) return '';
       log(outcome.record);
       return output(outcome.messages, outcome.specific);
@@ -145,6 +152,10 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     if (event === 'PostToolUse') {
       log({ status: 'error', error: message, ...notRouted('error'), warned: true });
       return output([`noonsight: the hook failed (${message}), so the subagent's model was not checked.`], null);
+    }
+    if (event === 'SubagentStart') {
+      log({ status: 'error', error: message, delivered: 'nothing', warned: true });
+      return output([`noonsight: the hook failed (${message}), so the subagent that started got no rules.`], null);
     }
     log({ status: 'error', error: message, ...(event === 'PreToolUse' ? notRouted('error') : {}), delivered: 'nothing', warned: true });
     return output([`noonsight: the hook failed (${message}), so no rules were delivered.`], null);

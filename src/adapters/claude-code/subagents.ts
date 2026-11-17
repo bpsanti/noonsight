@@ -1,16 +1,26 @@
-// The Claude Code hook adapter for subagents: PreToolUse and PostToolUse on the agent tool.
+// The Claude Code hook adapter for subagents: PreToolUse and PostToolUse on the agent tool, and
+// SubagentStart.
 //
-//   PreToolUse   predicts the model the subagent will run on (predict.ts), resolves its rules for the
-//                place "subagent", and returns the call with the rules added at the end of its task
-//                text, with the permission decision the configuration asks for. A call it does not
-//                change gets no decision. It records the prediction under the call's tool_use_id.
-//                With classifier.mode on, a task its matchers did not place may wait for the
-//                classifier (classifier.ts), up to classifier.timeout_ms.
-//   PostToolUse  compares the prediction with the model the subagent started on (resolvedModel in the
-//                tool's response), logs match or MISMATCH, and warns on a mismatch. It records the
-//                subagent's model under its agent id, for the calls that subagent makes in turn.
+//   PreToolUse    predicts the model the subagent will run on (predict.ts) and resolves its rules for
+//                 the place "subagent". It records them under the call's tool_use_id, and adds the call
+//                 to its session's pool of calls whose subagent has not started. It returns the call
+//                 changed, with the permission decision the configuration asks for, only when routing
+//                 sets its model or effort; any other call gets no output that touches it, so the auto
+//                 mode classifier's review of the response the call came in still holds. With
+//                 classifier.mode on, a task its matchers did not place may wait for the classifier
+//                 (classifier.ts), up to classifier.timeout_ms.
+//   SubagentStart gives the subagent the rules of the call that started it, as additionalContext. Its
+//                 input names the subagent and its type but not the call, so it takes the one open call
+//                 of that type in the session's pool, or the call whose result already named this
+//                 subagent. When several calls of the type are open, it waits briefly for a result to name
+//                 it; failing that, the subagent gets only what every one of those calls would give, since
+//                 the subagents of one response's calls start in no fixed order.
+//   PostToolUse   compares the prediction with the model the subagent started on (resolvedModel in the
+//                 tool's response), logs match or MISMATCH, and warns on a mismatch. It records the
+//                 subagent's model under its agent id, for the calls that subagent makes in turn, and
+//                 which call started that subagent, for a start not seen yet.
 //
-// Like the session hooks, neither ever blocks a call: an undeclared or unknown model only warns.
+// Like the session hooks, none ever blocks a call: an undeclared or unknown model only warns.
 
 import { normalizeModel } from '../../core/normalize.js';
 import { resolve, scopeChangesRules } from '../../core/resolve.js';
@@ -20,11 +30,22 @@ import type { Config, Decision } from '../../core/types.js';
 import {
   agentCallFile,
   agentFile,
+  agentLinkFile,
+  agentStartFile,
+  changePool,
+  pause,
   readAgentCall,
+  readAgentLink,
   readAgentModel,
+  readAgentStart,
   removeRecord,
   writeRecord,
   type AgentCall,
+  type AgentStart,
+  type OpenCall,
+  type Pool,
+  type SharedGroup,
+  type StartMatch,
 } from '../../state/agents.js';
 import { readState, sessionFile } from '../../state/sessions.js';
 import type { Env } from '../../config/paths.js';
@@ -116,7 +137,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const routing = routeFields(routed, ctx.env);
 
   if (config.subagents.delivery === 'off') {
-    const specific = Object.keys(changes).length > 0 ? changed(config, { ...ti, ...changes }, changes, false) : null;
+    const specific = Object.keys(changes).length > 0 ? changed(config, { ...ti, ...changes }, changes) : null;
     return {
       record: {
         ...base,
@@ -135,35 +156,45 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   const prediction = routed.routing === 'routed' ? predictWith(routed.value) : asCalled;
   const decision = resolve(config, { model: prediction.model, scope: scope.scope, place: 'subagent' });
 
-  let delivered: AgentCall['delivered'] = 'nothing';
-  let newPrompt = prompt;
-  if (decision.status === 'matched' && prompt !== null) {
-    if (prompt.includes(decision.text)) delivered = 'already-delivered';
-    else {
-      delivered = 'rules';
-      newPrompt = `${prompt}\n\n${decision.text}`;
-    }
-  }
-  const rewritten = delivered === 'rules' || Object.keys(changes).length > 0;
-  const specific = rewritten ? changed(config, { ...ti, ...changes, ...(newPrompt !== null ? { prompt: newPrompt } : {}) }, changes, delivered === 'rules') : null;
+  // The rules are handed to the subagent when it starts, not added to the task text: a changed call
+  // costs the other calls of the same response their auto mode review.
+  const planned: AgentCall['delivered'] =
+    decision.status !== 'matched' ? 'nothing' : prompt !== null && prompt.includes(decision.text) ? 'already-delivered' : 'at-start';
+  const specific = Object.keys(changes).length > 0 ? changed(config, { ...ti, ...changes }, changes) : null;
 
-  const messages = [...unplaced, ...undeclaredMessages(decision, prediction, subagentType, ctx.file)];
   const call: AgentCall = {
     session_id: str(input.session_id),
     subagent_type: subagentType,
     predicted: decision.model,
     status: decision.status,
     sha256: decision.status === 'matched' ? decision.sha256 : null,
-    delivered,
+    delivered: planned,
+    ...(planned === 'at-start' && decision.status === 'matched' ? { text: decision.text, rules: decision.rules, scope: decision.scope } : {}),
     routing: routed.routing,
     routing_reason: routed.reason,
     at: ctx.now.toISOString(),
   };
+  const toolUseId = str(input.tool_use_id);
+  const sessionId = str(input.session_id);
+  // A call with no rules is recorded too, so that its subagent's start never takes another call's rules.
+  let failure: string | null = null;
   try {
     writeRecord(callFile, call);
-  } catch {
-    // Without the record, the result of this call is not checked; the rules were still delivered.
+    if (callFile !== null && toolUseId !== null && sessionId !== null)
+      changePool(ctx.state, sessionId, (pool) => ({
+        pool: { open: [...pool.open, { id: toolUseId, type: subagentType, at: call.at }], groups: pool.groups },
+        value: undefined,
+      }));
+  } catch (e) {
+    failure = e instanceof Error ? e.message : String(e);
   }
+  // Without the record, the subagent's start finds no call, so it gets no rules, and its result is not checked.
+  const delivered = failure !== null && planned === 'at-start' ? 'nothing' : planned;
+  const messages = [
+    ...unplaced,
+    ...undeclaredMessages(decision, prediction, subagentType, ctx.file),
+    ...(failure !== null && planned === 'at-start' ? [`noonsight: noonsight could not record the call of subagent ${subagentType} (${failure}), so it gets no rules.`] : []),
+  ];
   return {
     record: {
       ...base,
@@ -178,9 +209,9 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       ...(prediction.definition !== undefined ? { definition: prediction.definition } : {}),
       ...(prediction.why !== undefined ? { unresolved_why: prediction.why } : {}),
       ...routing,
-      ...(prompt === null && decision.status === 'matched' ? { error: 'the call has no prompt' } : {}),
       delivered,
-      ...(rewritten ? { permission: config.subagents.permission } : {}),
+      ...(failure !== null ? { error: failure } : {}),
+      ...(specific !== null ? { permission: config.subagents.permission } : {}),
       warned: messages.length > 0,
     },
     messages,
@@ -188,19 +219,217 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
   };
 }
 
-/** The hookSpecificOutput for a call noonsight changed, with the permission decision the configuration asks for. */
-function changed(config: Config, updatedInput: Record<string, unknown>, routed: Record<string, unknown>, rules: boolean): Record<string, unknown> {
+/** The hookSpecificOutput for a call routing changed, with the permission decision the configuration asks for. */
+function changed(config: Config, updatedInput: Record<string, unknown>, routed: Record<string, unknown>): Record<string, unknown> {
   const permission = config.subagents.permission;
   const set = Object.entries(routed).map(([k, v]) => `${k} ${String(v)}`);
-  const what = [
-    ...(set.length > 0 ? [`set the subagent's ${set.join(' and ')} from its task scope`] : []),
-    ...(rules ? ["added the working rules for the subagent's model to the end of its task text"] : []),
-  ];
   return {
     hookEventName: 'PreToolUse',
-    ...(permission !== 'passthrough' ? { permissionDecision: permission, permissionDecisionReason: `noonsight ${what.join(', and ')}` } : {}),
+    ...(permission !== 'passthrough'
+      ? { permissionDecision: permission, permissionDecisionReason: `noonsight set the subagent's ${set.join(' and ')} from its task scope` }
+      : {}),
     updatedInput,
   };
+}
+
+/**
+ * How long an open call can wait for its subagent to start. A subagent starts within seconds of its
+ * call's hook, while a call denied after its hook ran never starts and no hook says so; until it is
+ * left out, a later start of its type cannot tell its own call from it.
+ */
+const OPEN_FOR_MS = 2 * 60 * 1000;
+/**
+ * How long before the newest open call of its type a call can have been made and still be its sibling.
+ * The calls of one response reach their hooks within moments of each other, so an open call made
+ * earlier than this came from an earlier response and was denied after its hook ran.
+ */
+const SIBLING_MS = 5000;
+/** How long a start that several open calls could own waits for a result to name it. */
+const LINK_WAIT_MS = 2000;
+const LINK_POLL_MS = 25;
+
+type Taken = { readonly match: StartMatch; readonly calls: readonly string[] } | null;
+type Decided = { readonly taken: NonNullable<Taken>; readonly given: Given } | null;
+
+/**
+ * SubagentStart: the rules for the subagent, from the call that started it. A resumed subagent gets
+ * the rules of its first start again; Claude Code adds them only when its context no longer holds them.
+ */
+export function subagentStart(input: Record<string, unknown>, config: Config, ctx: SubagentContext): SubagentOutcome | null {
+  const agentId = str(input.agent_id);
+  const type = str(input.agent_type);
+  const sessionId = str(input.session_id);
+  const startFile = agentStartFile(ctx.state, agentId);
+  if (agentId === null || type === null || sessionId === null || startFile === null || config.subagents.delivery === 'off') return null;
+
+  const earlier = readAgentStart(startFile);
+  if (earlier !== null)
+    return {
+      record: { agent_type: type, start_match: 'resumed', delivered: earlier.text !== null ? 'already-delivered' : 'nothing', warned: false },
+      messages: [],
+      specific: earlier.text !== null ? startContext(earlier.text) : null,
+    };
+
+  const now = ctx.now.getTime();
+  const linkFile = agentLinkFile(ctx.state, agentId);
+  // Decides under the pool's lock, and records the start there too, so that a result of the same call,
+  // running at the same time, sees either the start or nothing of it.
+  const decide = (final: boolean): Decided | 'wait' =>
+    changePool<Decided | 'wait'>(ctx.state, sessionId, (found) => {
+      const pool = current(found, now);
+      const link = readAgentLink(linkFile);
+      let taken: Taken | 'wait';
+      const candidates = pool.open.filter((c) => c.type === type);
+      let next: Pool = pool;
+      if (link !== null) {
+        taken = { match: 'result', calls: [link.call] };
+        next = without(pool, link.call);
+      } else if (candidates.length === 0) taken = null;
+      else if (candidates.length === 1) {
+        const only = candidates[0]?.id as string;
+        taken = { match: 'single', calls: [only] };
+        next = without(pool, only);
+      } else if (!final) taken = 'wait';
+      else {
+        taken = { match: 'shared', calls: candidates.map((c) => c.id) };
+        next = withShared(pool, taken.calls);
+      }
+      // Nothing taken: the pool stays as recorded; calls too old to start are left out when it is read.
+      if (taken === null || taken === 'wait') return { pool: null, value: taken };
+      const given = startText(config, taken, ctx.state);
+      writeRecord(startFile, {
+        session_id: sessionId,
+        subagent_type: type,
+        match: taken.match,
+        calls: taken.calls,
+        text: given.text,
+        at: ctx.now.toISOString(),
+      } satisfies AgentStart);
+      // The result of a call that named this subagent has already been checked.
+      if (link !== null) {
+        removeRecord(agentCallFile(ctx.state, link.call));
+        removeRecord(linkFile);
+      }
+      return { pool: next, value: { taken, given } };
+    });
+
+  let decided = decide(false);
+  for (const until = Date.now() + LINK_WAIT_MS; decided === 'wait' && Date.now() < until; ) {
+    pause(LINK_POLL_MS);
+    decided = decide(false);
+  }
+  if (decided === 'wait') decided = decide(true);
+  // No call of this type is open: a subagent noonsight did not see start, such as a teammate.
+  if (decided === null || decided === 'wait') return null;
+
+  const { taken, given } = decided;
+  return {
+    record: {
+      agent_type: type,
+      start_match: taken.match,
+      ...(taken.match === 'shared' ? { calls: taken.calls } : { call_id: taken.calls[0] ?? null }),
+      ...given.fields,
+      delivered: given.text !== null ? 'rules' : given.delivered,
+      warned: false,
+    },
+    messages: [],
+    specific: given.text !== null ? startContext(given.text) : null,
+  };
+}
+
+function startContext(text: string): Record<string, unknown> {
+  return { hookEventName: 'SubagentStart', additionalContext: text };
+}
+
+interface Given {
+  readonly text: string | null;
+  /** What the log records about the rules given. */
+  readonly fields: Record<string, unknown>;
+  /** The delivered value when no rules are given. */
+  readonly delivered: 'nothing' | 'already-delivered';
+}
+
+/**
+ * The rules a start gives. A start matched with one call gives that call's rules. A shared start gives
+ * what every call it could have been would give: their rules when all are the same; when they are for
+ * one model but differ by scope, that model's rules for every scope, which each of them holds; and
+ * otherwise nothing, so a subagent never gets rules chosen for another subagent.
+ */
+function startText(config: Config, taken: NonNullable<Taken>, state: string): Given {
+  const calls = taken.calls.map((id) => readAgentCall(agentCallFile(state, id)));
+  const give = (c: AgentCall | null): string | null => (c !== null && c.delivered === 'at-start' && c.text !== undefined ? c.text : null);
+  if (taken.match !== 'shared') {
+    const c = calls[0] ?? null;
+    if (c === null) return { text: null, fields: { error: 'the record of the call is missing' }, delivered: 'nothing' };
+    return {
+      text: give(c),
+      fields: {
+        model: c.predicted,
+        status: c.status,
+        ...(c.rules !== undefined ? { rules: c.rules, sha256: c.sha256 } : {}),
+        scope: c.scope ?? null,
+        place: 'subagent',
+      },
+      delivered: c.delivered === 'already-delivered' ? 'already-delivered' : 'nothing',
+    };
+  }
+  const texts = calls.map(give);
+  const first = calls[0] ?? null;
+  if (first !== null && calls.every((c) => c !== null && give(c) === give(first)) && texts[0] !== null)
+    return {
+      text: texts[0] ?? null,
+      fields: { model: first.predicted, status: first.status, rules: first.rules, sha256: first.sha256, scope: first.scope ?? null, place: 'subagent' },
+      delivered: 'nothing',
+    };
+  const models = new Set(calls.map((c) => c?.predicted ?? null));
+  const model = models.size === 1 ? ([...models][0] ?? null) : null;
+  if (model !== null && texts.every((t) => t !== null)) {
+    const common = resolve(config, { model, scope: null, place: 'subagent' });
+    if (common.status === 'matched')
+      return { text: common.text, fields: { ...decisionFields(common), shared_rules: 'every-scope' }, delivered: 'nothing' };
+  }
+  const lost = texts.some((t) => t !== null);
+  return { text: null, fields: { model, place: 'subagent', ...(lost ? { reason: 'calls-differ' } : {}) }, delivered: 'nothing' };
+}
+
+/**
+ * The pool without the calls that can no longer start: those past the open window, and those made well
+ * before the newest open call of their type. A shared group that loses a call this way is dropped with
+ * the starts it counted, so a leftover count never settles a later call.
+ */
+function current(pool: Pool, now: number): Pool {
+  const newest = new Map<string, number>();
+  for (const c of pool.open) newest.set(c.type, Math.max(newest.get(c.type) ?? Number.NEGATIVE_INFINITY, Date.parse(c.at)));
+  const live = (c: OpenCall): boolean => now - Date.parse(c.at) < OPEN_FOR_MS && (newest.get(c.type) ?? 0) - Date.parse(c.at) <= SIBLING_MS;
+  const dropped = new Set(pool.open.filter((c) => !live(c)).map((c) => c.id));
+  return settled({ open: pool.open.filter(live), groups: pool.groups.filter((g) => !g.calls.some((id) => dropped.has(id))) });
+}
+
+/** When a group counts as many started subagents as it has open calls, all of them have started. */
+function settled(pool: Pool): Pool {
+  let open = pool.open;
+  const groups: SharedGroup[] = [];
+  for (const g of pool.groups) {
+    const members = g.calls.filter((id) => open.some((c) => c.id === id));
+    if (g.started >= members.length) open = open.filter((c) => !members.includes(c.id));
+    else if (g.started > 0) groups.push({ calls: members, started: g.started });
+  }
+  return { open, groups };
+}
+
+function without(pool: Pool, id: string): Pool {
+  return settled({ open: pool.open.filter((c) => c.id !== id), groups: pool.groups });
+}
+
+/** The pool after a shared start among the given calls, counted in one group with any group it overlaps. */
+function withShared(pool: Pool, calls: readonly string[]): Pool {
+  const overlaps = (g: SharedGroup): boolean => g.calls.some((id) => calls.includes(id));
+  const merged = pool.groups.filter(overlaps);
+  const group: SharedGroup = {
+    calls: [...new Set([...calls, ...merged.flatMap((g) => g.calls)])],
+    started: merged.reduce((n, g) => n + g.started, 0) + 1,
+  };
+  return settled({ open: pool.open, groups: [...pool.groups.filter((g) => !overlaps(g)), group] });
 }
 
 export function agentResult(input: Record<string, unknown>, config: Config, ctx: SubagentContext): SubagentOutcome | null {
@@ -216,16 +445,37 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
     }
   }
 
-  const callFile = agentCallFile(ctx.state, str(input.tool_use_id));
+  const toolUseId = str(input.tool_use_id);
+  const callFile = agentCallFile(ctx.state, toolUseId);
   const call = readAgentCall(callFile);
   // No prediction to check: noonsight did not see the call start, or delivery is off.
   if (call === null) return null;
-  removeRecord(callFile);
+  const startFile = agentStartFile(ctx.state, subagentId);
+  const sessionId = str(input.session_id);
+  // The result names the subagent the call started. A start not seen yet finds its call by it; a
+  // shared start among this call's open calls now knows one more of them has started.
+  let start: AgentStart | null = readAgentStart(startFile);
+  let linked = false;
+  if (toolUseId !== null && sessionId !== null && subagentId !== null && startFile !== null)
+    ({ start, linked } = changePool(ctx.state, sessionId, (found) => {
+      const pool = current(found, ctx.now.getTime());
+      const seen = readAgentStart(startFile);
+      if (!pool.open.some((c) => c.id === toolUseId)) return { pool: null, value: { start: seen, linked: false } };
+      const groups =
+        seen?.match === 'shared' ? pool.groups.map((g) => (g.calls.includes(toolUseId) ? { calls: g.calls, started: g.started - 1 } : g)) : pool.groups;
+      if (seen === null) writeRecord(agentLinkFile(ctx.state, subagentId), { call: toolUseId, at: ctx.now.toISOString() });
+      return { pool: without({ open: pool.open, groups }, toolUseId), value: { start: seen, linked: seen === null } };
+    }));
+  // Kept for a start not seen yet, which reads the rules from it and then removes it.
+  if (!linked) removeRecord(callFile);
 
   const result = resolved === null ? 'unknown' : call.predicted === null ? 'unpredicted' : resolved === call.predicted ? 'match' : 'MISMATCH';
   const warn = result === 'MISMATCH' && config.subagents.onMismatch === 'warn';
   const usedModels = Array.isArray(r.modelsUsed) ? r.modelsUsed.filter((m): m is string => typeof m === 'string') : null;
-  const got = call.delivered === 'nothing' ? 'no rules' : `the rules for ${call.predicted}`;
+  // What the subagent's start gave it, once seen; before, what its call hands over. A call neither
+  // started nor still open, such as one past the open window, gave its subagent nothing.
+  const delivered = start !== null ? (start.text !== null ? 'rules' : 'nothing') : !linked && call.delivered === 'at-start' ? 'nothing' : call.delivered;
+  const got = delivered !== 'nothing' ? `the rules for ${call.predicted}` : 'no rules';
   return {
     record: {
       subagent_type: call.subagent_type,
@@ -234,7 +484,7 @@ export function agentResult(input: Record<string, unknown>, config: Config, ctx:
       model: resolved,
       ...(usedModels !== null ? { models_used: usedModels } : {}),
       result,
-      delivered: call.delivered,
+      delivered,
       ...(call.routing !== undefined ? { routing: call.routing } : {}),
       ...(call.routing_reason !== undefined ? { routing_reason: call.routing_reason } : {}),
       warned: warn,

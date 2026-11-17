@@ -1,7 +1,7 @@
 # The hooks
 
 noonsight gives each Claude Code session, and each subagent it starts, the rules for the model it actually runs on.
-Four hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, when the session's model changes; `PreToolUse` on the agent tool, before a subagent starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
+Five hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, when the session's model changes; `PreToolUse` on the agent tool, before a subagent starts, `SubagentStart`, as it starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
 [install.md](install.md) covers putting them in place; this page is the contract they keep.
 
 ## Rules every hook follows
@@ -10,11 +10,12 @@ Four hooks do it: `SessionStart`, when a session starts, and `PostModelSwitch`, 
   It always exits 0, reads only local files and never uses the network itself.
   It starts no other process, with two exceptions: on macOS, when nothing else names the session's model, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
+  A subagent's start waits at most two seconds more when several calls could have started it ([SubagentStart](#subagentstart-the-rules)).
 - **It never blocks anything.**
   An undeclared model, or a subagent whose model noonsight cannot tell, gets a warning, never a refusal; noonsight never denies a call.
 - **A configuration with any problem is refused whole.**
   The hook delivers nothing, warns the person, and logs `config-invalid`; `noonsight check` lists the problems.
-  The result of an agent call under a refused configuration is logged as `config-invalid` too, without a second warning.
+  The result of an agent call under a refused configuration is logged as `config-invalid` too, without a second warning, and its subagent's start does nothing.
 - **It decides from what Claude Code itself uses.**
   The model comes from the hook input Claude Code sends, from noonsight's own record of the same session or of the same Claude Code process, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
   The decision log names the source every time.
@@ -27,8 +28,8 @@ Nothing, or one JSON object with up to two fields:
 
 | Field | Reader | Content |
 | --- | --- | --- |
-| `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The session hooks: the rules, and on a model change, the note below |
-| `hookSpecificOutput.updatedInput`, `permissionDecision` | Claude Code | `PreToolUse`: the agent call with the rules at the end of its task text, and the permission decision the configuration asks for (see [Subagents](#subagents)) |
+| `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The session hooks: the rules, and on a model change, the note below. `SubagentStart`: the subagent's rules, at the start of its conversation |
+| `hookSpecificOutput.updatedInput`, `permissionDecision` | Claude Code | `PreToolUse`, only for a call routing changed: the agent call with its new `model` and `effort`, and the permission decision the configuration asks for (see [Routing](#routing)) |
 | `systemMessage` | The person, on screen | A warning: undeclared model, refused configuration, a subagent that started on another model than predicted, or a failed hook |
 
 The rules arrive wrapped in a short envelope that says where they came from, written as facts, as Claude Code's documentation asks for hook context:
@@ -110,12 +111,17 @@ The configuration keeps room for the note: the rules for any model, scope and pl
 
 A subagent does not see the session's conversation, so the rules delivered to the session never reach it ([What loads at startup](https://code.claude.com/docs/en/sub-agents)).
 And it can run on another model than the session.
-So before a subagent starts, noonsight adds the rules for the model it will run on to the end of its task text; after it starts, noonsight checks that it started on that model.
+So before a subagent starts, noonsight predicts the model it will run on; as it starts, noonsight gives it that model's rules; after it starts, noonsight checks that it started on that model.
 
-Both hooks run only for the agent tool: the entries match `Agent|Task`, its current and earlier names, and the hook checks the tool name again, so a widened matcher reaches no other tool.
+The rules reach the subagent through `SubagentStart`, never through a change to the agent call.
+In auto mode, Claude Code's classifier reviews the calls of a response as Claude wrote them, and when a hook changes one of them it gives no verdict for the others, which are then refused until Claude makes them again in a response of their own ([PreToolUse `updatedInput` in auto mode](https://code.claude.com/docs/en/hooks)).
+A call noonsight only gives rules to is left exactly as Claude wrote it.
+
+`PreToolUse` and `PostToolUse` run only for the agent tool: the entries match `Agent|Task`, its current and earlier names, and the hook checks the tool name again, so a widened matcher reaches no other tool.
 They also run for calls made inside a subagent, since Claude Code runs settings hooks there too; the input then carries the subagent's `agent_id`.
+`SubagentStart` runs for every subagent type.
 
-### PreToolUse: the rules go with the call
+### PreToolUse: the prediction
 
 1. noonsight predicts the model the subagent will run on, in Claude Code's own order ([Choose a model](https://code.claude.com/docs/en/sub-agents#choose-a-model)):
 
@@ -134,6 +140,7 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    Definitions are read from every `.claude/agents/` from the project directory (`CLAUDE_PROJECT_DIR`, else the input's `cwd`) up to the repository root, the closest first, then from `agents/` in the Claude Code configuration directory; both are scanned recursively, and a subagent is known by the `name` in its frontmatter.
    A definition of the same name replaces a built-in subagent.
    The built-in subagents ([Built-in subagents](https://code.claude.com/docs/en/sub-agents#built-in-subagents)): Explore runs on its parent's model, except that under a Fable parent it runs on the model the `opus` alias selects, unless Claude Code runs on Amazon Bedrock, Google Cloud or Microsoft Foundry; Explore and Plan ignore `CLAUDE_CODE_SUBAGENT_MODEL`; `statusline-setup` runs on Sonnet and `claude-code-guide` on Haiku.
+   `web-fetch`, which the documentation does not list, runs on the model the `haiku` alias selects, and on its parent's model on another provider than the Anthropic API, as its built-in definition in Claude Code 2.1.326 reads.
 2. The parent's model, for a call the session makes, comes from noonsight's record of the session, which `SessionStart` and `PostModelSwitch` keep current (`parent_source: session-record`); else from the session's transcript (`session-transcript`); else from the settings the session started with, as for `SessionStart`.
    For a call made inside a subagent, it comes from noonsight's record of that subagent, written when the result of the call that started it named its model, which happens at once for a subagent started in the background (`agent-record`); else from the model of that subagent's own transcript (`agent-transcript`).
    When neither knows, noonsight does not guess the session's model: the subagent gets no rules, and the person is warned.
@@ -141,21 +148,37 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    With `classifier.mode` on, the classifier may place a task instead, when the scope can change the subagent's rules or its route; a classification that fails, takes too long, or answers outside the declared scopes leaves the task with no scope, and the person is warned ([The classifier](configuration.md#the-classifier)).
 4. With routing on for subagents, the scope may set the call's `model` and `effort` ([Routing](#routing)); the prediction is then made again with the routed model.
    The rules are resolved for the scope, the place `subagent` and the model the subagent will run on.
-5. With rules to deliver, the hook returns the call with its `prompt` extended by a blank line and the rules, in the same envelope as the session's.
-   With routing off, that is the only change: noonsight never changes the model, the effort or any other field.
-   A task text that already holds the exact rules is left alone.
-6. With the changed call, it returns the permission decision `subagents.permission` names:
+5. The hook records the rules for the subagent's start, and puts the call among its session's calls whose subagent has not started yet.
+   A call whose task text already holds the exact rules gets none again (`delivered: "already-delivered"`).
+   When the record cannot be written, the subagent gets no rules, the person is warned, and the line records `error`; a call routing changed is still returned changed.
+6. It returns nothing for the call, unless routing changed its model or effort.
+7. An undeclared model warns the person, unless `on_undeclared` is `ignore`.
 
-   | Value | What Claude Code does |
-   | --- | --- |
-   | `allow` (default) | Runs the call without a permission prompt. Deny and ask rules still apply, and another hook's `deny` or `ask` still wins ([PreToolUse decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)) |
-   | `ask` | Asks the person to confirm each call noonsight changed |
-   | `passthrough` | No decision: the session's permission mode decides. In auto mode Claude Code can deny a call a hook changed, because its classifier reviewed the call as Claude wrote it |
+The prediction is written to `~/.local/state/noonsight/agent-calls/`, under the call's `tool_use_id`, and the session's open calls to `agent-pools/`.
 
-   A call noonsight does not change gets no decision at all.
-7. An undeclared model warns the person, unless `on_undeclared` is `ignore`; the call goes ahead unchanged.
+### SubagentStart: the rules
 
-The prediction is written to `~/.local/state/noonsight/agent-calls/`, under the call's `tool_use_id`.
+The input of `SubagentStart` names the subagent (`agent_id`) and its type (`agent_type`), but not the agent call that started it ([SubagentStart](https://code.claude.com/docs/en/hooks)).
+So noonsight finds the call among its session's open calls of that type:
+
+| `start_match` | When | What the subagent gets |
+| --- | --- | --- |
+| `single` | One call of the type is open | That call's rules |
+| `result` | The result of a call already named this subagent, as it does at once for a subagent run in the background | That call's rules |
+| `shared` | Several calls of the type are open, and no result names this subagent within two seconds | What every one of those calls would give: their rules when all are the same; when they are for one model and differ only by scope, that model's rules for every scope, which each of them holds (`shared_rules: "every-scope"`); otherwise none (`reason: "calls-differ"`) |
+| `resumed` | The same subagent started before, and resumes | The rules it was given then; Claude Code adds them only when its context no longer holds them |
+
+A shared start never gives a subagent rules chosen for another subagent.
+The subagents of one response's calls of a type start in no fixed order, even though their calls reach the hook in order (seen on Claude Code 2.1.326), so the order of the calls cannot tell them apart.
+Several calls of one response run at the same time, so the hooks of their calls, starts and results interleave in any order; the session's open calls are changed under a lock, one hook at a time.
+A start that matches no open call, such as an agent team teammate's, gets nothing and leaves no log line.
+A call whose subagent never starts, because something denied it after the hook ran, stays open for 2 minutes, since no hook says it was denied.
+A subagent starts within seconds of its call's hook, so 2 minutes leaves a wide margin.
+Sooner than that, an open call made more than 5 seconds before the newest open call of its type is left out: the calls of one response reach the hook within moments of each other, so it came from an earlier response and was denied, and a later call's subagent still gets its own rules.
+A call that waits longer than that to start, such as one held on a permission prompt, is no longer open when its subagent starts, which then gets no rules.
+
+The rules arrive as `additionalContext`, in the same envelope as the session's, at the start of the subagent's conversation, before its task.
+The start is recorded in `~/.local/state/noonsight/agent-starts/`, under the subagent's id.
 
 ### PostToolUse: the check
 
@@ -169,10 +192,12 @@ noonsight compares it with the prediction for the same `tool_use_id` and logs th
 | `unpredicted` | noonsight could not tell the model before the start, and already warned then |
 | `unknown` | The result names no model |
 
-The rules already delivered stay in the subagent's task; the check can only report.
+The rules already given stay in the subagent's context; the check can only report.
 The line also repeats the `routing` and `routing_reason` recorded for the call.
 `models_used`, when Claude Code reports it, lists the models a subagent switched between while it ran.
 The result also records the subagent's model under its agent id, in `~/.local/state/noonsight/agents/`, for the calls that subagent makes in turn.
+When the subagent's start has not been seen yet, it records which call started it, in `agent-links/`, so the start finds its own call.
+The line's `delivered` says what the subagent's start gave it (`rules` or `nothing`), or `at-start` when the start comes after the result; a call no longer open when its subagent started, which gave it nothing, records `nothing`.
 
 ### Routing
 
@@ -182,18 +207,31 @@ With `routing.enabled` and the target `subagents` ([Routing](configuration.md#ro
    When that model is fixed (a fork, or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`), or chosen by the caller under `routing.respect_explicit` (the call's `model`, the definition's `model`, a built-in subagent's own model, or a plugin's definition, which noonsight does not read), the call keeps its model.
 2. Otherwise the scope's row, else `routing.default`, gives the options, and the first whose model is declared wins.
    The hook sets the call's `model` to the option's alias and, when the option gives one, its `effort`; an effort the call or its definition already sets is kept under `respect_explicit`.
-3. The changed call is returned with the permission decision `subagents.permission` names, and its reason says what noonsight set.
+3. The changed call is returned with the permission decision `subagents.permission` names, and its reason says what noonsight set:
+
+   | Value | What Claude Code does |
+   | --- | --- |
+   | `allow` (default) | Runs the call without a permission prompt. Deny and ask rules still apply, and another hook's `deny` or `ask` still wins ([PreToolUse decision control](https://code.claude.com/docs/en/hooks#pretooluse-decision-control)) |
+   | `ask` | Asks the person to confirm each call routing changed |
+   | `passthrough` | No decision: the session's permission mode decides. In auto mode Claude Code can deny the changed call, because its classifier reviewed the call as Claude wrote it |
+
+   The rules still reach the subagent at its start.
    With `subagents.delivery` set to `off`, a routed call still gets its model and effort, and no rules.
+
+A routed call is the one call noonsight changes, and in auto mode a changed call costs the other calls of its response their review: they are refused, and Claude makes them again in a response of their own.
+With routing on for subagents in auto mode, that happens whenever a call is routed, and only then; a call routing yields on, or leaves on its model, is not changed.
 
 The check after the start compares the model the subagent started on with the routed model, so a route that Claude Code did not follow, such as one an installed mod replaced, shows as `MISMATCH`.
 Claude Code applies the call's `effort` only from version 2.1.292 ([Choose an effort level](https://code.claude.com/docs/en/sub-agents)), and `CLAUDE_CODE_EFFORT_LEVEL` wins over it.
 
 ### What the prediction does not see
 
-- The definitions of a plugin's subagents (`plugin:name`), the subagents given with `--agents`, and managed subagent definitions are not read.
+- The definitions of a plugin's subagents (`plugin:name`) are not read.
   Such a subagent is predicted on its parent's model, logged with `definition: "not-read"`, and the check reports a difference.
 - An installed mod that sets the model in its `agent.spawn` hook replaces the call's parameter; the check reports a difference.
 - Subagents that do not start through the agent tool, such as agent team teammates and workflow agents, get nothing from these hooks.
+- The subagents given with `--agents` and managed subagent definitions are not read.
+  Such a subagent is predicted like `general-purpose`, on `CLAUDE_CODE_SUBAGENT_MODEL`, else its parent's model, and the check reports a difference.
 
 ## The decision log
 
@@ -201,7 +239,9 @@ Every decision adds one JSON line to `~/.local/state/noonsight/decisions.jsonl`,
 Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a new log starts.
 
 `noonsight report` reads both files and prints, for each rule, how often it was delivered and to which models, scopes, places and events, with the length of its text; then the rules on in the configuration that the log never shows delivered, and the decisions that delivered no rules, by why.
+When the classifier acted, it also prints a classifier section: the tasks it was meant to place, by result, and for the classifications that ran, their median and longest time and the cost Claude Code reported.
 A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-prompt`; a session start that found the rules already in the launcher's system prompt (`launcher`) is counted once, under `launch`.
+A subagent's rules are counted once, on its `subagent-start` line; its `agent-call` line hands them over (`at-start`) and is not counted.
 `--log <file>` reads another log, such as one copied from another machine (a file it cannot read is a usage error), and `--json` prints the same as JSON.
 
 ```json
@@ -210,15 +250,16 @@ A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-promp
 
 | Field | Values |
 | --- | --- |
-| `event` | `session-start`, `model-switch`, `agent-call` (`PreToolUse`), `agent-result` (`PostToolUse`), and `launch` for `noonsight run` ([launcher.md](launcher.md#the-decision-log)) |
+| `event` | `session-start`, `model-switch`, `agent-call` (`PreToolUse`), `subagent-start` (`SubagentStart`), `agent-result` (`PostToolUse`), and `launch` for `noonsight run` ([launcher.md](launcher.md#the-decision-log)) |
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
 | `tool_name`, `tool_use_id`, `permission_mode` | For the subagent events: the agent tool's name, the call's id and the session's permission mode |
-| `agent_id` | For a call made inside a subagent: that subagent's id |
+| `agent_id` | For a call made inside a subagent: that subagent's id. For `subagent-start`: the subagent that started |
+| `agent_type`, `start_match`, `call_id`, `calls`, `shared_rules` | For `subagent-start`: the subagent's type; how its call was found (`single`, `result`, `shared`, `resumed`, see [SubagentStart](#subagentstart-the-rules)); the call's `tool_use_id`, or for a shared start the calls it could have been; and `every-scope` when a shared start gave the rules for every scope |
 | `subagent_type`, `requested_model` | The call's subagent type (`general-purpose` when it names none) and `model` parameter |
 | `parent_model`, `parent_source` | The model of whoever made the call, and where it came from (see [Subagents](#subagents)) |
 | `model_value`, `definition`, `unresolved_why` | What the prediction's source named, the definition file that decided, and why a model could not be told |
 | `requested_effort` | For an agent call: the call's own `effort` parameter, when it sets one |
-| `permission` | For a call noonsight changed: the permission decision returned |
+| `permission` | For a call routing changed: the permission decision returned |
 | `routing`, `routing_reason` | For `launch`, `agent-call` and `agent-result` lines: what routing did (`off`, `yielded`, `inherit`, `routed`) and why ([Routing](configuration.md#when-routing-yields)). A line for a refused configuration or a failed hook records `off` with `config-invalid` or `error` |
 | `routing_env` | For a route that yielded to the environment: the variable |
 | `route_model`, `route_value`, `route_effort`, `route_option` | For a routed task: the model the route selects, what noonsight passed (an alias for a subagent), the effort it set, and the position of the chosen option in its row |
@@ -241,13 +282,13 @@ A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-promp
 | `matcher_scope` | With `classifier.mode` set to `always`: the scope a matcher had chosen before the classifier decided |
 | `unattended_env` | For a session in the place `unattended`: the variable that put it there |
 | `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
-| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`; `launcher` for a session start that found the rules in the system prompt `noonsight run` gave; `system-prompt` for a launch that added them; and for a subagent with `subagents.delivery` set to `off`, `off` |
+| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`; `launcher` for a session start that found the rules in the system prompt `noonsight run` gave; `system-prompt` for a launch that added them; `at-start` for an agent call whose rules its subagent's start gives; and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `launch_file`, `launch_model` | For a session start under `noonsight run` with rules in the system prompt: the launcher's file, and the model its rules are for |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |
 
 What each session last received is kept in `~/.local/state/noonsight/sessions/` and `processes/`, one small file per session id and per Claude Code process; files nobody wrote for 30 days are removed, and so are the system prompt files of `noonsight run` in `launch/`.
-The subagent records in `agent-calls/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
+The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-links/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
 
 ## Turning noonsight off
 
@@ -255,7 +296,7 @@ The subagent records in `agent-calls/` and `agents/` are removed after 7 days; a
 | --- | --- |
 | `NOONSIGHT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line. The classifier's own session runs with it, so noonsight's hooks never act there |
 | `NOONSIGHT_ROUTING=off` in the environment that starts Claude Code or `noonsight run` | Routing only, for that session and its subagents; the rules are still delivered |
-| `"subagents": { "delivery": "off" }` in the configuration | Subagents only: calls are left alone and their results are not checked; each call still gets a log line |
+| `"subagents": { "delivery": "off" }` in the configuration | Subagents only: they get no rules, calls are left alone unless routing changes them, and their results are not checked; each call still gets a log line |
 | No configuration file for the account | Every session of that account, silently |
 | `noonsight uninstall` | Every new session reached by that install |
 

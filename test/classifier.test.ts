@@ -111,6 +111,13 @@ if (how.startsWith('answer:')) {
 
 const agentCalls = (h: HookHome): Record<string, any>[] => h.log().filter((l) => l.event === 'agent-call');
 
+/** The rules the subagent of the recorded call receives when it starts. */
+function rulesAtStart(h: HookHome): string {
+  const recorded = JSON.parse(hookInput('pre-tool-use-agent')) as { session_id: string; tool_use_id: string };
+  const r = h.hook('subagent-start', hookInput('subagent-start', { session_id: recorded.session_id, agent_id: `a-${recorded.tool_use_id}` }));
+  return r.out?.hookSpecificOutput?.additionalContext ?? '';
+}
+
 // ---------------------------------------------------------------------------------------------
 // Settings.
 
@@ -211,7 +218,8 @@ test('fallback: a task no matcher placed takes the classifier\'s scope, and gets
   const expected = resolve(load(h.env.NOONSIGHT_CONFIG ?? ''), { model: 'claude-haiku-5-5', scope: 'summarize', place: 'subagent' });
   assert.equal(expected.status, 'matched');
   assert.ok(expected.status === 'matched' && expected.rules.includes('user/haiku-summarize'));
-  assert.ok(r.out?.hookSpecificOutput.updatedInput.prompt.endsWith(expected.status === 'matched' ? expected.text : '?'));
+  assert.equal(r.raw, '', 'the call itself is not changed');
+  assert.equal(rulesAtStart(h), expected.status === 'matched' ? expected.text : '?');
   const [line] = agentCalls(h);
   assert.equal(line?.scope, 'summarize');
   assert.equal(line?.scope_source, 'classifier');
@@ -291,9 +299,9 @@ test('a classifier that fails or answers outside the scopes: no scope, the reaso
     assert.match(String(line?.classifier_error), error, behavior);
     assert.equal(line?.warned, true, behavior);
     assert.match(String(r.out?.systemMessage), /^noonsight: the classifier could not place the task of subagent general-purpose \(.+\), so it has no scope\.$/, behavior);
-    // The rules for no scope still go with the call.
+    // The rules for no scope still reach the subagent.
     const general = resolve(load(h.env.NOONSIGHT_CONFIG ?? ''), { model: 'claude-haiku-5-5', scope: null, place: 'subagent' });
-    assert.ok(general.status === 'matched' && r.out?.hookSpecificOutput.updatedInput.prompt.endsWith(general.text), behavior);
+    assert.ok(general.status === 'matched' && rulesAtStart(h) === general.text, behavior);
   }
 });
 

@@ -11,7 +11,7 @@ Take a fix before you set the course: pick the right model for each agent task, 
 
 **Status: early development.** Nothing is published yet.
 Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
-So does each subagent a session starts: before it starts, noonsight predicts the model it will run on and adds that model's rules to the end of its task, then checks the model it actually started on and warns on a difference.
+So does each subagent a session starts: before it starts, noonsight predicts the model it will run on, hands it that model's rules as it starts, without changing the call that started it, then checks the model it actually started on and warns on a difference.
 Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `NOONSIGHT_SCOPE`, a subagent from matchers run over its task, and `noonsight check` reports scopes that overlap.
 `noonsight run` starts Claude Code with the rules in the system prompt instead, for sessions the hooks do not reach; with the hooks installed too, the rules still arrive once.
 Routing is optional and off by default: once turned on, a task's scope picks the model and effort for a session `noonsight run` starts and for each subagent, from a table of preferences, and it yields to a model the caller chose and to an orchestrator's environment ([docs/configuration.md](docs/configuration.md#routing)).

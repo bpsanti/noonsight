@@ -131,11 +131,16 @@ function quote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-/** The claude options every session shares: the lab's hooks, none of the person's own settings files. Sonnet unless `extra` names a --model. */
+/**
+ * The claude options every session shares: the lab's hooks, none of the person's own settings files.
+ * Sonnet unless `extra` names a --model, and the default permission mode unless it names a
+ * --permission-mode: in auto mode a classifier reviews each tool call, so a case that is not about
+ * auto mode would depend on its verdicts.
+ */
 export function claudeArgs(l: Lab, extra: readonly string[] = []): string[] {
   const model = extra.includes('--model') ? [] : ['--model', 'sonnet'];
-  // A fixed permission mode: in auto mode a classifier reviews each agent call noonsight leaves unchanged.
-  return [...model, '--permission-mode', 'default', '--setting-sources', 'project,local', '--settings', l.settings, '--allowedTools', 'Agent', ...extra];
+  const mode = extra.includes('--permission-mode') ? [] : ['--permission-mode', 'default'];
+  return [...model, ...mode, '--setting-sources', 'project,local', '--settings', l.settings, '--allowedTools', 'Agent', ...extra];
 }
 
 export interface PrintRun {
@@ -158,7 +163,8 @@ export function print(l: Lab, prompt: string, extra: readonly string[] = [], env
     .split('\n')
     .filter((line) => line.startsWith('{'))
     .map((line) => JSON.parse(line) as Record<string, any>);
-  const result = String(stream.filter((e) => e.type === 'result').at(-1)?.result ?? '');
+  // A session whose subagent ran in the background can end with an empty result after the answer.
+  const result = String(stream.filter((e) => e.type === 'result' && e.result !== '').at(-1)?.result ?? '');
   fs.writeFileSync(path.join(l.root, 'stream.jsonl'), r.stdout);
   return { status: r.status, result, stream };
 }

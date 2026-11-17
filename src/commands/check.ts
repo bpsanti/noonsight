@@ -53,7 +53,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     add(
       'ok',
       `config ${file}: valid (${config.exact.size + config.wildcards.length} model entries; subagents: ` +
-        (sub.delivery === 'off' ? 'off' : `rules in the task text, permission ${sub.permission}, on mismatch ${sub.onMismatch}`) +
+        (sub.delivery === 'off' ? 'off' : `rules when each subagent starts, permission ${sub.permission} for a routed call, on mismatch ${sub.onMismatch}`) +
         ')',
     );
     checkScopes(config, env, add);

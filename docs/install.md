@@ -1,6 +1,6 @@
 # Installing the hooks
 
-noonsight reaches Claude Code through four official settings hooks: `SessionStart` and `PostModelSwitch` for the session itself, and `PreToolUse` and `PostToolUse` on the agent tool for the subagents it starts.
+noonsight reaches Claude Code through five official settings hooks: `SessionStart` and `PostModelSwitch` for the session itself, and `PreToolUse` and `PostToolUse` on the agent tool and `SubagentStart` for the subagents it starts.
 `noonsight install` puts them in place, `noonsight uninstall` takes them out, and `noonsight check` says whether they will run.
 [hooks.md](hooks.md) describes what the hooks do once they run.
 
@@ -208,7 +208,8 @@ They call `noonsight-hook`, a small shell script that runs the Node.js and the c
 }
 ```
 
-`PostModelSwitch` runs it with `model-switch`, and `PostToolUse`, with the same matcher, with `agent-result`.
+`PostModelSwitch` runs it with `model-switch`, `SubagentStart`, with no matcher, with `subagent-start`, and `PostToolUse`, with the same matcher as `PreToolUse`, with `agent-result`.
+An install made before noonsight used `SubagentStart` lacks that entry, so its subagents get no rules; `noonsight check` reports it, and running `noonsight install` again adds it.
 
 So the hook does not depend on the `PATH` of whatever started Claude Code, and installing a new copy of noonsight rewrites only the pointer, never a settings file.
 If the copy it points at is removed, the pointer exits quietly and `noonsight check` reports it.

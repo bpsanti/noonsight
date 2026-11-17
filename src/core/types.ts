@@ -45,9 +45,9 @@ export interface WildcardKey {
 
 /** How subagents get their rules; the keys under "subagents" in the configuration. */
 export interface SubagentSettings {
-  /** prompt: the rules go at the end of the subagent's task text. off: subagents are left alone. */
+  /** prompt: each subagent gets the rules for its model when it starts. off: subagents are left alone. */
   readonly delivery: 'prompt' | 'off';
-  /** The permission decision returned with a rewritten call; passthrough returns none. */
+  /** The permission decision returned with a call routing changed; passthrough returns none. */
   readonly permission: 'allow' | 'ask' | 'passthrough';
   /** What to do when a subagent starts on another model than the one its rules were chosen for. */
   readonly onMismatch: 'warn' | 'ignore';

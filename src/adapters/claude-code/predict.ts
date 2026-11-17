@@ -66,6 +66,13 @@ const BUILT_IN_MODELS: Readonly<Record<string, string>> = {
 /** Built-ins that run on their parent's model even when CLAUDE_CODE_SUBAGENT_MODEL is set. */
 const PARENT_BUILT_INS = new Set(['Explore', 'Plan']);
 
+/**
+ * The built-in web-fetch subagent, which the documentation does not list. Claude Code 2.1.326 gives it
+ * the model the haiku alias selects when it runs on the Anthropic API, and its parent's model on
+ * another provider, as its built-in definition reads.
+ */
+const WEB_FETCH = 'web-fetch';
+
 const FAMILIES = ['opus', 'sonnet', 'haiku', 'fable'] as const;
 
 export function predict(input: PredictInput): Prediction {
@@ -97,6 +104,7 @@ export function predict(input: PredictInput): Prediction {
   } else {
     if (type === 'Explore') return explore(parent, env);
     if (PARENT_BUILT_INS.has(type)) return fromParent(parent, 'built-in');
+    if (type === WEB_FETCH) return otherProvider(env) !== undefined ? fromParent(parent, 'built-in') : fromValue('haiku', parent, env, 'built-in');
     const builtIn = BUILT_IN_MODELS[type];
     if (builtIn !== undefined) return fromValue(builtIn, parent, env, 'built-in');
   }

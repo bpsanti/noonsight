@@ -69,6 +69,9 @@ export function pruneState(stateDir: string, now: number): void {
     // The system prompt files of `noonsight run`, which every launch writes again.
     ['launch', MAX_AGE_MS],
     ['agent-calls', AGENT_MAX_AGE_MS],
+    ['agent-pools', AGENT_MAX_AGE_MS],
+    ['agent-starts', AGENT_MAX_AGE_MS],
+    ['agent-links', AGENT_MAX_AGE_MS],
     ['agents', AGENT_MAX_AGE_MS],
   ] as const) {
     const dir = path.join(stateDir, sub);

@@ -96,8 +96,19 @@ test('live, login: matchers: two subagents on the same model, whose tasks fall i
       .map((d) => [d.model, d.scope, d.scope_source, d.place, d.delivered])
       .sort(),
     [
-      ['claude-sonnet-5-5', 'investigate', 'task-text', 'subagent', 'rules'],
-      ['claude-sonnet-5-5', 'summarize', 'task-text', 'subagent', 'rules'],
+      ['claude-sonnet-5-5', 'investigate', 'task-text', 'subagent', 'at-start'],
+      ['claude-sonnet-5-5', 'summarize', 'task-text', 'subagent', 'at-start'],
+    ],
+  );
+  // Two calls of one type at once: each start found its own call, so each got its own scope's rules.
+  assert.deepEqual(
+    l.log()
+      .filter((d) => d.event === 'subagent-start')
+      .map((d) => [d.scope, d.delivered])
+      .sort(),
+    [
+      ['investigate', 'rules'],
+      ['summarize', 'rules'],
     ],
   );
 });

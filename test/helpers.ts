@@ -70,9 +70,12 @@ export function fakeClaude(version: string): string {
   return bin;
 }
 
+/** The Claude Code version each recorded hook input comes from, when it is not 2.1.325. */
+const INPUT_VERSIONS: Readonly<Record<string, string>> = { 'subagent-start': '2.1.326' };
+
 /** A recorded or documented Claude Code hook input, with fields replaced as given. */
 export function hookInput(name: string, fields: Record<string, unknown> = {}): string {
-  const file = path.join(FIXTURES, 'hook-inputs', '2.1.325', `${name}.json`);
+  const file = path.join(FIXTURES, 'hook-inputs', INPUT_VERSIONS[name] ?? '2.1.325', `${name}.json`);
   return JSON.stringify({ ...(JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>), ...fields });
 }
 

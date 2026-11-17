@@ -76,8 +76,8 @@ The preset also suggests a routing table, which applies only when the user turns
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
 | `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches all six probe texts is refused; see [Scopes](#scopes). |
 | `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
-| `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: before a subagent starts, the rules for the model it will run on go at the end of its task text. `off`: subagents are left alone. |
-| `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose task text noonsight changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. |
+| `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: each subagent receives the rules for the model it will run on as it starts, without any change to the call that starts it ([hooks.md](hooks.md#subagents)). `off`: subagents are left alone. |
+| `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose model or effort routing changed; a call routing leaves alone is never changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. In auto mode a changed call also costs the other calls of the same response their review ([hooks.md](hooks.md#routing)). |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
 | `routing.enabled` | `true`, `false` | `false` | Turns routing on. With `false`, noonsight only delivers rules and never changes a model or an effort. See [Routing](#routing). |
 | `routing.targets` | `launcher`, `subagents` | Both | Where routing acts: `noonsight run`, the agent call hook, or both. |
@@ -184,7 +184,7 @@ An explicit scope, from `NOONSIGHT_SCOPE` or `noonsight run --scope`, is never r
 
 ### Where it acts
 
-- **The agent call hook**, for a subagent: it reads the call's `description` and `prompt`, the same text the matchers read ([hooks.md](hooks.md#pretooluse-the-rules-go-with-the-call)).
+- **The agent call hook**, for a subagent: it reads the call's `description` and `prompt`, the same text the matchers read ([hooks.md](hooks.md#pretooluse-the-prediction)).
 - **`noonsight run`**, for a session: it reads `--task`, or the prompt right after `-p`, and passes the scope to the session as `NOONSIGHT_SCOPE` ([launcher.md](launcher.md#what-it-adds)).
 
 A session started without `noonsight run` has no task text when it starts, so its scope still comes from `NOONSIGHT_SCOPE` alone.
@@ -307,7 +307,7 @@ Routing leaves a task as it is, and says why in the decision log, in each of the
 | A variable of `routing.yield_when_env` is set and not empty | `yielded` | `yield-env`, with the variable in `routing_env` |
 | The call names its model, under `respect_explicit`: `--model` on the claude command line, or the `model` parameter of an agent call | `yielded` | `explicit-model` |
 | The subagent's definition sets `model`, under `respect_explicit` | `yielded` | `definition-model` |
-| A built-in subagent with its own model rule (Explore, Plan, `statusline-setup`, `claude-code-guide`), under `respect_explicit` | `yielded` | `built-in-model` |
+| A built-in subagent with its own model rule (Explore, Plan, `statusline-setup`, `claude-code-guide`, `web-fetch`), under `respect_explicit` | `yielded` | `built-in-model` |
 | A plugin's subagent, whose definition noonsight does not read, under `respect_explicit` | `yielded` | `plugin-definition` |
 | A fork, which always runs on its parent's model | `yielded` | `fork` |
 | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, under which Claude Code ignores the call's model | `yielded` | `model-forced` |

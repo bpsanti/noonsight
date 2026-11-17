@@ -1,6 +1,6 @@
 {
   "name": "noonsight",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Hand every Claude Code session and subagent the rules for the model it actually runs on.",
   "license": "MIT",

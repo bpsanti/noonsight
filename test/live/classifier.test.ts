@@ -107,12 +107,13 @@ test('live, login: classifier-subagent: the classifier places a subagent\'s task
   assert.deepEqual(more, []);
   assert.deepEqual(
     [call?.model, call?.scope, call?.scope_source, call?.classifier, call?.rules, call?.delivered],
-    ['claude-sonnet-5-5', 'digest', 'classifier', 'scoped', ['live/all', 'live/digest'], 'rules'],
+    ['claude-sonnet-5-5', 'digest', 'classifier', 'scoped', ['live/all', 'live/digest'], 'at-start'],
   );
   // Every line comes from the lab's session: none from the classifier's.
+  // A subagent run in the background can have its result logged before its start.
   assert.deepEqual(
-    l.log().map((d) => d.event),
-    ['session-start', 'agent-call', 'agent-result'],
+    l.log().map((d) => d.event).sort(),
+    ['agent-call', 'agent-result', 'session-start', 'subagent-start'],
   );
   assert.equal(new Set(l.log().map((d) => d.session_id)).size, 1);
 });
