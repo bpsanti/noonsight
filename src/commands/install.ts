@@ -89,7 +89,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
         } catch (e) {
           if (!isPermissionError(e)) throw e;
           io.err(
-            `noonsight: this account cannot write ${(e as NodeJS.ErrnoException).path ?? file}, so the configuration file ${file} was not written. Nothing was changed. ` +
+            `noonsight: this account cannot write ${(e as NodeJS.ErrnoException).path ?? file}, so the configuration file ${file} was not written, and no hook was written either. ` +
               'Make that directory writable, or set NOONSIGHT_CONFIG to a file this account can write, then run `noonsight install` again.',
           );
           return 1;

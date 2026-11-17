@@ -307,7 +307,7 @@ test('a configuration this account cannot write: install says which path, change
     const r = runCli(['install', '--account', claudeDir], { HOME: home, NOONSIGHT_CONFIG: config });
     assert.equal(r.status, 1, r.stdout + r.stderr);
     assert.ok(r.stderr.includes(`noonsight: this account cannot write ${path.join(locked, 'noonsight')}`), r.stderr);
-    assert.match(r.stderr, /Nothing was changed\./);
+    assert.match(r.stderr, /no hook was written either\./);
     assert.doesNotMatch(r.stderr, /\n {4}at /, 'no stack trace');
     assert.equal(fs.existsSync(config), false);
     assert.deepEqual(fs.readdirSync(claudeDir), [], 'no hooks were written');
