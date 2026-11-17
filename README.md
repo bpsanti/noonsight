@@ -7,6 +7,8 @@
 
 # noonsight
 
+**Every model has its own north.**
+
 Take a fix before you set the course: pick the right model for each agent task, and hand every agent the practices that fit the model it actually runs on.
 
 **Status: early development.** Nothing is published yet.
