@@ -39,6 +39,8 @@ export interface Rule {
   /** The triggers that also deliver the rule to a session whose scope is not one of its scopes. */
   readonly triggers: readonly Trigger[];
   readonly text: string;
+  /** Set on a user rule that came from the configuration's top-level "all_models" block, not from a model's own "add". */
+  readonly allModels?: true;
 }
 
 /** What a declared model resolves to, after preset rules, enable, disable and add are applied. */
@@ -169,6 +171,12 @@ export interface Config {
   /** Wildcard keys, sorted by precedence (most literal first, then by key). */
   readonly wildcards: readonly WildcardKey[];
   readonly onUndeclared: 'warn' | 'ignore';
+  /**
+   * The rules of the "all_models" block, in declaration order. Each is already part of the rules of
+   * every exact model declared with "use": "preset" or "use": "custom"; they are kept here only so a
+   * command can describe the block.
+   */
+  readonly allModels: readonly Rule[];
   /**
    * Every declared scope, the preset's and the user's, in declaration order: the preset's first,
    * then the user's new ones. The order breaks ties when a task matches more than one scope.

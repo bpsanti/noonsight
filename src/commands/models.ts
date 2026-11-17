@@ -4,7 +4,7 @@
 // only and changes nothing.
 
 import os from 'node:os';
-import { loadConfigDetails, type DeclaredModel, type Preset, type PresetRule, type Source } from '../config/load.js';
+import { loadConfigDetails, type AllModelsRule, type DeclaredModel, type Preset, type PresetRule, type Source } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
 import { ANY_SCOPE, type Config, type Place, type Rule, type Trigger } from '../core/types.js';
 import { readDecisions } from '../state/log.js';
@@ -31,6 +31,8 @@ export interface ListedRule {
   readonly where: readonly Place[];
   /** The triggers that also deliver the rule to a session; empty when it lists none. */
   readonly triggers: readonly Trigger[];
+  /** Set to "all_models" on a rule of the configuration's "all_models" block, which every model declared with preset or custom receives. */
+  readonly from?: 'all_models';
   /** User rules: the file as the configuration writes it. */
   readonly file?: string;
   readonly source?: Source;
@@ -57,6 +59,8 @@ export interface ModelsReport {
     readonly version: string;
     readonly claude_code: { readonly version: string; readonly checked: string } | null;
   } | null;
+  /** The rules of the "all_models" block, in the order the file writes them; empty when there is none. */
+  readonly all_models: readonly ListedRule[];
   readonly declared: readonly ListedModel[];
   /** Models the preset has rules for that the configuration does not declare. */
   readonly preset_undeclared: readonly { readonly key: string; readonly rules: number; readonly on_by_default: number }[];
@@ -75,7 +79,7 @@ export function runModels(args: readonly string[], env: Env, out: (text: string)
 
 export function modelsReport(env: Env, home: string = os.homedir()): ModelsReport {
   const file = configPath(env, home);
-  const { config, preset, declared } = loadConfigDetails(file, {}, env);
+  const { config, preset, declared, allModels } = loadConfigDetails(file, {}, env);
   const log = stateDir(home);
   const seen = seenModels(log);
 
@@ -88,7 +92,7 @@ export function modelsReport(env: Env, home: string = os.homedir()): ModelsRepor
       listed.push({ key, use: entry.use, wildcard: true, rules: [], covers });
       continue;
     }
-    listed.push({ key, use: entry.use, wildcard: false, rules: listRules(key, entry, config, preset), seen: seen.get(key) ?? { decisions: 0, last: null } });
+    listed.push({ key, use: entry.use, wildcard: false, rules: listRules(key, entry, config, preset, allModels), seen: seen.get(key) ?? { decisions: 0, last: null } });
   }
 
   const presetUndeclared = [...(preset?.models ?? [])]
@@ -102,21 +106,27 @@ export function modelsReport(env: Env, home: string = os.homedir()): ModelsRepor
     config: file,
     log,
     preset: preset && { name: preset.name, version: preset.version, claude_code: preset.claudeCode },
+    all_models: config.allModels.map((r) => userRule(r, allModels.find((a) => a.id === r.id)?.file)),
     declared: listed,
     preset_undeclared: presetUndeclared,
     seen_undeclared: seenUndeclared,
   };
 }
 
-/** The rules of one exact model: every preset rule, on or off, for "use": "preset", then the user's own. */
-function listRules(key: string, entry: DeclaredModel, config: Config, preset: Preset | null): ListedRule[] {
+/**
+ * The rules of one exact model, in the order they are delivered: every preset rule, on or off, for
+ * "use": "preset", then the rules of "all_models", then the model's own.
+ */
+function listRules(key: string, entry: DeclaredModel, config: Config, preset: Preset | null, allModels: readonly AllModelsRule[]): ListedRule[] {
   const resolved = config.exact.get(key);
   const on = new Set(resolved?.use === 'rules' ? resolved.rules.map((r) => `${r.origin}:${r.id}`) : []);
   const rules: ListedRule[] = [];
   if (entry.use === 'preset')
     for (const r of preset?.models.get(key) ?? []) rules.push(presetRule(r, on.has(`preset:${r.id}`)));
-  if (resolved?.use === 'rules')
-    for (const r of resolved.rules.filter((x) => x.origin === 'user')) rules.push(userRule(r, entry.add.find((a) => a.id === r.id)?.file));
+  if (resolved?.use === 'rules') {
+    for (const r of resolved.rules.filter((x) => x.allModels)) rules.push(userRule(r, allModels.find((a) => a.id === r.id)?.file));
+    for (const r of resolved.rules.filter((x) => x.origin === 'user' && !x.allModels)) rules.push(userRule(r, entry.add.find((a) => a.id === r.id)?.file));
+  }
   return rules;
 }
 
@@ -125,7 +135,16 @@ function presetRule(r: PresetRule, on: boolean): ListedRule {
 }
 
 function userRule(r: Rule, file: string | undefined): ListedRule {
-  return { id: r.id, origin: 'user', on: true, scopes: r.scopes, where: r.where, triggers: r.triggers, ...(file !== undefined ? { file } : {}) };
+  return {
+    id: r.id,
+    origin: 'user',
+    on: true,
+    scopes: r.scopes,
+    where: r.where,
+    triggers: r.triggers,
+    ...(r.allModels ? { from: 'all_models' as const } : {}),
+    ...(file !== undefined ? { file } : {}),
+  };
 }
 
 /** The key that decides for a model, as the core resolves it: the exact key, else the strongest wildcard. */
@@ -159,6 +178,14 @@ export function renderModels(r: ModelsReport): string {
     );
   else lines.push('preset: not installed');
 
+  if (r.all_models.length) {
+    lines.push(
+      '',
+      `all_models: ${r.all_models.length} ${r.all_models.length === 1 ? 'rule' : 'rules'} for every model declared with "use": "preset" or "use": "custom", after the preset's rules and before the model's own`,
+    );
+    for (const rule of r.all_models) lines.push(ruleLine(rule), ...(rule.file !== undefined ? [`       file: ${rule.file}`] : []));
+  }
+
   for (const m of r.declared) {
     lines.push('');
     if (m.wildcard) {
@@ -178,8 +205,7 @@ export function renderModels(r: ModelsReport): string {
           : `custom, ${m.rules.length} ${m.rules.length === 1 ? 'rule' : 'rules'}`;
     lines.push(`${m.key}: ${head}; ${seenText(m.seen)}`);
     for (const rule of m.rules) {
-      const triggers = rule.triggers.length ? `; triggers: ${rule.triggers.join(', ')}` : '';
-      lines.push(`  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')}${triggers})`);
+      lines.push(ruleLine(rule));
       if (rule.source) lines.push(`       source: ${rule.source.url}, "${rule.source.section}", read ${rule.source.date}`);
       if (rule.effect !== undefined) lines.push(`       effect: ${rule.effect}`);
       if (rule.cost !== undefined) lines.push(`       cost: ${rule.cost}`);
@@ -200,6 +226,12 @@ export function renderModels(r: ModelsReport): string {
       );
   }
   return lines.join('\n');
+}
+
+function ruleLine(rule: ListedRule): string {
+  const triggers = rule.triggers.length ? `; triggers: ${rule.triggers.join(', ')}` : '';
+  const from = rule.from === 'all_models' ? '; from all_models' : '';
+  return `  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')}${triggers}${from})`;
 }
 
 function scopesText(scopes: readonly string[]): string {

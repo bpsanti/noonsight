@@ -86,6 +86,7 @@ type RawRouteRow = RawRouteOption[] | Partial<Record<RouteTarget, RawRouteOption
 interface RawConfig {
   version: 1;
   preset?: string;
+  all_models?: { add: RawUserRule[] };
   models?: Record<string, RawModelEntry>;
   on_undeclared?: 'warn' | 'ignore';
   scopes?: Record<string, RawScope>;
@@ -170,6 +171,12 @@ export interface DeclaredModel {
   readonly add: readonly { readonly id: string; readonly file: string }[];
 }
 
+/** One rule of the "all_models" block, with its file as the configuration writes it. */
+export interface AllModelsRule {
+  readonly id: string;
+  readonly file: string;
+}
+
 /** The loaded configuration, plus what describes it: the preset it draws from and each model as declared. */
 export interface ConfigDetails {
   readonly config: Config;
@@ -177,6 +184,8 @@ export interface ConfigDetails {
   readonly preset: Preset | null;
   /** The model keys in the order the file writes them. */
   readonly declared: ReadonlyMap<string, DeclaredModel>;
+  /** The rules of the "all_models" block, in the order the file writes them; empty when there is none. */
+  readonly allModels: readonly AllModelsRule[];
 }
 
 /** The preset a configuration draws from when it names none. */
@@ -223,6 +232,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   const configDir = path.dirname(configFile);
   const exact = new Map<string, ModelEntry>();
   const wildcards: WildcardKey[] = [];
+  const allModels = loadAllModels(cfg.all_models?.add ?? [], configDir, scopes, report);
 
   for (const [key, entry] of Object.entries(models)) {
     const at = `/models/${key}`;
@@ -242,6 +252,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     }
 
     const rules: Rule[] = [];
+    const presetIds = new Set(preset?.models.get(key)?.map((r) => r.id) ?? []);
     if (entry.use === 'preset') {
       const presetRules = preset?.models.get(key);
       if (preset && !presetRules) {
@@ -260,10 +271,17 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       }
     }
 
-    const taken = new Set(preset?.models.get(key)?.map((r) => r.id) ?? []);
+    // The rules of every model come after the preset's and before the model's own.
+    const taken = new Set(presetIds);
+    allModels.forEach((r, i) => {
+      if (presetIds.has(r.id)) report(`/all_models/add/${i}/id`, `rule id "${r.id}" is already a preset rule for ${key}; every model declared with "use": "preset" or "use": "custom" receives the rules of "all_models"`);
+      taken.add(r.id);
+      rules.push(r);
+    });
     (entry.add ?? []).forEach((u, i) => {
       const ruleAt = `${at}/add/${i}`;
-      if (taken.has(u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key}`);
+      if (allModels.some((r) => r.id === u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key} by "all_models"`);
+      else if (taken.has(u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key}`);
       taken.add(u.id);
       const ruleScopes = u.scopes ?? [ANY_SCOPE];
       const where = u.where ?? [...PLACES];
@@ -310,7 +328,40 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       },
     ]),
   );
-  return { config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', scopes, session, subagents, routing, classifier }, preset, declared };
+  return {
+    config: { exact, wildcards, onUndeclared: cfg.on_undeclared ?? 'warn', allModels, scopes, session, subagents, routing, classifier },
+    preset,
+    declared,
+    allModels: (cfg.all_models?.add ?? []).map((u) => ({ id: u.id, file: u.file })),
+  };
+}
+
+/**
+ * The rules of the "all_models" block, read and checked once, in the same way as a model's own
+ * "add". The id of each rule must also be new for every model that receives it; the loader checks
+ * that where it assembles each model's rules.
+ */
+function loadAllModels(
+  raw: readonly RawUserRule[],
+  configDir: string,
+  scopes: ReadonlyMap<string, Scope>,
+  report: (at: string, message: string) => void,
+): Rule[] {
+  const ids = new Set<string>();
+  const rules: Rule[] = [];
+  raw.forEach((u, i) => {
+    const at = `/all_models/add/${i}`;
+    if (ids.has(u.id)) report(`${at}/id`, `rule id "${u.id}" is used more than once in "all_models"`);
+    ids.add(u.id);
+    const ruleScopes = u.scopes ?? [ANY_SCOPE];
+    const where = u.where ?? [...PLACES];
+    const triggers = u.triggers ?? [];
+    checkScopes(ruleScopes, scopes, `${at}/scopes`, report);
+    checkTriggers(ruleScopes, where, triggers, `${at}/triggers`, report);
+    const text = readRuleText(path.resolve(configDir, u.file), `${at}/file`, report);
+    if (text !== undefined) rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text, allModels: true });
+  });
+  return rules;
 }
 
 function loadPreset(name: string, dir: string, needed: boolean, problems: string[]): Preset | null {
@@ -571,12 +622,15 @@ function checkDeliverySize(
         // Without a trigger the rules are those checked without one.
         if (picked.length === 0 || (triggers.length && picked.length === selectRules(rules, scope, place).length)) continue;
         const size = deliveryText(model, picked, scope, triggers).text.length;
-        if (size > RULES_TEXT_LIMIT)
+        if (size > RULES_TEXT_LIMIT) {
+          const shared = picked.filter((r) => r.allModels).length;
           report(
             at,
             `${prefix}the rules delivered for ${scope === null ? 'no scope' : `scope "${scope}"`} in place "${place}"` +
-              `${triggers.length ? ` once a session reveals ${triggers.join(', ')}` : ''} come to ${size} characters; ${LIMIT_TEXT}`,
+              `${triggers.length ? ` once a session reveals ${triggers.join(', ')}` : ''} come to ${size} characters` +
+              `${shared ? ` (${shared} of the ${picked.length} rules are from "all_models", which every model declared with "use": "preset" or "use": "custom" receives)` : ''}; ${LIMIT_TEXT}`,
           );
+        }
       }
 }
 

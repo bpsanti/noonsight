@@ -18,7 +18,7 @@ import { scopeOverlaps } from '../core/overlap.js';
 import { SCOPE_ENV, sessionPlace, sessionScope } from '../core/scope.js';
 import { ROUTING_ENV, routingEnvOff } from '../core/route.js';
 import { TRIGGER_ACTIONS } from '../core/triggers.js';
-import { ROUTE_TARGETS, TRIGGERS, type Config, type RouteOption, type RouteRow, type Trigger } from '../core/types.js';
+import { ROUTE_TARGETS, RULES_TEXT_LIMIT, TRIGGERS, type Config, type RouteOption, type RouteRow, type Trigger } from '../core/types.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
@@ -57,6 +57,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
         (sub.delivery === 'off' ? 'off' : `rules when each subagent starts, permission ${sub.permission} for a routed call, on mismatch ${sub.onMismatch}`) +
         ')',
     );
+    checkAllModels(config, add);
     checkScopes(config, env, add);
     checkTriggers(config, add);
     checkRouting(config, env, add);
@@ -124,6 +125,22 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   out(lines.map(([level, text]) => `${level}: ${text}`).join('\n'));
   if (!configOk) return 2;
   return lines.some(([level]) => level === 'problem') ? 1 : 0;
+}
+
+/**
+ * The "all_models" block: the models that receive its rules and the places they cover. The limit on
+ * the text delivered was already checked per model when the configuration loaded, with these rules
+ * in each model's rules, so a block that is too large for a model has refused the configuration.
+ */
+function checkAllModels(config: Config, add: (level: Level, text: string) => void): void {
+  if (config.allModels.length === 0) return;
+  const receiving = [...config.exact].filter(([, entry]) => entry.use === 'rules').map(([model]) => model);
+  add(
+    'ok',
+    `all_models: ${plural(config.allModels.length, 'rule')} (${config.allModels.map((r) => r.id).join(', ')}) delivered to ${plural(receiving.length, 'model')} declared with preset or custom` +
+      `${receiving.length ? ` (${receiving.join(', ')})` : ''}, each within the ${RULES_TEXT_LIMIT}-character limit on the rules delivered`,
+  );
+  if (receiving.length === 0) add('warning', 'all_models: no model is declared with "use": "preset" or "use": "custom", so no model receives these rules');
 }
 
 /**

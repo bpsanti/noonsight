@@ -32,6 +32,20 @@
       "additionalProperties": false,
       "default": {}
     },
+    "all_models": {
+      "description": "Rules for every model, in one place: team conventions, commit style, anything that is not specific to a model. They go to every model declared under \"models\" with \"use\": \"preset\" or \"use\": \"custom\", after the preset's rules and before the model's own \"add\". A model declared with \"use\": \"none\", and a wildcard key, receive none of them. A rule id must be new for every such model.",
+      "type": "object",
+      "required": ["add"],
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "description": "The user's own rule files, with the same keys as \"models.<id>.add\".",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/userRule" }
+        }
+      }
+    },
     "on_undeclared": {
       "description": "What to do when a model has no entry in \"models\". There is deliberately no option to block.",
       "enum": ["warn", "ignore"],
@@ -200,7 +214,7 @@
           "items": { "$ref": "#/$defs/ruleId" }
         },
         "add": {
-          "description": "The user's own rule files, delivered after the preset's rules.",
+          "description": "The user's own rule files, delivered after the preset's rules and the rules of \"all_models\".",
           "type": "array",
           "items": { "$ref": "#/$defs/userRule" }
         }
