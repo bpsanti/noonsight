@@ -141,6 +141,21 @@ The block counts for every model that receives it.
 The limit on the delivered text (9,500 characters, see [Validation](#validation)) is checked for each model with the block's rules among its rules, so a block that fits beside one model's rules can still be refused because of another model's, and the problem names that model.
 `noonsight models` lists the block and, under each model, its rules in delivery order with the block's marked `from all_models`; `noonsight check` says which models receive the block, and refuses a configuration whose block overflows a model.
 
+### When `all_models` is worth it, and when a `CLAUDE.md` is enough
+
+Claude Code loads a `CLAUDE.md` in every session for any model, so a rule written there reaches the context reliably, and so does one delivered by noonsight.
+What noonsight adds is timing and proof.
+
+- **Timing.** A rule can be limited by scope, by place (`session`, `unattended`, `subagent`) and by trigger, so a niche rule arrives when its situation happens instead of sitting in the context all the time beside everything else in a `CLAUDE.md`.
+- **Subagents.** A subagent receives the rules of the model it will run on, chosen for its own task.
+- **Proof.** The decision log and `noonsight report` show how often each rule was delivered, to which models, and which rules were never delivered ([hooks.md](hooks.md#the-decision-log)), which a `CLAUDE.md` cannot show.
+- **A checked budget.** The limit on the delivered text is checked for each model with the block's rules among its rules ([Validation](#validation)).
+
+Where it adds nothing: a fixed rule that every model should always have, with no scope, place or trigger, is the same as a line in a `CLAUDE.md`, and a `CLAUDE.md` is then the simpler home for it.
+Triggers are also narrow today, since the only one is `code-edit`.
+
+Whether delivering a rule at the right moment makes a model follow it more often is not measured, and nothing here claims it does.
+
 ## Scopes
 
 A scope names a kind of task, such as `investigate` or `summarize`.
