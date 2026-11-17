@@ -210,3 +210,7 @@ Mechanism signals, as in the study's design:
 - 2026-11-17, before night 2: the quota floor may be lowered from 50 to 35 percent of the account's weekly quota for the remaining nights, when 50 would stop a night (`run --quota-floor-fallback 35`: the night keeps 50 until a batch would start below it, then goes on with 35).
   Reason: the author allowed the account's daytime use by other work to keep going, which would otherwise leave too little of the week above 50 percent for the nights.
   Each night's summary records the floor in force when it ended and the lowest quota read before a batch.
+- 2026-11-17, evening: an extra session runs before night 2, from about 20:45 to 00:50 local, on the author's own account instead of the worker account, one run at a time (`--concurrency 1`) while other work builds on the machine, with the dev containers left running, and with a quota floor that falls back to 5 percent (that account's week resets on 2026-11-18 at 09:00 UTC).
+  Night 2 also runs on the author's account, with the same 5 percent fallback, and starts only after the extra session's runner has exited.
+  Reason: the author chose to spend his own account's quota, which resets the next morning, on the pilot, and to keep the worker account for daytime work.
+  The account pays for the runs and does not change them: the same Claude Code, models, effort, tasks, conditions and order; every result line records the session it ran in, and the summaries record the account, the floor in force and the quota before and after.

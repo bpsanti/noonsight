@@ -3,6 +3,8 @@
 // is the Claude Code configuration directory whose login the runs use, given as CLAUDE_CONFIG_DIR.
 
 import { spawnSync } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
 
 export interface QuotaReading {
   /** Percent left of the binding all-models window. */
@@ -34,9 +36,21 @@ export function parseQuota(json: string): QuotaReading {
   return { all_models: allLeft, models, resets_at: weekly?.resetsAt ?? null, error: allLeft === null ? 'no all-models quota in the reading' : null };
 }
 
+/**
+ * The environment that selects an account's login: CLAUDE_CONFIG_DIR for a configuration directory of
+ * its own, and no CLAUDE_CONFIG_DIR at all for the default one (~/.claude), whose login Claude Code
+ * keeps under a different key, so naming the directory finds no login.
+ */
+export function accountEnv(configDir: string, base: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const env = Object.fromEntries(Object.entries(base).filter((e): e is [string, string] => e[1] !== undefined));
+  delete env.CLAUDE_CONFIG_DIR;
+  if (path.resolve(configDir) !== path.join(os.homedir(), '.claude')) env.CLAUDE_CONFIG_DIR = configDir;
+  return env;
+}
+
 /** Read the quota of the account in `configDir`, asking the vendor each time. */
 export function readQuota(configDir: string): QuotaReading {
-  const r = spawnSync('quota-axi', ['--provider', 'claude', '--json'], { encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: configDir }, timeout: 60_000 });
+  const r = spawnSync('quota-axi', ['--provider', 'claude', '--json'], { encoding: 'utf8', env: accountEnv(configDir), timeout: 60_000 });
   if (r.error) return { all_models: null, models: {}, resets_at: null, error: `quota-axi: ${r.error.message}` };
   return parseQuota(r.stdout);
 }

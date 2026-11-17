@@ -94,6 +94,8 @@ export interface RunnerOptions {
   readonly quotaFloor?: number;
   /** A lower floor the night falls back to when its floor would stop it (a deviation the pre-registration records). */
   readonly quotaFloorFallback?: number;
+  /** Runs at a time for this night, when it is not the plan's. */
+  readonly concurrency?: number;
   /** Runs still going at this time are stopped and left interrupted: counted at their budget, and run again on the next night. */
   readonly stopBy: Date | null;
   readonly dryRun: boolean;
@@ -512,7 +514,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
     append(runsFile, failed);
     done.add(key);
   };
-  const pool = Math.max(1, o.plan.concurrency);
+  const pool = Math.max(1, o.concurrency ?? o.plan.concurrency);
   // Whole units are gathered into a batch until it holds `pool` runs, and the batch runs together, so a
   // placebo unit (one run) does not leave the second slot idle; every stop falls between batches, so
   // between units, and the quota is read before each batch.

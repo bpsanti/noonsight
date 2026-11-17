@@ -13,7 +13,8 @@ import { excludedBy, unchecked, type GoldRecord } from '../experiments/benchmark
 import { reward } from '../experiments/benchmark/harbor.js';
 import { judgeMessage, parseRatings, scrub, tally, type Item } from '../experiments/benchmark/judge.js';
 import { BENCH_DIR, loadPlan, selection, wanted } from '../experiments/benchmark/plan.js';
-import { aboveFloor, parseQuota } from '../experiments/benchmark/quota.js';
+import { accountEnv, aboveFloor, parseQuota } from '../experiments/benchmark/quota.js';
+import os from 'node:os';
 import { interrupted, measured, spent, type Recorded } from '../experiments/benchmark/run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from '../experiments/benchmark/schedule.js';
 import { parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
@@ -207,6 +208,13 @@ test('the quota reading takes the all-models scope and each model scope of quota
   assert.equal(aboveFloor(q, 50, 'fable').ok, false);
   assert.equal(aboveFloor({ ...q, all_models: 49 }, 50, 'opus').ok, false);
   assert.equal(aboveFloor(parseQuota('not json'), 50, 'opus').ok, false);
+});
+
+test('an account is selected by its configuration directory, except the default one, which is selected by naming none', () => {
+  assert.equal(accountEnv('/x/.claude-other', { PATH: 'p', CLAUDE_CONFIG_DIR: '/elsewhere' }).CLAUDE_CONFIG_DIR, '/x/.claude-other');
+  const def = accountEnv(path.join(os.homedir(), '.claude'), { PATH: 'p', CLAUDE_CONFIG_DIR: '/elsewhere' });
+  assert.equal('CLAUDE_CONFIG_DIR' in def, false);
+  assert.equal(def.PATH, 'p');
 });
 
 test('off and on differ only in "use"; placebo delivers one neutral text per default-on rule with its scopes and places', () => {

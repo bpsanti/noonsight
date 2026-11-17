@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Plan } from './plan.js';
+import { accountEnv } from './quota.js';
 import type { SetName } from './tasks.js';
 
 /** One rubric item: a statement the answer meets or does not. */
@@ -131,7 +132,7 @@ function vote(plan: Plan, account: string, rubric: Rubric, answer: string): { te
         '--system-prompt', rubric.system,
         '--tools', '', '--setting-sources', 'project,local', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence',
       ],
-      { cwd: dir, encoding: 'utf8', timeout: 600_000, maxBuffer: 64 * 2 ** 20, env: { PATH: process.env.PATH ?? '', HOME: os.homedir(), CLAUDE_CONFIG_DIR: account, NOONSIGHT_DISABLE: '1', DISABLE_AUTOUPDATER: '1' } },
+      { cwd: dir, encoding: 'utf8', timeout: 600_000, maxBuffer: 64 * 2 ** 20, env: { ...accountEnv(account, { PATH: process.env.PATH ?? '', HOME: os.homedir() }), NOONSIGHT_DISABLE: '1', DISABLE_AUTOUPDATER: '1' } },
     );
     const out = JSON.parse(r.stdout || '{}') as { result?: string; total_cost_usd?: number; is_error?: boolean; subtype?: string };
     return { text: String(out.result ?? ''), cost: Number(out.total_cost_usd ?? 0), error: r.status === 0 && !out.is_error ? null : `judge exited ${r.status} (${out.subtype ?? 'no result'})` };
