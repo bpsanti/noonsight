@@ -8,6 +8,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { pickCalibration } from '../experiments/benchmark/calibration.js';
 import { CONTAINER, conditionConfig, defaultOnRules, hookSettings, modelName, ownShare, placeboText, POINTER_CLAUDE_MD, presetText, unionRules, writeCondition } from '../experiments/benchmark/conditions.js';
+import { deliveries, deliveryTable, pathOf, rulesIn, signatures } from '../experiments/benchmark/delivery.js';
 import { excludedBy, unchecked, type GoldRecord } from '../experiments/benchmark/gold.js';
 import { reward } from '../experiments/benchmark/harbor.js';
 import { judgeMessage, parseRatings, scrub, tally, type Item } from '../experiments/benchmark/judge.js';
@@ -295,6 +296,38 @@ test('read_rules: the scattered rules file read by Read, Grep or a shell command
   assert.deepEqual(readFile([call('Bash', { command: "sed -i 's/a/b/' x.py" }), call('Bash', { command: `cat ${f}` })], f), { read: true, before_first_edit: false });
   assert.deepEqual(readFile([call('Bash', { command: 'ls /opt' })], f), { read: false, before_first_edit: false });
   assert.deepEqual(readFile([call('Grep', { pattern: 'rules', path: f })], f), { read: true, before_first_edit: true });
+});
+
+test('delivery: only rule texts that belong to one model identify it, and every model keeps at least one', () => {
+  const sigs = signatures(MODELS);
+  for (const m of MODELS) assert.ok((sigs.get(m) ?? []).length > 0, m);
+  // Sonnet and Haiku ship the same verify-changes text, so it names neither.
+  const verify = presetText(defaultOnRules('claude-sonnet-5-5').find((r) => r.id.endsWith('verify-changes'))!).trim().slice(0, 120);
+  for (const m of MODELS) assert.ok(!(sigs.get(m) ?? []).some((x) => x === JSON.stringify(verify).slice(1, -1)));
+  const body = { messages: [{ role: 'user', content: unionRules(['claude-opus-5-5']) }] };
+  assert.deepEqual(rulesIn(body, sigs), ['claude-opus-5-5']);
+});
+
+test('delivery: each request stands for a path, the first of a path counts, and the table has a column per arm', () => {
+  const user = (content: unknown) => ({ role: 'user', content });
+  const opusText = presetText(defaultOnRules('claude-opus-5-5')[0]!);
+  const start = { model: 'claude-opus-5-5', messages: [user([{ type: 'text', text: opusText }, { type: 'text', text: 'PROBE-STEP start: reply ok' }])] };
+  const spawnParent = { model: 'claude-opus-5-5', messages: [user('PROBE-STEP spawn Explore')] };
+  const sub = { model: 'claude-opus-5-5', messages: [user('PROBE-SUBAGENT-TASK Explore: reply with the word done.')] };
+  const result = { model: 'claude-opus-5-5', messages: [user('PROBE-STEP spawn Explore'), { role: 'assistant', content: [] }, user([{ type: 'tool_result', content: 'done' }])] };
+  assert.equal(pathOf(start), 'start');
+  assert.equal(pathOf(spawnParent), null, "the parent's turn before the subagent is not a path");
+  assert.equal(pathOf(sub), 'subagent Explore');
+  assert.equal(pathOf(result), null);
+  const rows = deliveries([{ body: start }, { body: spawnParent }, { body: sub }, { body: start }], MODELS);
+  assert.deepEqual(rows, [
+    { path: 'start', model: 'claude-opus-5-5', own: true, others: [] },
+    { path: 'subagent Explore', model: 'claude-opus-5-5', own: false, others: [] },
+  ]);
+  const table = deliveryTable({ on: rows, claudemd: [] }, ['start', 'subagent Explore', 'after-clear']);
+  assert.match(table, /^\| Path \| Model of the request \| on \| claudemd \|$/m);
+  assert.match(table, /^\| start \| claude-opus-5-5 \| yes \| not reached \|$/m);
+  assert.match(table, /^\| after-clear \|  \| not reached \| not reached \|$/m);
 });
 
 test('the hook settings run every noonsight hook through the pointer the agent installs', () => {

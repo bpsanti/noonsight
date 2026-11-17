@@ -1,7 +1,8 @@
 # Benchmark pilot
 
 Does delivering the `claude` preset's rules through noonsight change what Claude Code does on public, real-world tasks, and at what cost?
-This folder holds the pilot of the study that answers it: the harness, the task lists, the placebo texts and the pre-registration ([preregistration.md](preregistration.md)) that the results are read against.
+And against the usual alternative, rules in a Markdown file: do the rules reach the session for certain, and does each model do better with only the rules written for it?
+This folder holds the pilot of the study that answers it: the harness, the task lists, the delivery probe and the pre-registration ([preregistration.md](preregistration.md)) that the results are read against.
 The pilot checks the harness, the verifiers, the cost and the run-to-run spread before a larger study; it makes no claim about the rules by itself.
 
 It sends prompts to the models from the login of the person running it, so it spends usage, and it never runs in CI.
@@ -13,9 +14,9 @@ It sends prompts to the models from the login of the person running it, so it sp
 | --- | --- |
 | Task sets | Build and fix: SWE-bench Verified, only instances with a native arm64 image. Routine: Terminal-Bench 2.1. Open tasks: digest (new, on SWE-bench issue threads), review (ReviewBench), investigate (SWE Atlas Codebase QnA) |
 | Models | Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, effort `medium` |
-| Conditions | `off`, `on`, `placebo`; only noonsight's configuration file differs between them |
-| Rounds | 2 per task, model and condition |
-| Order | Build off and on first, then the other sets off and on, then placebo; within a round, a seeded order |
+| Conditions | `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`), `scattered` (a `CLAUDE.md` that only points to them) |
+| Rounds | 2 per task, model and condition; 1 for `scattered` |
+| Order | Build off and on first, then the other sets off and on, then `claudemd`, then `scattered`; within a round, a seeded order |
 | Spending | `--max-budget-usd` per run, US$ 200 in total, a budget per night, and a 50 percent floor on the account's weekly quota |
 | Place and scope | `unattended`, through `NOONSIGHT_EXPERIMENT`; the scope of each set through `NOONSIGHT_SCOPE` |
 
@@ -35,7 +36,24 @@ The conditions ([conditions.ts](conditions.ts)):
 | --- | --- | --- |
 | `off` | `{"use": "none"}` | Nothing; the hook runs and logs `declared-none` |
 | `on` | `{"use": "preset"}` | The preset's default-on rules for the model, scope and place |
-| `placebo` | `{"use": "custom", "add": [...]}` | One neutral text per default-on rule ([placebo/](placebo)), with that rule's scopes and places and its length within 2 percent |
+| `claudemd` | `{"use": "none"}`, and the user `CLAUDE.md` | Every default-on rule of all four models, under a heading per model, each with its scopes and places as a line of text: one Markdown file every model reads |
+| `scattered` | `{"use": "none"}`, and a user `CLAUDE.md` of one line | A pointer to `/opt/agent-notes/rules.md`, which holds the same rules; they reach the session only if the agent reads that file |
+
+The `CLAUDE.md` goes where Claude Code reads the user's own, `$CLAUDE_CONFIG_DIR/CLAUDE.md`, so the task's repository, its diff and its verifier see nothing of it.
+Runs under these two conditions also carry an `InstructionsLoaded` hook that only records each instruction load, under `/logs/agent/instructions/`.
+The `placebo` condition, length-matched neutral texts in [placebo/](placebo), was pre-registered and replaced by these two before it ran; the texts and their hashes stay.
+
+### The delivery probe
+
+The benchmark's tasks start no subagent and switch no model, so whether the rules reach every path is measured apart, by `test/live/delivery.test.ts`:
+
+```bash
+NOONSIGHT_LIVE_DELIVERY=1 NOONSIGHT_DELIVERY_OUT=<dir> npm run test:live
+```
+
+It runs one interactive session per condition (`on`, `claudemd`, `scattered`) against a local stand-in for the API ([test/live/stub-api.ts](../../test/live/stub-api.ts)), which records every request and answers with fixed replies: a first turn, three turns that each start a subagent (general-purpose, Explore, Plan), `/model haiku` and a turn, `/compact` and a turn, `/clear` and a turn.
+Nothing reaches Anthropic and no token is spent.
+[delivery.ts](delivery.ts) reads, in each request, whether the rules written for the request's model are there, and whose other rules came along; the table goes to `<dir>/delivery.md`.
 
 ### The tasks
 

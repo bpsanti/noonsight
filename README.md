@@ -103,7 +103,7 @@ On 2026-11-16, with Claude Code 2.1.326 at medium effort, 112 runs cost $7.57:
 
 The samples are small (3 to 10 runs per arm), so these are directions, not significant results, and the preset was left unchanged; [the dated results](experiments/rules/results/2026-11-16/README.md) give every count and the review of each rule.
 
-`experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on` and a length-matched `placebo`; its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
+`experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
 
 ## Try the core
 
