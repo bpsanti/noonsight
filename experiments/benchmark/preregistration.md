@@ -192,4 +192,7 @@ Mechanism signals, as in the study's design:
 
 ## Deviations
 
-None yet.
+- 2026-11-17, after night 1: the `verified` signal also counts edits made through the shell (`sed -i`, Python scripts that write a file, patches, redirects into source files); its definition in section 7 is unchanged, but the scorer saw only Edit and Write calls and missed most edits.
+  Night 1's signals were computed again from each run's saved event stream (`rescore`); with the fix, the edits found match the saved diff in 192 of 192 runs.
+- 2026-11-17, after night 1: runs are batched by whole units, up to two runs at a time, instead of the two conditions of one unit side by side, because a placebo unit holds a single run and would leave the second slot idle.
+  The order of the units and every stop rule are unchanged, and a stop still falls between units.
