@@ -176,48 +176,63 @@ test('parallel calls: each subagent gets its own call\'s rules when only one cal
   assert.ok(!fs.existsSync(path.join(state, 'agent-pools', `${SESSION}.json`)), 'no call is left open');
 });
 
-test('parallel calls of one type that no result names in time: the start takes the most recent open call, and the next start the one left', () => {
+/** Moves the session's open calls back in time, as if they were made that long ago. */
+function age(h: HookHome, ms: number): void {
+  const poolPath = path.join(h.dir, '.local', 'state', 'noonsight', 'agent-pools', `${SESSION}.json`);
+  const pool = JSON.parse(fs.readFileSync(poolPath, 'utf8')) as { open: { at: string }[] };
+  for (const c of pool.open) c.at = new Date(Date.parse(c.at) - ms).toISOString();
+  fs.writeFileSync(poolPath, JSON.stringify(pool));
+}
+
+test('parallel calls of one type that no result names in time: each subagent gets only the rules every one of those calls would give, never a sibling\'s', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');
-  h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_a' }));
-  h.hook('agent-call', call({ model: undefined, description: 'Condense', prompt: 'Summarize the notes.' }, { tool_use_id: 'toolu_b' }));
+  // Two tasks on one model with different scopes: the rules for every scope are what both hold.
+  h.hook('agent-call', call({ model: undefined, description: 'Condense', prompt: 'Summarize the notes.' }, { tool_use_id: 'toolu_a' }));
+  h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_b' }));
   const first = contextOf(h.hook('subagent-start', start('a-1')));
-  assert.match(first, /HAIKU-SUM-6610/, 'the summarize call, the most recent, gives its rules');
   const second = contextOf(h.hook('subagent-start', start('a-2')));
-  assert.match(second, /HAIKU-GEN-9047/);
-  assert.doesNotMatch(second, /HAIKU-SUM-6610/);
+  for (const context of [first, second]) {
+    assert.match(context, /<noonsight-rules model="claude-haiku-5-5">/);
+    assert.match(context, /HAIKU-GEN-9047/);
+    assert.doesNotMatch(context, /HAIKU-SUM-6610/, 'the summarize rule, which only one of them has, is given to neither');
+  }
   assert.deepEqual(
-    startLines(h).map((l) => [l.start_match, l.call_id, l.delivered]),
+    startLines(h).map((l) => [l.start_match, l.calls, l.delivered, l.shared_rules]),
     [
-      ['recent', 'toolu_b', 'rules'],
-      ['single', 'toolu_a', 'rules'],
+      ['shared', ['toolu_a', 'toolu_b'], 'rules', 'every-scope'],
+      ['shared', ['toolu_a', 'toolu_b'], 'rules', 'every-scope'],
     ],
   );
-  const state = path.join(h.dir, '.local', 'state', 'noonsight');
-  assert.ok(!fs.existsSync(path.join(state, 'agent-pools', `${SESSION}.json`)), 'no call is left open');
+  // Both subagents have started, so a later call of the type is matched alone again.
+  assert.match(rulesFor(h, call({ model: undefined, description: 'Digest', prompt: 'Write a digest.' }, { tool_use_id: 'toolu_c' })), /HAIKU-SUM-6610/);
+  assert.equal(startLines(h).at(-1)?.start_match, 'single');
+
+  // Two calls on different models: nothing both would give, so neither subagent gets rules.
+  h.hook('agent-call', call({ model: 'haiku' }, { tool_use_id: 'toolu_d' }));
+  h.hook('agent-call', call({ model: 'sonnet' }, { tool_use_id: 'toolu_e' }));
+  assert.equal(h.hook('subagent-start', start('a-4')).raw, '');
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.delivered, startLines(h).at(-1)?.reason], ['shared', 'nothing', 'calls-differ']);
 });
 
-test('a call denied inside the open window does not cost a later call of its type its own rules', () => {
+test('a call denied after its hook does not cost a call of its type made seconds later its own rules', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');
   h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_denied' }));
+  age(h, 10 * 1000);
   assert.match(rulesFor(h, call({ model: undefined, description: 'Condense', prompt: 'Summarize the notes.' }, { tool_use_id: 'toolu_later' })), /HAIKU-SUM-6610/);
-  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id], ['recent', 'toolu_later']);
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id], ['single', 'toolu_later']);
 });
 
-test('after a denied sibling and a subagent that runs past the open window, a later call of the type still gets its own rules', () => {
+test('after a shared start whose calls then pass the open window, a later call of the type still gets its own rules', () => {
   const h = hookHome(SCOPED());
   startOn(h, 'claude-haiku-5-5');
   h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the variable.' }, { tool_use_id: 'toolu_a' }));
   h.hook('agent-call', call({ model: undefined, description: 'Rename', prompt: 'Rename the file.' }, { tool_use_id: 'toolu_b' }));
   assert.equal(h.hook('subagent-start', start('a-a')).status, 0);
-  const poolPath = path.join(h.dir, '.local', 'state', 'noonsight', 'agent-pools', `${SESSION}.json`);
-  const age = (): void => {
-    const pool = JSON.parse(fs.readFileSync(poolPath, 'utf8')) as { open: { at: string }[] };
-    for (const c of pool.open) c.at = new Date(Date.parse(c.at) - 5 * 60 * 1000).toISOString();
-    fs.writeFileSync(poolPath, JSON.stringify(pool));
-  };
-  age();
+  assert.equal(startLines(h).at(-1)?.start_match, 'shared');
+  // toolu_b was denied; toolu_a's subagent runs for five minutes.
+  age(h, 5 * 60 * 1000);
   h.hook('agent-result', result('toolu_a', 'claude-haiku-5-5', { agentId: 'a-a' }));
   assert.match(rulesFor(h, call({ model: undefined, description: 'Condense', prompt: 'Summarize the notes.' }, { tool_use_id: 'toolu_c' })), /HAIKU-SUM-6610/);
   assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id], ['single', 'toolu_c']);

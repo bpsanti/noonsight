@@ -57,20 +57,30 @@ export interface OpenCall {
   readonly at: string;
 }
 
-/** A session's calls whose subagent has not started yet. */
+/**
+ * Subagents that started while several calls of their type were open, so that which of those calls
+ * started them is not known: `started` of the open calls among `calls` have in fact started.
+ */
+export interface SharedGroup {
+  readonly calls: readonly string[];
+  readonly started: number;
+}
+
+/** A session's calls whose subagent has not started yet, and the shared starts among them. */
 export interface Pool {
   readonly open: readonly OpenCall[];
+  readonly groups: readonly SharedGroup[];
 }
 
 /** How a subagent's start was matched with the call that started it. */
-export type StartMatch = 'single' | 'result' | 'recent';
+export type StartMatch = 'single' | 'result' | 'shared';
 
 export interface AgentStart {
   readonly session_id: string;
   readonly subagent_type: string;
   readonly match: StartMatch;
-  /** The call the start was matched with. */
-  readonly call: string;
+  /** The call, when the match names one; for a shared start, the calls it could have been. */
+  readonly calls: readonly string[];
   /** The rules given, or null when it was given none. */
   readonly text: string | null;
   readonly at: string;
@@ -138,8 +148,9 @@ export function readAgentStart(file: string | null): AgentStart | null {
     v !== null &&
     typeof v.session_id === 'string' &&
     typeof v.subagent_type === 'string' &&
-    (v.match === 'single' || v.match === 'result' || v.match === 'recent') &&
-    typeof v.call === 'string' &&
+    (v.match === 'single' || v.match === 'result' || v.match === 'shared') &&
+    Array.isArray(v.calls) &&
+    v.calls.every((c) => typeof c === 'string') &&
     (v.text === null || typeof v.text === 'string')
   )
     return v as unknown as AgentStart;
@@ -151,13 +162,24 @@ export function readAgentLink(file: string | null): AgentLink | null {
   return v !== null && typeof v.call === 'string' ? (v as unknown as AgentLink) : null;
 }
 
-/** The pool as recorded; an empty pool when there is none or it cannot be read. */
+/** The pool as recorded; an empty pool when there is none or it cannot be read. A count no group carries is ignored. */
 export function readPool(file: string | null): Pool {
   const v = readJson(file);
   const open = Array.isArray(v?.open)
     ? v.open.filter((c): c is OpenCall => isObject(c) && typeof c.id === 'string' && typeof c.type === 'string' && typeof c.at === 'string')
     : [];
-  return { open };
+  const groups = Array.isArray(v?.groups)
+    ? v.groups.filter(
+        (g): g is SharedGroup =>
+          isObject(g) &&
+          Array.isArray(g.calls) &&
+          g.calls.every((c) => typeof c === 'string') &&
+          typeof g.started === 'number' &&
+          Number.isInteger(g.started) &&
+          g.started > 0,
+      )
+    : [];
+  return { open, groups };
 }
 
 export function writeRecord(file: string | null, record: AgentCall | AgentModel | AgentStart | AgentLink | Pool): void {

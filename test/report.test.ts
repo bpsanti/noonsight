@@ -149,7 +149,7 @@ test('report without a configuration still reports the log, and says what it lea
   assert.match(r2.stdout, /is refused \(`noonsight check` lists why\)/);
 });
 
-test('report counts a subagent\'s rules once, where its start delivered them', () => {
+test('report counts a subagent\'s rules once, where its start delivered them, and the rules a shared start could not give', () => {
   const home = tempTree({});
   writeLog(home, [
     // The call hands its rules to the start; the start delivers them.
@@ -158,10 +158,12 @@ test('report counts a subagent\'s rules once, where its start delivered them', (
     // A call with no rules: counted at the call, not again at its start.
     { ts: '2026-11-17T10:01:00.000Z', event: 'agent-call', session_id: 's1', model: 'claude-opus-5-5', status: 'none', reason: 'declared-none', place: 'subagent', delivered: 'nothing' },
     { ts: '2026-11-17T10:01:01.000Z', event: 'subagent-start', session_id: 's1', start_match: 'single', model: 'claude-opus-5-5', status: 'none', place: 'subagent', delivered: 'nothing' },
+    // Two calls with different rules whose starts could not be told apart.
+    { ts: '2026-11-17T10:02:01.000Z', event: 'subagent-start', session_id: 's1', start_match: 'shared', model: null, place: 'subagent', reason: 'calls-differ', delivered: 'nothing' },
   ]);
   const report = JSON.parse(runCli(['report', '--json'], { HOME: home }).stdout) as Record<string, any>;
   assert.deepEqual(report.delivering, { 'subagent-start': 1 });
-  assert.deepEqual(report.not_delivering, { 'declared-none': 1 });
+  assert.deepEqual(report.not_delivering, { 'calls-differ': 1, 'declared-none': 1 });
   assert.deepEqual(
     report.rules.map((x: Record<string, any>) => [x.id, x.deliveries, x.events]),
     [['team/general', 1, { 'subagent-start': 1 }]],
