@@ -107,4 +107,5 @@ npm run benchmark -- smoke --work $WORK --account <account dir> --token-file <to
 
 `<work>/results` holds `runs.jsonl` (one line per run: tokens, cost, turns, wall time, the verifier's verdict, what noonsight delivered, the signals, the pins), `grades.jsonl`, `answers/`, `decisions.jsonl` for `noonsight report --log`, `journal.jsonl` and `nights.jsonl`.
 The result lines hold no path of the machine that ran them.
+`rescore` computes the signals again from each run's saved event stream with the checkout's scorer, into `signals.jsonl`; the analysis reads those, so a fix to the scorer reaches runs already recorded.
 A pilot's results go to `results/<date>/` with a reading of them, as in [experiments/rules](../rules/README.md).
