@@ -10,10 +10,18 @@ import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { isPermissionError } from '../state/files.js';
 import { accountInstalls, recordAccountInstall } from '../state/installs.js';
 import { packageVersion } from '../version.js';
+import { runCheck } from './check.js';
+import { writeConfig } from './init.js';
+import { modelsReport } from './models.js';
 import { UsageError } from './usage.js';
 
-export const INSTALL_USAGE = `usage: noonsight install [--account <dir> | --managed]
+export const INSTALL_USAGE = `usage: noonsight install [--account <dir> | --managed] [--hooks-only]
        noonsight uninstall [--account <dir> | --managed]
+
+One command sets noonsight up: it writes the configuration file when there is none (as
+\`noonsight init\`, never replacing an existing file), installs the hooks, runs \`noonsight check\`
+and lists what each declared model receives. It is safe to run again, and says what it changed or
+that nothing changed. With --hooks-only it installs the hooks and does nothing else.
 
 With no option, install noonsight's hooks into the user settings of every Claude Code configuration
 directory of this account: ~/.claude, the directory in CLAUDE_CONFIG_DIR, and every other directory
@@ -24,9 +32,11 @@ server-managed settings. Run it again after adding a Claude Code configuration d
 lists any directory it does not reach.
 
   --account <dir>  only this Claude Code configuration directory
+  --hooks-only     only the hooks: no configuration file is written and no check is run
   --managed        once for every account on the machine, in Claude Code's managed settings files;
                    needs administrator rights, and Claude Code ignores these files on a login whose
-                   organization delivers server-managed settings (see docs/install.md)
+                   organization delivers server-managed settings (see docs/install.md); it only
+                   installs the hooks, because the configuration belongs to each account
 
 Running install again changes nothing; uninstall removes only noonsight's own entries.`;
 
@@ -40,8 +50,13 @@ export interface Io {
 
 type Mode = { readonly kind: 'every' } | { readonly kind: 'account'; readonly dir: string } | { readonly kind: 'managed' };
 
+interface Parsed {
+  readonly mode: Mode;
+  readonly hooksOnly: boolean;
+}
+
 export function runInstall(command: 'install' | 'uninstall', args: readonly string[], env: Env, io: Io): number {
-  const mode = parseMode(args);
+  const { mode, hooksOnly } = parseMode(command, args);
   const home = os.homedir();
   const runtime: Runtime = { node: process.execPath, cli: fs.realpathSync(CLI_FILE), version: packageVersion() };
 
@@ -112,10 +127,71 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     throw e;
   }
 
-  if (command === 'install') lines.push(...installNotes(targets, env, home));
+  if (command === 'install' && mode.kind !== 'managed' && !hooksOnly) {
+    const setup = finishSetup(lines, targets, env, home);
+    io.out(setup.text);
+    return setup.status;
+  }
+  if (command === 'install') lines.push(...installNotes(targets, env, home, true));
   else if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
   io.out(lines.join('\n'));
   return 0;
+}
+
+/**
+ * The rest of the one-command setup, after the hooks are in: the configuration file when there is
+ * none, then what each declared model receives, then the check, then one line on what changed.
+ * It composes init, models and check, and holds no logic of its own about them.
+ */
+function finishSetup(hookLines: readonly string[], targets: readonly InstallTarget[], env: Env, home: string): { text: string; status: number } {
+  const out = [...hookLines];
+  const file = configPath(env, home);
+  const wrote = writeConfig(env);
+  if (wrote !== null) out.push(...wrote);
+  else out.push(`config ${file}: already there, left as it is`);
+
+  let usable = true;
+  try {
+    out.push(...receives(env, home));
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    usable = false;
+  }
+
+  const checked: string[] = [];
+  const status = runCheck([], env, (t) => checked.push(t));
+  out.push(...checked, ...installNotes(targets, env, home, false));
+  if (!usable || status === 2) out.push('Until the configuration is fixed, sessions get no rules. Edit it, then run `noonsight install` again.');
+
+  const hooks = hookLines.filter((l) => /^hooks .*: (created|added)\b/.test(l)).length;
+  const pointer = hookLines.some((l) => /^hook pointer .*: (written|rewritten)\b/.test(l));
+  const changes = [
+    ...(wrote !== null ? ['the configuration file was written'] : []),
+    ...(hooks > 0 ? [`hooks were added to ${hooks} Claude Code configuration ${hooks === 1 ? 'directory' : 'directories'}`] : []),
+    ...(pointer && hooks === 0 ? ['the hook pointer was updated'] : []),
+  ];
+  out.push(changes.length === 0 ? 'Nothing changed: noonsight was already set up here.' : `Changed: ${changes.join('; ')}.`);
+  out.push(
+    'Done: from the next Claude Code session on, each session receives the rules of its model whose scope and place apply to it; ' +
+      '`noonsight report` shows what was delivered. To undo: `noonsight uninstall`.',
+  );
+  return { text: out.join('\n'), status: status === 2 || !usable ? 2 : status };
+}
+
+/** What each declared model will receive, one line each, as `noonsight models` lists it. */
+function receives(env: Env, home: string): string[] {
+  const report = modelsReport(env, home);
+  const lines = ['Each declared model receives:'];
+  for (const m of report.declared) {
+    if (m.wildcard) lines.push(`  ${m.key}: a wildcard, covering the models it matches`);
+    else if (m.use === 'none') lines.push(`  ${m.key}: nothing, by decision`);
+    else {
+      const on = m.rules.filter((r) => r.on);
+      lines.push(`  ${m.key}: ${on.length} of ${m.rules.length} rules${on.length ? ` (${on.map((r) => `${r.id}: ${r.where.join(', ')}`).join('; ')})` : ''}`);
+    }
+  }
+  lines.push('  (after each rule: the places it is delivered in; `noonsight models` shows scopes, source, effect and cost)');
+  return lines;
 }
 
 /**
@@ -169,8 +245,9 @@ function isGone(dir: string): boolean {
   }
 }
 
-function parseMode(args: readonly string[]): Mode {
+function parseMode(command: 'install' | 'uninstall', args: readonly string[]): Parsed {
   let mode: Mode = { kind: 'every' };
+  let hooksOnly = false;
   const set = (next: Mode): void => {
     if (mode.kind !== 'every') throw new UsageError('give at most one of --account and --managed', INSTALL_USAGE);
     mode = next;
@@ -186,12 +263,13 @@ function parseMode(args: readonly string[]): Mode {
       if (!dir) throw new UsageError('--account needs a directory', INSTALL_USAGE);
       set({ kind: 'account', dir });
     } else if (a === '--managed') set({ kind: 'managed' });
+    else if (a === '--hooks-only' && command === 'install') hooksOnly = true;
     else throw new UsageError(a.startsWith('-') ? `unknown option ${a}` : `unexpected argument "${a}"`, INSTALL_USAGE);
   }
-  return mode;
+  return { mode, hooksOnly };
 }
 
-function installNotes(targets: readonly InstallTarget[], env: Env, home: string): string[] {
+function installNotes(targets: readonly InstallTarget[], env: Env, home: string, withConfigLine: boolean): string[] {
   const notes: string[] = [];
   if (targets[0]?.kind === 'managed') {
     notes.push(
@@ -222,7 +300,7 @@ function installNotes(targets: readonly InstallTarget[], env: Env, home: string)
     }
   }
   if (process.getuid?.() === 0) notes.push('next: run `noonsight check` as yourself, without administrator rights, to check your configuration.');
-  else notes.push(configLine(env, home));
+  else if (withConfigLine) notes.push(configLine(env, home));
   return notes;
 }
 

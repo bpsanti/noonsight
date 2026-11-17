@@ -27,10 +27,27 @@ export interface InitIo {
 export function runInit(args: readonly string[], env: Env, io: InitIo): number {
   if (args.length) throw new UsageError(`unexpected argument "${args[0]}"`, INIT_USAGE);
   const file = configPath(env);
-  if (exists(file)) {
+  const written = writeConfig(env);
+  if (written === null) {
     io.err(`noonsight: ${file} already exists, and init never replaces it; edit it, or move it away and run \`noonsight init\` again`);
     return 1;
   }
+  io.out(
+    [
+      ...written,
+      'Next: `noonsight models` lists every rule with its source, effect and cost; `noonsight install` adds the hooks; `noonsight check` checks it all.',
+    ].join('\n'),
+  );
+  return 0;
+}
+
+/**
+ * Write the configuration file from the preset and describe what was written, or return null when a
+ * file already exists, which is never replaced. `noonsight install` composes this with the hooks.
+ */
+export function writeConfig(env: Env): string[] | null {
+  const file = configPath(env);
+  if (exists(file)) return null;
 
   const preset = readPreset(DEFAULT_PRESET, {}, env);
   const content = {
@@ -40,8 +57,13 @@ export function runInit(args: readonly string[], env: Env, io: InitIo): number {
     models: Object.fromEntries([...preset.models.keys()].map((key) => [key, { use: 'preset' }])),
   };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  // "wx" fails when the file appeared since the check above, so a file is never replaced.
-  fs.writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`, { flag: 'wx' });
+  try {
+    // "wx" fails when the file appeared since the check above, so a file is never replaced.
+    fs.writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`, { flag: 'wx' });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return null;
+    throw e;
+  }
 
   const { preset: loaded } = loadConfigDetails(file, {}, env);
   const lines = [`wrote ${file}: preset ${preset.name} ${preset.version}, ${preset.models.size} models declared with "use": "preset"`];
@@ -49,11 +71,7 @@ export function runInit(args: readonly string[], env: Env, io: InitIo): number {
     const on = rules.filter((r) => r.enabled).length;
     lines.push(`  ${key}: ${on} of ${rules.length} rules on`);
   }
-  lines.push(
-    'Next: `noonsight models` lists every rule with its source, effect and cost; `noonsight install` adds the hooks; `noonsight check` checks it all.',
-  );
-  io.out(lines.join('\n'));
-  return 0;
+  return lines;
 }
 
 function exists(file: string): boolean {

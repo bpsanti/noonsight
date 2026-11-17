@@ -24,10 +24,11 @@ import { packageVersion } from './version.js';
 const USAGE = `usage: noonsight <command>
 
 Commands:
-  init                              create the configuration file from the preset
-  install [--account <dir>|--managed]
-                                    install the Claude Code hooks: by default for every Claude Code
-                                    login of this account, or for one directory, or machine-wide
+  init                              create the configuration file from the preset (install does it too)
+  install [--account <dir>|--managed] [--hooks-only]
+                                    set noonsight up: write the configuration if there is none,
+                                    install the Claude Code hooks (by default for every login of this
+                                    account, or one directory, or machine-wide), then check
   uninstall [--account <dir>|--managed]
                                     remove them
   watch enable|disable              turn on or off the watcher that installs the hooks into each

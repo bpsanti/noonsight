@@ -4,7 +4,41 @@ noonsight reaches Claude Code through five official settings hooks: `SessionStar
 `noonsight install` puts them in place, `noonsight uninstall` takes them out, and `noonsight check` says whether they will run.
 [hooks.md](hooks.md) describes what the hooks do once they run.
 
-There are three ways to install:
+## The one command
+
+```bash
+npx noonsight install
+```
+
+On a clean machine this is all of the setup.
+It takes these steps in order, and each one is the command of its own named in brackets, so none of them has logic the command does not have by itself:
+
+1. **The configuration** [`noonsight init`].
+   When `~/.config/noonsight/noonsight.json` (or the file `NOONSIGHT_CONFIG` names) does not exist, it is written from the preset, declaring every model the preset has rules for with `"use": "preset"`.
+   A file that exists is never opened for writing, and the output says it was left as it is.
+2. **The hooks** [`noonsight install --hooks-only`].
+   They go into every Claude Code configuration directory of your account, as [described below](#every-login-of-your-account-the-default).
+3. **What each model receives** [`noonsight models`].
+   One line per declared model: how many of its rules are on, and for each the places it is delivered in.
+   A rule is delivered only where its scope and place apply to the session, so an interactive session with no `NOONSIGHT_SCOPE` receives the rules declared for every scope, and `noonsight models` shows the rest.
+4. **The check** [`noonsight check`].
+   Its lines are printed as they are, and a problem in them makes the command exit 1 (2 for a refused configuration, which also says that sessions get no rules until it is fixed).
+5. **The summary.** One line says what changed (the configuration file written, hooks added to N directories), or that nothing changed.
+
+Running it again changes nothing: the existing configuration is kept, the hooks are already in place, and the summary says so.
+After it, the first Claude Code session already receives the rules of its model that apply to it, and `noonsight report` lists each rule delivered with its model, scope and place.
+
+`--account <dir>` runs the same steps for one directory.
+`--hooks-only` stops after step 2, with no configuration written and no check run; the [watcher](#new-logins-as-they-appear-optional) installs that way.
+`--managed` only installs the hooks, because it runs as an administrator and the configuration belongs to each account.
+
+To undo it, `noonsight uninstall` removes the hooks and the hook pointer, as [Uninstall](#uninstall) says.
+The configuration file is yours, so uninstall leaves it: delete `~/.config/noonsight/noonsight.json` by hand to remove it too.
+The decision log stays in `~/.local/state/noonsight/`.
+
+## The three installs of the hooks
+
+There are three ways to install the hooks:
 
 | Command | Reaches | Rights |
 | --- | --- | --- |

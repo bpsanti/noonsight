@@ -36,7 +36,7 @@ function logLines(env: { HOME: string }): Record<string, unknown>[] {
 test('after an account install, check reports every part as ok and exits 0', () => {
   const { env } = setup();
   const claudeDir = tempTree({});
-  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['install', '--account', claudeDir, '--hooks-only'], env).status, 0);
   runCli(['hook', 'session-start'], env, [], hookInput('session-start-startup'));
   const r = runCli(['check'], env, NO_NETWORK);
   assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -65,13 +65,13 @@ test('nothing installed is a problem', () => {
 
 test('a Claude Code older than the PostModelSwitch event is a problem; no claude on PATH is a warning', () => {
   const old = setup('2.1.200');
-  assert.equal(runCli(['install', '--account', tempTree({})], old.env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], old.env).status, 0);
   const r = runCli(['check'], old.env);
   assert.equal(r.status, 1);
   assert.match(r.stdout, /problem: claude: installed 2\.1\.200; the PostModelSwitch hook event needs 2\.1\.251 or later \(upgrade: claude update\)/);
 
   const none = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], none.env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], none.env).status, 0);
   const missing = runCli(['check'], { ...none.env, PATH: tempTree({}) });
   assert.equal(missing.status, 0, missing.stdout);
   assert.match(missing.stdout, /warning: claude: not found on PATH/);
@@ -79,7 +79,7 @@ test('a Claude Code older than the PostModelSwitch event is a problem; no claude
 
 test('a hook pointer whose copy of noonsight is gone, or missing, is a problem', () => {
   const { env, home } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
   fs.writeFileSync(pointer, fs.readFileSync(pointer, 'utf8').replace(/^cli=.*$/m, "cli='/gone/cli.js'"));
   const gone = runCli(['check'], env);
@@ -91,7 +91,7 @@ test('a hook pointer whose copy of noonsight is gone, or missing, is a problem',
 
 test('a hook pointer whose copy of noonsight this account cannot reach is reported as unreachable, not gone', { skip: process.getuid?.() === 0 }, () => {
   const { env, home } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const pointer = path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook');
   const locked = tempTree({ 'cli.js': '' });
   fs.writeFileSync(pointer, fs.readFileSync(pointer, 'utf8').replace(/^cli=.*$/m, `cli='${path.join(locked, 'cli.js')}'`));
@@ -109,20 +109,20 @@ test('a hook pointer whose copy of noonsight this account cannot reach is report
 test('an account install whose entries were removed by hand, or that sets disableAllHooks, is a problem', () => {
   const { env } = setup();
   const claudeDir = tempTree({});
-  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['install', '--account', claudeDir, '--hooks-only'], env).status, 0);
   fs.writeFileSync(path.join(claudeDir, 'settings.json'), JSON.stringify({ disableAllHooks: true }));
   const r = runCli(['check'], env);
   assert.equal(r.status, 1);
   assert.match(r.stdout, /problem: account install .*: no noonsight hooks in .*settings\.json; run `noonsight install --account/);
 
-  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['install', '--account', claudeDir, '--hooks-only'], env).status, 0);
   assert.match(runCli(['check'], env).stdout, /problem: account install .*sets disableAllHooks, so Claude Code runs none of this account's hooks/);
 });
 
 test('an install from before the subagent hooks or the SubagentStart hook, or one whose agent-tool matcher was widened, is a problem until install runs again', () => {
   const { env } = setup();
   const claudeDir = tempTree({});
-  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['install', '--account', claudeDir, '--hooks-only'], env).status, 0);
   const file = path.join(claudeDir, 'settings.json');
   const settings = JSON.parse(fs.readFileSync(file, 'utf8'));
   const full = structuredClone(settings);
@@ -142,13 +142,13 @@ test('an install from before the subagent hooks or the SubagentStart hook, or on
   full.hooks.PreToolUse[0].matcher = '*';
   fs.writeFileSync(file, JSON.stringify(full));
   assert.match(runCli(['check'], env).stdout, /problem: account install .*: the hooks in .*settings\.json are incomplete or point elsewhere; run/);
-  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['install', '--account', claudeDir, '--hooks-only'], env).status, 0);
   assert.equal(runCli(['check'], env, NO_NETWORK).status, 0);
 });
 
 test('the last decision can be a subagent result', () => {
   const { env } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const session = JSON.parse(hookInput('pre-tool-use-agent')) as Record<string, any>;
   runCli(['hook', 'session-start'], env, [], hookInput('session-start-startup', { session_id: session.session_id, model: 'claude-sonnet-5-5' }));
   runCli(['hook', 'agent-call'], env, [], JSON.stringify(session));
@@ -160,7 +160,7 @@ test('the last decision can be a subagent result', () => {
 
 test('a refused or missing configuration exits 2 and lists the problems', () => {
   const { env } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const bad = path.join(tempTree({ 'noonsight.json': { version: 1, models: { sonnet: { use: 'none' } } } }), 'noonsight.json');
   const r = runCli(['check'], { ...env, NOONSIGHT_CONFIG: bad });
   assert.equal(r.status, 2);
@@ -225,7 +225,7 @@ test('a login whose server-managed settings shadow the managed files is a proble
   );
   assert.ok(shadowed.stdout.includes(`ok: Claude Code configuration ${other}: reached by the machine-wide install`), shadowed.stdout);
 
-  assert.equal(runCli(['install', '--account', claudeDir], env).status, 0);
+  assert.equal(runCli(['install', '--account', claudeDir, '--hooks-only'], env).status, 0);
   const reached = runCli(['check'], env);
   assert.equal(reached.status, 0, reached.stdout);
   assert.ok(reached.stdout.includes(`ok: account install ${claudeDir}: hooks in`), reached.stdout);
@@ -237,7 +237,7 @@ test('server-managed settings that turn hooks off for a login are a problem', ()
   const { home, env } = setup();
   const claudeDir = path.join(home, '.claude');
   fs.mkdirSync(claudeDir);
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
   fs.writeFileSync(path.join(claudeDir, 'remote-settings.json'), JSON.stringify({ allowManagedHooksOnly: true }));
   assert.match(runCli(['check'], env).stdout, /problem: Claude Code configuration .*set allowManagedHooksOnly, so Claude Code runs only the hooks the organization delivers/);
   fs.writeFileSync(path.join(claudeDir, 'remote-settings.json'), JSON.stringify({ disableAllHooks: true }));
@@ -248,20 +248,20 @@ test('server-managed settings that turn hooks off for a login are a problem', ()
 
 test('a Claude Code configuration directory added after the install is a problem until install runs again', () => {
   const { home, env } = setup();
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
   const added = path.join(home, '.claude-new');
   fs.mkdirSync(added);
   fs.writeFileSync(path.join(added, '.claude.json'), '{}');
   const r = runCli(['check'], env);
   assert.equal(r.status, 1);
   assert.ok(r.stdout.includes(`problem: Claude Code configuration ${added}: no noonsight hooks reach it; run \`noonsight install\``), r.stdout);
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
   assert.equal(runCli(['check'], env).status, 0);
 });
 
 test('a Claude Code older than the documented aliases is a warning', () => {
   const { env } = setup('2.1.300');
-  assert.equal(runCli(['install'], env).status, 0);
+  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
   const r = runCli(['check'], env);
   assert.equal(r.status, 0, r.stdout);
   assert.match(r.stdout, /warning: claude: installed 2\.1\.300; when a session without a reported model, such as `claude -p`, names it by an alias, noonsight assumes what the aliases select from Claude Code 2\.1\.321 on/);
@@ -269,7 +269,7 @@ test('a Claude Code older than the documented aliases is a warning', () => {
 
 test('check reports scopes whose matchers overlap as warnings that keep exit 0', () => {
   const { env } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const dir = tempTree({
     'noonsight.json': {
       version: 1,
@@ -295,7 +295,7 @@ test('check reports scopes whose matchers overlap as warnings that keep exit 0',
 
 test('check does not claim that no two scopes overlap while a matcher has more examples than it keeps', () => {
   const { env } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const words = Array.from({ length: 24 }, (_, i) => `w${String(i).padStart(2, '0')}`);
   const dir = tempTree({
     'noonsight.json': {
@@ -311,7 +311,7 @@ test('check does not claim that no two scopes overlap while a matcher has more e
 
 test('check says which scope and place sessions started from its environment get, and warns about an undeclared NOONSIGHT_SCOPE', () => {
   const { env } = setup();
-  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  assert.equal(runCli(['install', '--account', tempTree({}), '--hooks-only'], env).status, 0);
   const dir = tempTree({ 'noonsight.json': { version: 1, scopes: { investigate: { match: ['\\binvestigat'] } }, session: { unattended_when_env: ['CI'] } } });
   const scoped = { ...env, NOONSIGHT_CONFIG: path.join(dir, 'noonsight.json') };
   const quiet = runCli(['check'], scoped);

@@ -32,18 +32,20 @@ One configuration file serves the whole machine, for every Claude Code account o
 ## Install
 
 ```bash
-noonsight init       # the configuration file, declaring every model the preset covers
-noonsight models     # each model's rules, with their source, effect and cost
-noonsight install    # every Claude Code login of this account, no administrator rights
-noonsight check      # configuration, installs, watcher, Claude Code version
+npx noonsight install
 ```
 
-`noonsight init` writes `~/.config/noonsight/noonsight.json`, or the file `NOONSIGHT_CONFIG` names, and never replaces one that exists.
+One command sets noonsight up, and running it again is safe.
+It writes the configuration file when there is none (`~/.config/noonsight/noonsight.json`, or the file `NOONSIGHT_CONFIG` names, declaring every model the preset covers; an existing file is never replaced), adds the hooks to every Claude Code login of this account (no administrator rights), runs `noonsight check`, lists the rules each declared model receives, and ends by saying what it changed, or that nothing changed.
+The next Claude Code session already gets the rules of its model that apply to its scope and place, and `noonsight report` shows what was delivered.
+[docs/install.md](docs/install.md#the-one-command) lists the steps it takes and how to undo them.
+
+The same steps are also commands of their own: `noonsight init`, `noonsight models`, `noonsight install --hooks-only` and `noonsight check`.
 Turn a preset rule on or off with `enable` and `disable`, add your own rule files, and declare the models you use; [docs/configuration.md](docs/configuration.md) explains each key.
 
 `noonsight watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `noonsight watch disable` turns it off.
 
-`noonsight install` adds noonsight's hooks to the user settings of every Claude Code configuration directory it finds (`~/.claude`, the one in `CLAUDE_CONFIG_DIR`, and every other one in the home directory), keeping every other setting and hook.
+`noonsight install` adds noonsight's hooks (after the configuration file, when there is none) to the user settings of every Claude Code configuration directory it finds (`~/.claude`, the one in `CLAUDE_CONFIG_DIR`, and every other one in the home directory), keeping every other setting and hook.
 User settings reach every login, including one whose organization delivers server-managed settings, where Claude Code ignores machine-wide managed settings files.
 `noonsight install --account <dir>` installs into one directory, and `sudo ... noonsight install --managed` once for every account through Claude Code's managed settings files.
 [docs/install.md](docs/install.md) covers the three installs, what they write, why the default is the default, and how to remove them.
