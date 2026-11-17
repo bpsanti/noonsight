@@ -1,13 +1,14 @@
-// The Claude Code hook adapter: SessionStart and PostModelSwitch for the session itself, and
-// PreToolUse and PostToolUse on the agent tool and SubagentStart for the subagents it starts
-// (subagents.ts).
+// The Claude Code hook adapter: SessionStart and PostModelSwitch for the session itself, PostToolUse
+// on Edit and Write for the triggers the session reveals (triggers.ts), and PreToolUse and PostToolUse
+// on the agent tool and SubagentStart for the subagents it starts (subagents.ts).
 //
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session beyond a bound: it reads local files only and never
 //     the network itself. It starts no process, except `ps` on macOS to read the Claude Code command
 //     line when nothing else names the session's model (launch.ts), or when `noonsight run` started the
-//     session (launcher.ts); and, with classifier.mode on, the classifier for an agent call, stopped
-//     after classifier.timeout_ms (classifier.ts).
+//     session (launcher.ts); `git ls-files`, stopped after 3 seconds, for an edit of a code file until
+//     the session reveals code-edit (code-edit.ts); and, with classifier.mode on, the classifier for
+//     an agent call, stopped after classifier.timeout_ms (classifier.ts).
 //   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session or subagent
 //     context, or a subagent call routing changed), systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.
@@ -18,17 +19,18 @@ import fs from 'node:fs';
 import { ConfigError, loadConfig } from '../../config/load.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { normalizeModel } from '../../core/normalize.js';
-import { joinDelivery, launcherNote, resolve, switchNote } from '../../core/resolve.js';
+import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
-import type { Config, Decision } from '../../core/types.js';
+import type { Config, Decision, Trigger } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
 import { launchFields, launchModel, readCommandLine, type LaunchModel } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
-import { AGENT_TOOLS, HOOK_EVENTS, type HookEvent } from './settings.js';
+import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
 import { agentCall, agentResult, choiceFields, decisionFields, subagentStart } from './subagents.js';
+import { fileEdit, mayReveal, revealedTriggers } from './triggers.js';
 
 export interface HookContext {
   readonly env: Env;
@@ -45,18 +47,22 @@ export interface HookContext {
 /** Run one hook event. Returns what to print on stdout (possibly nothing). Never throws. */
 export function runHook(arg: string, rawInput: string, ctx: HookContext): string {
   if (ctx.env.NOONSIGHT_DISABLE === '1') return '';
-  const event = (Object.keys(HOOK_EVENTS) as HookEvent[]).find((e) => HOOK_EVENTS[e] === arg);
-  if (!event) return '';
+  const spec = HOOK_HANDLERS.find((h) => h.arg === arg);
+  if (!spec) return '';
+  const event = spec.event;
   const input = parseInput(rawInput);
   // Anything that is not this Claude Code event (another tool reading the same settings, a hand
   // run, a renamed event) is left alone, silently.
   if (!input || input.hook_event_name !== event) return '';
-  const toolEvent = event === 'PreToolUse' || event === 'PostToolUse';
-  const subagentEvent = toolEvent || event === 'SubagentStart';
-  // The settings entry only matches the agent tool; a hand-edited or widened matcher must not reach other tools.
-  if (toolEvent && !AGENT_TOOLS.includes(str(input.tool_name) ?? '')) return '';
+  const toolEvent = spec.tools !== undefined;
+  const editEvent = arg === 'file-edit';
+  const subagentEvent = (toolEvent && !editEvent) || event === 'SubagentStart';
+  // Each settings entry only matches its own tools; a hand-edited or widened matcher must not reach other tools.
+  if (spec.tools !== undefined && !spec.tools.includes(str(input.tool_name) ?? '')) return '';
 
   const state = stateDir(ctx.home);
+  // Every edit runs this hook; one that cannot reveal a trigger ends here, before the configuration is read.
+  if (editEvent && !mayReveal(input, state)) return '';
   const record: Record<string, unknown> = {
     ts: ctx.now.toISOString(),
     version: ctx.version,
@@ -92,8 +98,9 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       config = loadConfig(file, {}, ctx.env);
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
-      // The call that started the subagent already warned, and logged that nothing was delivered.
-      if (event === 'SubagentStart') return '';
+      // The call that started the subagent already warned, and logged that nothing was delivered; the
+      // session's start already warned that the session got no rules.
+      if (event === 'SubagentStart' || editEvent) return '';
       // The call this result belongs to already warned.
       if (event === 'PostToolUse') {
         log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), warned: false });
@@ -118,9 +125,25 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     }
     const sessionId = str(input.session_id) ?? '';
     const sessionState = sessionFile(state, sessionId);
+    if (editEvent) {
+      const outcome = fileEdit(input, config, { env: ctx.env, home: ctx.home, now: ctx.now, state, parentPid: ctx.parentPid });
+      if (outcome === null) return '';
+      log(outcome.record);
+      if (outcome.state)
+        try {
+          writeState(sessionState, { ...outcome.state, at: ctx.now.toISOString() });
+        } catch {
+          // Without the record, a later resume delivers again: the safe direction.
+        }
+      return output([], outcome.context ? { hookEventName: event, additionalContext: outcome.context } : null);
+    }
     const processState = processFile(state, ctx.parentPid);
     // Both come from the environment Claude Code runs in, which its hooks inherit.
-    const where: Where = { scope: sessionScope(ctx.env), place: sessionPlace(config, ctx.env) };
+    const where: Where = {
+      scope: sessionScope(ctx.env),
+      place: sessionPlace(config, ctx.env),
+      triggers: revealedTriggers(config, state, str(input.session_id)),
+    };
     const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
     const result =
       event === 'SessionStart'
@@ -149,6 +172,11 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     return output(result.messages, result.context ? { hookEventName: event, additionalContext: result.context } : null);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    // The edit itself is done, and a warning after every edit would only repeat; the log keeps the error.
+    if (editEvent) {
+      log({ status: 'error', error: message, delivered: 'nothing', warned: false });
+      return '';
+    }
     if (event === 'PostToolUse') {
       log({ status: 'error', error: message, ...notRouted('error'), warned: true });
       return output([`noonsight: the hook failed (${message}), so the subagent's model was not checked.`], null);
@@ -162,10 +190,11 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
   }
 }
 
-/** A session's scope and place. */
+/** A session's scope and place, and the triggers it has revealed. */
 interface Where {
   readonly scope: ScopeChoice;
   readonly place: PlaceChoice;
+  readonly triggers: readonly Trigger[];
 }
 
 interface Outcome {
@@ -192,6 +221,10 @@ interface Outcome {
  * so at those starts the rules are not delivered again when the launcher's text holds them. A resumed
  * or forked conversation keeps the system prompt it was first sent with, so the session record decides.
  * When the launcher's rules are for another model than the session's, a note says they do not apply.
+ *
+ * The rules are resolved with the triggers the session has revealed (triggers.ts), which its id keeps:
+ * after compaction, the same session gets the rules a trigger added again; after /clear, a new session
+ * starts with none.
  */
 function sessionStart(
   input: Record<string, unknown>,
@@ -218,14 +251,20 @@ function sessionStart(
       : launch?.kind === 'found'
         ? launch.source
         : null;
-  const decision = resolve(config, { model, scope: where.scope.scope, place: where.place.place });
+  const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
+  const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
   const repeat = (source === 'resume' || source === 'fork') && session !== null && session.model === decision.model && session.sha256 === sha;
 
   const launcher = source === 'startup' || source === 'clear' || source === 'compact' ? readLauncher() : null;
-  const inPrompt = launcher !== null && decision.status === 'matched' && launcher.content.includes(decision.text);
+  // The launcher's system prompt holds the rules for the session's scope; it never holds those a
+  // trigger the session revealed later added, which are delivered here.
+  const forLauncher = where.triggers.length ? resolve(config, { ...request, triggers: [] }) : decision;
+  const inPrompt = launcher !== null && forLauncher.status === 'matched' && launcher.content.includes(forLauncher.text);
+  const added = inPrompt && where.triggers.length ? resolveAdded(config, request, []) : null;
+  const sent = inPrompt ? (added?.status === 'matched' ? added : null) : decision.status === 'matched' ? decision : null;
   const otherModel = launcher !== null && !inPrompt && launcher.model !== null && launcher.model !== decision.model ? launcher.model : null;
-  const rules = decision.status === 'matched' && !repeat && !inPrompt ? decision.text : null;
+  const rules = sent !== null && !repeat ? sent.text : null;
   const note = otherModel !== null ? launcherNote(otherModel, decision.model ?? '') : null;
   const parts = [...(note ? [note] : []), ...(rules ? [rules] : [])];
   const messages = repeat
@@ -241,12 +280,14 @@ function sessionStart(
       ];
   return {
     record: {
-      ...decisionFields(decision),
+      // Rules sent beside the launcher's are only those a trigger added, so the line names those.
+      ...decisionFields(sent !== null && sent !== decision && !repeat ? sent : decision),
       ...choiceFields(where.scope, where.place),
+      ...triggerFields(where.triggers),
       model_source: modelSource,
       ...launchFields(launch),
       ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),
-      delivered: repeat ? 'already-delivered' : inPrompt ? 'launcher' : rules ? (note ? 'rules+note' : 'rules') : note ? 'note' : 'nothing',
+      delivered: repeat ? 'already-delivered' : rules ? (note ? 'rules+note' : 'rules') : inPrompt ? 'launcher' : note ? 'note' : 'nothing',
       warned: messages.length > 0,
     },
     context: parts.length ? joinDelivery(parts) : null,
@@ -262,10 +303,16 @@ function sessionStart(
 function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null): Outcome {
   const to = normalizeModel(str(input.to_model));
   const from = normalizeModel(str(input.from_model));
-  const request = { scope: where.scope.scope, place: where.place.place };
+  const request = { scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const base = { ...decisionFields(decision), ...choiceFields(where.scope, where.place), model_source: 'hook-input', from_model: from || null };
+  const base = {
+    ...decisionFields(decision),
+    ...choiceFields(where.scope, where.place),
+    ...triggerFields(where.triggers),
+    model_source: 'hook-input',
+    from_model: from || null,
+  };
   const state = decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha };
 
   // Resuming a session restores its model and reports it as a switch; the rules may already be there.
@@ -289,6 +336,11 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     messages,
     state,
   };
+}
+
+/** The triggers a session has revealed, for its log line; nothing when it has revealed none. */
+function triggerFields(triggers: readonly Trigger[]): Record<string, unknown> {
+  return triggers.length ? { triggers } : {};
 }
 
 function undeclaredMessages(decision: Decision, file: string, launch: LaunchModel | null = null): string[] {

@@ -1,5 +1,6 @@
 // noonsight report: what the decision log says the hooks and the launcher did. For each rule, how
-// often it was delivered, and to which models, scopes, places and events; the rules the
+// often it was delivered, and to which models, scopes, places and events, and whether its scope or a
+// trigger brought it; the triggers sessions revealed, and with which edits; the rules the
 // configuration has on that the log never shows delivered; the decisions that delivered nothing, by
 // why; and what the classifier did, how long it took and what it cost. It reads local files only and
 // changes nothing.
@@ -16,8 +17,9 @@ import { UsageError } from './usage.js';
 export const REPORT_USAGE = `usage: noonsight report [--json] [--log <file>]
 
 Report what the decision log records: for each rule, how often it was delivered and to which
-models, scopes, places and events, with the length of its text; the rules the configuration has on
-that the log never shows delivered; the decisions that delivered nothing, by why; and the
+models, scopes, places and events, whether its scope or a trigger brought it, and the length of its
+text; the triggers sessions revealed, by the edits that revealed them; the rules the configuration
+has on that the log never shows delivered; the decisions that delivered nothing, by why; and the
 classifier's results, time and cost.
 
   --log <file>  read this log file instead of the account's decision log
@@ -30,6 +32,12 @@ export const NOT_RECORDED = '(not recorded)';
 
 /** How a tally names a task with no scope. */
 export const NO_SCOPE = '(none)';
+
+/** How the tally of what brought a rule names a delivery by the rule's scopes, as opposed to a trigger. */
+export const BY_SCOPE = 'scope';
+
+/** How many files a trigger's text lists, most frequent first. */
+const FILES_SHOWN = 10;
 
 /** The values of `delivered` that mean the rules reached the model: by the hook, or in the system prompt. */
 export const DELIVERING = ['rules', 'rules+note', 'system-prompt'] as const;
@@ -50,6 +58,8 @@ export interface RuleReport {
   readonly scopes: Tally;
   readonly places: Tally;
   readonly events: Tally;
+  /** What brought each delivery: BY_SCOPE, or the trigger the session revealed. */
+  readonly brought_by: Tally;
   /** The rule's current text length in characters, per model, from the configuration; absent when it cannot be read. */
   readonly characters?: Readonly<Record<string, number>>;
 }
@@ -59,6 +69,18 @@ export interface IdleRule {
   readonly model: string;
   readonly scopes: readonly string[];
   readonly where: readonly Place[];
+}
+
+/** What one trigger did, from the decisions of the edits that revealed it. */
+export interface TriggerReport {
+  /** The sessions that revealed it: one decision each. */
+  readonly revealed: number;
+  /** Of those, the ones whose edit delivered rules. */
+  readonly delivered: number;
+  /** The edits that revealed it, by tool, by file extension, and by file relative to its repository. */
+  readonly tools: Tally;
+  readonly extensions: Tally;
+  readonly files: Tally;
 }
 
 /** What the classifier did, from the decisions that record a `classifier` field. */
@@ -86,6 +108,8 @@ export interface Report {
   /** Subagent checks after the start, by result. */
   readonly agent_results: Tally;
   readonly rules: readonly RuleReport[];
+  /** By trigger; empty when no session revealed one. */
+  readonly triggers: Readonly<Record<string, TriggerReport>>;
   /** Read from the configuration: null when there is none or it is refused, with why. */
   readonly config: { readonly file: string; readonly status: 'read' | 'missing' | 'refused' };
   /** Rules on in the configuration for an exact model that no delivery in this log carries. */
@@ -134,6 +158,7 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
   const classifierMs: number[] = [];
   let classifierCost = 0;
   const rules = new Map<string, MutableRule>();
+  const triggers = new Map<string, MutableTrigger>();
   let first: string | null = null;
   let last: string | null = null;
 
@@ -154,6 +179,17 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
       count(agentResults, text(r.result) ?? NOT_RECORDED);
       continue;
     }
+    const revealed = event === 'file-edit' ? text(r.trigger) : null;
+    if (revealed !== null) {
+      const t = triggers.get(revealed) ?? { revealed: 0, delivered: 0, tools: {}, extensions: {}, files: {} };
+      triggers.set(revealed, t);
+      t.revealed++;
+      if ((DELIVERING as readonly unknown[]).includes(r.delivered)) t.delivered++;
+      count(t.tools, text(r.tool_name) ?? NOT_RECORDED);
+      const file = text(r.file);
+      count(t.extensions, file === null ? NOT_RECORDED : path.extname(file).toLowerCase() || '(none)');
+      count(t.files, file ?? NOT_RECORDED);
+    }
     // A subagent's rules are counted once: delivered at its start, or not delivered at its call.
     if (event === 'agent-call' && r.delivered === 'at-start') continue;
     const ids = Array.isArray(r.rules) ? r.rules.filter((x): x is string => typeof x === 'string') : [];
@@ -164,6 +200,10 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
       continue;
     }
     count(delivering, event);
+    const triggered = Array.isArray(r.triggered_rules) ? r.triggered_rules.filter((x): x is string => typeof x === 'string') : [];
+    const lineTriggers = Array.isArray(r.triggers) ? r.triggers.filter((x): x is string => typeof x === 'string') : [];
+    // A file-edit line names its trigger; a session start or a switch after one names the session's triggers.
+    const by = text(r.trigger) ?? (lineTriggers.join(', ') || NOT_RECORDED);
     for (const id of ids) {
       const rule = rules.get(id) ?? newRule(id);
       rules.set(id, rule);
@@ -179,6 +219,7 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
       count(rule.scopes, 'scope' in r ? (text(r.scope) ?? NO_SCOPE) : NOT_RECORDED);
       count(rule.places, text(r.place) ?? NOT_RECORDED);
       count(rule.events, event);
+      count(rule.brought_by, triggered.includes(id) ? by : BY_SCOPE);
     }
   }
 
@@ -209,6 +250,7 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
         scopes: sorted(r.scopes),
         places: sorted(r.places),
         events: sorted(r.events),
+        brought_by: sorted(r.brought_by),
         ...(Object.keys(shown).length ? { characters: shown } : {}),
       };
     });
@@ -230,6 +272,11 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
     not_delivering: sorted(notDelivering),
     agent_results: sorted(agentResults),
     rules: listed,
+    triggers: Object.fromEntries(
+      [...triggers]
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([name, t]) => [name, { revealed: t.revealed, delivered: t.delivered, tools: sorted(t.tools), extensions: sorted(t.extensions), files: sorted(t.files) }]),
+    ),
     config: { file, status },
     never_delivered: neverDelivered,
     classifier:
@@ -263,10 +310,19 @@ interface MutableRule {
   readonly scopes: Record<string, number>;
   readonly places: Record<string, number>;
   readonly events: Record<string, number>;
+  readonly brought_by: Record<string, number>;
 }
 
 function newRule(id: string): MutableRule {
-  return { id, deliveries: 0, sessions: new Set(), first: null, last: null, models: {}, scopes: {}, places: {}, events: {} };
+  return { id, deliveries: 0, sessions: new Set(), first: null, last: null, models: {}, scopes: {}, places: {}, events: {}, brought_by: {} };
+}
+
+interface MutableTrigger {
+  revealed: number;
+  delivered: number;
+  readonly tools: Record<string, number>;
+  readonly extensions: Record<string, number>;
+  readonly files: Record<string, number>;
 }
 
 /**
@@ -341,8 +397,23 @@ export function renderReport(r: Report): string {
       lines.push(`     scopes: ${pairs(rule.scopes)}`);
       lines.push(`     places: ${pairs(rule.places)}`);
       lines.push(`     events: ${pairs(rule.events)}`);
+      if (Object.keys(rule.brought_by).some((k) => k !== BY_SCOPE)) lines.push(`     brought by: ${pairs(rule.brought_by)}`);
       if (rule.characters)
         lines.push(`     text: ${Object.entries(rule.characters).map(([model, n]) => `${n} characters for ${model}`).join(', ')}`);
+    }
+  }
+
+  const triggerNames = Object.keys(r.triggers);
+  if (triggerNames.length) {
+    lines.push('', 'Triggers revealed:');
+    for (const name of triggerNames) {
+      const t = r.triggers[name] as TriggerReport;
+      lines.push(`  ${name}: in ${t.revealed} ${t.revealed === 1 ? 'session' : 'sessions'}, ${t.delivered} with rules delivered`);
+      lines.push(`     tools: ${pairs(t.tools)}`);
+      lines.push(`     extensions: ${pairs(t.extensions)}`);
+      const files = Object.entries(t.files);
+      const more = files.length - FILES_SHOWN;
+      lines.push(`     files: ${pairs(Object.fromEntries(files.slice(0, FILES_SHOWN)))}${more > 0 ? `, and ${more} more` : ''}`);
     }
   }
 

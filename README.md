@@ -13,6 +13,7 @@ Take a fix before you set the course: pick the right model for each agent task, 
 Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
 So does each subagent a session starts: before it starts, noonsight predicts the model it will run on, hands it that model's rules as it starts, without changing the call that started it, then checks the model it actually started on and warns on a difference.
 Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `NOONSIGHT_SCOPE`, a subagent from matchers run over its task, and `noonsight check` reports scopes that overlap.
+A rule can also list a trigger, an action that reveals the kind of task: a session that first edits a code file its project's git already tracks receives the rules that list `code-edit`, such as the preset's verify rules for Sonnet and Haiku, with that edit ([docs/configuration.md](docs/configuration.md#triggers)).
 `noonsight run` starts Claude Code with the rules in the system prompt instead, for sessions the hooks do not reach; with the hooks installed too, the rules still arrive once.
 Routing is optional and off by default: once turned on, a task's scope picks the model and effort for a session `noonsight run` starts and for each subagent, from a table of preferences, and it yields to a model the caller chose and to an orchestrator's environment ([docs/configuration.md](docs/configuration.md#routing)).
 The classifier is optional and off by default too: once turned on, a small model places a task that no explicit scope and no matcher placed, and a task it cannot place in time gets no scope ([The classifier](#the-classifier)).
@@ -57,7 +58,7 @@ User settings reach every login, including one whose organization delivers serve
 noonsight was called sextant before; [docs/install.md](docs/install.md#moving-from-sextant) says how to move an install made under that name.
 [docs/hooks.md](docs/hooks.md) describes what the hooks deliver, the decision log, and how to turn noonsight off for a session (`NOONSIGHT_DISABLE=1`).
 
-`noonsight report` reads the decision log and tells, for each rule, how often it was delivered and to which models, scopes and places, and which rules are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).
+`noonsight report` reads the decision log and tells, for each rule, how often it was delivered and to which models, scopes and places, which deliveries a trigger made and with which edits, and which rules are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).
 
 `noonsight run [--scope <scope>] -- <claude arguments>` starts `claude` with the rules for its model added through `--append-system-prompt-file`, keeping any `--append-system-prompt` someone else passes, and with routing on, the model and effort the scope's row gives; [docs/launcher.md](docs/launcher.md) explains it.
 
@@ -116,6 +117,8 @@ See [docs/configuration.md](docs/configuration.md) for the configuration file an
 npm test             # builds, then runs every test with node --test
 npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
+
+Without a login, `npm run test:live` also runs a `claude -p` session against a local stand-in for the Messages API that answers with a fixed script of tool calls: it checks that writing an HTML report delivers nothing and that the first edit of a tracked code file delivers the preset's verify rule for Sonnet, once, right after the edit's result.
 
 `NOONSIGHT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session), the scope cases (two sessions on one model in two scopes through `NOONSIGHT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) the preset cases (what Claude Code's own system prompt already sends each model, compared with the preset, and the real preset reaching a session and a subagent with the hash `noonsight resolve` gives) the launcher cases (`noonsight run` with an explicit model, with and without the hooks, next to another `--append-system-prompt` or `--append-system-prompt-file`, and routed without `--model`) the routing cases (`route-subagents`, `explicit-model` and `orchestrator-env`) and the classifier cases (`classifier-agreement` over the hand-labeled tasks, `classifier-subagent` and `classifier-timeout`) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage, Fable 5.2 included.
 `npm run experiment -- run` runs the rule effect experiment from the same login, within a spending cap it states ([experiments/rules/README.md](experiments/rules/README.md)).

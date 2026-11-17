@@ -71,7 +71,11 @@ export function fakeClaude(version: string): string {
 }
 
 /** The Claude Code version each recorded hook input comes from, when it is not 2.1.325. */
-const INPUT_VERSIONS: Readonly<Record<string, string>> = { 'subagent-start': '2.1.326' };
+const INPUT_VERSIONS: Readonly<Record<string, string>> = {
+  'subagent-start': '2.1.326',
+  'post-tool-use-edit': '2.1.326',
+  'post-tool-use-write': '2.1.326',
+};
 
 /** A recorded or documented Claude Code hook input, with fields replaced as given. */
 export function hookInput(name: string, fields: Record<string, unknown> = {}): string {

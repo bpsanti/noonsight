@@ -32,7 +32,7 @@ export class NeedsPermission extends Error {
   }
 }
 
-const EVENTS = Object.keys(HOOK_EVENTS).join(', ');
+const EVENTS = HOOK_EVENTS.join(', ');
 
 interface InstallPlan {
   readonly settings: Record<string, unknown> | null;

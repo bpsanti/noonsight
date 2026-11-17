@@ -129,14 +129,45 @@ Default matchers were considered and left out, as a judgment, for two reasons:
 
 A user who knows the words of their own tasks can declare matchers, and `noonsight check` reports two scopes whose matchers overlap.
 
-Until a scope is detected some other way, the rules with a list are dormant in every task whose scope is not known.
-Of the rules on by default, that is `fable-5-2/finish-work`, `sonnet-5-5/stay-in-scope`, `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes`; of those off by default, `fable-5-2/code-ownership`, `sonnet-5-5/no-self-review-rounds`, `sonnet-5-5/check-current-facts` and `haiku-5-5/search-recent-facts`.
+A session also shows its kind of task by what it does: the two verify rules list the trigger `code-edit`, so a session receives them when it first edits a code file the project's git already tracks, whatever its scope ([Rules delivered on an action](#rules-delivered-on-an-action)).
+
+Until a scope is detected some other way, the other rules with a list are dormant in every task whose scope is not known.
+Of the rules on by default, that is `fable-5-2/finish-work` and `sonnet-5-5/stay-in-scope`, and the two verify rules in a subagent or in a session that has not edited code; of those off by default, `fable-5-2/code-ownership`, `sonnet-5-5/no-self-review-rounds`, `sonnet-5-5/check-current-facts` and `haiku-5-5/search-recent-facts`.
 Meanwhile, a user who wants one of them in every task can leave the preset's rule off (`disable` turns off one that ships on) and add the same text as their own rule with `"scopes": ["*"]` (`add`, [configuration.md](../../docs/configuration.md#keys)).
 
 The classifier ([configuration.md](../../docs/configuration.md#the-classifier)) is the way the preset waits for.
 It is off by default; with `classifier.mode` set to `fallback`, a small model gives a scope to tasks that no explicit scope and no matcher placed, reading the descriptions of the preset's scopes, and the task gets no scope when it fails or takes too long.
 With it on, the dormant rules start to reach the tasks it places, subagents included, with no change to the preset, and a task it cannot place still receives the `*` rules.
 That fallback is why the `*` rules are held to principle 1: they are what a task of unknown kind receives, with or without the classifier.
+
+### Rules delivered on an action
+
+A plain interactive session has no known scope, so the rules with a list never reach it.
+A trigger is a second way in: a rule that lists one is also delivered to a session once the session does it, whatever its scope ([hooks.md](../../docs/hooks.md#posttooluse-on-edit-and-write-the-triggers)).
+The one trigger is `code-edit`: the session edited, with Edit or Write, a file with a code extension that the project's git already tracks.
+The edit shows the session is changing code, but not which kind of task it is on: a fix found by an investigation, an implementation and a routine change all make one, and so can a review that ends up fixing what it found.
+
+So a trigger is given only to a rule that is cheap when that guess is wrong.
+These principles decide which rules list it; all of them are judgment, since no source discusses delivering a rule on an action:
+
+1. **The rule acts on the action itself.**
+   A rule whose advice only applies once code has changed costs nothing but its text in a session that edited code for any reason, and nothing at all in one that never does, since a session that edits no tracked code file never receives it.
+2. **The rule never works against a kind of task the edit cannot rule out.**
+   An edit cannot tell `routine` from `build`, so a rule kept out of one of them on purpose does not list the trigger.
+3. **A rule with a measured cost or a described side effect needs a named scope.**
+   An edit is too weak a signal to buy it.
+
+| Rule | Trigger | Why |
+| --- | --- | --- |
+| `sonnet-5-5/verify-changes` | `code-edit` | Its advice starts with "a code change that can be executed, built or type-checked", so it acts only after the edit that triggers it (principle 1). Its scopes are the three that make code changes, so a session that edits code gets nothing a named scope would have kept from it; in a review or a digest that edits code after all, a real check of that change is still what the rule's source asks for. The source reports a slightly higher cost per task and no side effect. |
+| `haiku-5-5/verify-changes` | `code-edit` | As for `sonnet-5-5/verify-changes`; its source reports more tokens, without a figure, and no side effect. |
+| `fable-5-2/finish-work` | None | About 30 percent more output, kept out of `routine` for that reason (principles 2 and 3); and it reaches subagents only, where a trigger does not act. |
+| `sonnet-5-5/stay-in-scope` | None | It holds back additions that are often wanted in `build`, and an edit cannot tell `routine` from `build` (principle 2). |
+| `fable-5-2/code-ownership`, `sonnet-5-5/no-self-review-rounds` | None | Off by default; one has a measured cost of 70 to 80 percent more output with changes nobody asked for, the other changes how much the model reviews (principle 3). |
+| `sonnet-5-5/check-current-facts`, `haiku-5-5/search-recent-facts` | None | Off by default, and their scopes are `investigate` and `digest`, which an edit of code does not reveal. |
+
+A trigger that fires on the wrong edit can be measured: every delivery a trigger made names it in the decision log, with the tool and the file, and `noonsight report` lists them under "Triggers revealed".
+`session.triggers` set to `[]` turns triggers off, and the verify rules then reach a session only from a named scope, as before.
 
 ### Measuring a change of scopes
 
@@ -303,6 +334,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Scope basis: sourced for `build`, `routine`; judgment for `investigate`.
   Section "Verification on coding tasks" describes the skipped checks "On agentic coding tasks", which is what `build` and `routine` cover.
   Including `investigate`, where a fix often ends the work, is judgment.
+- Trigger: `code-edit`, as a judgment: the rule acts only on a code change, so it is cheap in a session that edits code whatever its task ([Rules delivered on an action](#rules-delivered-on-an-action)).
 
 #### `sonnet-5-5/no-self-review-rounds`
 
@@ -371,6 +403,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Scope basis: sourced for `build`, `routine`; judgment for `investigate`.
   Section "Tell coding agents to verify their changes" addresses coding agents that report "a code change as done without running a check", which is what `build` and `routine` cover.
   Including `investigate` is judgment.
+- Trigger: `code-edit`, as a judgment, as for `sonnet-5-5/verify-changes`.
 
 #### `haiku-5-5/search-recent-facts`
 
@@ -425,6 +458,7 @@ When Anthropic publishes a guide for a new model, or changes a section a rule ci
 1. Read the guide; its list of sections by symptom is a good starting point.
 2. Write each new rule with its source, section, date, effect and cost, here and in `preset.json`.
    Give it the scopes where its effect is worth its cost, by the principles in [How the rules are scoped](#how-the-rules-are-scoped), and record why and the basis of that choice here.
+   Give it a trigger only by the principles in [Rules delivered on an action](#rules-delivered-on-an-action), and record why here.
 3. Run the live test `system-prompt` (`NOONSIGHT_LIVE_LOGIN=1 npm run test:live`) to see what Claude Code already sends the new model, and keep each rule out of the places where it does.
 4. Raise the preset's `version` and `claude_code`, and list each new, changed or removed rule in the changelog.
 

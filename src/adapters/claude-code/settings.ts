@@ -6,17 +6,6 @@
 
 export const POINTER_NAME = 'noonsight-hook';
 
-/** The Claude Code events noonsight handles, and the argument its hook command receives for each. */
-export const HOOK_EVENTS = {
-  SessionStart: 'session-start',
-  PostModelSwitch: 'model-switch',
-  PreToolUse: 'agent-call',
-  SubagentStart: 'subagent-start',
-  PostToolUse: 'agent-result',
-} as const;
-export type HookEvent = keyof typeof HOOK_EVENTS;
-export type HookArg = (typeof HOOK_EVENTS)[HookEvent];
-
 /**
  * The names of the tool that starts a subagent. Claude Code calls it Agent; earlier versions called
  * it Task, and both names are valid (https://code.claude.com/docs/en/sub-agents).
@@ -24,17 +13,39 @@ export type HookArg = (typeof HOOK_EVENTS)[HookEvent];
 export const AGENT_TOOLS: readonly string[] = ['Agent', 'Task'];
 
 /**
- * The matcher of each event's entry, or undefined for an entry with no matcher. The tool events only
- * run noonsight for the agent tool, under either name; the hook checks the tool name again itself.
- * SubagentStart matches on the subagent's type, and runs for every type.
+ * The tools that edit a file, whose input names it in file_path. Claude Code 2.1.326 offers these two;
+ * NotebookEdit edits notebooks, which are not code files to the code-edit trigger.
  */
-export const HOOK_MATCHERS: Readonly<Record<HookEvent, string | undefined>> = {
-  SessionStart: undefined,
-  PostModelSwitch: undefined,
-  PreToolUse: AGENT_TOOLS.join('|'),
-  SubagentStart: undefined,
-  PostToolUse: AGENT_TOOLS.join('|'),
-};
+export const EDIT_TOOLS: readonly string[] = ['Edit', 'Write'];
+
+/**
+ * The handlers noonsight installs, one matcher group each: the Claude Code event, the argument the hook
+ * command receives, and for a tool event the tools its matcher names; an entry without tools has no
+ * matcher and runs on every occurrence.
+ *   - The agent tool entries run noonsight only for the agent tool, under either name.
+ *   - SubagentStart matches on the subagent's type, and runs for every type.
+ *   - The file edit entry runs after a successful Edit or Write, for the code-edit trigger.
+ * The hook checks the tool name again itself, so a widened matcher reaches no other tool.
+ */
+export const HOOK_HANDLERS = [
+  { event: 'SessionStart', arg: 'session-start', tools: undefined },
+  { event: 'PostModelSwitch', arg: 'model-switch', tools: undefined },
+  { event: 'PreToolUse', arg: 'agent-call', tools: AGENT_TOOLS },
+  { event: 'SubagentStart', arg: 'subagent-start', tools: undefined },
+  { event: 'PostToolUse', arg: 'agent-result', tools: AGENT_TOOLS },
+  { event: 'PostToolUse', arg: 'file-edit', tools: EDIT_TOOLS },
+] as const;
+export type HookHandlerSpec = (typeof HOOK_HANDLERS)[number];
+export type HookEvent = HookHandlerSpec['event'];
+export type HookArg = HookHandlerSpec['arg'];
+
+/** The matcher of an entry: its tools, or none. */
+export function matcherOf(spec: HookHandlerSpec): string | undefined {
+  return spec.tools?.join('|');
+}
+
+/** The Claude Code events noonsight handles, each once. */
+export const HOOK_EVENTS: readonly HookEvent[] = [...new Set(HOOK_HANDLERS.map((h) => h.event))];
 
 /**
  * Seconds before Claude Code cancels the hook. The hook itself takes a fraction of a second; the
@@ -50,11 +61,11 @@ export interface CommandHandler {
 }
 
 /**
- * The handler for one event. It uses exec form (command plus args): no shell parses the path,
+ * The handler for one entry. It uses exec form (command plus args): no shell parses the path,
  * so a directory such as "Application Support" needs no quoting.
  */
-export function handlerFor(pointer: string, event: HookEvent): CommandHandler {
-  return { type: 'command', command: pointer, args: [HOOK_EVENTS[event]], timeout: HOOK_TIMEOUT_SECONDS };
+export function handlerFor(pointer: string, spec: HookHandlerSpec): CommandHandler {
+  return { type: 'command', command: pointer, args: [spec.arg], timeout: HOOK_TIMEOUT_SECONDS };
 }
 
 /** A settings file whose shape noonsight will not edit; the message names where the shape is wrong. */
@@ -103,34 +114,33 @@ export interface Edit {
   readonly changed: boolean;
 }
 
-/** The matcher group noonsight adds for one event. */
-export function groupFor(pointer: string, event: HookEvent): JsonObject {
-  const matcher = HOOK_MATCHERS[event];
-  return { ...(matcher !== undefined ? { matcher } : {}), hooks: [handlerFor(pointer, event)] };
+/** The matcher group noonsight adds for one entry. */
+export function groupFor(pointer: string, spec: HookHandlerSpec): JsonObject {
+  const matcher = matcherOf(spec);
+  return { ...(matcher !== undefined ? { matcher } : {}), hooks: [handlerFor(pointer, spec)] };
+}
+
+/** The found handlers that are exactly the entry for a spec: its event, matcher, and handler for this pointer. */
+export function handlersFor(found: readonly FoundHandler[], spec: HookHandlerSpec, pointer: string): FoundHandler[] {
+  return found.filter((f) => f.event === spec.event && f.matcher === matcherOf(spec) && sameHandler(f.handler, handlerFor(pointer, spec)));
 }
 
 /**
- * The settings with exactly one noonsight handler per event, each in its own matcher group with the
- * event's matcher, pointing at the given pointer. Running it again on its own result changes nothing.
+ * The settings with exactly one noonsight handler per entry of HOOK_HANDLERS, each in its own matcher
+ * group with the entry's matcher, pointing at the given pointer. Running it again on its own result
+ * changes nothing.
  */
 export function withNoonsightHooks(settings: unknown, pointer: string): Edit {
   const base = checkShape(settings);
   const found = findNoonsightHandlers(base);
-  const events = Object.keys(HOOK_EVENTS) as HookEvent[];
-  const current =
-    found.length === events.length &&
-    events.every((event) => {
-      const mine = found.filter((f) => f.event === event);
-      const only = mine.length === 1 ? mine[0] : undefined;
-      return only !== undefined && only.matcher === HOOK_MATCHERS[event] && sameHandler(only.handler, handlerFor(pointer, event));
-    });
+  const current = found.length === HOOK_HANDLERS.length && HOOK_HANDLERS.every((spec) => handlersFor(found, spec, pointer).length === 1);
   if (current) return { settings: base, changed: false };
 
   const next = withoutNoonsightHooks(base).settings;
   const hooks = isObject(next.hooks) ? next.hooks : (next.hooks = {});
-  for (const event of events) {
-    const groups = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : (hooks[event] = []);
-    groups.push(groupFor(pointer, event));
+  for (const spec of HOOK_HANDLERS) {
+    const groups = Array.isArray(hooks[spec.event]) ? (hooks[spec.event] as unknown[]) : (hooks[spec.event] = []);
+    groups.push(groupFor(pointer, spec));
   }
   return { settings: next, changed: true };
 }
@@ -175,7 +185,7 @@ function checkShape(settings: unknown): JsonObject {
   const copy = structuredClone(settings);
   if (copy.hooks === undefined) return copy;
   if (!isObject(copy.hooks)) throw new SettingsShapeError('"hooks" is not an object');
-  for (const event of Object.keys(HOOK_EVENTS)) {
+  for (const event of HOOK_EVENTS) {
     const groups = copy.hooks[event];
     if (groups === undefined) continue;
     if (!Array.isArray(groups)) throw new SettingsShapeError(`"hooks.${event}" is not a list`);

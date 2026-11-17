@@ -62,6 +62,13 @@
             "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
           },
           "default": []
+        },
+        "triggers": {
+          "description": "The triggers the session hooks act on. A rule that lists a trigger left out here is delivered only by its scopes. An empty list turns triggers off.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/trigger" },
+          "default": ["code-edit"]
         }
       },
       "default": {}
@@ -264,6 +271,13 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/place" },
           "default": ["session", "unattended", "subagent"]
+        },
+        "triggers": {
+          "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes, once the session does one of them. code-edit: the session edited a code file the project's git already tracks. Only for a rule that is cheap when the action was not what the scopes mean, and never for a rule for every scope.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/trigger" },
+          "default": []
         }
       }
     },
@@ -317,6 +331,10 @@
     "scopeRef": {
       "type": "string",
       "pattern": "^(?:\\*|[a-z][a-z0-9-]*)$"
+    },
+    "trigger": {
+      "description": "code-edit: the session edited, with Edit or Write, a file with a code extension that the git repository of the session's project already tracks.",
+      "enum": ["code-edit"]
     },
     "place": {
       "description": "session: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task.",

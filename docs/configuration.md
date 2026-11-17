@@ -29,7 +29,7 @@ No rule is delivered in a place where Claude Code already sends the same advice;
 [presets/claude/SOURCES.md](../presets/claude/SOURCES.md) lists every rule and scope with its source, and `noonsight models` prints the rules of each declared model with their source, effect and cost.
 
 The preset's scopes declare no matchers, so a session takes one of them only from `NOONSIGHT_SCOPE` (which `noonsight run --scope` sets), and a subagent only once the user's file gives that scope a `match`.
-A task whose scope is not known receives only the preset rules for every scope; the rules that list scopes stay dormant until the scope is known.
+A task whose scope is not known receives only the preset rules for every scope; the rules that list scopes stay dormant until the scope is known, except that `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes` reach a session once it edits a code file of the project ([Triggers](#triggers)).
 [presets/claude/SOURCES.md](../presets/claude/SOURCES.md#how-the-rules-are-scoped) gives each rule's scopes, why, and whether that choice comes from a source or is a judgment.
 
 The preset also suggests a routing table, which applies only when the user turns routing on ([Routing](#routing)).
@@ -76,6 +76,7 @@ The preset also suggests a routing table, which applies only when the user turns
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
 | `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches all six probe texts is refused; see [Scopes](#scopes). |
 | `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
+| `session.triggers` | `code-edit` | `["code-edit"]` | The triggers the hooks act on. A rule that lists a trigger left out here reaches a session only by its scopes; `[]` turns triggers off. See [Triggers](#triggers). |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: each subagent receives the rules for the model it will run on as it starts, without any change to the call that starts it ([hooks.md](hooks.md#subagents)). `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose model or effort routing changed; a call routing leaves alone is never changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. In auto mode a changed call also costs the other calls of the same response their review ([hooks.md](hooks.md#routing)). |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
@@ -98,6 +99,7 @@ A user rule has these keys:
 | `file` | Required | The rule text. |
 | `scopes` | `["*"]` | The scopes the rule applies to, or `["*"]` for every scope. |
 | `where` | All three places | The places the rule applies to: `session` (someone is watching), `unattended` (nobody is watching), `subagent` (a subagent's task, delivered by the subagent hooks). |
+| `triggers` | None | Actions that also deliver the rule to a session whose scope is not one of the rule's scopes, once the session does one: `code-edit`. See [Triggers](#triggers). |
 
 ## Model keys
 
@@ -118,7 +120,7 @@ A decision has at most one scope, and where it comes from depends on who reads t
 
 | Reader | Scope | Place |
 | --- | --- | --- |
-| A session | `NOONSIGHT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it, as `noonsight run` does with the scope it finds ([launcher.md](launcher.md#what-it-adds)); else none | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
+| A session | `NOONSIGHT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it, as `noonsight run` does with the scope it finds ([launcher.md](launcher.md#what-it-adds)); else none. Rules that list a trigger the session revealed apply too ([Triggers](#triggers)) | `unattended` when a variable of `session.unattended_when_env` is set and not empty; else `session` |
 | A subagent | The scope whose matcher matches earliest in its description and task text; else, with the classifier on, the scope the classifier gives ([The classifier](#the-classifier)); else none | Always `subagent` |
 
 A subagent's scope comes from its own task and is never taken from the session.
@@ -162,6 +164,40 @@ The last two shapes are also looked for inside lookarounds, so `^(?=.*.*x)` is r
 Characters are compared over a fixed set of sample characters (printable ASCII, whitespace and a few letters beyond it).
 The check recognizes these shapes only: a matcher that passes it is not proven fast, and other slow shapes, such as alternatives that match the same text inside a repeat (`(a|a)*`), are not detected.
 Matchers that start with a word and a word boundary, such as `\bdeploy\b`, `review|revis` or `^fix\b`, pass it.
+
+## Triggers
+
+A session nobody gave a scope still shows its kind of task by what it does.
+A trigger names such an action; a rule that lists it is delivered to a session once the session does it, whatever the session's scope, besides the scopes the rule lists.
+Nothing is delivered on an action unless a rule declares the trigger.
+
+```json
+{
+  "models": {
+    "claude-sonnet-5-5": {
+      "use": "custom",
+      "add": [{ "id": "team/run-the-tests", "file": "rules/run-the-tests.md", "scopes": ["build", "routine"], "triggers": ["code-edit"] }]
+    }
+  }
+}
+```
+
+| Trigger | What reveals it |
+| --- | --- |
+| `code-edit` | The session edits, with Edit or Write, a file with a code extension that the git repository of the session's project already tracks ([hooks.md](hooks.md#posttooluse-on-edit-and-write-the-triggers) lists the extensions and what each condition keeps out) |
+
+A trigger guesses the kind of task from one action, and the guess can be wrong: a code edit shows that the session changes code, not whether it is building, fixing what an investigation found, or doing a routine change.
+So give a trigger only to a rule that is cheap when the guess is wrong, such as a rule whose advice applies only once code has changed: a session that edits no code never receives it, and one that does needs it whatever its task.
+A rule with a measured cost or a side effect needs a named scope.
+[presets/claude/SOURCES.md](../presets/claude/SOURCES.md#rules-delivered-on-an-action) applies this to the preset, whose two verify rules, `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes`, list `code-edit`.
+
+- A session's triggers only grow: once revealed, a trigger holds for the rest of the session, after compaction, a resume and a `/model` switch, and the rules it brought stay in the conversation.
+  Only the rules a trigger adds are delivered, once.
+- Triggers act only in a session (the places `session` and `unattended`); a subagent's scope comes from its own task, and the edits a subagent makes reveal nothing.
+- The decision log names the trigger behind every rule it brought (`triggered_rules`), and the edit that revealed it, and `noonsight report` counts them, so a trigger that fires on the wrong edits shows there ([hooks.md](hooks.md#the-decision-log)).
+
+`session.triggers` lists the triggers the hooks act on, all of them by default; `[]` turns triggers off, and every rule then reaches a session only by its scopes.
+`noonsight check` names, for each trigger on, the rules it delivers to which model.
 
 ## The classifier
 
@@ -364,12 +400,13 @@ Beyond the schema, noonsight checks that:
 - every rule file exists and is not empty;
 - rule ids are unique for each model;
 - every scope a rule names is declared;
+- a rule that lists a trigger is not for every scope (`["*"]`, where a trigger adds nothing), and is for the place `session` or `unattended`, where triggers act;
 - every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
 - `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
 - the preset is installed and has rules for every model declared with `use: "preset"`;
 - every scope in `routing.table` is declared, and every model a routing option names is an alias or a model declared with its exact key;
 - a routing row written as an object lists at least one target;
-- the delivered text fits in 9,500 characters for every combination of scope and place, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
+- the delivered text fits in 9,500 characters for every combination of scope and place, with and without the triggers revealed, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
 
 The preset is checked the same way, and more strictly:
 

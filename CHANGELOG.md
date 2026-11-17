@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Triggers: a rule can list `triggers`, actions that also deliver it to a session whose scope is not one of the rule's scopes, once the session does one; a plain interactive session has no scope, so every rule written for a list of scopes used to stay dormant in it.
+  The one trigger is `code-edit`: the session edits, with Edit or Write, a file with a code extension that the git repository of its project already tracks, so reports, notes, `.md` and `.html` files, new files, ignored files and files outside the project never count.
+  A sixth hook entry, `PostToolUse` on `Edit|Write`, delivers the rules the trigger adds with the first such edit, as `additionalContext`, which Claude Code adds right after the edit's result; it runs `git ls-files` until the session reveals the trigger, and nothing after.
+  A session's triggers only grow: they hold after compaction, a resume and a `/model` switch, and only the rules a trigger adds are delivered, once.
+  `session.triggers` lists the triggers the hooks act on (default `["code-edit"]`; `[]` turns them off).
+  A rule that lists a trigger must not be for every scope, and must be for the place `session` or `unattended`.
+  Run `noonsight install` again: `noonsight check` reports an install without the `Edit|Write` entry.
+  See `docs/configuration.md` ("Triggers") and `docs/hooks.md` ("PostToolUse on Edit and Write").
+- The `claude` preset, version 1.3.0: `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes` list `code-edit`, so a Sonnet or Haiku session receives them with its first edit of a tracked code file, whatever its scope. Only rules that are cheap when the edit was not what their scopes mean list a trigger; `presets/claude/SOURCES.md` ("Rules delivered on an action") gives the reasoning, a judgment, rule by rule.
+- The decision log records `file-edit` lines (`trigger`, `file`), `triggers` on session lines of a session that revealed one, and `triggered_rules`, the rules a trigger brought; `noonsight report` shows, for each rule, what brought its deliveries, and the triggers sessions revealed with the tools, extensions and files of the edits; `noonsight models` lists each rule's triggers, and `noonsight check` the rules each trigger delivers.
+
 - `noonsight install` is now the one command that sets noonsight up: when there is no configuration file it writes one as `noonsight init` does, never replacing an existing file, then installs the hooks as before, runs `noonsight check`, lists the rules each declared model receives, and says what it changed or that nothing changed.
   Running it again changes nothing.
   It exits 2 when the configuration is refused and 1 when it cannot write the configuration file, where it used to exit 0 once the hooks were in; a problem the check reports elsewhere on the machine is printed and leaves the status at 0.

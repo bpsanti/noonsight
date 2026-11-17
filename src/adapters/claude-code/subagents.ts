@@ -520,9 +520,22 @@ function parentModel(input: Record<string, unknown>, ctx: SubagentContext): Pare
     if (own !== null) return { model: own, source: 'agent-transcript' };
     return { model: null, source: null };
   }
+  return sessionModel(input, ctx);
+}
+
+/**
+ * The model of the session a hook input comes from: noonsight's record of the session, kept current
+ * by SessionStart and PostModelSwitch; else the session's transcript; else the settings the session
+ * started with.
+ */
+export function sessionModel(
+  input: Record<string, unknown>,
+  ctx: Pick<SubagentContext, 'env' | 'home' | 'state' | 'parentPid'>,
+): { readonly model: string | null; readonly source: string | null } {
+  const sessionId = str(input.session_id);
   const session = sessionId !== null ? readState(sessionFile(ctx.state, sessionId)) : null;
   if (session?.model) return { model: session.model, source: 'session-record' };
-  const fromTranscript = transcriptModel(transcript, true);
+  const fromTranscript = transcriptModel(str(input.transcript_path), true);
   if (fromTranscript !== null) return { model: fromTranscript, source: 'session-transcript' };
   const launch = launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd) });
   if (launch.kind === 'found') return { model: launch.model, source: launch.source };
@@ -546,6 +559,7 @@ export function decisionFields(d: Decision): Record<string, unknown> {
     ...('reason' in d ? { reason: d.reason } : {}),
     ...('key' in d ? { key: d.key } : {}),
     ...(d.status === 'matched' ? { rules: d.rules, sha256: d.sha256 } : {}),
+    ...(d.status === 'matched' && d.triggered !== undefined ? { triggered_rules: d.triggered } : {}),
     scope: d.scope,
     ...(d.unknown_scope !== undefined ? { unknown_scope: d.unknown_scope } : {}),
     place: d.place,

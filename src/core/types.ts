@@ -9,6 +9,15 @@ export type Place = (typeof PLACES)[number];
 export const ANY_SCOPE = '*';
 
 /**
+ * What a session can do that shows what kind of task it is on, without anyone naming a scope.
+ *   code-edit  the session edited a code file the project's git already tracks.
+ * A rule that lists a trigger is also delivered to a session once the session has done it, whatever
+ * the session's scope. Only a session reveals a trigger; a subagent's scope comes from its task.
+ */
+export const TRIGGERS = ['code-edit'] as const;
+export type Trigger = (typeof TRIGGERS)[number];
+
+/**
  * Claude Code replaces hook context longer than this with a file path and a short preview,
  * so every text the core can produce must fit.
  */
@@ -27,6 +36,8 @@ export interface Rule {
   /** Either exactly [ANY_SCOPE] or a list of declared scope names. */
   readonly scopes: readonly string[];
   readonly where: readonly Place[];
+  /** The triggers that also deliver the rule to a session whose scope is not one of its scopes. */
+  readonly triggers: readonly Trigger[];
   readonly text: string;
 }
 
@@ -78,9 +89,11 @@ export interface Scope {
 export interface SessionSettings {
   /** Environment variables that, when any is set and not empty, mark a session as unattended. */
   readonly unattendedWhenEnv: readonly string[];
+  /** The triggers the session hooks act on; a trigger left out delivers nothing. */
+  readonly triggers: readonly Trigger[];
 }
 
-export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [] };
+export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [], triggers: TRIGGERS };
 
 /** Where routing can act: the session `noonsight run` starts, and the subagents a session starts. */
 export const ROUTE_TARGETS = ['launcher', 'subagents'] as const;
@@ -184,6 +197,8 @@ export interface MatchedDecision extends DecisionBase {
   readonly model: string;
   readonly key: string;
   readonly rules: readonly string[];
+  /** The rules among `rules` that only a trigger the session revealed brought; absent when there are none. */
+  readonly triggered?: readonly string[];
   /** First 16 hex characters of the SHA-256 of the joined rule text. */
   readonly sha256: string;
   /** The exact text that would be delivered, envelope included. */
