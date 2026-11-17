@@ -167,7 +167,7 @@ These principles decide which rules list it; all of them are judgment, since no 
 | `sonnet-5-5/check-current-facts`, `haiku-5-5/search-recent-facts` | None | Off by default, and their scopes are `investigate` and `digest`, which an edit of code does not reveal. |
 
 A trigger that fires on the wrong edit can be measured: every delivery a trigger made names it in the decision log, with the tool and the file, and `noonsight report` lists them under "Triggers revealed".
-`session.triggers` set to `[]` turns triggers off, and the verify rules then reach a session only from a named scope, as before.
+Disabling a verify rule keeps it out of every session, and a user rule without `triggers` reaches a session only from a named scope.
 
 ### Measuring a change of scopes
 

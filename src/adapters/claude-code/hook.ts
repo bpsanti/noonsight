@@ -24,13 +24,14 @@ import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '
 import type { Config, Decision, Trigger } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
+import { sessionTriggers } from '../../state/triggers.js';
 import { launchFields, launchModel, readCommandLine, type LaunchModel } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
 import { agentCall, agentResult, choiceFields, decisionFields, subagentStart } from './subagents.js';
-import { fileEdit, mayReveal, revealedTriggers } from './triggers.js';
+import { fileEdit, mayReveal } from './triggers.js';
 
 export interface HookContext {
   readonly env: Env;
@@ -142,7 +143,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     const where: Where = {
       scope: sessionScope(ctx.env),
       place: sessionPlace(config, ctx.env),
-      triggers: revealedTriggers(config, state, str(input.session_id)),
+      triggers: sessionTriggers(state, str(input.session_id)),
     };
     const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
     const result =

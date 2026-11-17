@@ -89,11 +89,9 @@ export interface Scope {
 export interface SessionSettings {
   /** Environment variables that, when any is set and not empty, mark a session as unattended. */
   readonly unattendedWhenEnv: readonly string[];
-  /** The triggers the session hooks act on; a trigger left out delivers nothing. */
-  readonly triggers: readonly Trigger[];
 }
 
-export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [], triggers: TRIGGERS };
+export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [] };
 
 /** Where routing can act: the session `noonsight run` starts, and the subagents a session starts. */
 export const ROUTE_TARGETS = ['launcher', 'subagents'] as const;

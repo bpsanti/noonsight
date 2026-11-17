@@ -40,14 +40,6 @@ export interface TriggerOutcome {
 }
 
 /**
- * The triggers a session has revealed that the configuration acts on, in the order of TRIGGERS. A
- * trigger turned off in session.triggers delivers nothing, even for a session that revealed it before.
- */
-export function revealedTriggers(config: Config, state: string, sessionId: string | null): Trigger[] {
-  return sessionTriggers(state, sessionId).filter((t) => config.session.triggers.includes(t));
-}
-
-/**
  * Whether an edit could reveal a trigger, from what costs no configuration and no process: an edit of
  * the session itself, of a code file that is there, in a session that has not revealed every trigger.
  * Every edit runs the hook, so the hook reads the configuration only past this check.
@@ -61,17 +53,16 @@ export function mayReveal(input: Record<string, unknown>, state: string): boolea
 
 /**
  * PostToolUse on Edit and Write. Returns null, with nothing to log, for an edit that reveals no new
- * trigger: one inside a subagent, a trigger the configuration does not act on or no rule lists, a
+ * trigger: one inside a subagent, a trigger no rule lists, a
  * trigger the session already revealed, or an edit that is not a code edit.
  */
 export function fileEdit(input: Record<string, unknown>, config: Config, ctx: TriggerContext): TriggerOutcome | null {
   const trigger: Trigger = 'code-edit';
   if (str(input.agent_id) !== null) return null;
   const sessionId = str(input.session_id);
-  if (sessionId === null || !config.session.triggers.includes(trigger) || !listsTrigger(config, trigger)) return null;
-  const revealed = sessionTriggers(ctx.state, sessionId);
-  if (revealed.includes(trigger)) return null;
-  const held = revealed.filter((t) => config.session.triggers.includes(t));
+  if (sessionId === null || !listsTrigger(config, trigger)) return null;
+  const held = sessionTriggers(ctx.state, sessionId);
+  if (held.includes(trigger)) return null;
 
   const edit = codeEdit(input, ctx.env);
   if (edit.kind !== 'code') return null;

@@ -89,7 +89,7 @@ interface RawConfig {
   models?: Record<string, RawModelEntry>;
   on_undeclared?: 'warn' | 'ignore';
   scopes?: Record<string, RawScope>;
-  session?: { unattended_when_env?: string[]; triggers?: Trigger[] };
+  session?: { unattended_when_env?: string[] };
   subagents?: { delivery?: 'prompt' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
   routing?: {
     enabled?: boolean;
@@ -288,7 +288,6 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   };
   const session = {
     unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv,
-    triggers: cfg.session?.triggers ?? DEFAULT_SESSION_SETTINGS.triggers,
   };
   const routing = loadRouting(cfg.routing ?? {}, preset, scopes, exact, report);
   const c = cfg.classifier ?? {};

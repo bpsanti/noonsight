@@ -3,10 +3,9 @@
 ## Unreleased
 
 - Triggers: a rule can list `triggers`, actions that also deliver it to a session whose scope is not one of the rule's scopes, once the session does one; a plain interactive session has no scope, so every rule written for a list of scopes used to stay dormant in it.
-  The one trigger is `code-edit`: the session edits, with Edit or Write, a file with a code extension that the git repository of its project already tracks, so reports, notes, `.md` and `.html` files, new files, ignored files and files outside the project never count.
-  A sixth hook entry, `PostToolUse` on `Edit|Write`, delivers the rules the trigger adds with the first such edit, as `additionalContext`, which Claude Code adds right after the edit's result; it runs `git ls-files` until the session reveals the trigger, and nothing after.
+  The one trigger is `code-edit`: the session edits, with Edit or Write, a file with a code extension that the git repository of its project, or of one of its worktrees, already tracks, so reports, notes, `.md` and `.html` files, new files, ignored files and files outside the project never count.
+  A sixth hook entry, `PostToolUse` on `Edit|Write`, delivers the rules the trigger adds with the first such edit, as `additionalContext`, which Claude Code adds right after the edit's result; it runs `git ls-files` and `git rev-parse` until the session reveals the trigger, and nothing after.
   A session's triggers only grow: they hold after compaction, a resume and a `/model` switch, and only the rules a trigger adds are delivered, once.
-  `session.triggers` lists the triggers the hooks act on (default `["code-edit"]`; `[]` turns them off).
   A rule that lists a trigger must not be for every scope, and must be for the place `session` or `unattended`.
   Run `noonsight install` again: `noonsight check` reports an install without the `Edit|Write` entry.
   See `docs/configuration.md` ("Triggers") and `docs/hooks.md` ("PostToolUse on Edit and Write").

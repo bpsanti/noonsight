@@ -87,6 +87,7 @@ test('code-edit: reports, notes, new files, ignored files and files outside the 
   assert.equal(why(edit(project, outside, {}, 'Write')), 'untracked', 'a file outside the project');
   const notRepo = tempTree({ 'a.ts': 'export {};\n' });
   assert.equal(why(edit(notRepo, 'a.ts')), 'untracked', 'a project that is not a git repository');
+  assert.equal(why(edit(notRepo, path.join(project, 'src', 'app.ts'))), 'foreign', 'a tracked file, but the project is not a git repository');
   assert.equal(why(edit(project, 'src/app.ts', { tool_name: 'NotebookEdit' })), 'not-edit-tool');
   assert.equal(why(edit(project, 'src/app.ts', { tool_name: 'Bash' })), 'not-edit-tool');
   assert.equal(why(edit(project, 'x', { tool_input: {} })), 'no-file');
@@ -98,10 +99,38 @@ test('code-edit: the project is CLAUDE_PROJECT_DIR when Claude Code sets it, els
   const project = repo(PROJECT, TRACKED);
   const elsewhere = tempTree({});
   const input = edit(project, 'src/app.ts', { cwd: elsewhere });
-  assert.deepEqual(codeEdit(input, env), { kind: 'not', why: 'untracked' }, "the project is the cwd, and the file is not in the cwd's repository");
+  assert.deepEqual(codeEdit(input, env), { kind: 'not', why: 'foreign' }, "the project is the cwd, and the file is not in the cwd's repository");
   assert.deepEqual(codeEdit(input, { ...env, CLAUDE_PROJECT_DIR: project }), { kind: 'code', tool: 'Edit', file: 'src/app.ts' });
   const other = repo({ 'c.ts': 'export {};\n' }, ['c.ts']);
-  assert.deepEqual(codeEdit(edit(project, 'src/app.ts'), { ...env, CLAUDE_PROJECT_DIR: other }), { kind: 'not', why: 'untracked' }, "the file is not in the project's repository");
+  assert.deepEqual(codeEdit(edit(project, 'src/app.ts'), { ...env, CLAUDE_PROJECT_DIR: other }), { kind: 'not', why: 'foreign' }, "the file is not in the project's repository");
+});
+
+test("code-edit: an edit in a worktree of the project counts, even one inside the project's directory that its index does not track", () => {
+  const project = repo(PROJECT, TRACKED);
+  const git = (...args: string[]): void => {
+    const r = spawnSync('git', ['-C', project, ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+  };
+  // As EnterWorktree does: the worktree is under the project, and CLAUDE_PROJECT_DIR still names the checkout.
+  const nested = path.join(project, '.claude', 'worktrees', 'w1');
+  git('worktree', 'add', '-q', '-b', 'w1', nested);
+  const projectEnv = { ...env, CLAUDE_PROJECT_DIR: project };
+  assert.deepEqual(codeEdit(edit(nested, 'src/app.ts'), projectEnv), { kind: 'code', tool: 'Edit', file: 'src/app.ts' });
+  assert.deepEqual(codeEdit(edit(project, path.join(nested, 'src', 'app.ts')), env), { kind: 'code', tool: 'Edit', file: 'src/app.ts' }, 'the cwd is the checkout');
+  fs.writeFileSync(path.join(nested, 'src', 'new.ts'), 'export {};\n');
+  assert.deepEqual(codeEdit(edit(nested, 'src/new.ts', {}, 'Write'), projectEnv), { kind: 'not', why: 'untracked' }, 'a new file in the worktree');
+
+  // A worktree elsewhere on the machine, and the checkout's file edited from a session in the worktree.
+  const apart = path.join(tempTree({}), 'w2');
+  git('worktree', 'add', '-q', '-b', 'w2', apart);
+  assert.deepEqual(codeEdit(edit(apart, 'src/app.ts'), projectEnv), { kind: 'code', tool: 'Edit', file: 'src/app.ts' });
+  assert.deepEqual(codeEdit(edit(apart, path.join(project, 'src', 'app.ts')), { ...env, CLAUDE_PROJECT_DIR: apart }), { kind: 'code', tool: 'Edit', file: 'src/app.ts' });
+
+  // Another repository nested in the project's directory is not one of its worktrees.
+  const inner = repo({ 'd.ts': 'export {};\n' }, ['d.ts']);
+  const innerInProject = path.join(project, 'vendor');
+  fs.renameSync(inner, innerInProject);
+  assert.deepEqual(codeEdit(edit(project, 'vendor/d.ts'), projectEnv), { kind: 'not', why: 'foreign' });
 });
 
 test('code extensions are those of programming languages, compared without case', () => {
@@ -178,9 +207,7 @@ test('the core: a rule that lists a revealed trigger applies whatever the scope,
   assert.ok(withTrigger.rules.every((id) => id !== 'user/other'));
 });
 
-test('the configuration: triggers default on, can be turned off, and are refused on a rule for every scope or for subagents only', () => {
-  assert.deepEqual(loadConfig(configTree(), { presetsDir: LAB_PRESETS }).session.triggers, ['code-edit']);
-  assert.deepEqual(loadConfig(configTree({ session: { triggers: [] } }), { presetsDir: LAB_PRESETS }).session.triggers, []);
+test('the configuration: triggers are refused on a rule for every scope or for subagents only', () => {
 
   const refused = (models: Record<string, unknown>, extra: Record<string, unknown> = {}): readonly string[] => {
     try {
@@ -196,7 +223,6 @@ test('the configuration: triggers default on, can be turned off, and are refused
   const subagent = refused({ 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'x', file: 'verify.md', scopes: ['investigate'], where: ['subagent'], triggers: ['code-edit'] }] } });
   assert.deepEqual(subagent, ['/models/claude-haiku-5-5/add/0/triggers: a trigger acts only in a session, but the rule is only for the place "subagent"; add "session" or "unattended" to "where"']);
   assert.match(refused({ 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'x', file: 'verify.md', scopes: ['investigate'], triggers: ['deploy'] }] } }).join('\n'), /triggers\/0/);
-  assert.match(refused({}, { session: { triggers: ['deploy'] } }).join('\n'), /\/session\/triggers\/0/);
 });
 
 test('the configuration: a preset rule can list a trigger, and the delivered text with the trigger revealed must fit', () => {
@@ -322,17 +348,11 @@ test('a session reveals the trigger even when its model gets no rule from it, an
   );
 });
 
-test("a subagent's edit, a trigger turned off, a refused configuration and a scope that already holds the rule deliver nothing more", () => {
+test("a subagent's edit, a refused configuration and a scope that already holds the rule deliver nothing more", () => {
   const l = lab();
   l.start('claude-sonnet-5-5');
   assert.equal(l.fileEdit('src/app.ts', { agent_id: 'a1b2c3', agent_type: 'general-purpose' }).raw, '', "a subagent's edit");
   assert.equal(l.log().length, 1);
-
-  const off = lab(configTree({ session: { triggers: [] } }));
-  off.start('claude-sonnet-5-5');
-  assert.equal(off.fileEdit('src/app.ts').raw, '');
-  assert.equal(off.log().length, 1);
-  assert.equal(off.start('claude-sonnet-5-5', { source: 'compact' }).out?.hookSpecificOutput.additionalContext.includes(VERIFY), false);
 
   const broken = path.join(tempTree({ 'noonsight.json': { version: 1, models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'x', file: 'gone.md' }] } } } }), 'noonsight.json');
   const refused = lab(broken);
@@ -393,14 +413,12 @@ test('noonsight report shows what brought each delivery, and the edits that reve
   assert.match(text, /^Triggers revealed:\n {2}code-edit: in 1 session, 1 with rules delivered\n {5}tools: Edit 1\n {5}extensions: \.ts 1\n {5}files: src\/app\.ts 1$/m);
 });
 
-test('noonsight check names the rules each trigger delivers, or that triggers are off', () => {
+test('noonsight check names the rules each trigger delivers', () => {
   const on = runCli(['check'], { NOONSIGHT_CONFIG: configTree(), NOONSIGHT_PRESETS_DIR: LAB_PRESETS }, NO_NETWORK).stdout;
   assert.match(
     on,
     /^ok: triggers: code-edit, which delivers user\/verify for claude-sonnet-5-5, user\/haiku-verify for claude-haiku-5-5 to a session once it edits a code file its project's git already tracks$/m,
   );
-  const off = runCli(['check'], { NOONSIGHT_CONFIG: configTree({ session: { triggers: [] } }), NOONSIGHT_PRESETS_DIR: LAB_PRESETS }, NO_NETWORK).stdout;
-  assert.match(off, /^ok: triggers: off \(session\.triggers is empty\), so user\/verify for claude-sonnet-5-5, user\/haiku-verify for claude-haiku-5-5 reach a session only by their scopes$/m);
 });
 
 test('the file edit hook leaves foreign input and other tools alone', () => {

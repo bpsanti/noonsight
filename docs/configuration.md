@@ -76,7 +76,6 @@ The preset also suggests a routing table, which applies only when the user turns
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
 | `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches all six probe texts is refused; see [Scopes](#scopes). |
 | `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`. |
-| `session.triggers` | `code-edit` | `["code-edit"]` | The triggers the hooks act on. A rule that lists a trigger left out here reaches a session only by its scopes; `[]` turns triggers off. See [Triggers](#triggers). |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: each subagent receives the rules for the model it will run on as it starts, without any change to the call that starts it ([hooks.md](hooks.md#subagents)). `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose model or effort routing changed; a call routing leaves alone is never changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. In auto mode a changed call also costs the other calls of the same response their review ([hooks.md](hooks.md#routing)). |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
@@ -184,7 +183,7 @@ Nothing is delivered on an action unless a rule declares the trigger.
 
 | Trigger | What reveals it |
 | --- | --- |
-| `code-edit` | The session edits, with Edit or Write, a file with a code extension that the git repository of the session's project already tracks ([hooks.md](hooks.md#posttooluse-on-edit-and-write-the-triggers) lists the extensions and what each condition keeps out) |
+| `code-edit` | The session edits, with Edit or Write, a file with a code extension that the git repository of the session's project, or of one of its worktrees, already tracks ([hooks.md](hooks.md#posttooluse-on-edit-and-write-the-triggers) lists the extensions and what each condition keeps out) |
 
 A trigger guesses the kind of task from one action, and the guess can be wrong: a code edit shows that the session changes code, not whether it is building, fixing what an investigation found, or doing a routine change.
 So give a trigger only to a rule that is cheap when the guess is wrong, such as a rule whose advice applies only once code has changed: a session that edits no code never receives it, and one that does needs it whatever its task.
@@ -196,8 +195,8 @@ A rule with a measured cost or a side effect needs a named scope.
 - Triggers act only in a session (the places `session` and `unattended`); a subagent's scope comes from its own task, and the edits a subagent makes reveal nothing.
 - The decision log names the trigger behind every rule it brought (`triggered_rules`), and the edit that revealed it, and `noonsight report` counts them, so a trigger that fires on the wrong edits shows there ([hooks.md](hooks.md#the-decision-log)).
 
-`session.triggers` lists the triggers the hooks act on, all of them by default; `[]` turns triggers off, and every rule then reaches a session only by its scopes.
-`noonsight check` names, for each trigger on, the rules it delivers to which model.
+A rule takes part in a trigger only by listing it in its own `triggers`: a user rule without `triggers` reaches a session only by its scopes, and `disable` keeps a preset rule that lists one out of every session.
+`noonsight check` names, for each trigger, the rules it delivers to which model.
 
 ## The classifier
 

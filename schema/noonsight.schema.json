@@ -62,13 +62,6 @@
             "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
           },
           "default": []
-        },
-        "triggers": {
-          "description": "The triggers the session hooks act on. A rule that lists a trigger left out here is delivered only by its scopes. An empty list turns triggers off.",
-          "type": "array",
-          "uniqueItems": true,
-          "items": { "$ref": "#/$defs/trigger" },
-          "default": ["code-edit"]
         }
       },
       "default": {}
@@ -333,7 +326,7 @@
       "pattern": "^(?:\\*|[a-z][a-z0-9-]*)$"
     },
     "trigger": {
-      "description": "code-edit: the session edited, with Edit or Write, a file with a code extension that the git repository of the session's project already tracks.",
+      "description": "code-edit: the session edited, with Edit or Write, a file with a code extension that the git repository of the session's project, or of one of its worktrees, already tracks.",
       "enum": ["code-edit"]
     },
     "place": {

@@ -167,12 +167,7 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
 function checkTriggers(config: Config, add: (level: Level, text: string) => void): void {
   const listing = (trigger: Trigger): string[] =>
     [...config.exact].flatMap(([model, entry]) => (entry.use === 'rules' ? entry.rules.filter((r) => r.triggers.includes(trigger)).map((r) => `${r.id} for ${model}`) : []));
-  const all = TRIGGERS.flatMap((t) => listing(t));
-  if (config.session.triggers.length === 0) {
-    add('ok', `triggers: off (session.triggers is empty)${all.length ? `, so ${all.join(', ')} reach a session only by their scopes` : ''}`);
-    return;
-  }
-  for (const t of config.session.triggers) {
+  for (const t of TRIGGERS) {
     const rules = listing(t);
     add('ok', `triggers: ${t}` + (rules.length ? `, which delivers ${rules.join(', ')} to ${TRIGGER_ACTIONS[t]}` : ', which no rule lists'));
   }

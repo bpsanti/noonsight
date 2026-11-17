@@ -8,7 +8,7 @@ Six hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`
 
 - **It never holds the session, or a subagent call, beyond a bound.**
   It always exits 0, reads only local files and never uses the network itself.
-  It starts no other process, with three exceptions: on macOS, when nothing else names the session's model, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` for an edit of a file with a code extension, stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
+  It starts no other process, with three exceptions: on macOS, when nothing else names the session's model, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
   A subagent's start waits at most two seconds more when several calls could have started it ([SubagentStart](#subagentstart-the-rules)).
 - **It never blocks anything.**
@@ -120,9 +120,10 @@ The one trigger is `code-edit`:
 | --- | --- |
 | The tool is `Edit` or `Write`, called by the session itself | Edits a subagent makes: its input carries the subagent's `agent_id`, and a subagent's scope comes from its own task |
 | The file has a code extension (below) | Reports, notes and documents (`.md`, `.html`, `.txt`), styles, data and settings (`.css`, `.json`, `.yaml`, `.toml`), notebooks, and files with no extension |
-| The git repository of the session's project already tracks the file (`git ls-files --error-unmatch`) | Every new file, such as a script or a report the session writes for itself; files git ignores, such as build outputs and temporary files; files outside the project's repository, such as a temporary directory's; and every file of a project that is not a git repository |
+| The git repository holding the file already tracks it (`git ls-files --error-unmatch`, run in the file's directory), and that repository is the project's or one of its worktrees: both have the same common git directory (`git rev-parse --git-common-dir`) | Every new file, such as a script or a report the session writes for itself; files git ignores, such as build outputs and temporary files; files of another repository, or of none, such as a temporary directory's; and every file of a project that is not a git repository |
 
 The project is `CLAUDE_PROJECT_DIR`, which Claude Code sets for its hooks, else the input's `cwd`; paths are compared with every symbolic link resolved.
+An edit in a worktree of the project counts, including a worktree inside the project's directory, such as one under `.claude/worktrees/`: a session that moves into a worktree keeps the original checkout as `CLAUDE_PROJECT_DIR`, and that checkout's index does not track the worktree's files.
 The code extensions are those of programming languages, shell scripts and SQL: `c`, `h`, `cc`, `cpp`, `cxx`, `hh`, `hpp`, `hxx`, `m`, `mm`, `cs`, `java`, `kt`, `kts`, `scala`, `groovy`, `gradle`, `clj`, `cljs`, `cljc`, `js`, `jsx`, `mjs`, `cjs`, `ts`, `tsx`, `mts`, `cts`, `vue`, `svelte`, `go`, `rs`, `swift`, `dart`, `py`, `pyi`, `rb`, `php`, `pl`, `pm`, `lua`, `r`, `jl`, `ex`, `exs`, `erl`, `hrl`, `hs`, `ml`, `mli`, `fs`, `fsx`, `elm`, `nim`, `zig`, `sol`, `sh`, `bash`, `zsh`, `fish`, `ps1`, `psm1` and `sql`, in any case.
 
 The first edit that meets all three delivers, as `additionalContext`, the rules the trigger adds for the session's model, scope and place, and only those: the session's conversation already holds the rest.
@@ -347,7 +348,6 @@ The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-
 | `NOONSIGHT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line. The classifier's own session runs with it, so noonsight's hooks never act there |
 | `NOONSIGHT_ROUTING=off` in the environment that starts Claude Code or `noonsight run` | Routing only, for that session and its subagents; the rules are still delivered |
 | `"subagents": { "delivery": "off" }` in the configuration | Subagents only: they get no rules, calls are left alone unless routing changes them, and their results are not checked; each call still gets a log line |
-| `"session": { "triggers": [] }` in the configuration | Triggers only: a rule that lists one reaches a session only by its scopes |
 | No configuration file for the account | Every session of that account, silently |
 | `noonsight uninstall` | Every new session reached by that install |
 
