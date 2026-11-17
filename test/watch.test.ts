@@ -149,18 +149,22 @@ test('the systemd unit runs this copy of noonsight at login and keeps it running
 
 test('the watcher is off by default: install writes no service, and check says it is off', { skip: !supported }, () => {
   const { env, service, calls } = machine();
-  const r = runCli(['install', '--hooks-only'], env);
+  const r = runCli(['install'], env);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(fs.existsSync(service.file), false);
-  assert.deepEqual(calls(), [], 'install asks the service manager nothing');
+  assert.ok(
+    calls().every((c) => /^(launchctl print|systemctl --user is-active) /.test(c)),
+    `install only asks the service manager whether the watcher runs: ${calls().join('; ')}`,
+  );
   const check = runCli(['check'], env);
   assert.match(check.stdout, /^ok: watcher: off; `noonsight watch enable`/m);
 });
 
 test('watch enable writes only its service file and starts it; again changes nothing; disable removes exactly that file', { skip: !supported }, () => {
   const { home, env, service, calls } = machine();
-  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
+  assert.equal(runCli(['install'], env).status, 0);
   const before = files(home);
+  const callsAtStart = calls().length;
 
   const on = runCli(['watch', 'enable'], env);
   assert.equal(on.status, 0, on.stderr);
@@ -172,7 +176,7 @@ test('watch enable writes only its service file and starts it; again changes not
   assert.deepEqual(argv.slice(0, 2), [process.execPath, fs.realpathSync(CLI)]);
   assert.deepEqual(argv.slice(2), ['watch', 'run']);
   assert.deepEqual(
-    calls(),
+    calls().slice(callsAtStart),
     process.platform === 'darwin'
       ? [`launchctl print gui/${process.getuid?.()}/${SERVICE_LABEL}`, `launchctl bootstrap gui/${process.getuid?.()} ${service.file}`]
       : [`systemctl --user is-active --quiet ${SERVICE_UNIT}`, 'systemctl --user daemon-reload', `systemctl --user enable --now ${SERVICE_UNIT}`],
@@ -206,7 +210,7 @@ test('watch enable writes only its service file and starts it; again changes not
 
 test('check reports a watcher whose service is in place but not running', { skip: !supported }, () => {
   const { env, service, managerDir } = machine();
-  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
+  assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
   fs.writeFileSync(path.join(managerDir, 'state'), 'off\n');
   const check = runCli(['check'], env);
@@ -223,7 +227,7 @@ test('check reports a watcher whose service is in place but not running', { skip
 
 test('watch enable that replaces a running service and is then refused leaves the watcher stopped, and says so', { skip: !supported }, () => {
   const { env, service, managerDir } = machine();
-  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
+  assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
   // A copy of noonsight that runs from another Node.js, as after an upgrade: enable replaces its service file.
   const other = serviceContent(service, { node: '/usr/local/other/node', cli: fs.realpathSync(CLI) });
@@ -238,7 +242,7 @@ test('watch enable that replaces a running service and is then refused leaves th
 
 test('a running watcher whose service file was removed by hand is reported by check, and enable and disable still reach it', { skip: !supported }, () => {
   const { env, service, managerDir } = machine();
-  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
+  assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
   fs.rmSync(service.file);
   const check = runCli(['check'], env);
@@ -406,7 +410,7 @@ test('a marker written after the fast window is still picked up', async (t) => {
 
 test('macOS: a loaded job without a running process is a warning, and enable and disable still reach it', { skip: process.platform !== 'darwin' }, () => {
   const { env, managerDir } = machine();
-  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
+  assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
   assert.match(runCli(['check'], env).stdout, /^ok: watcher: on \(/m);
 
@@ -441,7 +445,7 @@ test('a watcher install that fails leaves a problem line as its last log line, a
 
 test('an upgrade of noonsight at the same path is noticed: check warns, and enable rewrites the service file and restarts the watcher', { skip: !supported }, () => {
   const { env, service, calls } = machine();
-  assert.equal(runCli(['install', '--hooks-only'], env).status, 0);
+  assert.equal(runCli(['install'], env).status, 0);
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
   const current = fs.readFileSync(service.file, 'utf8');
   fs.writeFileSync(service.file, current.replaceAll(packageVersion(), 'previous-version'));

@@ -4,7 +4,8 @@
 
 - `noonsight install` is now the one command that sets noonsight up: when there is no configuration file it writes one as `noonsight init` does, never replacing an existing file, then installs the hooks as before, runs `noonsight check`, lists the rules each declared model receives, and says what it changed or that nothing changed.
   Running it again changes nothing.
-  `--hooks-only` keeps the old behavior of installing only the hooks, which the watcher uses, and `--managed` still installs only the hooks.
+  It exits 2 when the configuration is refused and 1 when it cannot write the configuration file, where it used to exit 0 once the hooks were in; a problem the check reports elsewhere on the machine is printed and leaves the status at 0.
+  `--managed` still installs only the hooks, and so does the watcher for each new login.
   The step-by-step commands (`init`, `models`, `install`, `check`) all still work.
 
 - A subagent's rules now reach it through a fifth hook, `SubagentStart`, as `additionalContext`, instead of being added to the end of its task text: the agent call hook no longer changes a call it only gives rules to.

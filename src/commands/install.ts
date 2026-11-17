@@ -15,13 +15,14 @@ import { writeConfig } from './init.js';
 import { modelsReport } from './models.js';
 import { UsageError } from './usage.js';
 
-export const INSTALL_USAGE = `usage: noonsight install [--account <dir> | --managed] [--hooks-only]
+export const INSTALL_USAGE = `usage: noonsight install [--account <dir> | --managed]
        noonsight uninstall [--account <dir> | --managed]
 
 One command sets noonsight up: it writes the configuration file when there is none (as
 \`noonsight init\`, never replacing an existing file), installs the hooks, runs \`noonsight check\`
 and lists what each declared model receives. It is safe to run again, and says what it changed or
-that nothing changed. With --hooks-only it installs the hooks and does nothing else.
+that nothing changed. It exits 0 once the hooks and a valid configuration are in place, and the
+check's lines say what else needs attention; it exits 2 when the configuration is refused.
 
 With no option, install noonsight's hooks into the user settings of every Claude Code configuration
 directory of this account: ~/.claude, the directory in CLAUDE_CONFIG_DIR, and every other directory
@@ -32,7 +33,6 @@ server-managed settings. Run it again after adding a Claude Code configuration d
 lists any directory it does not reach.
 
   --account <dir>  only this Claude Code configuration directory
-  --hooks-only     only the hooks: no configuration file is written and no check is run
   --managed        once for every account on the machine, in Claude Code's managed settings files;
                    needs administrator rights, and Claude Code ignores these files on a login whose
                    organization delivers server-managed settings (see docs/install.md); it only
@@ -50,13 +50,13 @@ export interface Io {
 
 type Mode = { readonly kind: 'every' } | { readonly kind: 'account'; readonly dir: string } | { readonly kind: 'managed' };
 
-interface Parsed {
-  readonly mode: Mode;
-  readonly hooksOnly: boolean;
+/** hooksOnly installs the hooks and nothing else; the watcher installs each new login that way. */
+export interface InstallOptions {
+  readonly hooksOnly?: boolean;
 }
 
-export function runInstall(command: 'install' | 'uninstall', args: readonly string[], env: Env, io: Io): number {
-  const { mode, hooksOnly } = parseMode(command, args);
+export function runInstall(command: 'install' | 'uninstall', args: readonly string[], env: Env, io: Io, options: InstallOptions = {}): number {
+  const mode = parseMode(args);
   const home = os.homedir();
   const runtime: Runtime = { node: process.execPath, cli: fs.realpathSync(CLI_FILE), version: packageVersion() };
 
@@ -127,11 +127,7 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
     throw e;
   }
 
-  if (command === 'install' && mode.kind !== 'managed' && !hooksOnly) {
-    const setup = finishSetup(lines, targets, env, home);
-    io.out(setup.text);
-    return setup.status;
-  }
+  if (command === 'install' && mode.kind !== 'managed' && options.hooksOnly !== true) return finishSetup(lines, targets, env, home, io);
   if (command === 'install') lines.push(...installNotes(targets, env, home, true));
   else if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
   io.out(lines.join('\n'));
@@ -141,12 +137,26 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
 /**
  * The rest of the one-command setup, after the hooks are in: the configuration file when there is
  * none, then what each declared model receives, then the check, then one line on what changed.
- * It composes init, models and check, and holds no logic of its own about them.
+ * It composes init, models and check, and holds no logic of its own about them. Its exit status
+ * covers what it set up, the hooks and the configuration; the check's lines report the rest of the
+ * machine without changing it.
  */
-function finishSetup(hookLines: readonly string[], targets: readonly InstallTarget[], env: Env, home: string): { text: string; status: number } {
+function finishSetup(hookLines: readonly string[], targets: readonly InstallTarget[], env: Env, home: string, io: Io): number {
   const out = [...hookLines];
   const file = configPath(env, home);
-  const wrote = writeConfig(env);
+  let wrote: string[] | null;
+  try {
+    wrote = writeConfig(env);
+  } catch (e) {
+    if (!isPermissionError(e)) throw e;
+    if (out.length) io.out(out.join('\n'));
+    io.err(
+      `noonsight: this account cannot write ${(e as NodeJS.ErrnoException).path ?? file}, so the configuration file ${file} was not written. ` +
+        `${out.length ? 'The hooks above are in place, but sessions' : 'Sessions'} get no rules until it exists: ` +
+        'make that directory writable, or set NOONSIGHT_CONFIG to a file this account can write, then run `noonsight install` again.',
+    );
+    return 1;
+  }
   if (wrote !== null) out.push(...wrote);
   else out.push(`config ${file}: already there, left as it is`);
 
@@ -159,9 +169,9 @@ function finishSetup(hookLines: readonly string[], targets: readonly InstallTarg
   }
 
   const checked: string[] = [];
-  const status = runCheck([], env, (t) => checked.push(t));
+  const checkStatus = runCheck([], env, (t) => checked.push(t));
+  if (checkStatus === 2) usable = false;
   out.push(...checked, ...installNotes(targets, env, home, false));
-  if (!usable || status === 2) out.push('Until the configuration is fixed, sessions get no rules. Edit it, then run `noonsight install` again.');
 
   const hooks = hookLines.filter((l) => /^hooks .*: (created|added)\b/.test(l)).length;
   const pointer = hookLines.some((l) => /^hook pointer .*: (written|rewritten)\b/.test(l));
@@ -171,11 +181,15 @@ function finishSetup(hookLines: readonly string[], targets: readonly InstallTarg
     ...(pointer && hooks === 0 ? ['the hook pointer was updated'] : []),
   ];
   out.push(changes.length === 0 ? 'Nothing changed: noonsight was already set up here.' : `Changed: ${changes.join('; ')}.`);
-  out.push(
-    'Done: from the next Claude Code session on, each session receives the rules of its model whose scope and place apply to it; ' +
-      '`noonsight report` shows what was delivered. To undo: `noonsight uninstall`.',
-  );
-  return { text: out.join('\n'), status: status === 2 || !usable ? 2 : status };
+  if (!usable) out.push('Until the configuration is fixed, sessions get no rules. Edit it, then run `noonsight install` again.');
+  else if (checkStatus !== 0) out.push('Not done yet: fix the problems the check reports above, then run `noonsight check` again.');
+  else
+    out.push(
+      'Done: from the next Claude Code session on, each session receives the rules of its model whose scope and place apply to it; ' +
+        '`noonsight report` shows what was delivered. To undo: `noonsight uninstall`.',
+    );
+  io.out(out.join('\n'));
+  return usable ? 0 : 2;
 }
 
 /** What each declared model will receive, one line each, as `noonsight models` lists it. */
@@ -245,9 +259,8 @@ function isGone(dir: string): boolean {
   }
 }
 
-function parseMode(command: 'install' | 'uninstall', args: readonly string[]): Parsed {
+function parseMode(args: readonly string[]): Mode {
   let mode: Mode = { kind: 'every' };
-  let hooksOnly = false;
   const set = (next: Mode): void => {
     if (mode.kind !== 'every') throw new UsageError('give at most one of --account and --managed', INSTALL_USAGE);
     mode = next;
@@ -263,10 +276,9 @@ function parseMode(command: 'install' | 'uninstall', args: readonly string[]): P
       if (!dir) throw new UsageError('--account needs a directory', INSTALL_USAGE);
       set({ kind: 'account', dir });
     } else if (a === '--managed') set({ kind: 'managed' });
-    else if (a === '--hooks-only' && command === 'install') hooksOnly = true;
     else throw new UsageError(a.startsWith('-') ? `unknown option ${a}` : `unexpected argument "${a}"`, INSTALL_USAGE);
   }
-  return { mode, hooksOnly };
+  return mode;
 }
 
 function installNotes(targets: readonly InstallTarget[], env: Env, home: string, withConfigLine: boolean): string[] {

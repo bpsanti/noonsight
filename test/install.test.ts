@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { accountTarget, managedTarget, UnsupportedPlatformError } from '../src/adapters/claude-code/locations.js';
-import { CLI, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
+import { CLI, fakeClaude, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree } from './helpers.js';
 
 /** A settings file that already has hooks of its own, and other settings, before noonsight arrives. */
 const THIRD_PARTY = {
@@ -273,15 +273,44 @@ test('a per-account install next to a machine-wide one warns that the rules woul
   assert.match(r.stdout, /warning: noonsight is also installed for the whole machine .*sessions that use .* receive the rules twice/);
 });
 
-test('--hooks-only says what to do next about the configuration and writes none', () => {
-  const home = tempTree({});
-  const none = runCli(['install', '--account', tempTree({}), '--hooks-only'], { HOME: home });
-  assert.match(none.stdout, /next: create .*\.config\/noonsight\/noonsight\.json/);
-  assert.equal(fs.existsSync(path.join(home, '.config', 'noonsight', 'noonsight.json')), false);
+test('a refused configuration: install keeps the file, exits 2, and does not say it is done', () => {
   const bad = path.join(tempTree({ 'noonsight.json': { version: 9 } }), 'noonsight.json');
-  const refused = runCli(['install', '--account', tempTree({}), '--hooks-only'], { HOME: tempTree({}), NOONSIGHT_CONFIG: bad });
-  assert.equal(refused.status, 0);
-  assert.match(refused.stdout, /refused \(1 problem\); run `noonsight check`/);
+  const before = fs.readFileSync(bad, 'utf8');
+  const r = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), NOONSIGHT_CONFIG: bad });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(bad, 'utf8'), before);
+  assert.match(r.stdout, /^Until the configuration is fixed, sessions get no rules\./m);
+  assert.doesNotMatch(r.stdout, /^Done:/m);
+});
+
+test('install --account exits 0 for what it set up while check reports a problem elsewhere, and does not say it is done', () => {
+  const home = tempTree({ '.claude/.keep': '' });
+  const env = { HOME: home, PATH: fakeClaude('2.1.325'), NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS, NOONSIGHT_SYSTEM_ROOT: tempTree({}) };
+  const r = runCli(['install', '--account', tempTree({})], env);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^problem: Claude Code configuration .*\.claude: no noonsight hooks reach it/m);
+  assert.match(r.stdout, /^Not done yet: fix the problems the check reports above/m);
+  assert.doesNotMatch(r.stdout, /^Done:/m);
+
+  const ready = runCli(['install'], env);
+  assert.equal(ready.status, 0, ready.stdout + ready.stderr);
+  assert.match(ready.stdout, /^Done: /m);
+});
+
+test('a configuration this account cannot write: install reports the hooks it added and the path, and exits 1', { skip: process.getuid?.() === 0 }, () => {
+  const locked = tempTree({});
+  fs.chmodSync(locked, 0o500);
+  try {
+    const config = path.join(locked, 'noonsight', 'noonsight.json');
+    const r = runCli(['install', '--account', tempTree({})], { HOME: tempTree({}), NOONSIGHT_CONFIG: config });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stdout, /^hooks .*settings\.json: (created|added)/m);
+    assert.ok(r.stderr.includes(`noonsight: this account cannot write ${path.join(locked, 'noonsight')}`), r.stderr);
+    assert.doesNotMatch(r.stderr, /\n {4}at /, 'no stack trace');
+    assert.equal(fs.existsSync(config), false);
+  } finally {
+    fs.chmodSync(locked, 0o755);
+  }
 });
 
 test('one command on a clean machine: writes the configuration, installs in every directory, checks, and a second run changes nothing', () => {

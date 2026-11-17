@@ -31,16 +31,20 @@ One configuration file serves the whole machine, for every Claude Code account o
 
 ## Install
 
+From a clone of this repository, until the package is published:
+
 ```bash
-npx noonsight install
+npm install && npm run build && npm link   # puts `noonsight` on PATH
+noonsight install
 ```
 
+Once version 0.1 is published, `npx noonsight install` becomes the whole route.
 One command sets noonsight up, and running it again is safe.
 It writes the configuration file when there is none (`~/.config/noonsight/noonsight.json`, or the file `NOONSIGHT_CONFIG` names, declaring every model the preset covers; an existing file is never replaced), adds the hooks to every Claude Code login of this account (no administrator rights), runs `noonsight check`, lists the rules each declared model receives, and ends by saying what it changed, or that nothing changed.
 The next Claude Code session already gets the rules of its model that apply to its scope and place, and `noonsight report` shows what was delivered.
 [docs/install.md](docs/install.md#the-one-command) lists the steps it takes and how to undo them.
 
-The same steps are also commands of their own: `noonsight init`, `noonsight models`, `noonsight install --hooks-only` and `noonsight check`.
+Three of its steps are also commands of their own: `noonsight init`, `noonsight models` and `noonsight check`.
 Turn a preset rule on or off with `enable` and `disable`, add your own rule files, and declare the models you use; [docs/configuration.md](docs/configuration.md) explains each key.
 
 `noonsight watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `noonsight watch disable` turns it off.

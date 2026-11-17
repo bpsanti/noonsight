@@ -25,7 +25,7 @@ const USAGE = `usage: noonsight <command>
 
 Commands:
   init                              create the configuration file from the preset (install does it too)
-  install [--account <dir>|--managed] [--hooks-only]
+  install [--account <dir>|--managed]
                                     set noonsight up: write the configuration if there is none,
                                     install the Claude Code hooks (by default for every login of this
                                     account, or one directory, or machine-wide), then check
