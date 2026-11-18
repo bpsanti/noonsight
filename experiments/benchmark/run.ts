@@ -24,7 +24,7 @@ import { runTrial } from './harbor.js';
 import { BENCH_DIR, type Plan, type Selection } from './plan.js';
 import { aboveFloor, readQuota, type QuotaReading } from './quota.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from './schedule.js';
-import { parseStream, signals, usage, type Signals, type Usage } from './score.js';
+import { hitUsageLimit, parseStream, signals, usage, type Signals, type Usage } from './score.js';
 import { ANSWER_FILE, materialize, OPEN_SETS, type Materialized, type SetName, type Sources } from './tasks.js';
 
 export interface RunRecord extends Cell {
@@ -219,6 +219,8 @@ export interface CellRun {
   /** Why the attempt could not be recorded, when it could not. */
   readonly failure: string | null;
   readonly cost_usd: number | null;
+  /** The run stopped at the account's usage limit: not a result, not a failure of the harness. */
+  readonly usage_limit?: boolean;
 }
 
 /** One attempt of one cell: a fresh Harbor trial, then its result line. */
@@ -281,6 +283,7 @@ export async function runCell(
     .map((l) => JSON.parse(l) as Record<string, any>);
   const session = decisions.find((d) => d.event === 'session-start');
   // Without the hook's decision the run cannot say what it received, and without a result event it never reached the model.
+  if (session && hitUsageLimit(stream)) return { record: null, failure: "the account's usage limit", cost_usd: u.cost_usd, usage_limit: true };
   if (!session || u.outcome === 'no-result') {
     const why = !session ? 'noonsight logged no session start' : 'Claude Code reported no result';
     return { record: null, failure: `${why}${trial.error ? `; ${trial.error}` : ''}`, cost_usd: u.cost_usd };
@@ -497,6 +500,16 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
         o.log(`stopped ${key} at the night's stop time; it runs again next night`);
         return;
       }
+      if (res.usage_limit) {
+        // The account ran out: the run is set aside for a later night, and no further run starts tonight.
+        append(journalFile, { event: 'retry', key, night, at: new Date().toISOString(), cost_usd: res.cost_usd ?? 0, why: 'usage limit' } satisfies JournalLine);
+        total += res.cost_usd ?? 0;
+        tonight += res.cost_usd ?? 0;
+        usageLimit = true;
+        stop = "the account's weekly quota is used up";
+        o.log(`limit ${key}: the account reached its usage limit; it runs again on a later night`);
+        return;
+      }
       if (res.record) {
         append(runsFile, res.record);
         append(journalFile, { event: 'end', key, night, at: new Date().toISOString(), cost_usd: res.record.cost_counted_usd } satisfies JournalLine);
@@ -531,6 +544,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   // between units, and the quota is read before each batch.
   let batch: Cell[] = [];
   let quota: QuotaReading | null = null;
+  let usageLimit = false;
   let quotaFloor = o.quotaFloor ?? o.plan.quota_floor_percent;
   let quotaMin: number | null = quotaBefore.all_models;
   const flush = async (): Promise<void> => {
@@ -554,6 +568,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
             continue;
           }
         }
+        if (usageLimit) break outer;
         if (batch.length === 0) {
           if (o.until && Date.now() >= o.until.getTime()) {
             stop = `the night's end time (${o.until.toISOString()}) was reached`;

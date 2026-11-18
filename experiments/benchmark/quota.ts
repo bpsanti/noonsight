@@ -62,6 +62,8 @@ export function readQuota(configDir: string): QuotaReading {
  */
 export function aboveFloor(q: QuotaReading, floor: number, model: string): { ok: boolean; why: string } {
   if (q.all_models === null) return { ok: false, why: q.error ?? 'quota unreadable' };
+  // A used-up quota ends the night even with no floor: every run would stop at the usage limit.
+  if (q.all_models <= 0) return { ok: false, why: "the account's weekly quota is used up" };
   if (q.all_models < floor) return { ok: false, why: `weekly quota at ${q.all_models}%, below the ${floor}% floor` };
   const own = q.models[model];
   if (own !== undefined && own < floor) return { ok: false, why: `${model}'s weekly quota at ${own}%, below the ${floor}% floor` };

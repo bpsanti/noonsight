@@ -17,7 +17,7 @@ import { accountEnv, aboveFloor, parseQuota } from '../experiments/benchmark/quo
 import os from 'node:os';
 import { doneKeys, interrupted, measured, spent, type Recorded } from '../experiments/benchmark/run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from '../experiments/benchmark/schedule.js';
-import { parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
+import { hitUsageLimit, parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
 import { chooseSwebench, chooseTerminalBench, rank, type SwebenchInstance } from '../experiments/benchmark/select.js';
 import { tomlValue } from '../experiments/benchmark/sources.js';
 import { dropKey, dropSection, unpinBase, useArm64Image } from '../experiments/benchmark/tasks.js';
@@ -220,6 +220,9 @@ test('the quota reading takes the all-models scope and each model scope of quota
   assert.equal(aboveFloor(q, 50, 'fable').ok, false);
   assert.equal(aboveFloor({ ...q, all_models: 49 }, 50, 'opus').ok, false);
   assert.equal(aboveFloor(parseQuota('not json'), 50, 'opus').ok, false);
+  // With no floor the night still ends when the quota is used up.
+  assert.equal(aboveFloor({ ...q, all_models: 1, models: {} }, 0, 'opus').ok, true);
+  assert.equal(aboveFloor({ ...q, all_models: 0, models: {} }, 0, 'opus').ok, false);
 });
 
 test('an account is selected by its configuration directory, except the default one, which is selected by naming none', () => {
@@ -387,6 +390,10 @@ test('usage reads the last result event: subtype, cost, tokens over every model,
   assert.deepEqual(u.tokens, { input: 11, cache_creation: 4, cache_read: 3, output: 22 });
   assert.equal(u.final, 'Done.');
   assert.equal(usage([]).outcome, 'no-result');
+  assert.equal(hitUsageLimit([{ type: 'result', is_error: true, api_error_status: 429, result: 'x' }]), true);
+  assert.equal(hitUsageLimit([{ type: 'result', is_error: true, result: "Claude AI usage limit reached|1794990000" }]), true);
+  assert.equal(hitUsageLimit([{ type: 'result', is_error: false, result: 'The quota module is fixed.' }]), false, 'a word in a successful answer is not the limit');
+  assert.equal(hitUsageLimit([{ type: 'result', is_error: true, api_error: 'connection_failed', result: 'API Error' }]), false);
 });
 
 test('the judge sees no condition, reads ratings by statement or order, and takes the majority per item', () => {

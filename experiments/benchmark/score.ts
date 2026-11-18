@@ -30,6 +30,18 @@ export interface Usage {
   readonly final: string;
 }
 
+/**
+ * Whether the session stopped because the account reached its usage limit, not because of anything
+ * the model did: the API answered 429, or the result names the limit.
+ */
+export function hitUsageLimit(stream: readonly Record<string, any>[]): boolean {
+  const result = stream.filter((e) => e.type === 'result').at(-1);
+  if (!result) return false;
+  if (result.api_error_status === 429) return true;
+  const text = `${String(result.api_error ?? '')} ${result.is_error ? String(result.result ?? '') : ''}`;
+  return /usage limit|rate[_ ]limit|limit reached|quota/i.test(text);
+}
+
 /** The totals the last result event reports, summed over every model the session used. */
 export function usage(stream: readonly Record<string, any>[]): Usage {
   const result = stream.filter((e) => e.type === 'result').at(-1);
