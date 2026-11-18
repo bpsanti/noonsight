@@ -295,6 +295,20 @@ test('"replaces" meets "enable" and "disable": the project\'s choice wins, and t
     'user/finish',
   ]);
 
+  // A project rule that takes a machine rule's place with its own "replaces" leaves the machine's
+  // replaced rule to the project's "disable".
+  assert.deepEqual(
+    sonnet(
+      load(
+        machine(machineFinish),
+        projectTree({
+          models: { 'claude-sonnet-5-5': { add: [{ id: 'user/finish', file: 'team-sonnet.md', replaces: 'sonnet/progress-updates' }], disable: ['sonnet/investigate'] } },
+        }),
+      ),
+    ),
+    ['sonnet/general', 'user/finish'],
+  );
+
   // The machine turned a preset rule off, or an off-by-default one on; a project rule replacing it wins.
   assert.deepEqual(
     sonnet(

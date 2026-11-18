@@ -292,13 +292,13 @@ function mergeEntry(
 ): RawModelEntry {
   const replacedBy = (list: readonly RawModelRule[] | undefined): Set<string> =>
     new Set((list ?? []).flatMap((r) => (r.replaces === undefined ? [] : [r.replaces])));
-  const machineReplaces = replacedBy(mine.add);
   const projectReplaces = replacedBy(theirs.add);
+  const add = addRules(theirs.add);
+  const machineReplaces = new Set([...replacedBy(add)].filter((id) => !projectReplaces.has(id)));
   const on = new Set(theirs.enable ?? []);
   const off = new Set((theirs.disable ?? []).filter((id) => !machineReplaces.has(id)));
   const enable = unique([...(mine.enable ?? []).filter((id) => !off.has(id) && !projectReplaces.has(id)), ...on]);
   const disable = unique([...(mine.disable ?? []).filter((id) => !on.has(id) && !projectReplaces.has(id)), ...off]);
-  const add = addRules(theirs.add);
   add.forEach((r, i) => {
     if (r.replaces === undefined || !on.has(r.replaces) || projectReplaces.has(r.replaces)) return;
     if (mine.add?.includes(r)) {
