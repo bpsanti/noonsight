@@ -67,11 +67,15 @@ interface RawUserRule {
   where?: Place[];
   triggers?: Trigger[];
 }
+/** A rule of a model's own "add", which alone may replace a preset rule. */
+interface RawModelRule extends RawUserRule {
+  replaces?: string;
+}
 interface RawModelEntry {
   use: 'preset' | 'custom' | 'none';
   enable?: string[];
   disable?: string[];
-  add?: RawUserRule[];
+  add?: RawModelRule[];
 }
 interface RawScope {
   description?: string;
@@ -178,7 +182,18 @@ export interface DeclaredModel {
   readonly enable: readonly string[];
   readonly disable: readonly string[];
   /** The user's own rules, with their files as the configuration writes them. */
-  readonly add: readonly { readonly id: string; readonly file: string }[];
+  readonly add: readonly DeclaredRule[];
+}
+
+/** The keys a rule that replaces a preset rule takes from it when the rule does not give them. */
+export type InheritedKey = 'scopes' | 'places' | 'triggers';
+
+/** One rule of a model's own "add", as the configuration writes it. */
+export interface DeclaredRule {
+  readonly id: string;
+  readonly file: string;
+  /** The preset rule the rule replaces, as written, and the keys it takes from it. */
+  readonly replaces?: { readonly id: string; readonly inherits: readonly InheritedKey[] };
 }
 
 /** One rule of the "all_models" block, with its file as the configuration writes it. */
@@ -309,10 +324,10 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   }
   if (problems.length) refuse();
 
-  // Under "warn", an enable or disable entry can name a rule the accepted version had and the installed
-  // one no longer has: the update dropped it, so the entry is left out and reported, not refused.
+  // Under "warn", an enable, disable or replaces entry can name a rule the accepted version had and the
+  // installed one no longer has: the update dropped it, so the entry is left out and reported, not refused.
   let former: Preset | null | undefined;
-  const formerIds = (model: string): ReadonlySet<string> => {
+  const formerRules = (model: string): readonly PresetRule[] => {
     if (former === undefined) {
       former = null;
       if (accepted !== null && installed !== null && preset === installed && accepted !== installed.version) {
@@ -321,7 +336,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
         if (own.length) former = null;
       }
     }
-    return new Set(former?.models.get(model)?.map((r) => r.id) ?? []);
+    return former?.models.get(model) ?? [];
   };
 
   const scopes = mergeScopes(preset?.scopes ?? new Map(), cfg.scopes ?? {}, report);
@@ -347,7 +362,11 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       continue;
     }
 
-    const rules: Rule[] = [];
+    // The preset's part of the rules: a rule that is on, or the index in "add" of the rule that replaces it.
+    const presetPart: (Rule | number)[] = [];
+    // The preset rule each rule of "add" that names one in "replaces" takes its defaults from: the rule
+    // it replaces, or, when the update dropped that rule, the rule as the accepted version had it.
+    const replaced = new Map<number, PresetRule>();
     const presetIds = new Set(preset?.models.get(key)?.map((r) => r.id) ?? []);
     if (entry.use === 'preset') {
       const presetRules = preset?.models.get(key);
@@ -362,7 +381,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
           for (const id of entry[list] ?? []) {
             const current = ids.has(id) ? id : renamed.get(id);
             if (current !== undefined) picked.set(current, id);
-            else if (!formerIds(key).has(id)) report(`${at}/${list}`, `preset "${presetName}" has no rule "${id}" for ${key}`);
+            else if (!formerRules(key).some((r) => r.id === id)) report(`${at}/${list}`, `preset "${presetName}" has no rule "${id}" for ${key}`);
           }
           return picked;
         };
@@ -373,9 +392,35 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
           if (other !== undefined)
             report(at, `rule "${id}" is both enabled and disabled` + (written !== id || other !== id ? ` (as "${written}" and "${other}")` : ''));
         }
+        const replacing = new Map<string, number>();
+        (entry.add ?? []).forEach((u, i) => {
+          if (u.replaces === undefined) return;
+          const replacesAt = `${at}/add/${i}/replaces`;
+          const current = ids.has(u.replaces) ? u.replaces : renamed.get(u.replaces);
+          if (current === undefined) {
+            const gone = formerRules(key).find((r) => r.id === u.replaces);
+            if (gone !== undefined) replaced.set(i, gone);
+            else report(replacesAt, `preset "${presetName}" has no rule "${u.replaces}" for ${key}`);
+            return;
+          }
+          const named = current !== u.replaces ? ` (as "${u.replaces}")` : '';
+          const other = replacing.get(current);
+          if (other !== undefined) {
+            report(replacesAt, `rule "${current}"${named} is already replaced by "${entry.add?.[other]?.id}"; a preset rule is replaced by one rule at most`);
+            return;
+          }
+          if (enable.has(current))
+            report(replacesAt, `rule "${current}"${named} is both replaced and enabled; remove it from "enable" to deliver "${u.id}" in its place`);
+          if (disable.has(current))
+            report(replacesAt, `rule "${current}"${named} is both replaced and disabled; "replaces" already turns it off, so remove it from "disable"`);
+          replacing.set(current, i);
+          replaced.set(i, presetRules.find((r) => r.id === current) as PresetRule);
+        });
         for (const r of presetRules) {
+          const by = replacing.get(r.id);
           const on = (r.enabled || enable.has(r.id)) && !disable.has(r.id);
-          if (on) rules.push({ id: r.id, origin: r.origin, scopes: r.scopes, where: r.where, triggers: r.triggers, text: r.text });
+          if (by !== undefined) presetPart.push(by);
+          else if (on) presetPart.push({ id: r.id, origin: r.origin, scopes: r.scopes, where: r.where, triggers: r.triggers, text: r.text });
         }
       }
     }
@@ -385,21 +430,31 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     allModels.forEach((r, i) => {
       if (presetIds.has(r.id)) report(`/all_models/add/${i}/id`, `rule id "${r.id}" is already a preset rule for ${key}; every model declared with "use": "preset" or "use": "custom" receives the rules of "all_models"`);
       taken.add(r.id);
-      rules.push(r);
     });
-    (entry.add ?? []).forEach((u, i) => {
+    // A rule that replaces a preset rule takes the scopes, places and triggers it does not give from that rule.
+    const own = (entry.add ?? []).map((u, i): Rule | undefined => {
       const ruleAt = `${at}/add/${i}`;
       if (allModels.some((r) => r.id === u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key} by "all_models"`);
       else if (taken.has(u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key}`);
       taken.add(u.id);
-      const ruleScopes = u.scopes ?? [ANY_SCOPE];
-      const where = u.where ?? [...PLACES];
-      const triggers = u.triggers ?? [];
+      const base = replaced.get(i);
+      const ruleScopes = u.scopes ?? base?.scopes ?? [ANY_SCOPE];
+      const where = u.where ?? base?.where ?? [...PLACES];
+      const triggers = u.triggers ?? base?.triggers ?? [];
       checkScopes(ruleScopes, scopes, `${ruleAt}/scopes`, report);
-      checkTriggers(ruleScopes, where, triggers, `${ruleAt}/triggers`, report);
+      const triggersFrom = u.triggers === undefined && base !== undefined ? base.id : undefined;
+      checkTriggers(ruleScopes, where, triggers, `${ruleAt}/triggers`, report, triggersFrom);
       const text = readRuleText(path.resolve(configDir, u.file), `${ruleAt}/file`, report);
-      if (text !== undefined) rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text });
+      if (text === undefined) return undefined;
+      const inPlace = base !== undefined && presetPart.includes(i);
+      return { id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text, ...(inPlace ? { replaces: base.id } : {}) };
     });
+    // A rule that replaces a preset rule is delivered in its place; the others follow the rules of "all_models".
+    const rules: Rule[] = [
+      ...presetPart.flatMap((r) => (typeof r === 'number' ? (own[r] ?? []) : [r])),
+      ...allModels,
+      ...own.filter((r, i): r is Rule => r !== undefined && !presetPart.includes(i)),
+    ];
 
     checkDeliverySize(key, rules, scopes, at, report);
     exact.set(key, { use: 'rules', rules });
@@ -435,7 +490,22 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
         wildcard: /[*?]/.test(key),
         enable: entry.enable ?? [],
         disable: entry.disable ?? [],
-        add: (entry.add ?? []).map((u) => ({ id: u.id, file: u.file })),
+        add: (entry.add ?? []).map((u) => ({
+          id: u.id,
+          file: u.file,
+          ...(u.replaces !== undefined
+            ? {
+                replaces: {
+                  id: u.replaces,
+                  inherits: [
+                    ...(u.scopes === undefined ? (['scopes'] as const) : []),
+                    ...(u.where === undefined ? (['places'] as const) : []),
+                    ...(u.triggers === undefined ? (['triggers'] as const) : []),
+                  ],
+                },
+              }
+            : {}),
+        })),
       },
     ]),
   );
@@ -729,10 +799,12 @@ function checkTriggers(
   triggers: readonly Trigger[],
   at: string,
   report: (at: string, message: string) => void,
+  inheritedFrom?: string,
 ): void {
   if (triggers.length === 0) return;
-  if (ruleScopes.includes(ANY_SCOPE)) report(at, `the rule is for every scope ("${ANY_SCOPE}"), so it already reaches every session; a trigger adds nothing`);
-  if (!where.some((p) => p !== 'subagent')) report(at, 'a trigger acts only in a session, but the rule is only for the place "subagent"; add "session" or "unattended" to "where"');
+  const from = inheritedFrom === undefined ? '' : ` (the rule takes its triggers from "${inheritedFrom}", which it replaces; give "triggers": [] to drop them)`;
+  if (ruleScopes.includes(ANY_SCOPE)) report(at, `the rule is for every scope ("${ANY_SCOPE}"), so it already reaches every session; a trigger adds nothing${from}`);
+  if (!where.some((p) => p !== 'subagent')) report(at, `a trigger acts only in a session, but the rule is only for the place "subagent"; add "session" or "unattended" to "where"${from}`);
 }
 
 /** The trigger sets a delivery can be made with: none, and every trigger revealed. */

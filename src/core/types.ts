@@ -41,6 +41,8 @@ export interface Rule {
   readonly text: string;
   /** Set on a user rule that came from the configuration's top-level "all_models" block, not from a model's own "add". */
   readonly allModels?: true;
+  /** Set on a user rule delivered in place of a preset rule: that rule's id, as the preset it is delivered from names it. */
+  readonly replaces?: string;
 }
 
 /** What a declared model resolves to, after preset rules, enable, disable and add are applied. */

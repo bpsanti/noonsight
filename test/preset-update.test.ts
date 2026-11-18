@@ -102,6 +102,7 @@ test('the comparison lists, per model, the rules turned on or off, renamed and c
       nowOff: [{ id: 'sonnet/investigate', why: 'removed' }],
       renamed: [{ from: 'sonnet/carry-through', to: 'sonnet/follow-through' }],
       changed: [{ id: 'sonnet/general', what: ['text'] }],
+      inherited: [],
       newOff: ['sonnet/new-off'],
       staleEntries: [{ list: 'disable', id: 'sonnet/carry-through', now: 'sonnet/follow-through' }],
     },
@@ -273,6 +274,85 @@ test('accept writes nothing when the configuration would be refused with the ins
     assert.match(r.stderr, /Nothing was written/);
     assert.equal(fs.readFileSync(file, 'utf8'), content);
   }
+});
+
+/** A configuration whose Sonnet entry adds the rule user/mine, in its own directory with the rule's file. */
+function replacingConfig(mine: Record<string, unknown>, extra: Record<string, unknown> = {}): string {
+  const config = labConfig(extra, { add: [{ id: 'user/mine', file: 'mine.md', ...mine }] });
+  return path.join(tempTree({ 'noonsight.json': config, 'mine.md': '- My own version: MINE-6021.\n' }), 'noonsight.json');
+}
+
+test('a "replaces" follows a renamed rule, and the change warning names the id to write', () => {
+  const presets = updatedPresets();
+  const file = replacingConfig({ replaces: 'sonnet/carry-through' });
+  const details = loadConfigDetails(file, { presetsDir: presets });
+  const rules = details.config.exact.get(SONNET);
+  const mine = rules?.use === 'rules' ? rules.rules.find((r) => r.id === 'user/mine') : undefined;
+  assert.equal(mine?.replaces, 'sonnet/follow-through', 'the rule replaces the renamed rule, in its place');
+  assert.deepEqual(mine?.where, ['unattended', 'subagent']);
+  assert.ok(rules?.use === 'rules' && !rules.rules.some((r) => r.id === 'sonnet/follow-through'));
+
+  const c = comparePresets(details.presetVersions, details.declared, { presetsDir: presets });
+  const sonnet = c?.models[0];
+  assert.deepEqual(sonnet?.staleEntries, [{ list: 'replaces', rule: 'user/mine', id: 'sonnet/carry-through', now: 'sonnet/follow-through' }]);
+  assert.deepEqual(sonnet?.renamed, [{ from: 'sonnet/carry-through', to: 'sonnet/follow-through' }]);
+  assert.ok(![...(sonnet?.nowOn ?? []), ...(sonnet?.nowOff ?? [])].some((r) => r.id === 'sonnet/follow-through' || r.id === 'sonnet/carry-through'), 'the replaced rule stays off');
+
+  const env = cliEnv(file, presets);
+  assert.match(
+    runCli(['check'], env).stdout,
+    /; rule "user\/mine" replaces "sonnet\/carry-through", which is now "sonnet\/follow-through"; it still replaces it, and "sonnet\/follow-through" is the name to write$/m,
+  );
+  const held = runCli(['check'], cliEnv(replacingConfig({ replaces: 'sonnet/carry-through' }, { on_preset_change: 'hold' }), presets));
+  assert.match(
+    held.stdout,
+    /rule "user\/mine" replaces "sonnet\/carry-through", which the installed preset renames "sonnet\/follow-through"; it will still replace it, and after accepting, "sonnet\/follow-through" is the name to write/,
+  );
+  assert.match(runCli(['models'], env).stdout, /^ {2}on {3}user\/mine {2}\(scopes: every scope; places: unattended, subagent; replaces sonnet\/follow-through\)$/m);
+});
+
+test('under "warn", a "replaces" for a rule the update removed is reported, and the rule keeps what it took from it', () => {
+  const presets = updatedPresets();
+  const file = replacingConfig({ replaces: 'sonnet/investigate' });
+  const details = loadConfigDetails(file, { presetsDir: presets });
+  const rules = details.config.exact.get(SONNET);
+  assert.ok(rules?.use === 'rules');
+  if (rules?.use !== 'rules') return;
+  const mine = rules.rules.at(-1);
+  assert.deepEqual([mine?.id, mine?.scopes, mine?.replaces], ['user/mine', ['investigate'], undefined], 'last, with the scopes of the removed rule, replacing nothing');
+
+  const c = comparePresets(details.presetVersions, details.declared, { presetsDir: presets });
+  assert.deepEqual(c?.models[0]?.staleEntries, [{ list: 'replaces', rule: 'user/mine', id: 'sonnet/investigate', now: null }]);
+  assert.deepEqual(c?.models[0]?.nowOff, [], 'investigate was replaced, so its removal turns nothing off');
+  const env = cliEnv(file, presets);
+  assert.match(
+    runCli(['check'], env).stdout,
+    /rule "user\/mine" replaces "sonnet\/investigate", which the preset no longer has; "user\/mine" is still delivered, after the rules of "all_models", with what it took from "sonnet\/investigate"; remove "replaces", and write in "user\/mine" any scopes, places or triggers it took from "sonnet\/investigate" and should keep/,
+  );
+  const accept = runCli(['accept'], env);
+  assert.equal(accept.status, 2);
+  assert.match(accept.stderr, /\/add\/0\/replaces: preset "lab" has no rule "sonnet\/investigate"/);
+});
+
+test('a change to the scopes, places or triggers of a replaced rule reaches the rule that takes them, and is reported', () => {
+  const presets = updatedPresets((p) => {
+    const follow = (p.models[SONNET].rules as Record<string, any>[]).find((r) => r.id === 'sonnet/follow-through');
+    if (follow) follow.where = ['session', 'unattended', 'subagent'];
+  });
+  const file = replacingConfig({ replaces: 'sonnet/carry-through' });
+  const details = loadConfigDetails(file, { presetsDir: presets });
+  const c = comparePresets(details.presetVersions, details.declared, { presetsDir: presets });
+  assert.deepEqual(c?.models[0]?.inherited, [{ id: 'sonnet/follow-through', by: 'user/mine', what: ['places'] }]);
+  assert.ok(!c?.models[0]?.changed.some((r) => r.id === 'sonnet/follow-through'), 'the preset rule itself is not delivered');
+  const session = resolve(details.config, { model: SONNET, scope: null, place: 'session' });
+  assert.ok(session.status === 'matched' && session.rules.includes('user/mine'));
+
+  const h = hookHome(file, { NOONSIGHT_PRESETS_DIR: presets });
+  assert.match(h.hook('session-start', start(SONNET)).out?.systemMessage, /changed in a replaced rule: sonnet\/follow-through \(places\), which user\/mine takes/);
+
+  // A rule that gives its own places takes nothing from the replaced rule's.
+  const own = loadConfigDetails(replacingConfig({ replaces: 'sonnet/carry-through', where: ['subagent'] }), { presetsDir: presets });
+  assert.deepEqual(comparePresets(own.presetVersions, own.declared, { presetsDir: presets })?.models[0]?.inherited, []);
 });
 
 test('accept records a version a configuration did not record, after "preset", and writes through a symbolic link', () => {

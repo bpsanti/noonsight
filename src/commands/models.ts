@@ -35,6 +35,10 @@ export interface ListedRule {
   readonly from?: 'all_models';
   /** User rules: the file as the configuration writes it. */
   readonly file?: string;
+  /** A preset rule that is off because a user rule replaces it: that rule's id. */
+  readonly replaced_by?: string;
+  /** A user rule delivered in place of a preset rule: that rule's id. It is listed right after it. */
+  readonly replaces?: string;
   readonly source?: Source;
   readonly effect?: string;
   readonly cost?: string;
@@ -125,23 +129,39 @@ export function modelsReport(env: Env, home: string = os.homedir()): ModelsRepor
 
 /**
  * The rules of one exact model, in the order they are delivered: every preset rule, on or off, for
- * "use": "preset", then the rules of "all_models", then the model's own.
+ * "use": "preset", each replaced one followed by the user rule delivered in its place, then the rules
+ * of "all_models", then the model's own.
  */
 function listRules(key: string, entry: DeclaredModel, config: Config, preset: Preset | null, allModels: readonly AllModelsRule[]): ListedRule[] {
   const resolved = config.exact.get(key);
-  const on = new Set(resolved?.use === 'rules' ? resolved.rules.map((r) => `${r.origin}:${r.id}`) : []);
+  const delivered = resolved?.use === 'rules' ? resolved.rules : [];
+  const on = new Set(delivered.map((r) => `${r.origin}:${r.id}`));
+  const own = (r: Rule): ListedRule => userRule(r, entry.add.find((a) => a.id === r.id)?.file);
   const rules: ListedRule[] = [];
   if (entry.use === 'preset')
-    for (const r of preset?.models.get(key) ?? []) rules.push(presetRule(r, on.has(`preset:${r.id}`)));
-  if (resolved?.use === 'rules') {
-    for (const r of resolved.rules.filter((x) => x.allModels)) rules.push(userRule(r, allModels.find((a) => a.id === r.id)?.file));
-    for (const r of resolved.rules.filter((x) => x.origin === 'user' && !x.allModels)) rules.push(userRule(r, entry.add.find((a) => a.id === r.id)?.file));
-  }
+    for (const r of preset?.models.get(key) ?? []) {
+      const by = delivered.find((x) => x.replaces === r.id);
+      rules.push(presetRule(r, on.has(`preset:${r.id}`), by?.id));
+      if (by !== undefined) rules.push(own(by));
+    }
+  for (const r of delivered.filter((x) => x.allModels)) rules.push(userRule(r, allModels.find((a) => a.id === r.id)?.file));
+  for (const r of delivered.filter((x) => x.origin === 'user' && !x.allModels && x.replaces === undefined)) rules.push(own(r));
   return rules;
 }
 
-function presetRule(r: PresetRule, on: boolean): ListedRule {
-  return { id: r.id, origin: 'preset', on, scopes: r.scopes, where: r.where, triggers: r.triggers, source: r.source, effect: r.effect, cost: r.cost };
+function presetRule(r: PresetRule, on: boolean, replacedBy: string | undefined): ListedRule {
+  return {
+    id: r.id,
+    origin: 'preset',
+    on,
+    scopes: r.scopes,
+    where: r.where,
+    triggers: r.triggers,
+    source: r.source,
+    effect: r.effect,
+    cost: r.cost,
+    ...(replacedBy !== undefined ? { replaced_by: replacedBy } : {}),
+  };
 }
 
 function userRule(r: Rule, file: string | undefined): ListedRule {
@@ -154,6 +174,7 @@ function userRule(r: Rule, file: string | undefined): ListedRule {
     triggers: r.triggers,
     ...(r.allModels ? { from: 'all_models' as const } : {}),
     ...(file !== undefined ? { file } : {}),
+    ...(r.replaces !== undefined ? { replaces: r.replaces } : {}),
   };
 }
 
@@ -242,7 +263,8 @@ export function renderModels(r: ModelsReport): string {
 function ruleLine(rule: ListedRule): string {
   const triggers = rule.triggers.length ? `; triggers: ${rule.triggers.join(', ')}` : '';
   const from = rule.from === 'all_models' ? '; from all_models' : '';
-  return `  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')}${triggers}${from})`;
+  const pair = rule.replaced_by !== undefined ? `; replaced by ${rule.replaced_by}` : rule.replaces !== undefined ? `; replaces ${rule.replaces}` : '';
+  return `  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')}${triggers}${from}${pair})`;
 }
 
 function scopesText(scopes: readonly string[]): string {

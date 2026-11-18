@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- A user rule can replace a preset rule: `replaces`, on a rule in `models.<id>.add` of a model declared with `"use": "preset"`, names the preset rule, which is then off, and the user rule is delivered in its place, with its scopes, places and triggers unless it gives its own.
+  Until now that took `disable` plus `add`, which did not say that one replaces the other.
+  `noonsight models` lists the pair, the preset rule `replaced by` the user rule that follows it (`replaced_by` and `replaces` in `--json`).
+  A `replaces` that names no preset rule of the model refuses the configuration, so `noonsight check` reports it; a preset rule is replaced once at most, and a replaced rule is neither enabled nor disabled.
+  On a preset update, `replaces` follows a renamed rule as `enable` and `disable` do, and the change warning names the id to write; a change to the scopes, places or triggers of a replaced rule that the user rule takes is reported, and under `warn`, a `replaces` for a rule the update removed is reported, not refused.
+  See `docs/configuration.md` ("Replacing a preset rule").
+
 - Preset updates no longer change the rules sessions receive without notice.
   The configuration records the preset version it was last checked against, `preset_version`, which `noonsight init` (and so `noonsight install`) writes.
   When the installed preset is another version, `noonsight check` lists, for each model declared with `"use": "preset"`, the rules now on (new, or shipping on now), the rules now off (removed, or shipping off now), renamed and changed rules, new rules that ship off, and the `enable` and `disable` entries that no longer name a rule; a new session whose model's rules changed starts with a warning that names them, and its decision log line records `preset_update`.
