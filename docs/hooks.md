@@ -93,7 +93,7 @@ After compaction of a session that revealed a trigger, the rules the trigger add
 When the launcher's rules are for another model, the hook delivers this model's rules with a note that the others do not apply.
 [launcher.md](launcher.md#with-the-hooks) has the details.
 
-At `startup`, when the installed preset is not the version the configuration accepted (`preset_version`) and the package keeps a copy of that version, the person is warned when the update changes the session's model's rules: rules turned on or off, rules whose text, scopes, places or triggers changed, and `enable` or `disable` entries that name a rule the preset no longer has.
+At `startup`, when the installed preset is not the version the configuration accepted (`preset_version`) and the package keeps a copy of that version, the person is warned when the update changes the session's model's rules: rules turned on or off, rules whose text, scopes, places or triggers changed (including those a user rule that replaces them takes), and `enable`, `disable` or `replaces` entries that name a rule the preset no longer has.
 Under `"on_preset_change": "warn"` the warning says what the session now receives; under `"hold"` the session keeps the accepted version's rules, and the warning says what accepting the installed version would change ([Preset updates](configuration.md#preset-updates)).
 A model the update leaves as it was gets no warning, nor does a start other than `startup`, and a failure in this comparison never costs the session its rules: `noonsight check` reports it.
 

@@ -1,11 +1,20 @@
 // What a preset update changes for a configuration. The configuration records the preset version it
 // was checked against ("preset_version"); the package ships the installed version and keeps a copy of
 // each earlier one, so the rules each model declared with "use": "preset" receives can be compared
-// rule by rule: rules turned on or off, renamed, or changed, and enable or disable entries that no
-// longer name a rule. noonsight check, noonsight accept and the session-start warning all read it.
+// rule by rule: rules turned on or off, renamed, or changed, changes a rule that replaces a preset
+// rule takes from it, and enable, disable or replaces entries that no longer name a rule. noonsight
+// check, noonsight accept and the session-start warning all read it.
 
 import type { Env } from './paths.js';
-import { readPresetVersion, type DeclaredModel, type LoadOptions, type Preset, type PresetRule, type PresetVersions } from './load.js';
+import {
+  readPresetVersion,
+  type DeclaredModel,
+  type InheritedKey,
+  type LoadOptions,
+  type Preset,
+  type PresetRule,
+  type PresetVersions,
+} from './load.js';
 
 /** What the installed version changes for one model declared with "use": "preset". */
 export interface ModelChanges {
@@ -19,11 +28,18 @@ export interface ModelChanges {
   readonly renamed: readonly { readonly from: string; readonly to: string }[];
   /** Rules on in both versions whose text, scopes, places or triggers changed. */
   readonly changed: readonly { readonly id: string; readonly what: readonly ('text' | 'scopes' | 'places' | 'triggers')[] }[];
+  /** Replaced rules whose scopes, places or triggers changed, which the user rule `by` that replaces each takes from it. */
+  readonly inherited: readonly { readonly id: string; readonly by: string; readonly what: readonly InheritedKey[] }[];
   /** New rules that ship off. */
   readonly newOff: readonly string[];
   /** Entries that do not name a rule of the installed version: `now` is the rule's id after a rename, or null when it is gone. */
-  readonly staleEntries: readonly { readonly list: 'enable' | 'disable'; readonly id: string; readonly now: string | null }[];
+  readonly staleEntries: readonly StaleEntry[];
 }
+
+/** An enable or disable entry, or the "replaces" of the user rule `rule`, that does not name a rule of the installed version. */
+export type StaleEntry =
+  | { readonly list: 'enable' | 'disable'; readonly id: string; readonly now: string | null }
+  | { readonly list: 'replaces'; readonly rule: string; readonly id: string; readonly now: string | null };
 
 export interface PresetComparison {
   readonly name: string;
@@ -58,7 +74,7 @@ export function comparePresets(
   const models: ModelChanges[] = [];
   for (const [model, entry] of declared) {
     if (entry.use !== 'preset' || entry.wildcard || (only !== undefined && model !== only)) continue;
-    const changes = modelChanges(model, base.models.get(model) ?? [], installed.models.get(model), entry.enable, entry.disable);
+    const changes = modelChanges(model, base.models.get(model) ?? [], installed.models.get(model), entry);
     if (hasChanges(changes)) models.push(changes);
   }
   return {
@@ -77,22 +93,23 @@ export function versionChanged(c: PresetComparison): boolean {
 }
 
 export function hasChanges(m: ModelChanges): boolean {
-  return m.dropped || [m.nowOn, m.nowOff, m.renamed, m.changed, m.newOff, m.staleEntries].some((list) => list.length > 0);
+  return m.dropped || [m.nowOn, m.nowOff, m.renamed, m.changed, m.inherited, m.newOff, m.staleEntries].some((list) => list.length > 0);
 }
 
 /** Whether the change alters what the model is delivered, or drops a choice the user made. */
 export function changesDelivery(m: ModelChanges): boolean {
-  return m.dropped || m.nowOn.length > 0 || m.nowOff.length > 0 || m.changed.length > 0 || m.staleEntries.some((e) => e.now === null);
+  return (
+    m.dropped ||
+    m.nowOn.length > 0 ||
+    m.nowOff.length > 0 ||
+    m.changed.length > 0 ||
+    m.inherited.length > 0 ||
+    m.staleEntries.some((e) => e.now === null)
+  );
 }
 
-function modelChanges(
-  model: string,
-  from: readonly PresetRule[],
-  to: readonly PresetRule[] | undefined,
-  enable: readonly string[],
-  disable: readonly string[],
-): ModelChanges {
-  const empty = { nowOn: [], nowOff: [], renamed: [], changed: [], newOff: [], staleEntries: [] };
+function modelChanges(model: string, from: readonly PresetRule[], to: readonly PresetRule[] | undefined, entry: DeclaredModel): ModelChanges {
+  const empty = { nowOn: [], nowOff: [], renamed: [], changed: [], inherited: [], newOff: [], staleEntries: [] };
   if (to === undefined) return { model, dropped: true, ...empty };
   const predecessor = (r: PresetRule): PresetRule | undefined =>
     from.find((p) => p.id === r.id) ?? from.find((p) => r.renamedFrom.includes(p.id));
@@ -101,8 +118,12 @@ function modelChanges(
     const r = to.find((r) => r.id === id || r.renamedFrom.includes(id));
     return (r === undefined ? undefined : predecessor(r)?.id) ?? id;
   };
-  const onBefore = onRules(from, enable.map(asBefore), disable.map(asBefore));
-  const onAfter = onRules(to, enable, disable);
+  // A replaced rule is off, as a disabled one is.
+  const replacing = entry.add.flatMap((u) => (u.replaces === undefined ? [] : [{ rule: u.id, ...u.replaces }]));
+  const enable = entry.enable;
+  const off = [...entry.disable, ...replacing.map((x) => x.id)];
+  const onBefore = onRules(from, enable.map(asBefore), off.map(asBefore));
+  const onAfter = onRules(to, enable, off);
   const successor = (p: PresetRule): PresetRule | undefined => to.find((r) => predecessor(r) === p);
 
   const nowOn: ModelChanges['nowOn'][number][] = [];
@@ -129,11 +150,23 @@ function modelChanges(
     else if (!onAfter.has(r.id)) nowOff.push({ id: r.id, why: 'ships-off' });
   }
 
+  // A rule that replaces a preset rule takes the keys it does not give from that rule, so their changes reach it.
+  const inherited: ModelChanges['inherited'][number][] = [];
+  for (const x of replacing) {
+    const r = to.find((r) => r.id === x.id || r.renamedFrom.includes(x.id));
+    const p = r === undefined ? undefined : predecessor(r);
+    if (r === undefined || p === undefined) continue;
+    const what = differences(p, r).filter((w): w is InheritedKey => w !== 'text' && x.inherits.includes(w));
+    if (what.length) inherited.push({ id: r.id, by: x.rule, what });
+  }
+
   const ids = new Set(to.map((r) => r.id));
-  const staleEntries: ModelChanges['staleEntries'][number][] = [];
-  for (const [list, entries] of [['enable', enable], ['disable', disable]] as const)
-    for (const id of entries) if (!ids.has(id)) staleEntries.push({ list, id, now: to.find((r) => r.renamedFrom.includes(id))?.id ?? null });
-  return { model, dropped: false, nowOn, nowOff, renamed, changed, newOff, staleEntries };
+  const now = (id: string): string | null => to.find((r) => r.renamedFrom.includes(id))?.id ?? null;
+  const staleEntries: StaleEntry[] = [];
+  for (const [list, entries] of [['enable', enable], ['disable', entry.disable]] as const)
+    for (const id of entries) if (!ids.has(id)) staleEntries.push({ list, id, now: now(id) });
+  for (const x of replacing) if (!ids.has(x.id)) staleEntries.push({ list: 'replaces', rule: x.rule, id: x.id, now: now(x.id) });
+  return { model, dropped: false, nowOn, nowOff, renamed, changed, inherited, newOff, staleEntries };
 }
 
 /** The ids of the rules that are on, with the entries mapped through renames. */
@@ -166,16 +199,33 @@ export function describeChanges(m: ModelChanges, held = false): string {
   if (m.nowOff.length) parts.push(`now off: ${m.nowOff.map((r) => `${r.id} (${r.why === 'removed' ? 'removed' : 'ships off now'})`).join(', ')}`);
   if (m.renamed.length) parts.push(`renamed: ${m.renamed.map((r) => `${r.from} to ${r.to}`).join(', ')}`);
   if (m.changed.length) parts.push(`changed: ${m.changed.map((r) => `${r.id} (${r.what.join(', ')})`).join(', ')}`);
+  for (const r of m.inherited) parts.push(`changed in a replaced rule: ${r.id} (${r.what.join(', ')}), which ${r.by} takes`);
   if (m.newOff.length) parts.push(`new and off unless enabled: ${m.newOff.join(', ')}`);
-  for (const e of m.staleEntries)
-    parts.push(
-      e.now !== null
-        ? held
-          ? `"${e.list}" names "${e.id}", which the installed preset renames "${e.now}"; it will still apply to it, and after accepting, "${e.now}" is the name to write`
-          : `"${e.list}" names "${e.id}", which is now "${e.now}"; it still applies to it, and "${e.now}" is the name to write`
-        : held
-          ? `"${e.list}" names "${e.id}", which the installed preset no longer has; remove it before accepting`
-          : `"${e.list}" names "${e.id}", which the preset no longer has, so that choice no longer applies; remove it`,
-    );
+  for (const e of m.staleEntries) parts.push(describeStale(e, held));
   return parts.join('; ');
+}
+
+/** An entry that no longer names a rule of the installed version, as one part of a line. */
+function describeStale(e: StaleEntry, held: boolean): string {
+  if (e.list === 'replaces') return describeStaleReplaces(e.rule, e.id, e.now, held);
+  if (e.now !== null)
+    return held
+      ? `"${e.list}" names "${e.id}", which the installed preset renames "${e.now}"; it will still apply to it, and after accepting, "${e.now}" is the name to write`
+      : `"${e.list}" names "${e.id}", which is now "${e.now}"; it still applies to it, and "${e.now}" is the name to write`;
+  return held
+    ? `"${e.list}" names "${e.id}", which the installed preset no longer has; remove it before accepting`
+    : `"${e.list}" names "${e.id}", which the preset no longer has, so that choice no longer applies; remove it`;
+}
+
+/** A "replaces" that no longer names a rule of the installed version, as one part of a line. */
+function describeStaleReplaces(rule: string, id: string, now: string | null, held: boolean): string {
+  const lead = `rule "${rule}" replaces "${id}", which`;
+  if (now !== null)
+    return held
+      ? `${lead} the installed preset renames "${now}"; it will still replace it, and after accepting, "${now}" is the name to write`
+      : `${lead} is now "${now}"; it still replaces it, and "${now}" is the name to write`;
+  const keep = `write in "${rule}" any scopes, places or triggers it took from "${id}" and should keep`;
+  return held
+    ? `${lead} the installed preset no longer has; remove "replaces" before accepting, and ${keep}`
+    : `${lead} the preset no longer has; "${rule}" is still delivered, after the rules of "all_models", with what it took from "${id}"; remove "replaces", and ${keep}`;
 }
