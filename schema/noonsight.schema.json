@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://unpkg.com/noonsight@0/schema/noonsight.schema.json",
   "title": "noonsight configuration",
-  "description": "The noonsight configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. noonsight looks for it at $NOONSIGHT_CONFIG, then ~/.config/noonsight/noonsight.json.",
+  "description": "The noonsight configuration. One file serves the whole machine: every Claude Code account and configuration directory reads the same file. noonsight looks for it at $NOONSIGHT_CONFIG, then ~/.config/noonsight/noonsight.json. A project can lay its own file, .noonsight/noonsight.json, over it for the sessions that run in that project, as \"projects\" permits.",
   "type": "object",
   "required": ["version"],
   "additionalProperties": false,
@@ -196,6 +196,19 @@
           "minimum": 1000,
           "maximum": 8000,
           "default": 8000
+        }
+      },
+      "default": {}
+    },
+    "projects": {
+      "description": "How far a project's configuration, the file .noonsight/noonsight.json a repository commits, may change this configuration for the sessions that run in that project. A project applies only once this account trusts it with noonsight trust.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "description": "none: project files are ignored. add: a project only adds rules, under all_models.add and models.<id>.add, for models this file declares with \"use\": \"preset\" or \"use\": \"custom\". rules: a project also changes which rules a model receives (use, enable, disable, wildcard keys, and a rule with the id of one of this file's rules, which replaces it), and sets scopes, session and on_undeclared. all: a project also sets routing, classifier and subagents.",
+          "enum": ["none", "add", "rules", "all"],
+          "default": "add"
         }
       },
       "default": {}

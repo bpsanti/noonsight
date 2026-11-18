@@ -41,6 +41,7 @@ import type {
 } from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
 import { presetsDir as defaultPresetsDir, SCHEMA_DIR, type Env } from './paths.js';
+import { DEFAULT_PROJECT_ALLOW, mergeProject, type ProjectAllow, type ProjectInput, type RawProject, type RuleOrigin } from './project.js';
 
 export class ConfigError extends Error {
   constructor(
@@ -57,10 +58,12 @@ export interface LoadOptions {
   readonly presetsDir?: string;
   /** The configuration file's content, read instead of the file; rule files are still found next to the file. */
   readonly content?: string;
+  /** The project file of the session or command, laid over the configuration as its "projects.allow" permits. */
+  readonly project?: ProjectInput | null;
 }
 
 // Shapes after schema validation. The schemas are the owners of these shapes.
-interface RawUserRule {
+export interface RawUserRule {
   id: string;
   file: string;
   scopes?: string[];
@@ -71,13 +74,13 @@ interface RawUserRule {
 interface RawModelRule extends RawUserRule {
   replaces?: string;
 }
-interface RawModelEntry {
+export interface RawModelEntry {
   use: 'preset' | 'custom' | 'none';
   enable?: string[];
   disable?: string[];
   add?: RawModelRule[];
 }
-interface RawScope {
+export interface RawScope {
   description?: string;
   match?: string[];
   /** Preset scopes only. */
@@ -89,7 +92,8 @@ interface RawRouteOption {
 }
 /** A list for every target, or a list per target. */
 type RawRouteRow = RawRouteOption[] | Partial<Record<RouteTarget, RawRouteOption[]>>;
-interface RawConfig {
+export interface RawConfig {
+  $schema?: string;
   version: 1;
   preset?: string;
   preset_version?: string;
@@ -109,6 +113,7 @@ interface RawConfig {
     default?: 'inherit' | RawRouteRow;
   };
   classifier?: { mode?: ClassifierMode; model?: string; effort?: Effort; timeout_ms?: number };
+  projects?: { allow?: ProjectAllow };
 }
 interface RawPresetRule {
   id: string;
@@ -194,12 +199,38 @@ export interface DeclaredRule {
   readonly file: string;
   /** The preset rule the rule replaces, as written, and the keys it takes from it. */
   readonly replaces?: { readonly id: string; readonly inherits: readonly InheritedKey[] };
+  /** Set on a rule the project's configuration wrote; its file is then relative to the project file. */
+  readonly project?: true;
 }
 
-/** One rule of the "all_models" block, with its file as the configuration writes it. */
+/** A user rule, with its file as the configuration that writes it writes it. */
 export interface AllModelsRule {
   readonly id: string;
   readonly file: string;
+  /** Set on a rule the project's configuration wrote. */
+  readonly project?: true;
+}
+
+/**
+ * What became of the project file of a session or command:
+ *   applied    laid over the machine's configuration;
+ *   untrusted  this account never trusted the project, so it was left out;
+ *   declined   this account declined it with `noonsight untrust`;
+ *   ignored    the machine's configuration sets "projects.allow" to "none";
+ *   refused    it has a problem, alone or laid over the machine's configuration, so it was left out.
+ * Only "applied" changes anything; the machine's configuration applies alone otherwise.
+ */
+export interface ProjectLayer {
+  readonly dir: string;
+  readonly file: string;
+  readonly allow: ProjectAllow;
+  readonly status: 'applied' | 'untrusted' | 'declined' | 'ignored' | 'refused';
+  /** Why it was refused. */
+  readonly problems: readonly string[];
+  /** Entries of an applied project that do not apply on this machine. */
+  readonly notes: readonly string[];
+  /** The project file as read, when it matched its schema. */
+  readonly raw: RawProject | null;
 }
 
 /**
@@ -229,6 +260,8 @@ export interface ConfigDetails {
   readonly declared: ReadonlyMap<string, DeclaredModel>;
   /** The rules of the "all_models" block, in the order the file writes them; empty when there is none. */
   readonly allModels: readonly AllModelsRule[];
+  /** The project file the load was asked to lay over the configuration, and what became of it; null when there was none. */
+  readonly project: ProjectLayer | null;
 }
 
 /** The preset a configuration draws from when it names none. */
@@ -273,9 +306,66 @@ export function loadConfig(file: string, options: LoadOptions = {}, env: Env = p
   return loadConfigDetails(file, options, env).config;
 }
 
-/** As loadConfig, and also returns the preset and each model as the file declares it. */
+/**
+ * As loadConfig, and also returns the preset and each model as the file declares it. With a project
+ * file, the project is laid over the configuration when the configuration's "projects.allow" and this
+ * account's trust let it; a project with any problem is left out, and the configuration applies alone.
+ * Only a problem of the configuration itself throws.
+ */
 export function loadConfigDetails(file: string, options: LoadOptions = {}, env: Env = process.env): ConfigDetails {
   const configFile = path.resolve(file);
+  const problems: string[] = [];
+  const raw =
+    options.content !== undefined
+      ? parseJson(options.content, problems)
+      : readJson(configFile, problems, 'no configuration file here; create one, or point NOONSIGHT_CONFIG at one');
+  if (raw !== undefined) problems.push(...validateSchema(schema('noonsight.schema.json'), raw));
+  if (problems.length) throw new ConfigError(configFile, problems);
+  const machine = raw as RawConfig;
+
+  const project = options.project ?? null;
+  if (project === null) return { ...build(machine, configFile, options, env, null), project: null };
+  const allow = machine.projects?.allow ?? DEFAULT_PROJECT_ALLOW;
+  const alone = (status: ProjectLayer['status'], why: readonly string[] = [], read: RawProject | null = null): ConfigDetails => ({
+    ...build(machine, configFile, options, env, null),
+    project: { dir: project.dir, file: project.file, allow, status, problems: why, notes: [], raw: read },
+  });
+  if (allow === 'none') return alone('ignored');
+  if (project.trusted === null) return alone('untrusted');
+  if (project.trusted === false) return alone('declined');
+
+  const own: string[] = [];
+  const read = project.content !== undefined ? parseJson(project.content, own) : readJson(project.file, own, 'the project file is gone');
+  if (read !== undefined) own.push(...validateSchema(schema('noonsight-project.schema.json'), read));
+  if (own.length) return alone('refused', own);
+  const projectRaw = read as RawProject;
+  // Paths in the project file are relative to the file itself, as in the configuration.
+  const merged = mergeProject(machine, projectRaw, allow, path.dirname(project.file));
+  if (merged.problems.length) return alone('refused', merged.problems, projectRaw);
+  try {
+    // The merged configuration is checked against the configuration's schema too: a project entry
+    // merged into the machine's can make a combination neither file has alone.
+    const combined = validateSchema(schema('noonsight.schema.json'), merged.raw);
+    if (combined.length) throw new ConfigError(project.file, combined);
+    return {
+      ...build(merged.raw, configFile, options, env, merged.origins),
+      project: { dir: project.dir, file: project.file, allow, status: 'applied', problems: [], notes: merged.notes, raw: projectRaw },
+    };
+  } catch (e) {
+    if (!(e instanceof ConfigError)) throw e;
+    // A problem the configuration has alone throws from here; one the project brings leaves the project out.
+    return alone('refused', e.problems, projectRaw);
+  }
+}
+
+/** Check a configuration that matches its schema, and build what the core resolves against. */
+function build(
+  cfg: RawConfig,
+  configFile: string,
+  options: LoadOptions,
+  env: Env,
+  origins: WeakMap<RawUserRule, RuleOrigin> | null,
+): Omit<ConfigDetails, 'project'> {
   const problems: string[] = [];
   const report = (at: string, message: string): void => {
     problems.push(`${at}: ${message}`);
@@ -283,15 +373,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   const refuse = (): never => {
     throw new ConfigError(configFile, problems);
   };
-
-  const raw =
-    options.content !== undefined
-      ? parseJson(options.content, problems)
-      : readJson(configFile, problems, 'no configuration file here; create one, or point NOONSIGHT_CONFIG at one');
-  if (raw === undefined) refuse();
-  problems.push(...validateSchema(schema('noonsight.schema.json'), raw));
-  if (problems.length) refuse();
-  const cfg = raw as RawConfig;
+  const origin = (u: RawUserRule): RuleOrigin | undefined => origins?.get(u);
   const models = cfg.models ?? {};
 
   // The preset: always read when present, required when named or when a model uses it.
@@ -343,7 +425,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   const configDir = path.dirname(configFile);
   const exact = new Map<string, ModelEntry>();
   const wildcards: WildcardKey[] = [];
-  const allModels = loadAllModels(cfg.all_models?.add ?? [], configDir, scopes, report);
+  const allModels = loadAllModels(cfg.all_models?.add ?? [], configDir, scopes, report, origin);
 
   for (const [key, entry] of Object.entries(models)) {
     const at = `/models/${key}`;
@@ -433,7 +515,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     });
     // A rule that replaces a preset rule takes the scopes, places and triggers it does not give from that rule.
     const own = (entry.add ?? []).map((u, i): Rule | undefined => {
-      const ruleAt = `${at}/add/${i}`;
+      const ruleAt = origin(u)?.at ?? `${at}/add/${i}`;
       if (allModels.some((r) => r.id === u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key} by "all_models"`);
       else if (taken.has(u.id)) report(`${ruleAt}/id`, `rule id "${u.id}" is already used for ${key}`);
       taken.add(u.id);
@@ -447,7 +529,16 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
       const text = readRuleText(path.resolve(configDir, u.file), `${ruleAt}/file`, report);
       if (text === undefined) return undefined;
       const inPlace = base !== undefined && presetPart.includes(i);
-      return { id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text, ...(inPlace ? { replaces: base.id } : {}) };
+      return {
+        id: u.id,
+        origin: 'user',
+        scopes: ruleScopes,
+        where,
+        triggers,
+        text,
+        ...(inPlace ? { replaces: base.id } : {}),
+        ...(origin(u) ? { project: true as const } : {}),
+      };
     });
     // A rule that replaces a preset rule is delivered in its place; the others follow the rules of "all_models".
     const rules: Rule[] = [
@@ -491,8 +582,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
         enable: entry.enable ?? [],
         disable: entry.disable ?? [],
         add: (entry.add ?? []).map((u) => ({
-          id: u.id,
-          file: u.file,
+          ...describeRule(u, origin(u)),
           ...(u.replaces !== undefined
             ? {
                 replaces: {
@@ -514,8 +604,13 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     preset,
     presetVersions: { name: presetName, accepted, onChange, installed },
     declared,
-    allModels: (cfg.all_models?.add ?? []).map((u) => ({ id: u.id, file: u.file })),
+    allModels: (cfg.all_models?.add ?? []).map((u) => describeRule(u, origin(u))),
   };
+}
+
+/** A user rule as commands list it: its file as the configuration that writes it writes it. */
+function describeRule(u: RawUserRule, origin: RuleOrigin | undefined): AllModelsRule {
+  return origin ? { id: u.id, file: origin.file, project: true } : { id: u.id, file: u.file };
 }
 
 /**
@@ -528,11 +623,12 @@ function loadAllModels(
   configDir: string,
   scopes: ReadonlyMap<string, Scope>,
   report: (at: string, message: string) => void,
+  origin: (u: RawUserRule) => RuleOrigin | undefined,
 ): Rule[] {
   const ids = new Set<string>();
   const rules: Rule[] = [];
   raw.forEach((u, i) => {
-    const at = `/all_models/add/${i}`;
+    const at = origin(u)?.at ?? `/all_models/add/${i}`;
     if (ids.has(u.id)) report(`${at}/id`, `rule id "${u.id}" is used more than once in "all_models"`);
     ids.add(u.id);
     const ruleScopes = u.scopes ?? [ANY_SCOPE];
@@ -541,7 +637,8 @@ function loadAllModels(
     checkScopes(ruleScopes, scopes, `${at}/scopes`, report);
     checkTriggers(ruleScopes, where, triggers, `${at}/triggers`, report);
     const text = readRuleText(path.resolve(configDir, u.file), `${at}/file`, report);
-    if (text !== undefined) rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text, allModels: true });
+    if (text !== undefined)
+      rules.push({ id: u.id, origin: 'user', scopes: ruleScopes, where, triggers, text, allModels: true, ...(origin(u) ? { project: true as const } : {}) });
   });
   return rules;
 }

@@ -14,6 +14,8 @@ noonsight looks for it in this order:
 
 Paths inside the file (the `file` of a rule) are relative to the file itself.
 
+A repository can also commit a configuration of its own, `.noonsight/noonsight.json`, which is laid over this file for the sessions that run in that project, once the account trusts the project and as far as this file's `projects.allow` permits ([Project configuration](#project-configuration)).
+
 Presets are read from the installed package, so a preset follows the package version, and the configuration records the version it was checked against ([Preset updates](#preset-updates)).
 `NOONSIGHT_PRESETS_DIR` replaces that directory, for tests and for preset development.
 
@@ -94,6 +96,7 @@ The preset also suggests a routing table, which applies only when the user turns
 | `classifier.model` | A model alias or identifier | `haiku` | The model the classifier runs on, as `claude --model` takes it. |
 | `classifier.effort` | `low`, `medium`, `high`, `xhigh`, `max` | `low` | The effort the classifier runs at. |
 | `classifier.timeout_ms` | 1000 to 8000 | 8000 | How long one classification may take before the task gets no scope. |
+| `projects.allow` | `none`, `add`, `rules`, `all` | `add` | How far a project's configuration may change this one for the sessions that run in that project. See [Project configuration](#project-configuration). |
 
 A user rule has these keys:
 
@@ -187,6 +190,91 @@ Only the text changes, unless the rule says otherwise.
 - A rule that ships off can be replaced too: the user rule is delivered all the same.
 - Triggers the user rule takes from the replaced rule are checked as its own; `"triggers": []` drops them.
 - `replaces` is only for a model declared with `"use": "preset"`, since only those have preset rules, and not in `all_models.add`, since a preset rule belongs to one model.
+
+## Project configuration
+
+A repository can commit rules next to its code, so that the sessions of everyone who works in it receive them.
+The file is `.noonsight/noonsight.json`, with its rule files, and it is laid over the machine's configuration for the sessions that run in that project.
+
+```json
+{
+  "$schema": "https://unpkg.com/noonsight@0/schema/noonsight-project.schema.json",
+  "version": 1,
+  "all_models": { "add": [{ "id": "team/commit-style", "file": "rules/commit-style.md" }] },
+  "models": {
+    "claude-sonnet-5-5": { "add": [{ "id": "team/run-the-tests", "file": "rules/run-the-tests.md", "scopes": ["build"] }] }
+  }
+}
+```
+
+The schema in `schema/noonsight-project.schema.json` is the authority on its shape.
+It takes the keys of the machine's configuration, except `preset`, `preset_version` and `on_preset_change`, which follow the noonsight installed on each machine, and `projects`, which only the machine decides; and a model entry may leave `use` out.
+Paths inside it are relative to the file itself, as in the machine's file, so the rules of the example are in `.noonsight/rules/`.
+
+### Which project a session is in
+
+The project directory is `CLAUDE_PROJECT_DIR`, which Claude Code sets for its hooks, else the `cwd` of the hook input, as for the other project files noonsight reads.
+`noonsight run`, `check`, `models` and `resolve` take `CLAUDE_PROJECT_DIR` too, else the directory they run in, so they show what a session started there receives.
+noonsight looks for `.noonsight/noonsight.json` in that directory and in each directory above it up to the repository root, the directory that holds `.git`, and the closest file wins, so a package of a repository can have its own.
+Outside a git repository, only the directory itself counts, and a file above the repository root is never read.
+The machine's configuration file is never also read as a project's.
+
+### Trust
+
+A cloned repository changes nothing a session receives until this account trusts it.
+
+```text
+noonsight trust [<dir>]
+noonsight untrust [<dir>]
+```
+
+`noonsight trust` records the project found from `<dir>`, the current directory by default, as trusted, then prints what the project applies, or why it does not.
+Trust is kept for the project directory, by its real path, and for the account, in `~/.local/state/noonsight/projects.json`, like the folder trust Claude Code asks for: once a project is trusted, later changes to its files, such as those a pull brings, apply without asking again.
+A second clone or a worktree at another path is a project of its own.
+
+An untrusted project is left out, and each new session in it starts with a warning that names `noonsight trust`.
+`noonsight untrust` declines the project: it stays out, with no warning, until `noonsight trust`.
+Both exit 0, 1 when no project configuration is found from `<dir>` or the decision cannot be written, and 2 for a usage error.
+
+### How far a project may go
+
+The machine's configuration decides how far a project may change it, with `projects.allow`:
+
+| `projects.allow` | A project may |
+| --- | --- |
+| `none` | Nothing: project files are ignored, with no warning |
+| `add` (default) | Add rules, under `all_models.add` and `models.<id>.add`, for the models the machine declares with `"use": "preset"` or `"use": "custom"`; nothing the machine declares changes |
+| `rules` | Also change which rules a model receives: `use`, `enable`, `disable`, wildcard keys, and a rule with the id of one of the machine's rules, which replaces it; and set `scopes`, `session` and `on_undeclared` |
+| `all` | Also set `routing`, `classifier` and `subagents` |
+
+The default lets a trusted project add its rules and nothing else: it never removes or replaces one of the person's rules, never declares a model the person did not, never changes the model a task runs on, never spends usage on the classifier, and never answers a permission prompt.
+`rules` keeps the last three out, since they act beyond the text a model receives.
+A project that writes a key its level does not allow is refused, and the problem names the level the key needs.
+
+### How the two files merge
+
+Every value a project writes replaces the machine's, key by key, with these exceptions:
+
+- **Rule lists add up.**
+  A model receives the preset's rules, then `all_models.add`, the machine's then the project's, then its own `add`, the machine's then the project's.
+  Under `add`, a project rule id must be new for each model that receives it, as any rule id; above `add`, a project rule with the id of one of the machine's rules in the same list replaces it in its place.
+- **A model entry merges when it keeps the machine's `use`.**
+  An entry without `use`, or with the machine's, is merged into the machine's entry: `enable` and `disable` by rule id, the project's choice winning, and `add` as above.
+  An entry with another `use` replaces the machine's entry, so the machine's `enable`, `disable` and `add` for that model no longer apply in the project.
+  An entry without `use` for a model the machine does not declare with its exact key, or declares with `"use": "none"`, does not apply: the person decides which models get rules, and `noonsight check` notes the entry.
+- **A scope keeps its place** and takes only the keys the project gives, as a user scope over a preset scope; a new scope comes after the machine's.
+- **Settings merge key by key.**
+  `session`, `subagents`, `classifier` and `routing` take each key the project gives, and a routing row replaces the machine's row for the same scope.
+
+### A project with a problem
+
+The merged configuration is checked as any configuration is, the limit on the delivered text included.
+A project with any problem, alone or once merged, is refused alone: sessions in it receive the machine's configuration as if there were no project, and each new session starts with a warning that says so.
+A problem in the machine's configuration still refuses everything, whatever the project.
+
+`noonsight check` and `noonsight models` show the project found from the directory they run for and what became of it, and mark the project's rules (`project` in `--json`, `from the project` in the listing).
+The decision log records the project directory as `project` and what became of it as `project_status`: `applied`, `untrusted`, `declined`, `ignored` or `refused` ([hooks.md](hooks.md#the-decision-log)).
+
 
 ## Preset updates
 
@@ -490,13 +578,14 @@ A user row replaces the preset's row for the same scope; to stop routing a scope
    A scope that is not declared only means "rules for every scope"; it never blocks and never warns.
 3. The place narrows them again.
 
-The rules that remain are joined in order (the preset's first, each replaced one by the user rule that replaces it, then those of `all_models`, then the model's own) and hashed.
+The rules that remain are joined in order (the preset's first, each replaced one by the user rule that replaces it, then those of `all_models`, then the model's own, with a project's rules after the machine's in each list) and hashed.
 The joined text is then wrapped in a short envelope that says where it came from; the hash covers the rules only, not the envelope.
 The same configuration and the same request always give the same text and the same hash.
 
 ## Validation
 
 A configuration with any problem is refused whole, and nothing from it is applied.
+A project's configuration is checked merged with the machine's, and a problem it brings refuses only the project ([A project with a problem](#a-project-with-a-problem)).
 Problems are reported with their location in the file, in three passes.
 Schema problems (unknown keys, wrong types or values) are reported together first.
 Once the file matches the schema, problems with the preset (missing, or failing its own checks) are reported together.
@@ -537,6 +626,7 @@ Lists, for each declared model, how it is declared and the rules it receives.
 For `"use": "preset"` that is every preset rule of the model, on or off, with its scopes, places, source, effect and cost; a replaced rule is marked `replaced by` the user rule that replaces it, which follows it, marked `replaces` (`replaced_by` and `replaces` in `--json`); the rules of `all_models` and the user's other rules follow, with their files; a section at the top lists the rules of `all_models` once.
 It also lists the preset's models that are not declared, and the models the decision log ([hooks.md](hooks.md#the-decision-log)) has seen that are not declared, which get a warning and no rules.
 A wildcard key lists the models from the log that it covers.
+A project configuration found from the current directory applies as it would to a session started there, and the listing starts with what became of it and marks the project's rules ([Project configuration](#project-configuration)).
 `--json` prints the same as one JSON object.
 The command reads only local files.
 
@@ -558,7 +648,7 @@ It exits 0 when the version was written or already was the installed one, 1 when
 noonsight resolve <model> [scope] [session|unattended|subagent]
 ```
 
-Prints the decision as JSON.
+Prints the decision as JSON, with the project configuration found from the current directory laid over the machine's, as for a session started there.
 The place defaults to `session`.
 An empty scope (`""`) means no scope, so a place can be given without one, as in `noonsight resolve claude-sonnet-5-5 "" subagent`.
 

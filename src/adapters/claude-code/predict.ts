@@ -16,6 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Env } from '../../config/paths.js';
+import { repositoryRoot } from '../../config/project.js';
 import { normalizeModel } from '../../core/normalize.js';
 import { isSet, otherProvider, resolveModelValue } from './launch.js';
 
@@ -187,13 +188,6 @@ function definitionDirs(places: DefinitionPlaces): string[] {
   return [...new Set(dirs)];
 }
 
-function repositoryRoot(start: string): string {
-  for (let d = start; ; d = path.dirname(d)) {
-    if (exists(path.join(d, '.git'))) return d;
-    if (path.dirname(d) === d) return start;
-  }
-}
-
 function findIn(root: string, name: string): Definition | null {
   let seen = 0;
   const walk = (dir: string, depth: number): Definition | null => {
@@ -246,15 +240,6 @@ function readHead(file: string): string {
     }
   } catch {
     return '';
-  }
-}
-
-function exists(file: string): boolean {
-  try {
-    fs.statSync(file);
-    return true;
-  } catch {
-    return false;
   }
 }
 

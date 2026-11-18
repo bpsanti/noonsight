@@ -1,0 +1,344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/noonsight@0/schema/noonsight-project.schema.json",
+  "title": "noonsight project configuration",
+  "description": "A project's noonsight configuration, committed at .noonsight/noonsight.json in the repository. It is laid over the machine's configuration for the sessions that run in the project, once the account trusts the project with noonsight trust, and only as far as the machine's \"projects.allow\" permits. It takes the keys of the machine's configuration except preset, preset_version and on_preset_change, which follow the installed package, and projects. Paths inside the file are relative to the file itself.",
+  "type": "object",
+  "required": ["version"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "description": "Format version of this file.",
+      "const": 1
+    },
+    "models": {
+      "description": "The models declared active, keyed by full model identifier (for example claude-fable-5-2). A model missing from this map is undeclared.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(?:(?=.*[0-9])[a-z0-9]+(?:[-.][a-z0-9]+)*|[a-z0-9.*?-]*[*?][a-z0-9.*?-]*)$",
+        "x-hint": "a model key is a full lowercase model identifier with its version, such as claude-fable-5-2, or a wildcard pattern such as claude-opus-4-*"
+      },
+      "patternProperties": {
+        "^(?=.*[0-9])[a-z0-9]+(?:[-.][a-z0-9]+)*$": { "$ref": "#/$defs/modelEntry" },
+        "^[a-z0-9.*?-]*[*?][a-z0-9.*?-]*$": { "$ref": "#/$defs/wildcardEntry" }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "all_models": {
+      "description": "Rules for every model, in one place: team conventions, commit style, anything that is not specific to a model. They go to every model declared under \"models\" with \"use\": \"preset\" or \"use\": \"custom\", after the preset's rules and before the model's own \"add\". A model declared with \"use\": \"none\", and a wildcard key, receive none of them. A rule id must be new for every such model.",
+      "type": "object",
+      "required": ["add"],
+      "additionalProperties": false,
+      "properties": {
+        "add": {
+          "description": "The user's own rule files, with the same keys as \"models.<id>.add\".",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/userRule" }
+        }
+      }
+    },
+    "on_undeclared": {
+      "description": "What to do when a model has no entry in \"models\". There is deliberately no option to block.",
+      "enum": ["warn", "ignore"],
+      "default": "warn"
+    },
+    "scopes": {
+      "description": "Task scopes the user declares, added to the preset's scopes. A scope with the same name as a preset scope replaces only the keys given here. A session takes its scope from NOONSIGHT_SCOPE; a subagent from the scope whose matcher matches earliest in its task.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$",
+        "x-hint": "a scope name is lowercase letters, digits and hyphens, starting with a letter"
+      },
+      "additionalProperties": { "$ref": "#/$defs/scope" },
+      "default": {}
+    },
+    "session": {
+      "description": "How a session, as opposed to a subagent, is told apart.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unattended_when_env": {
+          "description": "Environment variables that mark a session as unattended (the place \"unattended\") when any of them is set and not empty in the environment Claude Code runs in. With none set, a session is in the place \"session\".",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
+          },
+          "default": []
+        }
+      },
+      "default": {}
+    },
+    "subagents": {
+      "description": "How the subagents a session opens get the rules for the model each one runs on.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "delivery": {
+          "description": "prompt: each subagent receives the rules for the model it runs on when it starts. off: subagents are left alone.",
+          "enum": ["prompt", "off"],
+          "default": "prompt"
+        },
+        "permission": {
+          "description": "The permission decision returned with a call whose model or effort routing changed. allow: the call runs without a permission prompt, though deny and ask rules still apply. ask: the person confirms each such call. passthrough: no decision, so the session's permission mode decides, and auto mode can deny a changed call.",
+          "enum": ["allow", "ask", "passthrough"],
+          "default": "allow"
+        },
+        "on_mismatch": {
+          "description": "What to do when a subagent starts on another model than the one noonsight chose its rules for. The decision log records it either way.",
+          "enum": ["warn", "ignore"],
+          "default": "warn"
+        }
+      },
+      "default": {}
+    },
+    "routing": {
+      "description": "Optional routing: choose the model and effort for a task from its scope. Off unless enabled. Whether or not a route applies, the scope and the rules are decided the same way, and the rules follow the model the task runs on.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Turns routing on. With false, noonsight only delivers rules and never changes a model or an effort.",
+          "type": "boolean",
+          "default": false
+        },
+        "targets": {
+          "description": "Where routing acts. launcher: noonsight run adds --model and --effort to the claude command line. subagents: the agent call hook sets the call's model and effort.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["launcher", "subagents"] },
+          "default": ["launcher", "subagents"]
+        },
+        "respect_explicit": {
+          "description": "With true, a model the caller already chose wins over the table: a --model on the claude command line, the model parameter of an agent call, or the model a subagent definition or a built-in subagent sets. An effort the caller set is kept too.",
+          "type": "boolean",
+          "default": true
+        },
+        "yield_when_env": {
+          "description": "Environment variables that mark a session someone else routes, such as an orchestrator's. When any of them is set and not empty, routing yields; the rules are still delivered.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
+          },
+          "default": []
+        },
+        "table": {
+          "description": "Scope name to a row of options in order of preference. Each row replaces the preset's row for the same scope. The first option whose model is declared under \"models\" wins.",
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "x-hint": "a scope name is lowercase letters, digits and hyphens, starting with a letter"
+          },
+          "additionalProperties": { "type": ["array", "object"], "$ref": "#/$defs/routeRow" },
+          "default": {}
+        },
+        "default": {
+          "description": "The row for a task with no scope, or whose scope has no row for the target. inherit leaves the model and the effort as they are.",
+          "type": ["string", "array", "object"],
+          "$ref": "#/$defs/routeRow",
+          "if": { "type": "string" },
+          "then": { "const": "inherit", "x-hint": "the only text value is \"inherit\"" },
+          "default": "inherit"
+        }
+      },
+      "default": {}
+    },
+    "classifier": {
+      "description": "Optional: a small model, asked through `claude -p` with the login Claude Code already has, picks the scope of a task that no explicit scope placed. Off unless a mode is set. A classification that fails, takes longer than timeout_ms, or answers outside the declared scopes gives the task no scope, and the decision log records why.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "description": "off: never classify. fallback: classify a task that no explicit scope and no matcher placed. always: classify every task without an explicit scope, over the matchers; meant for comparing the two.",
+          "enum": ["off", "fallback", "always"],
+          "default": "off"
+        },
+        "model": {
+          "description": "The model the classifier runs on, as claude --model takes it: an alias such as haiku, or a model identifier.",
+          "type": "string",
+          "minLength": 1,
+          "default": "haiku"
+        },
+        "effort": {
+          "description": "The effort level the classifier runs at.",
+          "enum": ["low", "medium", "high", "xhigh", "max"],
+          "default": "low"
+        },
+        "timeout_ms": {
+          "description": "How long, in milliseconds, a classification may take before the task gets no scope. At most 8000, so that the agent call hook, which Claude Code stops after 10 seconds, still answers in time.",
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 8000,
+          "default": 8000
+        }
+      },
+      "default": {}
+    }
+  },
+  "$defs": {
+    "modelEntry": {
+      "description": "How a model gets its rules in this project. An entry with the machine's \"use\", or with none, is merged into the machine's entry: enable and disable by rule id, the project's choice winning, and add after the machine's rules. An entry with another \"use\" replaces the machine's entry.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "use": {
+          "description": "preset: the preset's rules for this exact model. custom: only the rules in \"add\". none: decided that this model needs no rules. Left out, the machine's \"use\" applies, and the entry applies only where the machine declares the model with \"preset\" or \"custom\".",
+          "enum": ["preset", "custom", "none"]
+        },
+        "enable": {
+          "description": "Preset rules, off by default, to turn on.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ruleId" }
+        },
+        "disable": {
+          "description": "Preset rules, on by default, to turn off.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/ruleId" }
+        },
+        "add": {
+          "description": "The user's own rule files, delivered after the preset's rules and the rules of \"all_models\".",
+          "type": "array",
+          "items": { "$ref": "#/$defs/userRule" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["use"], "properties": { "use": { "const": "none" } } },
+          "then": {
+            "properties": { "use": true },
+            "additionalProperties": false,
+            "x-hint": "a model declared with \"use\": \"none\" takes no other key"
+          }
+        },
+        {
+          "if": { "required": ["use"], "properties": { "use": { "const": "custom" } } },
+          "then": {
+            "required": ["add"],
+            "properties": { "use": true, "add": { "minItems": 1 } },
+            "additionalProperties": false,
+            "x-hint": "a model declared with \"use\": \"custom\" takes only \"add\", with at least one rule"
+          }
+        }
+      ]
+    },
+    "wildcardEntry": {
+      "description": "A wildcard key only declares models that need no rules. Rules always need the exact model identifier, so a new model version never inherits rules written for an earlier one.",
+      "type": "object",
+      "required": ["use"],
+      "additionalProperties": false,
+      "properties": {
+        "use": {
+          "const": "none",
+          "x-hint": "a wildcard key only accepts {\"use\": \"none\"}; give rules under the exact model identifier"
+        }
+      },
+      "x-hint": "a wildcard key only accepts {\"use\": \"none\"}; give rules under the exact model identifier"
+    },
+    "userRule": {
+      "type": "object",
+      "required": ["id", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/ruleId" },
+        "file": {
+          "description": "Path to the rule text, relative to this configuration file or absolute.",
+          "type": "string",
+          "minLength": 1
+        },
+        "scopes": {
+          "description": "Scopes the rule applies to, or [\"*\"] for every scope.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/scopeRef" },
+          "default": ["*"]
+        },
+        "where": {
+          "description": "Places the rule applies to.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/place" },
+          "default": ["session", "unattended", "subagent"]
+        },
+        "triggers": {
+          "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes, once the session does one of them. code-edit: the session edited a code file the project's git already tracks. Only for a rule that is cheap when the action was not what the scopes mean, and never for a rule for every scope.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/trigger" },
+          "default": []
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "What kind of task this scope covers.",
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "description": "Regular expressions (JavaScript syntax, case-insensitive, Unicode-aware) matched against a subagent's description and task text. The scope whose matcher matches earliest wins; at the same place, the scope declared first.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "routeRow": {
+      "description": "Options in order of preference: one list for every target, or an object with a list for each target it routes. A target the object leaves out falls to routing.default; an empty list means that target is not routed.",
+      "items": { "$ref": "#/$defs/routeOption" },
+      "properties": {
+        "launcher": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } },
+        "subagents": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } }
+      },
+      "additionalProperties": false
+    },
+    "routeOption": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "description": "A model alias (fable, opus, sonnet, haiku) or a model identifier declared under \"models\". An option is used only when the model it selects is declared.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[-.][a-z0-9]+)*$"
+        },
+        "effort": {
+          "description": "The effort level to set with the model. Left out, the effort is not changed.",
+          "enum": ["low", "medium", "high", "xhigh", "max"]
+        }
+      }
+    },
+    "ruleId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*$",
+      "x-hint": "a rule id is lowercase segments separated by \"/\", such as team/commit-style"
+    },
+    "scopeRef": {
+      "type": "string",
+      "pattern": "^(?:\\*|[a-z][a-z0-9-]*)$"
+    },
+    "trigger": {
+      "description": "code-edit: the session edited, with Edit or Write, a file with a code extension that the git repository of the session's project, or of one of its worktrees, already tracks.",
+      "enum": ["code-edit"]
+    },
+    "place": {
+      "description": "session: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task.",
+      "enum": ["session", "unattended", "subagent"]
+    }
+  }
+}

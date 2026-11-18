@@ -4,8 +4,9 @@
 // only and changes nothing.
 
 import os from 'node:os';
-import { loadConfigDetails, type AllModelsRule, type DeclaredModel, type Preset, type PresetRule, type Source } from '../config/load.js';
+import { loadConfigDetails, type AllModelsRule, type DeclaredModel, type Preset, type PresetRule, type ProjectLayer, type Source } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
+import { describeProject, projectFor } from '../config/project.js';
 import { ANY_SCOPE, type Config, type Place, type Rule, type Trigger } from '../core/types.js';
 import { readDecisions } from '../state/log.js';
 import { UsageError } from './usage.js';
@@ -14,7 +15,8 @@ export const MODELS_USAGE = `usage: noonsight models [--json]
 
 List the models the configuration declares and the rules each one receives, with the source,
 effect and cost of each preset rule; the preset's models that are not declared; and the models
-seen in the decision log that are not declared. --json prints the same as JSON.
+seen in the decision log that are not declared. A project configuration found from the current
+directory applies as it would to a session started here. --json prints the same as JSON.
 Exits 0, or 2 for a usage error or a refused configuration.`;
 
 export interface Seen {
@@ -33,6 +35,8 @@ export interface ListedRule {
   readonly triggers: readonly Trigger[];
   /** Set to "all_models" on a rule of the configuration's "all_models" block, which every model declared with preset or custom receives. */
   readonly from?: 'all_models';
+  /** Set on a rule of the project's configuration; its file is then relative to the project file. */
+  readonly project?: true;
   /** User rules: the file as the configuration writes it. */
   readonly file?: string;
   /** A preset rule that is off because a user rule replaces it: that rule's id. */
@@ -57,6 +61,14 @@ export interface ListedModel {
 
 export interface ModelsReport {
   readonly config: string;
+  /** The project configuration found from the current directory, and what became of it; null when there is none. */
+  readonly project: {
+    readonly file: string;
+    readonly dir: string;
+    readonly allow: ProjectLayer['allow'];
+    readonly status: ProjectLayer['status'];
+    readonly summary: string;
+  } | null;
   readonly log: string;
   readonly preset: {
     readonly name: string;
@@ -87,8 +99,9 @@ export function runModels(args: readonly string[], env: Env, out: (text: string)
 
 export function modelsReport(env: Env, home: string = os.homedir()): ModelsReport {
   const file = configPath(env, home);
-  const { config, preset, presetVersions, declared, allModels } = loadConfigDetails(file, {}, env);
   const log = stateDir(home);
+  const project = projectFor(env.CLAUDE_PROJECT_DIR || process.cwd(), file, log);
+  const { config, preset, presetVersions, declared, allModels, project: layer } = loadConfigDetails(file, { project }, env);
   const seen = seenModels(log);
 
   const listed: ListedModel[] = [];
@@ -112,6 +125,7 @@ export function modelsReport(env: Env, home: string = os.homedir()): ModelsRepor
 
   return {
     config: file,
+    project: layer && { file: layer.file, dir: layer.dir, allow: layer.allow, status: layer.status, summary: describeProject(layer) },
     log,
     preset: preset && {
       name: preset.name,
@@ -173,6 +187,7 @@ function userRule(r: Rule, file: string | undefined): ListedRule {
     where: r.where,
     triggers: r.triggers,
     ...(r.allModels ? { from: 'all_models' as const } : {}),
+    ...(r.project ? { project: true as const } : {}),
     ...(file !== undefined ? { file } : {}),
     ...(r.replaces !== undefined ? { replaces: r.replaces } : {}),
   };
@@ -200,6 +215,7 @@ function seenModels(dir: string): Map<string, Seen> {
 
 export function renderModels(r: ModelsReport): string {
   const lines: string[] = [`config ${r.config}`];
+  if (r.project) lines.push(`project ${r.project.file}: ${r.project.summary}`);
   if (r.preset)
     lines.push(
       `preset ${r.preset.name} ${r.preset.version}` +
@@ -262,7 +278,7 @@ export function renderModels(r: ModelsReport): string {
 
 function ruleLine(rule: ListedRule): string {
   const triggers = rule.triggers.length ? `; triggers: ${rule.triggers.join(', ')}` : '';
-  const from = rule.from === 'all_models' ? '; from all_models' : '';
+  const from = (rule.from === 'all_models' ? '; from all_models' : '') + (rule.project ? '; from the project' : '');
   const pair = rule.replaced_by !== undefined ? `; replaced by ${rule.replaced_by}` : rule.replaces !== undefined ? `; replaces ${rule.replaces}` : '';
   return `  ${rule.on ? 'on ' : 'off'}  ${rule.id}  (scopes: ${scopesText(rule.scopes)}; places: ${rule.where.join(', ')}${triggers}${from}${pair})`;
 }

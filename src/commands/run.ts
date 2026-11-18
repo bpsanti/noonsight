@@ -4,8 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { applyEnv, passThrough, planLaunch, type LaunchPlan } from '../adapters/claude-code/launcher.js';
 import { notRouted } from '../adapters/claude-code/routing.js';
-import { ConfigError, loadConfig } from '../config/load.js';
+import { ConfigError, loadConfigDetails } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
+import { projectFields, projectFor, projectWarning } from '../config/project.js';
 import { appendDecision } from '../state/log.js';
 import { writeFileAtomic } from '../state/files.js';
 import { packageVersion } from '../version.js';
@@ -82,9 +83,14 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
     return passThrough(args, scope, env);
   }
   let plan: LaunchPlan;
+  let projectNote: string | null = null;
   try {
-    const config = loadConfig(file, {}, env);
-    plan = planLaunch(config, file, { args, scope, task, env, home, cwd: process.cwd(), state });
+    // The session's project: the one Claude Code will find from the same directory.
+    const cwd = process.cwd();
+    const details = loadConfigDetails(file, { project: projectFor(env.CLAUDE_PROJECT_DIR || cwd, file, state) }, env);
+    plan = planLaunch(details.config, file, { args, scope, task, env, home, cwd, state });
+    plan = { ...plan, record: { ...plan.record, ...projectFields(details.project) } };
+    projectNote = projectWarning(details.project);
   } catch (e) {
     if (e instanceof ConfigError) {
       log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), delivered: 'nothing', warned: true });
@@ -111,8 +117,8 @@ function prepare(args: readonly string[], scope: string | null, task: string | n
       return plan.fallback;
     }
   }
-  log(plan.record);
-  for (const m of plan.messages) io.err(m);
+  log(projectNote !== null ? { ...plan.record, warned: true } : plan.record);
+  for (const m of [...plan.messages, ...(projectNote !== null ? [projectNote] : [])]) io.err(m);
   return plan;
 }
 

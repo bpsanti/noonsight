@@ -9,6 +9,15 @@
   On a preset update, `replaces` follows a renamed rule as `enable` and `disable` do, and the change warning names the id to write; a change to the scopes, places or triggers of a replaced rule that the user rule takes is reported, and under `warn`, a `replaces` for a rule the update removed is reported, not refused.
   See `docs/configuration.md` ("Replacing a preset rule").
 
+- Project configuration: a repository can commit `.noonsight/noonsight.json`, with its rule files, so that every contributor's sessions receive its rules.
+  The file takes the keys of the machine's configuration except the preset keys and `projects`, and it is laid over the machine's configuration for the sessions that run in the project: the nearest file from `CLAUDE_PROJECT_DIR` (else the hook input's `cwd`, or the directory a command runs in) up to the repository root.
+  A cloned repository applies only once the account trusts it: `noonsight trust` records the project directory, and later changes to its files apply without asking again, like Claude Code's folder trust; until then each new session in it starts with a warning, and `noonsight untrust` declines it quietly.
+  The machine's configuration decides how far a project may go with `projects.allow`: `none` ignores project files, `add` (the default) lets a project only add rules for the models the machine declares, `rules` also lets it change which rules a model receives and declare scopes, and `all` also lets it set routing, the classifier and the subagent settings.
+  Rule lists add up, the machine's rules first; a model entry with the machine's `use` merges into it, and one with another `use` replaces it; every other value the project writes replaces the machine's, key by key.
+  A project with any problem, alone or merged, is refused alone, and sessions receive the machine's configuration with a warning.
+  `noonsight check`, `models`, `resolve` and `run` read the project of the directory they run for, and the decision log records `project` and `project_status`.
+  See `docs/configuration.md` ("Project configuration").
+
 - Preset updates no longer change the rules sessions receive without notice.
   The configuration records the preset version it was last checked against, `preset_version`, which `noonsight init` (and so `noonsight install`) writes.
   When the installed preset is another version, `noonsight check` lists, for each model declared with `"use": "preset"`, the rules now on (new, or shipping on now), the rules now off (removed, or shipping off now), renamed and changed rules, new rules that ship off, and the `enable` and `disable` entries that no longer name a rule; a new session whose model's rules changed starts with a warning that names them, and its decision log line records `preset_update`.

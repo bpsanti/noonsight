@@ -2,7 +2,8 @@
 // noonsight command line. Exit codes: 0 for success and for every decision (matched, none,
 // undeclared); 1 when install, uninstall, watch or check finds a problem; 2 for a usage error or a
 // refused configuration. `noonsight init` exits 1 when the configuration file already exists, and
-// `noonsight accept` when it cannot write it.
+// `noonsight accept` when it cannot write it, and `noonsight trust` and `untrust` when they find no
+// project configuration or cannot record the decision.
 // `noonsight hook` always exits 0, `noonsight watch run` keeps running, and `noonsight run` exits with
 // claude's exit status.
 
@@ -17,6 +18,7 @@ import { MODELS_USAGE, runModels } from './commands/models.js';
 import { REPORT_USAGE, runReport } from './commands/report.js';
 import { RESOLVE_USAGE, runResolve } from './commands/resolve.js';
 import { runRun } from './commands/run.js';
+import { runTrust, TRUST_USAGE } from './commands/trust.js';
 import { UsageError } from './commands/usage.js';
 import { runWatch, WATCH_USAGE } from './commands/watch.js';
 import { ConfigError } from './config/load.js';
@@ -38,6 +40,9 @@ Commands:
   check                             check the configuration, the installs, the watcher and Claude Code
   accept                            accept the installed preset version: list what it changes, then
                                     record it as "preset_version" in the configuration
+  trust [<dir>]                     apply the project configuration (.noonsight/noonsight.json) found
+                                    from the directory to the sessions that run in that project
+  untrust [<dir>]                   stop applying it
   models [--json]                   list the declared models and their rules, with source and cost
   resolve <model> [scope] [place]   show the rules a model receives
   report [--json] [--log <file>]
@@ -51,7 +56,8 @@ Options:
   --help       show this help
   --version    print the version
 
-The configuration is read from $NOONSIGHT_CONFIG, else ~/.config/noonsight/noonsight.json. One file serves every Claude Code account on the machine.`;
+The configuration is read from $NOONSIGHT_CONFIG, else ~/.config/noonsight/noonsight.json. One file serves every Claude Code account on the machine.
+A project can commit its own, .noonsight/noonsight.json, laid over it for the sessions that run in the project once trusted.`;
 
 export interface Io {
   readonly out: (text: string) => void;
@@ -67,6 +73,8 @@ const COMMAND_USAGE: Record<string, string> = {
   uninstall: INSTALL_USAGE,
   check: CHECK_USAGE,
   accept: ACCEPT_USAGE,
+  trust: TRUST_USAGE,
+  untrust: TRUST_USAGE,
   watch: WATCH_USAGE,
   hook: HOOK_USAGE,
 };
@@ -110,6 +118,9 @@ export function main(argv: readonly string[], env: Env, io: Io): number | Promis
         return runCheck(rest, env, io.out);
       case 'accept':
         return runAccept(rest, env, io);
+      case 'trust':
+      case 'untrust':
+        return runTrust(command, rest, env, io);
       case 'watch':
         return runWatch(rest, env, io);
       case undefined:

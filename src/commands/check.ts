@@ -21,6 +21,7 @@ import { ROUTING_ENV, routingEnvOff } from '../core/route.js';
 import { TRIGGER_ACTIONS } from '../core/triggers.js';
 import { ROUTE_TARGETS, RULES_TEXT_LIMIT, TRIGGERS, type Config, type RouteOption, type RouteRow, type Trigger } from '../core/types.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
+import { describeProject, projectFor } from '../config/project.js';
 import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { lastDecision } from '../state/log.js';
@@ -30,7 +31,8 @@ import { UsageError } from './usage.js';
 export const CHECK_USAGE = `usage: noonsight check
 
 Check the configuration, the installed hooks, the watcher and the Claude Code version, and show
-the last decision. Each line starts with ok, warning or problem. Exits 0 when there is no problem, 1 when there is one,
+the last decision. A project configuration found from the current directory is checked as a
+session started here would read it. Each line starts with ok, warning or problem. Exits 0 when there is no problem, 1 when there is one,
 and 2 when the configuration is missing or refused.`;
 
 type Level = 'ok' | 'warning' | 'problem';
@@ -49,7 +51,8 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   const file = configPath(env, home);
   let configOk = false;
   try {
-    const details = loadConfigDetails(file, {}, env);
+    // As a session started here would: with the project found from this directory over the configuration.
+    const details = loadConfigDetails(file, { project: projectFor(env.CLAUDE_PROJECT_DIR || process.cwd(), file, stateDir(home)) }, env);
     const config = details.config;
     configOk = true;
     const sub = config.subagents;
@@ -59,6 +62,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
         (sub.delivery === 'off' ? 'off' : `rules when each subagent starts, permission ${sub.permission} for a routed call, on mismatch ${sub.onMismatch}`) +
         ')',
     );
+    checkProject(details, add);
     checkPreset(details, env, add);
     checkAllModels(config, add);
     checkScopes(config, env, add);
@@ -128,6 +132,15 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
   out(lines.map(([level, text]) => `${level}: ${text}`).join('\n'));
   if (!configOk) return 2;
   return lines.some(([level]) => level === 'problem') ? 1 : 0;
+}
+
+/** The project configuration found from this directory: what became of it, and its entries that do not apply here. */
+function checkProject(details: ConfigDetails, add: (level: Level, text: string) => void): void {
+  const layer = details.project;
+  if (layer === null) return;
+  const level: Level = layer.status === 'refused' ? 'problem' : layer.status === 'untrusted' ? 'warning' : 'ok';
+  add(level, `project ${layer.file}: ${describeProject(layer)}`);
+  for (const note of layer.notes) add('warning', `project ${layer.file}: ${note}`);
 }
 
 /**
