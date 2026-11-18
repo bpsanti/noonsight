@@ -391,7 +391,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
   On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), with the last sentence, Haiku met a requirement in a document its project's CLAUDE.md points to in 59 of 60 runs, against 44 of 60 without it, and added something unrequested in 0 of 60 runs where the project only describes a convention.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: a subagent or an unattended session that hands the task back before the end leaves half a search or half a change, whatever the kind of task, and with routing on the preset's table sends digest subagents to Haiku 5.5.
-  Its last sentences keep out work nobody asked for, as `sonnet-5-5/stay-in-scope` does in `routine` only; the Haiku 5.5 guide writes them into the same prompt, so they come with it in every scope.
+  Its sentences on work nobody requested keep that work out, as `sonnet-5-5/stay-in-scope` does in `routine` only; the Haiku 5.5 guide writes them into the same prompt, so they come with it in every scope, and so does the last sentence, which qualifies them.
 - Scope basis: judgment.
   Section "Prevent early stopping in long agent prompts" ties the stops to "a long coding-agent system prompt at low effort", which is a property of the prompt and the effort, not a kind of task.
 
