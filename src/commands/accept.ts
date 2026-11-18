@@ -15,7 +15,8 @@ export const ACCEPT_USAGE = `usage: noonsight accept
 Accept the installed preset version: list what it changes since the version the configuration
 accepted ("preset_version"), then write the installed version there. Only that value of the file
 changes; the rest of the file stays as it is. The configuration must load with the installed version,
-so an enable or disable entry that names a rule the installed preset no longer has is removed first.
+so an enable, disable or replaces entry that names a rule the installed preset no longer has is
+removed first.
 Exits 0 when the version was written or already was the installed one, 1 when the file cannot be
 written, and 2 for a usage error, a refused configuration, or a preset that is not installed.`;
 
