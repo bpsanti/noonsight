@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Preset updates no longer change the rules sessions receive without notice.
+  The configuration records the preset version it was last checked against, `preset_version`, which `noonsight init` (and so `noonsight install`) writes.
+  When the installed preset is another version, `noonsight check` lists, for each model declared with `"use": "preset"`, the rules now on (new, or shipping on now), the rules now off (removed, or shipping off now), renamed and changed rules, new rules that ship off, and the `enable` and `disable` entries that no longer name a rule; a new session whose model's rules changed starts with a warning that names them, and its decision log line records `preset_update`.
+  `on_preset_change` chooses what an update does: `warn` (the default) delivers the installed version's rules, and `hold` keeps delivering the rules, scopes and routing table of `preset_version` until the user accepts the update.
+  `noonsight accept` lists what the installed version changes and writes it to `preset_version`, changing only that value of the file; it writes nothing while the configuration would be refused with the installed version.
+  The package keeps a copy of every earlier released version of its preset, from 1.3.0 on, in `presets/<preset>/versions/`, and a preset rule lists the ids it had before in `renamed_from`, so an `enable` or `disable` entry with an old id still applies and a rename is reported as one.
+  Under `warn`, an `enable` or `disable` entry that names a rule the update removed is left out and reported instead of refusing the whole configuration.
+  A configuration without `preset_version` works as before, and `noonsight check` warns until `noonsight accept` records one.
+  See `docs/configuration.md` ("Preset updates").
+
 - Rules for every model in one block: `all_models.add` takes the same rules as `models.<id>.add` (`id`, `file`, `scopes`, `where`, `triggers`) and delivers them to every model declared with `"use": "preset"` or `"use": "custom"`, after the preset's rules and before the model's own `add`, so team conventions no longer have to be repeated under each model.
   A model declared `"use": "none"`, by an exact key or a wildcard, receives none of them, and the block declares no model.
   A rule id must be new for each model that receives it, across the preset's rules, the block and the model's own `add`; the delivery limit of 9,500 characters is checked for each model with the block's rules among its rules, and the problem names the model it overflows.

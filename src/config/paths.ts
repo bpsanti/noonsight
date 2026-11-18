@@ -24,8 +24,9 @@ export function configPath(env: Env = process.env, home: string = os.homedir()):
 }
 
 /**
- * Where presets are read from: the installed package, so a preset always follows the package
- * version. NOONSIGHT_PRESETS_DIR replaces the directory for tests and preset development.
+ * Where presets are read from: the installed package, so a preset follows the package version,
+ * along with the copies of earlier versions it keeps for configurations that hold one.
+ * NOONSIGHT_PRESETS_DIR replaces the directory for tests and preset development.
  */
 export function presetsDir(env: Env = process.env): string {
   return env.NOONSIGHT_PRESETS_DIR ? path.resolve(env.NOONSIGHT_PRESETS_DIR) : path.join(PACKAGE_ROOT, 'presets');

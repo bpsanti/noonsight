@@ -58,6 +58,10 @@ export interface ModelsReport {
     readonly name: string;
     readonly version: string;
     readonly claude_code: { readonly version: string; readonly checked: string } | null;
+    /** The version the configuration accepted ("preset_version"), or null when it records none. */
+    readonly accepted: string | null;
+    /** The version the package ships; another than `version` when the configuration holds an earlier one. */
+    readonly installed: string | null;
   } | null;
   /** The rules of the "all_models" block, in the order the file writes them; empty when there is none. */
   readonly all_models: readonly ListedRule[];
@@ -79,7 +83,7 @@ export function runModels(args: readonly string[], env: Env, out: (text: string)
 
 export function modelsReport(env: Env, home: string = os.homedir()): ModelsReport {
   const file = configPath(env, home);
-  const { config, preset, declared, allModels } = loadConfigDetails(file, {}, env);
+  const { config, preset, presetVersions, declared, allModels } = loadConfigDetails(file, {}, env);
   const log = stateDir(home);
   const seen = seenModels(log);
 
@@ -105,7 +109,13 @@ export function modelsReport(env: Env, home: string = os.homedir()): ModelsRepor
   return {
     config: file,
     log,
-    preset: preset && { name: preset.name, version: preset.version, claude_code: preset.claudeCode },
+    preset: preset && {
+      name: preset.name,
+      version: preset.version,
+      claude_code: preset.claudeCode,
+      accepted: presetVersions.accepted,
+      installed: presetVersions.installed?.version ?? null,
+    },
     all_models: config.allModels.map((r) => userRule(r, allModels.find((a) => a.id === r.id)?.file)),
     declared: listed,
     preset_undeclared: presetUndeclared,
@@ -172,6 +182,7 @@ export function renderModels(r: ModelsReport): string {
   if (r.preset)
     lines.push(
       `preset ${r.preset.name} ${r.preset.version}` +
+        (r.preset.installed !== null && r.preset.installed !== r.preset.version ? ` (held; the package ships ${r.preset.installed})` : '') +
         (r.preset.claude_code
           ? `: its rules were compared with the system prompts of Claude Code ${r.preset.claude_code.version} on ${r.preset.claude_code.checked}, so none is delivered where that version already sends the same advice`
           : ''),

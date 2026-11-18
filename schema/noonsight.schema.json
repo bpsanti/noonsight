@@ -18,6 +18,17 @@
       "pattern": "^[a-z0-9][a-z0-9-]*$",
       "default": "claude"
     },
+    "preset_version": {
+      "description": "The version of the preset this configuration was last checked against. noonsight check and the session-start warning report what the installed preset changed since this version; noonsight accept records the installed one. noonsight init writes it.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "x-hint": "a preset version is three numbers, such as 1.3.0"
+    },
+    "on_preset_change": {
+      "description": "What an installed preset that is not \"preset_version\" does. warn: sessions receive the installed preset's rules, and noonsight check and each session's start report what changed. hold: sessions keep receiving the rules of \"preset_version\", from the copy the package keeps, until noonsight accept records the installed version.",
+      "enum": ["warn", "hold"],
+      "default": "warn"
+    },
     "models": {
       "description": "The models declared active, keyed by full model identifier (for example claude-fable-5-2). A model missing from this map is undeclared.",
       "type": "object",

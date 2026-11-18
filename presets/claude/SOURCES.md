@@ -460,6 +460,9 @@ When Anthropic publishes a guide for a new model, or changes a section a rule ci
    Give it the scopes where its effect is worth its cost, by the principles in [How the rules are scoped](#how-the-rules-are-scoped), and record why and the basis of that choice here.
    Give it a trigger only by the principles in [Rules delivered on an action](#rules-delivered-on-an-action), and record why here.
 3. Run the live test `system-prompt` (`NOONSIGHT_LIVE_LOGIN=1 npm run test:live`) to see what Claude Code already sends the new model, and keep each rule out of the places where it does.
-4. Raise the preset's `version` and `claude_code`, and list each new, changed or removed rule in the changelog.
+4. Before changing anything else, copy the released version, `preset.json` and its rule files, to `versions/<its version>/`, so that a configuration that accepted it can still compare against it and hold it ([Preset updates](../../docs/configuration.md#preset-updates)).
+   A kept copy is never edited afterwards.
+5. A rule whose id changes keeps every id it had before in `renamed_from`, so the `enable` and `disable` entries that name it still apply and the update reports a rename instead of a removal and a new rule.
+6. Raise the preset's `version` and `claude_code`, and list each new, changed, renamed or removed rule in the changelog.
 
 A model that has no entry here stays undeclared for every user, who gets a warning instead of rules carried over from an earlier version.

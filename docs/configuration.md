@@ -14,10 +14,10 @@ noonsight looks for it in this order:
 
 Paths inside the file (the `file` of a rule) are relative to the file itself.
 
-Presets are read from the installed package, so a preset always follows the package version.
+Presets are read from the installed package, so a preset follows the package version, and the configuration records the version it was checked against ([Preset updates](#preset-updates)).
 `NOONSIGHT_PRESETS_DIR` replaces that directory, for tests and for preset development.
 
-`noonsight init` writes a first file there, and so does `noonsight install` when there is none ([install.md](install.md#the-one-command)): it declares every model the preset has rules for with `"use": "preset"`, and it never replaces a file that exists.
+`noonsight init` writes a first file there, and so does `noonsight install` when there is none ([install.md](install.md#the-one-command)): it declares every model the preset has rules for with `"use": "preset"`, records the preset's version as `preset_version`, and never replaces a file that exists.
 
 ## The preset
 
@@ -40,6 +40,7 @@ The preset also suggests a routing table, which applies only when the user turns
 {
   "$schema": "https://unpkg.com/noonsight@0/schema/noonsight.schema.json",
   "version": 1,
+  "preset_version": "1.3.0",
   "models": {
     "claude-sonnet-5-5": {
       "use": "custom",
@@ -65,7 +66,9 @@ The preset also suggests a routing table, which applies only when the user turns
 | Key | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `version` | `1` | Required | Format version of the file. |
-| `preset` | Preset name | `claude` | The preset shipped with the package that `"use": "preset"` draws from. The preset follows the installed package version. |
+| `preset` | Preset name | `claude` | The preset shipped with the package that `"use": "preset"` draws from. |
+| `preset_version` | A preset version, such as `1.3.0` | Absent | The preset version the configuration was last checked against. `noonsight init` and `noonsight accept` write it. See [Preset updates](#preset-updates). |
+| `on_preset_change` | `warn`, `hold` | `warn` | What an installed preset that is not `preset_version` does. `warn`: sessions receive its rules, and `noonsight check` and each session's start report what changed. `hold`: sessions keep receiving the rules of `preset_version` until `noonsight accept`. |
 | `models` | Model key to entry | Empty | The models declared active. A model missing from this map is undeclared. |
 | `models.<id>.use` | `preset`, `custom`, `none` | Required | `preset`: the preset's rules for this exact model. `custom`: only the rules in `add`. `none`: decided that this model needs no rules. |
 | `models.<id>.enable` | Rule ids | Empty | Preset rules that ship off and should be on. Only with `preset`. |
@@ -155,6 +158,35 @@ Where it adds nothing: a fixed rule that every model should always have, with no
 Triggers are also narrow today, since the only one is `code-edit`.
 
 Whether delivering a rule at the right moment makes a model follow it more often is not measured, and nothing here claims it does.
+
+## Preset updates
+
+The preset follows the installed package, so an update of noonsight can change the rules sessions receive: a new rule that ships on, a rule that ships on or off now, a changed text, a renamed or removed rule.
+`preset_version` records the version the configuration was last checked against, and noonsight compares the installed version with it, model by model, for every model declared with `"use": "preset"`:
+
+| Change | What it means |
+| --- | --- |
+| Now on | A new rule that ships on, or a rule that ships on now, and that no `disable` turns off |
+| Now off | A rule the model received that the update removed, or that ships off now |
+| Renamed | A rule whose id changed; an `enable` or `disable` entry with the old id still applies to it |
+| Changed | A rule on before and after whose text, scopes, places or triggers changed |
+| New and off | A new rule that ships off, which `enable` turns on |
+| Entries | An `enable` or `disable` entry that names a rule by its old id, or a rule the preset no longer has, so that choice no longer applies |
+
+The package keeps a copy of every earlier released version of its preset, from 1.3.0 on, in `presets/<preset>/versions/`, checked as the installed one is, so the comparison is exact.
+A preset rule lists the ids it had before in `renamed_from`, so a rename is reported as a rename, and not as a removed rule and a new one.
+
+What an installed version that is not `preset_version` does depends on `on_preset_change`:
+
+- `warn` (the default): sessions receive the installed version's rules.
+  An `enable` or `disable` entry that names a rule the accepted version had and the installed one dropped is left out and reported, not refused, so the configuration keeps working.
+  `noonsight check` lists the changes, and a new session whose model's rules changed starts with a warning that names them ([hooks.md](hooks.md#sessionstart)).
+- `hold`: sessions keep receiving the rules, scopes and routing table of `preset_version`, from the copy the package keeps, so the update changes nothing they receive.
+  `noonsight check`, `noonsight models` and the session-start warning say that the preset is held and what accepting the installed version would change.
+  `hold` needs a `preset_version`, and a version the package keeps: a configuration that holds a version the package does not keep is refused, and `noonsight accept` takes the installed one.
+
+`noonsight accept` records the installed version in `preset_version` once the changes are reviewed ([`noonsight accept`](#noonsight-accept)).
+A configuration without `preset_version` delivers the installed version's rules, as under `warn`, with nothing to compare them against, so `noonsight check` warns until it records one.
 
 ## Scopes
 
@@ -446,8 +478,9 @@ Beyond the schema, noonsight checks that:
 - every scope a rule names is declared;
 - a rule that lists a trigger is not for every scope (`["*"]`, where a trigger adds nothing), and is for the place `session` or `unattended`, where triggers act;
 - every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
-- `enable` and `disable` name rules the preset has for that model, and never the same rule twice;
+- `enable` and `disable` name rules the preset has for that model, by their id or by an id they had before a rename, and never the same rule twice; under `"on_preset_change": "warn"`, an entry that names a rule the version in `preset_version` had and the installed version dropped is left out and reported instead ([Preset updates](#preset-updates));
 - the preset is installed and has rules for every model declared with `use: "preset"`;
+- `"on_preset_change": "hold"` comes with a `preset_version` that is the installed version or one the package keeps;
 - every scope in `routing.table` is declared, and every model a routing option names is an alias or a model declared with its exact key;
 - a routing row written as an object lists at least one target;
 - the delivered text fits in 9,500 characters for every model and every combination of scope and place, with the rules of `all_models` among the model's rules and with and without the triggers revealed, so that with the note sent when the session's model changes it stays within the 10,000 characters Claude Code accepts from a hook ([hooks.md](hooks.md)).
@@ -456,7 +489,9 @@ The preset is checked the same way, and more strictly:
 
 - every preset rule names its source (the page, the section and the date it was read), the effect the source reports and its cost, and every preset scope names its source;
 - every row of the preset's routing table names a scope of the preset, models by alias only, and what it rests on with its sources;
-- every preset rule fits the limit on its own, and a model's preset rules fit it together with every rule on, for every combination of scope and place, since the user decides which of them are on.
+- every preset rule fits the limit on its own, and a model's preset rules fit it together with every rule on, for every combination of scope and place, since the user decides which of them are on;
+- an id in a rule's `renamed_from` is not the id of a rule of that model in the same version, and no two rules list the same one;
+- every kept copy of an earlier version is checked in the same way when it is read, and must be the version its directory names.
 
 The installed preset is read whenever it is there, even when no model uses it, because its scopes are always declared; a preset that fails these checks refuses every configuration until it is fixed.
 
@@ -472,6 +507,18 @@ It also lists the preset's models that are not declared, and the models the deci
 A wildcard key lists the models from the log that it covers.
 `--json` prints the same as one JSON object.
 The command reads only local files.
+
+## `noonsight accept`
+
+```text
+noonsight accept
+```
+
+Accepts the installed preset version: lists what it changes since `preset_version`, model by model, as `noonsight check` does, then writes the installed version to `preset_version`.
+Only that value of the file changes; a file without the key gets it after `preset` (or `version`), with the indentation of that line, and a symbolic link to the file stays a link.
+The configuration must load with the installed version, so an `enable` or `disable` entry that names a rule the installed preset no longer has must be removed first; until then nothing is written.
+An entry that names a rule by its old id still loads, and `noonsight check` names the id to write.
+It exits 0 when the version was written or already was the installed one, 1 when the file cannot be written, and 2 when the configuration is refused or the preset is not installed.
 
 ## `noonsight resolve`
 

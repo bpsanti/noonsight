@@ -1,6 +1,7 @@
 {
   "version": 1,
   "preset": "lab",
+  "preset_version": "0.0.0",
   "on_undeclared": "warn",
   "models": {
     "claude-sonnet-5-5": { "use": "preset" },

@@ -16,7 +16,8 @@
 //     and the log records config-invalid.
 
 import fs from 'node:fs';
-import { ConfigError, loadConfig } from '../../config/load.js';
+import { ConfigError, loadConfigDetails, type ConfigDetails } from '../../config/load.js';
+import { changesDelivery, comparePresets, describeChanges } from '../../config/preset-changes.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { normalizeModel } from '../../core/normalize.js';
 import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '../../core/resolve.js';
@@ -94,9 +95,9 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     // A machine-wide install reaches every account; an account that never set noonsight up is left alone.
     if (!ctx.env.NOONSIGHT_CONFIG && !fs.existsSync(file)) return '';
     record.config = file;
-    let config: Config;
+    let details: ConfigDetails;
     try {
-      config = loadConfig(file, {}, ctx.env);
+      details = loadConfigDetails(file, {}, ctx.env);
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
       // The call that started the subagent already warned, and logged that nothing was delivered; the
@@ -116,6 +117,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
         null,
       );
     }
+    const config = details.config;
     if (subagentEvent) {
       const sub = { env: ctx.env, home: ctx.home, now: ctx.now, state, parentPid: ctx.parentPid, file };
       const outcome =
@@ -159,6 +161,11 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
             () => launcherPrompt(ctx.env, commandLine),
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
+    const update = event === 'SessionStart' && input.source === 'startup' ? presetUpdate(details, result.state?.model ?? null, file, ctx.env) : null;
+    if (update !== null) {
+      result.record.preset_update = update.fields;
+      result.record.warned = true;
+    }
     log(result.record);
     if (result.state) {
       const saved: DeliveryState = { ...result.state, at: ctx.now.toISOString() };
@@ -170,7 +177,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
         // Without the record, a later resume delivers again: the safe direction.
       }
     }
-    return output(result.messages, result.context ? { hookEventName: event, additionalContext: result.context } : null);
+    return output([...result.messages, ...(update !== null ? [update.message] : [])], result.context ? { hookEventName: event, additionalContext: result.context } : null);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // The edit itself is done, and a warning after every edit would only repeat; the log keeps the error.
@@ -337,6 +344,37 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     messages,
     state,
   };
+}
+
+/**
+ * The warning a session gets as it starts when the installed preset is not the version the
+ * configuration accepted and that changes the session's model's rules: under "warn", what the
+ * session receives now that it did not; under "hold", what accepting the installed version would
+ * change. A failure here never costs the session its rules: `noonsight check` reports it.
+ */
+function presetUpdate(
+  details: ConfigDetails,
+  model: string | null,
+  file: string,
+  env: Env,
+): { message: string; fields: Record<string, unknown> } | null {
+  const v = details.presetVersions;
+  if (model === null || v.accepted === null || v.installed === null || v.accepted === v.installed.version) return null;
+  try {
+    const c = comparePresets(v, details.declared, {}, env, model);
+    const changes = c?.models[0];
+    if (!c || c.from === null || changes === undefined || !changesDelivery(changes)) return null;
+    const to = c.installed.version;
+    const what = describeChanges(changes, c.held);
+    const message = c.held
+      ? `noonsight: preset ${c.name} ${to} is installed, and this session keeps the rules of ${c.accepted}, held in ${file}; ` +
+        `${to} would change those of ${model}: ${what}. Run \`noonsight accept\` to take ${to}.`
+      : `noonsight: preset ${c.name} ${to} changed the rules of ${model} since ${c.accepted}, the version accepted in ${file}: ${what}. ` +
+        `Run \`noonsight check\` for every model, and \`noonsight accept\` to accept ${to}.`;
+    return { message, fields: { accepted: c.accepted, installed: to, held: c.held } };
+  } catch {
+    return null;
+  }
 }
 
 /** The triggers a session has revealed, for its log line; nothing when it has revealed none. */

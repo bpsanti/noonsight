@@ -135,6 +135,16 @@
           "uniqueItems": true,
           "items": { "enum": ["code-edit"] }
         },
+        "renamed_from": {
+          "description": "Every id this rule had in earlier versions of the preset, for the same model. An enable or disable entry that names one applies to this rule, and noonsight reports the rename when the preset is updated.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*$"
+          }
+        },
         "enabled": {
           "description": "Whether the rule is on unless the user turns it off. Rules with a high cost or a described side effect ship off.",
           "type": "boolean",

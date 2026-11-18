@@ -24,6 +24,7 @@ test('init writes a configuration that declares every preset model with "use": "
     $schema: 'https://unpkg.com/noonsight@0/schema/noonsight.schema.json',
     version: 1,
     preset: 'claude',
+    preset_version: '1.3.0',
     models: {
       'claude-fable-5-2': { use: 'preset' },
       'claude-opus-5-5': { use: 'preset' },

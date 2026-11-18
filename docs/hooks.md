@@ -30,7 +30,7 @@ Nothing, or one JSON object with up to two fields:
 | --- | --- | --- |
 | `hookSpecificOutput.additionalContext` | Claude, as a system reminder | The session hooks: the rules, and on a model change, the note below. `PostToolUse` on Edit and Write: the rules a trigger added, right after the edit's result. `SubagentStart`: the subagent's rules, at the start of its conversation |
 | `hookSpecificOutput.updatedInput`, `permissionDecision` | Claude Code | `PreToolUse`, only for a call routing changed: the agent call with its new `model` and `effort`, and the permission decision the configuration asks for (see [Routing](#routing)) |
-| `systemMessage` | The person, on screen | A warning: undeclared model, refused configuration, a subagent that started on another model than predicted, or a failed hook |
+| `systemMessage` | The person, on screen | A warning: undeclared model, refused configuration, a preset update that changes the session's rules, a subagent that started on another model than predicted, or a failed hook |
 
 The rules arrive wrapped in a short envelope that says where they came from, written as facts, as Claude Code's documentation asks for hook context:
 
@@ -92,6 +92,10 @@ At `startup`, `clear` and `compact`, when the Claude Code process was started wi
 After compaction of a session that revealed a trigger, the rules the trigger added are not in the launcher's file, so the hook delivers those, and the line names only them.
 When the launcher's rules are for another model, the hook delivers this model's rules with a note that the others do not apply.
 [launcher.md](launcher.md#with-the-hooks) has the details.
+
+At `startup`, when the installed preset is not the version the configuration accepted (`preset_version`) and the package keeps a copy of that version, the person is warned when the update changes the session's model's rules: rules turned on or off, rules whose text, scopes, places or triggers changed, and `enable` or `disable` entries that name a rule the preset no longer has.
+Under `"on_preset_change": "warn"` the warning says what the session now receives; under `"hold"` the session keeps the accepted version's rules, and the warning says what accepting the installed version would change ([Preset updates](configuration.md#preset-updates)).
+A model the update leaves as it was gets no warning, nor does a start other than `startup`, and a failure in this comparison never costs the session its rules: `noonsight check` reports it.
 
 ## PostModelSwitch
 
@@ -335,6 +339,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`; `launcher` for a session start that found the rules in the system prompt `noonsight run` gave; `system-prompt` for a launch that added them; `at-start` for an agent call whose rules its subagent's start gives; and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `launch_file`, `launch_model` | For a session start under `noonsight run` with rules in the system prompt: the launcher's file, and the model its rules are for |
+| `preset_update` | For a session start warned about a preset update: the version the configuration accepted (`accepted`), the installed one (`installed`), and whether the session kept the accepted version's rules (`held`) |
 | `warned` | Whether the person was shown a warning |
 | `problems` | For `config-invalid`, how many problems the configuration has |
 
