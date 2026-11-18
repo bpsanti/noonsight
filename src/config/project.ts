@@ -210,8 +210,10 @@ export function mergeProject(
     const out = [...(base ?? [])];
     (added ?? []).forEach((u, i) => {
       const rule: RawUserRule = { ...u, file: path.resolve(baseDir, u.file) };
-      if (path.isAbsolute(u.file) || !insideProject(projectDir, rule.file))
-        problems.push(`${at}/${i}/file: "${u.file}" is outside the project directory ${projectDir}; a project rule file must be a relative path that stays inside it`);
+      if (path.isAbsolute(u.file))
+        problems.push(`${at}/${i}/file: "${u.file}" is an absolute path; a project rule file must be relative to the project file`);
+      else if (!insideProject(projectDir, rule.file))
+        problems.push(`${at}/${i}/file: "${u.file}" is outside the project directory ${projectDir}; a project rule file must stay inside it`);
       origins.set(rule, { at: `${at}/${i}`, file: u.file });
       // Only one of the machine's rules is replaced; a project rule that repeats an id is left for the
       // loader to report, as a repeated id always is.

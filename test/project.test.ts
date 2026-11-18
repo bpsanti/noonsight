@@ -203,10 +203,20 @@ test('a project rule file must stay inside the project directory, symlinks follo
   const linked = projectTree({ all_models: { add: [{ id: 'team/x', file: 'linked.md' }] } });
   fs.symlinkSync(secret, path.join(linked, '.noonsight', 'linked.md'));
 
-  for (const dir of [escape, absolute, absoluteInside, linked]) {
+  const outsideProblem = /\/all_models\/add\/0\/file: .* is outside the project directory/;
+  const absoluteProblem = /\/all_models\/add\/0\/file: .* is an absolute path; a project rule file must be relative to the project file/;
+  const cases: [string, RegExp][] = [
+    [escape, outsideProblem],
+    [absolute, absoluteProblem],
+    [absoluteInside, absoluteProblem],
+    [linked, outsideProblem],
+  ];
+  for (const [dir, problem] of cases) {
     const d = load(machine, dir);
     assert.equal(d.project?.status, 'refused', dir);
-    assert.match(d.project?.problems.join('\n') ?? '', /\/all_models\/add\/0\/file: .* is outside the project directory/);
+    const problems = d.project?.problems.join('\n') ?? '';
+    assert.match(problems, problem);
+    if (problem === absoluteProblem) assert.doesNotMatch(problems, outsideProblem);
     // The machine's rules, its own absolute path outside every project included, still apply.
     assert.deepEqual(rulesOf(d, 'claude-sonnet-5-5'), ['sonnet/general', 'user/far', 'user/own']);
   }
