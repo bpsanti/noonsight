@@ -20,7 +20,7 @@ This page lists where each rule and each scope comes from, what the source repor
 
 Each rule text is a short adaptation of the guide's suggested prompt, in this project's own words, and not a copy.
 It is written as statements of what the user wants, because Claude Code's hooks documentation asks for hook context written as facts rather than as system commands.
-The guides measured their own wording; the adapted wording has not been measured separately.
+The guides measured their own wording; the adapted wording has not been measured separately, except the last sentence of `haiku-5-5/carry-through` and `sonnet-5-5/stay-in-scope`, which is not from a guide and was measured in [2026-11-18](../../experiments/rules/results/2026-11-18/README.md).
 
 ## Documents
 
@@ -313,8 +313,9 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Unrequested additions when coding", read 2026-11-16.
 - Effect: Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.
 - Cost: Not reported by the source.
-- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added for consistency with `haiku-5-5/carry-through`, which ends with the same sentence for the reason given there; in the run set described there, Sonnet 5.5 showed no measurable change with or without it.
+- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added for consistency with `haiku-5-5/carry-through`, which ends with the same sentence for the reason given there; in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) run set, Sonnet 5.5 showed no measurable change with or without it.
 - Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on a one-file fix, no run changed another file, with or without it (0 of 10 each).
+  On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), the last sentence made no measurable change in 10 runs per arm: Sonnet met a requirement in a document its CLAUDE.md points to in 10 of 10 runs with and without it, and added nothing unrequested where the project only describes a convention (0 of 10 each).
 - Scopes: `routine`. Not `investigate`, `build`, `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: a well-scoped change is where tests, documentation and files nobody asked for are least welcome.
   In an investigation or an implementation that needs reasoning, such additions are often wanted, and a review or a digest changes no files, so the rule has nothing to do there.
@@ -385,8 +386,9 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Prevent early stopping in long agent prompts", read 2026-11-16.
 - Effect: Fewer early stops that hand the task back to the user, which appear with a long coding-agent system prompt at low effort.
 - Cost: Not reported for the text. For comparison, raising effort from low to medium roughly halved early stopping and more than doubled output tokens.
-- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added because, in a measured run set on a project whose requirement sat in a document its CLAUDE.md points to, Haiku 5.5 with the rule as adapted from the guide skipped the requirement in about a quarter of runs, often saying nobody had asked for it.
+- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added because, in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) run set, on a project whose requirement sat in a document its CLAUDE.md points to, Haiku 5.5 with the rule as adapted from the guide skipped the requirement in about a quarter of runs, often saying nobody had asked for it.
 - Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
+  On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), with the last sentence, Haiku met a requirement in a document its project's CLAUDE.md points to in 59 of 60 runs, against 44 of 60 without it, and added something unrequested in 0 of 60 runs where the project only describes a convention.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: a subagent or an unattended session that hands the task back before the end leaves half a search or half a change, whatever the kind of task, and with routing on the preset's table sends digest subagents to Haiku 5.5.
   Its last sentences keep out work nobody asked for, as `sonnet-5-5/stay-in-scope` does in `routine` only; the Haiku 5.5 guide writes them into the same prompt, so they come with it in every scope.

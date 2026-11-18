@@ -6,6 +6,7 @@
   Both rules tell the model to leave out what nobody requested, and a requirement that sat in a document the project's CLAUDE.md points to was often skipped as unrequested.
   In 610 runs of `experiments/rules`, Haiku with the previous wording met such a requirement in 44 of 60 runs and with this one in 59 of 60, and added nothing unrequested in 60 of 60 runs of a task where the project only describes a convention; a shorter wording reached 30 of 30 but added unrequested changes in 12 of 30.
   Sonnet showed no measurable change; the sentence is there for consistency.
+  `experiments/rules/results/2026-11-18/README.md` records the run.
   `presets/claude/SOURCES.md` records the deviation from the guides' text; `noonsight check` reports the change to a configuration last checked against 1.3.0.
 
 - A conversation resumed with `claude --continue` or `claude --resume` and an explicit `--model` now gets the rules of the model it runs on.
