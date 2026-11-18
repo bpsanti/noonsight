@@ -12,7 +12,7 @@ import { SCHEMA_DIR } from '../src/config/paths.js';
 import { findProject, PROJECT_ALLOW, projectFor, setTrust, trustOf } from '../src/config/project.js';
 import { resolve } from '../src/core/resolve.js';
 import type { Decision } from '../src/core/types.js';
-import { hookHome, hookInput, LAB_PRESETS, runCli, tempTree } from './helpers.js';
+import { hookHome, hookInput, LAB_PRESETS, labPresetWith, runCli, tempTree } from './helpers.js';
 
 const OWN = 'OWN-STYLE-5528';
 const TEAM = 'TEAM-COMMITS-4417';
@@ -336,6 +336,33 @@ test('"replaces" meets "enable" and "disable": the project\'s choice wins, and t
   );
   assert.equal(own.project?.status, 'refused');
   assert.match(own.project?.problems.join('\n') ?? '', /^\/models\/claude-sonnet-5-5\/add\/0\/replaces: rule "sonnet\/progress-updates" is both replaced and enabled/m);
+});
+
+test('a project and the machine that name one preset rule by its id before and after a rename still meet', () => {
+  // The preset renamed sonnet/investigate to sonnet/look-into; the machine still writes the former id.
+  const presetsDir = labPresetWith((p) => {
+    const rule = p.models['claude-sonnet-5-5'].rules.find((r: { id: string }) => r.id === 'sonnet/investigate');
+    Object.assign(rule, { id: 'sonnet/look-into', renamed_from: ['sonnet/investigate'] });
+  });
+  const machine = (entry: Record<string, unknown>) =>
+    machineTree({ projects: { allow: 'rules' }, models: { 'claude-sonnet-5-5': { use: 'preset', ...entry }, 'claude-haiku-5-5': { use: 'preset' } } });
+  const sonnet = (machineFile: string, project: Record<string, unknown>) => {
+    const found = findProject(projectTree({ models: { 'claude-sonnet-5-5': project } }));
+    assert.ok(found);
+    const d = loadConfigDetails(machineFile, { presetsDir, project: { ...found, trusted: true } });
+    assert.equal(d.project?.status, 'applied', d.project?.problems.join('\n'));
+    return rulesOf(d, 'claude-sonnet-5-5', 'investigate');
+  };
+  const machineFinish = machine({ add: [{ id: 'user/finish', file: 'own.md', replaces: 'sonnet/investigate' }] });
+  const projectFinish = { id: 'team/finish-work', file: 'team-sonnet.md' };
+
+  assert.deepEqual(sonnet(machineFinish, { disable: ['sonnet/look-into'] }), ['sonnet/general', 'user/finish']);
+  assert.deepEqual(sonnet(machineFinish, { enable: ['sonnet/look-into'] }), ['sonnet/general', 'sonnet/look-into', 'user/finish']);
+  assert.deepEqual(sonnet(machineFinish, { add: [{ ...projectFinish, replaces: 'sonnet/look-into' }] }), ['sonnet/general', 'team/finish-work']);
+  assert.deepEqual(sonnet(machine({ disable: ['sonnet/investigate'] }), { add: [{ ...projectFinish, replaces: 'sonnet/look-into' }] }), [
+    'sonnet/general',
+    'team/finish-work',
+  ]);
 });
 
 test('`noonsight models` shows a project rule that replaces a preset rule as a pair, from the project', () => {

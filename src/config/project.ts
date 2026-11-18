@@ -192,6 +192,7 @@ export function mergeProject(
   allow: Exclude<ProjectAllow, 'none'>,
   baseDir: string,
   projectDir: string,
+  presetId: (model: string, id: string) => string,
 ): ProjectMerge {
   const problems: string[] = [];
   const notes: string[] = [];
@@ -212,7 +213,12 @@ export function mergeProject(
   if (problems.length) return { raw: machine, problems, notes, origins };
 
   const replace = allow !== 'add';
-  const rules = <R extends RawModelRule>(base: readonly R[] | undefined, added: readonly R[] | undefined, at: string): R[] => {
+  const rules = <R extends RawModelRule>(
+    base: readonly R[] | undefined,
+    added: readonly R[] | undefined,
+    at: string,
+    current: (id: string) => string = (id) => id,
+  ): R[] => {
     const out = [...(base ?? [])];
     (added ?? []).forEach((u, i) => {
       const rule: R = { ...u, file: path.resolve(baseDir, u.file) };
@@ -227,8 +233,11 @@ export function mergeProject(
       const same = replace ? out.findIndex((r) => r.id === u.id && !origins.has(r)) : -1;
       if (same >= 0 && rule.replaces === undefined && out[same]?.replaces !== undefined) rule.replaces = out[same].replaces;
       // A project rule that replaces the preset rule a machine rule replaces takes that machine rule's place.
+      const replaced = rule.replaces === undefined ? undefined : current(rule.replaces);
       const rival =
-        replace && rule.replaces !== undefined ? out.findIndex((r, j) => j !== same && r.replaces === rule.replaces && !origins.has(r)) : -1;
+        replace && replaced !== undefined
+          ? out.findIndex((r, j) => j !== same && r.replaces !== undefined && current(r.replaces) === replaced && !origins.has(r))
+          : -1;
       if (same >= 0) out[same] = rule;
       else if (rival >= 0) out[rival] = rule;
       else out.push(rule);
@@ -245,6 +254,7 @@ export function mergeProject(
     for (const [key, entry] of Object.entries(project.models)) {
       const at = `/models/${key}`;
       const mine = machine.models?.[key];
+      const current = (id: string): string => presetId(key, id);
       if (entry.use === undefined) {
         if (mine === undefined || mine.use === 'none') {
           notes.push(
@@ -253,10 +263,10 @@ export function mergeProject(
           );
           continue;
         }
-        models[key] = mergeEntry(mine, entry, mine.use, (list) => rules(mine.add, list, `${at}/add`));
+        models[key] = mergeEntry(mine, entry, mine.use, (list) => rules(mine.add, list, `${at}/add`, current), current);
       } else if (mine === undefined || mine.use !== entry.use) {
         models[key] = { ...entry, use: entry.use, ...(entry.add ? { add: rules([], entry.add, `${at}/add`) } : {}) } as RawModelEntry;
-      } else models[key] = mergeEntry(mine, entry, entry.use, (list) => rules(mine.add, list, `${at}/add`));
+      } else models[key] = mergeEntry(mine, entry, entry.use, (list) => rules(mine.add, list, `${at}/add`, current), current);
     }
     raw.models = models;
   }
@@ -289,18 +299,20 @@ function mergeEntry(
   theirs: Partial<RawModelEntry>,
   use: RawModelEntry['use'],
   addRules: (list: readonly RawModelRule[] | undefined) => RawModelRule[],
+  current: (id: string) => string,
 ): RawModelEntry {
   const replacedBy = (list: readonly RawModelRule[] | undefined): Set<string> =>
-    new Set((list ?? []).flatMap((r) => (r.replaces === undefined ? [] : [r.replaces])));
+    new Set((list ?? []).flatMap((r) => (r.replaces === undefined ? [] : [current(r.replaces)])));
   const projectReplaces = replacedBy(theirs.add);
   const add = addRules(theirs.add);
   const machineReplaces = new Set([...replacedBy(add)].filter((id) => !projectReplaces.has(id)));
-  const on = new Set(theirs.enable ?? []);
-  const off = new Set((theirs.disable ?? []).filter((id) => !machineReplaces.has(id)));
-  const enable = unique([...(mine.enable ?? []).filter((id) => !off.has(id) && !projectReplaces.has(id)), ...on]);
-  const disable = unique([...(mine.disable ?? []).filter((id) => !on.has(id) && !projectReplaces.has(id)), ...off]);
+  const on = new Set((theirs.enable ?? []).map(current));
+  const off = new Set((theirs.disable ?? []).filter((id) => !machineReplaces.has(current(id))));
+  const offCurrent = new Set([...off].map(current));
+  const enable = unique([...(mine.enable ?? []).filter((id) => !offCurrent.has(current(id)) && !projectReplaces.has(current(id))), ...(theirs.enable ?? [])]);
+  const disable = unique([...(mine.disable ?? []).filter((id) => !on.has(current(id)) && !projectReplaces.has(current(id))), ...off]);
   add.forEach((r, i) => {
-    if (r.replaces === undefined || !on.has(r.replaces) || projectReplaces.has(r.replaces)) return;
+    if (r.replaces === undefined || !on.has(current(r.replaces)) || projectReplaces.has(current(r.replaces))) return;
     if (mine.add?.includes(r)) {
       const { replaces: _replaces, ...rest } = r;
       add[i] = rest;

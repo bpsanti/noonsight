@@ -324,23 +324,29 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   const machine = raw as RawConfig;
 
   const project = options.project ?? null;
-  if (project === null) return { ...build(machine, configFile, options, env, null), project: null };
+  // The machine's configuration alone: it must load whatever the project, and its preset names the
+  // rules a project's entries may name by an id they had before a rename.
+  const own = build(machine, configFile, options, env, null);
+  if (project === null) return { ...own, project: null };
   const allow = machine.projects?.allow ?? DEFAULT_PROJECT_ALLOW;
   const alone = (status: ProjectLayer['status'], why: readonly string[] = [], read: RawProject | null = null): ConfigDetails => ({
-    ...build(machine, configFile, options, env, null),
+    ...own,
     project: { dir: project.dir, file: project.file, allow, status, problems: why, notes: [], raw: read },
   });
   if (allow === 'none') return alone('ignored');
   if (project.trusted === null) return alone('untrusted');
   if (project.trusted === false) return alone('declined');
 
-  const own: string[] = [];
-  const read = readJson(project.file, own, 'the project file is gone');
-  if (read !== undefined) own.push(...validateSchema(schema('noonsight-project.schema.json'), read));
-  if (own.length) return alone('refused', own);
+  const unread: string[] = [];
+  const read = readJson(project.file, unread, 'the project file is gone');
+  if (read !== undefined) unread.push(...validateSchema(schema('noonsight-project.schema.json'), read));
+  if (unread.length) return alone('refused', unread);
   const projectRaw = read as RawProject;
+  const renamed = new Map(
+    [...(own.preset?.models ?? [])].map(([model, rules]) => [model, new Map(rules.flatMap((r) => r.renamedFrom.map((old) => [old, r.id] as const)))]),
+  );
   // Paths in the project file are relative to the file itself, as in the configuration.
-  const merged = mergeProject(machine, projectRaw, allow, path.dirname(project.file), project.dir);
+  const merged = mergeProject(machine, projectRaw, allow, path.dirname(project.file), project.dir, (model, id) => renamed.get(model)?.get(id) ?? id);
   if (merged.problems.length) return alone('refused', merged.problems, projectRaw);
   try {
     // The merged configuration is checked against the configuration's schema too: a project entry
