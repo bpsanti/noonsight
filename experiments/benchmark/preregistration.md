@@ -224,3 +224,4 @@ Mechanism signals, as in the study's design:
   A run stopped by the usage limit is not a result and not an infrastructure failure: it is set aside and runs again on a later night, and no further run starts that night.
   The session, started at 22:33 with the fixes above, had only regraded one answer when it was stopped and started again with these limits (twice, at 22:35 and 22:37, as the limits were set); it resumed from its own records each time, and a grade it was giving when stopped is asked again.
   When its planned round ends before 05:30 and the account is above its floor, the session goes on into the next round as any night does.
+- 2026-11-17, 22:50 local: the judge's budget per graded answer rises from US$ 0.50 to US$ 1.50 (US$ 0.50 per vote), because the three votes on the first review answer each stopped at their budget before answering; a grade stopped that way is no grade and is asked again.
