@@ -408,7 +408,8 @@ test('the project schema is the configuration schema without the preset keys and
   assert.deepEqual(Object.keys(project.properties), machineKeys);
   for (const key of machineKeys) assert.deepEqual(project.properties[key], machine.properties[key], key);
   const { modelEntry: projectEntry, ...projectDefs } = project.$defs;
-  const { modelEntry: machineEntry, ...machineDefs } = machine.$defs;
+  // A project rule cannot replace a preset rule, so the project schema has no "modelRule".
+  const { modelEntry: machineEntry, modelRule: _modelRule, ...machineDefs } = machine.$defs;
   // Only the description of a rule's file differs: a project's must stay inside the project.
   const withoutFileText = (defs: any): any => ({
     ...defs,
