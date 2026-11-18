@@ -8,7 +8,7 @@ Six hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`
 
 - **It never holds the session, or a subagent call, beyond a bound.**
   It always exits 0, reads only local files and never uses the network itself.
-  It starts no other process, with three exceptions: on macOS, when nothing else names the session's model, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
+  It starts no other process, with three exceptions: on macOS, when the input does not name the session's model and, except at a resume, neither does noonsight's record, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
   A subagent's start waits at most two seconds more when several calls could have started it ([SubagentStart](#subagentstart-the-rules)).
 - **It never blocks anything.**
@@ -50,7 +50,7 @@ The hook decides by how the session started (the `source` field):
 | --- | --- | --- |
 | `startup` | Delivers the rules | A new session |
 | `clear`, `compact` | Delivers them again | The earlier context, and the rules in it, are gone |
-| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record | The restored conversation already holds them |
+| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record; on another model, with a note that the rules the conversation holds no longer apply | The restored conversation already holds them |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect noonsight exists to prevent |
 
 The model comes from the first of these that knows it:
@@ -64,6 +64,13 @@ The model comes from the first of these that knows it:
    3. the `model` setting of the highest-ranked settings file that sets one: the server-managed settings cached for the login, else the managed settings files; then `--settings`; then the project's `.claude/settings.local.json` and `.claude/settings.json`; then the user's `settings.json` in `CLAUDE_CONFIG_DIR` or `~/.claude`, with `--setting-sources` honored.
 
    The first of the three that names a model decides, as in Claude Code; a lower one is never consulted past it.
+
+At `resume` and `fork` without a `model` in the input, the third comes before the second.
+`claude --continue` and `claude --resume` start a new Claude Code process, which reports no model and fires no `PostModelSwitch`, and runs the conversation on the model its `--model`, `ANTHROPIC_MODEL` or `model` setting names, whatever model the conversation ran on before; only when none of them names a model does it keep the conversation's own model, which the session's record holds ([recorded on Claude Code 2.1.327](../test/fixtures/hook-inputs/2.1.327/README.md)).
+A launch setting noonsight cannot pin down leaves the record to decide, and the log line records the setting.
+After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
+`/resume` typed inside a running session reports the model in the input.
+When the resumed conversation's record is for another model that had rules, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
 
 Only when none of them names a model does the session get no rules and a warning.
 
@@ -327,7 +334,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `subagent_id`, `predicted`, `models_used`, `result` | For `agent-result`: the subagent's agent id, the model predicted for it, the models it switched between, and the check's `result` |
 | `install` | `managed` or `account`: which install ran the hook |
 | `project`, `project_status` | When the session's directory has a project configuration: the project directory, and what became of the project: `applied`, `untrusted`, `declined`, `ignored` (`"projects.allow": "none"`) or `refused` ([Project configuration](configuration.md#project-configuration)) |
-| `model`, `from_model` | The normalized model identifiers |
+| `model`, `from_model` | The normalized model identifiers; on a session start, `from_model` is the model of the resumed conversation's record when the session runs on another one |
 | `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
 | `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
 | `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |

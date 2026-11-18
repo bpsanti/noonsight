@@ -138,8 +138,12 @@ test('SessionStart by start type: resume and fork skip rules the session already
   assert.equal(h.hook('session-start', start('claude-sonnet-5-5', { source: 'fork' })).raw, '');
   assert.match(words(h.hook('session-start', start('claude-sonnet-5-5', { source: 'compact' }))) ?? '', /SONNET-GEN/);
   assert.match(words(h.hook('session-start', start('claude-sonnet-5-5', { source: 'something-new' }))) ?? '', /SONNET-GEN/);
-  // A resume on another model, or into a session with no record, delivers.
-  assert.match(words(h.hook('session-start', start('claude-haiku-5-5', { source: 'resume' }))) ?? '', /HAIKU-GEN/);
+  // A resume on another model, or into a session with no record, delivers; on another model, with a
+  // note that the rules the conversation holds no longer apply.
+  assert.match(
+    words(h.hook('session-start', start('claude-haiku-5-5', { source: 'resume' }))) ?? '',
+    /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">[\s\S]*HAIKU-GEN/,
+  );
   assert.match(words(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume', session_id: 'never-seen' }))) ?? '', /SONNET-GEN/);
   assert.deepEqual(
     h.log().map((l) => [l.source, l.delivered]),
@@ -149,7 +153,7 @@ test('SessionStart by start type: resume and fork skip rules the session already
       ['fork', 'already-delivered'],
       ['compact', 'rules'],
       ['something-new', 'rules'],
-      ['resume', 'rules'],
+      ['resume', 'rules+note'],
       ['resume', 'rules'],
     ],
   );
@@ -407,15 +411,75 @@ test('claude -p: a model setting noonsight cannot pin down warns with what was s
   );
 });
 
-test('a reported model, or the record of the session, always outranks the launch settings', () => {
+test('a reported model outranks the launch settings, and so does the record of the session after /clear', () => {
   const h = home();
   const r = underClaude(h, ['-p', '--model', 'claude-haiku-5-5'], start('claude-sonnet-5-5', { session_id: 'reported' }));
   assert.match(context(r), /SONNET-GEN-3306/);
-  assert.equal(underClaude(h, ['-p', '--model', 'claude-haiku-5-5'], start(null, { session_id: 'reported', source: 'resume' })).raw, '');
-  assert.deepEqual(h.log().map((l) => [l.model, l.model_source, l.delivered]), [
-    ['claude-sonnet-5-5', 'hook-input', 'rules'],
-    ['claude-sonnet-5-5', 'session-record', 'already-delivered'],
+  // After /model, the process runs another model than its --model names; the record knows which.
+  assert.match(context(underClaude(h, ['--model', 'claude-haiku-5-5'], hookInput('session-start-clear', { session_id: 'reported' }))), /SONNET-GEN-3306/);
+  assert.deepEqual(h.log().map((l) => [l.source, l.model, l.model_source, l.delivered]), [
+    ['startup', 'claude-sonnet-5-5', 'hook-input', 'rules'],
+    ['clear', 'claude-sonnet-5-5', 'session-record', 'rules'],
   ]);
+});
+
+// A conversation resumed in a new Claude Code process gets a SessionStart input that names no model,
+// and no PostModelSwitch. Claude Code 2.1.327 runs it on the model its --model, ANTHROPIC_MODEL or model
+// setting names, and on the conversation's own model only when none names one
+// (test/fixtures/hook-inputs/2.1.327/README.md).
+const resumeOf = (id: string): string => hookInput('session-start-resume-continue', { session_id: id });
+
+test('a resume started with --model gets that model\'s rules over the session record, with a note that the earlier ones no longer apply', () => {
+  const h = home();
+  // Sonnet, then /model haiku, then /clear: the new session's record holds Haiku and its rules.
+  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'first' }));
+  h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { session_id: 'first' }));
+  assert.match(context(h.hook('session-start', hookInput('session-start-clear', { session_id: 'cleared' }))), /HAIKU-GEN-9047/);
+
+  // `claude --continue --model sonnet` resumes it on Sonnet.
+  const resumed = context(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf('cleared')));
+  assert.match(resumed, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">\nThe session's model changed from claude-haiku-5-5 to claude-sonnet-5-5\./);
+  assert.match(resumed, /<noonsight-rules model="claude-sonnet-5-5">[\s\S]*SONNET-GEN-3306/);
+  assert.doesNotMatch(resumed, /HAIKU-GEN-9047/);
+  // The record now holds Sonnet's rules: the same resume again delivers nothing.
+  assert.equal(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf('cleared')).raw, '');
+  // ANTHROPIC_MODEL decides the same way; Opus is declared "none", so only the note goes.
+  const onOpus = context(underClaude(h, ['--continue'], resumeOf('cleared'), { ANTHROPIC_MODEL: 'claude-opus-5-5' }));
+  assert.match(onOpus, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">[\s\S]*<\/noonsight-rules-change>$/);
+
+  assert.deepEqual(
+    h.log().map((l) => [l.event, l.source, l.model, l.model_source, l.model_from ?? null, l.from_model ?? null, l.delivered]),
+    [
+      ['session-start', 'startup', 'claude-sonnet-5-5', 'hook-input', null, null, 'rules'],
+      ['model-switch', 'command', 'claude-haiku-5-5', 'hook-input', null, 'claude-sonnet-5-5', 'rules+note'],
+      ['session-start', 'clear', 'claude-haiku-5-5', 'process-record', null, null, 'rules'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'claude-args', '--model', 'claude-haiku-5-5', 'rules+note'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'claude-args', '--model', null, 'already-delivered'],
+      ['session-start', 'resume', 'claude-opus-5-5', 'env', 'ANTHROPIC_MODEL', 'claude-sonnet-5-5', 'note'],
+    ],
+  );
+});
+
+test('a resume whose launch names no model, or one noonsight cannot pin down, keeps the model of the session record', () => {
+  const h = home();
+  h.hook('session-start', start('claude-haiku-5-5', { session_id: 'kept' }));
+  assert.equal(underClaude(h, ['--continue'], resumeOf('kept')).raw, '');
+  assert.equal(underClaude(h, ['--resume', 'kept', '--model', 'opusplan'], resumeOf('kept')).raw, '');
+  // A conversation noonsight has no record of gets the rules of what the launch names, as any start.
+  assert.match(context(underClaude(h, ['--resume', 'unseen', '--model', 'sonnet'], resumeOf('unseen'))), /^<noonsight-rules model="claude-sonnet-5-5">/);
+  // /resume inside a running session reports the model the process runs, which outranks its command line.
+  const command = hookInput('session-start-resume-command', { session_id: 'kept' });
+  assert.equal(underClaude(h, ['--model', 'sonnet'], command).raw, '');
+  assert.deepEqual(
+    h.log().map((l) => [l.model, l.model_source, l.model_from ?? null, l.model_unresolved ?? null, l.delivered]),
+    [
+      ['claude-haiku-5-5', 'hook-input', null, null, 'rules'],
+      ['claude-haiku-5-5', 'session-record', null, null, 'already-delivered'],
+      ['claude-haiku-5-5', 'session-record', '--model', 'opusplan', 'already-delivered'],
+      ['claude-sonnet-5-5', 'claude-args', '--model', null, 'rules'],
+      ['claude-haiku-5-5', 'hook-input', null, null, 'already-delivered'],
+    ],
+  );
 });
 
 test('a command line read without argument boundaries, as on macOS, reports a --model it cannot read instead of falling through', () => {

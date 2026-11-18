@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A conversation resumed with `claude --continue` or `claude --resume` and an explicit `--model` now gets the rules of the model it runs on.
+  Claude Code reports no model when it resumes a conversation, and runs it on the model its `--model`, `ANTHROPIC_MODEL` or `model` setting names, falling back to the conversation's own model only when none names one; the hook took the model from the session's record first, so a conversation that last ran on Haiku and was resumed with `--model sonnet` kept Haiku's rules and logged `already-delivered`, without a warning.
+  At `resume` and `fork` the launch now comes before the record, and when the record is for another model, the new model's rules come with a note that the earlier ones no longer apply, as after `/model`; the log line names the record's model in `from_model`.
+  See `docs/hooks.md` ("SessionStart").
+
 - A user rule can replace a preset rule: `replaces`, on a rule in `models.<id>.add` of a model declared with `"use": "preset"`, names the preset rule, which is then off, and the user rule is delivered in its place, with its scopes, places and triggers unless it gives its own.
   Until now that took `disable` plus `add`, which did not say that one replaces the other.
   `noonsight models` lists the pair, the preset rule `replaced by` the user rule that follows it (`replaced_by` and `replaces` in `--json`).

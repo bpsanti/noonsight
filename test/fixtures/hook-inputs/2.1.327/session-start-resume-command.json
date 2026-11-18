@@ -1,0 +1,13 @@
+{
+  "session_id": "9638995f-30bf-4751-ace3-4b557642cdd2",
+  "transcript_path": "/Users/user/.claude/projects/-Users-user-project/9638995f-30bf-4751-ace3-4b557642cdd2.jsonl",
+  "cwd": "/Users/user/project",
+  "prompt_id": "471b501d-298b-4c9b-8ff9-30beab4cfd00",
+  "hook_event_name": "SessionStart",
+  "source": "resume",
+  "model": "claude-haiku-5-5",
+  "seconds_since_last_response": 25,
+  "context_tokens": 13,
+  "prompt_cache_likely_expired": false,
+  "estimated_cache_write_usd": 0
+}

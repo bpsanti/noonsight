@@ -75,6 +75,8 @@ const INPUT_VERSIONS: Readonly<Record<string, string>> = {
   'subagent-start': '2.1.326',
   'post-tool-use-edit': '2.1.326',
   'post-tool-use-write': '2.1.326',
+  'session-start-resume-continue': '2.1.327',
+  'session-start-resume-command': '2.1.327',
 };
 
 /** A recorded or documented Claude Code hook input, with fields replaced as given. */
