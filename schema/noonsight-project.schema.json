@@ -207,9 +207,9 @@
           "items": { "$ref": "#/$defs/ruleId" }
         },
         "add": {
-          "description": "The user's own rule files, delivered after the preset's rules and the rules of \"all_models\".",
+          "description": "The user's own rule files, delivered after the preset's rules and the rules of \"all_models\". A rule that replaces a preset rule is delivered in that rule's place instead.",
           "type": "array",
-          "items": { "$ref": "#/$defs/userRule" }
+          "items": { "$ref": "#/$defs/modelRule" }
         }
       },
       "allOf": [
@@ -299,6 +299,32 @@
       "type": "array",
       "uniqueItems": true,
       "items": { "$ref": "#/$defs/trigger" }
+    },
+    "modelRule": {
+      "description": "A rule of a model's own \"add\": a user rule, which may also replace one of the model's preset rules.",
+      "type": "object",
+      "required": ["id", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/userRule/properties/id" },
+        "file": { "$ref": "#/$defs/userRule/properties/file" },
+        "scopes": {
+          "$ref": "#/$defs/ruleScopes",
+          "description": "Scopes the rule applies to, or [\"*\"] for every scope. Defaults to [\"*\"], or, with \"replaces\", to the scopes of the rule it replaces."
+        },
+        "where": {
+          "$ref": "#/$defs/ruleWhere",
+          "description": "Places the rule applies to. Defaults to all three, or, with \"replaces\", to the places of the rule it replaces."
+        },
+        "triggers": {
+          "$ref": "#/$defs/ruleTriggers",
+          "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes, once the session does one of them; see \"triggers\" of a user rule. Defaults to none, or, with \"replaces\", to the triggers of the rule it replaces."
+        },
+        "replaces": {
+          "description": "The id of a preset rule of this model that this rule replaces: the preset rule is off, and this rule is delivered in its place, with its scopes, places and triggers unless this rule gives its own. An id the preset rule had before a rename still names it. Only for a model declared with \"use\": \"preset\".",
+          "$ref": "#/$defs/ruleId"
+        }
+      }
     },
     "scope": {
       "type": "object",

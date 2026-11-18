@@ -71,7 +71,7 @@ export interface RawUserRule {
   triggers?: Trigger[];
 }
 /** A rule of a model's own "add", which alone may replace a preset rule. */
-interface RawModelRule extends RawUserRule {
+export interface RawModelRule extends RawUserRule {
   replaces?: string;
 }
 export interface RawModelEntry {
@@ -477,7 +477,7 @@ function build(
         const replacing = new Map<string, number>();
         (entry.add ?? []).forEach((u, i) => {
           if (u.replaces === undefined) return;
-          const replacesAt = `${at}/add/${i}/replaces`;
+          const replacesAt = `${origin(u)?.at ?? `${at}/add/${i}`}/replaces`;
           const current = ids.has(u.replaces) ? u.replaces : renamed.get(u.replaces);
           if (current === undefined) {
             const gone = formerRules(key).find((r) => r.id === u.replaces);

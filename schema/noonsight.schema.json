@@ -206,7 +206,7 @@
       "additionalProperties": false,
       "properties": {
         "allow": {
-          "description": "none: project files are ignored. add: a project only adds rules, under all_models.add and models.<id>.add, for models this file declares with \"use\": \"preset\" or \"use\": \"custom\". rules: a project also changes which rules a model receives (use, enable, disable, wildcard keys, and a rule with the id of one of this file's rules, which replaces it), and sets scopes, session and on_undeclared. all: a project also sets routing, classifier and subagents.",
+          "description": "none: project files are ignored. add: a project only adds rules, under all_models.add and models.<id>.add, for models this file declares with \"use\": \"preset\" or \"use\": \"custom\". rules: a project also changes which rules a model receives (use, enable, disable, replaces, wildcard keys, and a rule with the id of one of this file's rules, which replaces it), and sets scopes, session and on_undeclared. all: a project also sets routing, classifier and subagents.",
           "enum": ["none", "add", "rules", "all"],
           "default": "add"
         }

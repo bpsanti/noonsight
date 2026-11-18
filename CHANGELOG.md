@@ -14,6 +14,7 @@
   A cloned repository applies only once the account trusts it: `noonsight trust` records the project directory, and later changes to its files apply without asking again, like Claude Code's folder trust; until then each new session in it starts with a warning, and `noonsight untrust` declines it quietly.
   The machine's configuration decides how far a project may go with `projects.allow`: `none` ignores project files, `add` (the default) lets a project only add rules for the models the machine declares, `rules` also lets it change which rules a model receives and declare scopes, and `all` also lets it set routing, the classifier and the subagent settings.
   Rule lists add up, the machine's rules first; a model entry with the machine's `use` merges into it, and one with another `use` replaces it; every other value the project writes replaces the machine's, key by key.
+  A project rule's `replaces` needs `rules`; a project rule that takes the place of a machine rule keeps the preset rule that rule replaced off, and one that replaces the same preset rule as a machine rule wins.
   A project with any problem, alone or merged, is refused alone, and sessions receive the machine's configuration with a warning.
   `noonsight check`, `models`, `resolve` and `run` read the project of the directory they run for, and the decision log records `project` and `project_status`.
   See `docs/configuration.md` ("Project configuration").

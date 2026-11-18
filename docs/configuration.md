@@ -246,7 +246,7 @@ The machine's configuration decides how far a project may change it, with `proje
 | --- | --- |
 | `none` | Nothing: project files are ignored, with no warning |
 | `add` (default) | Add rules, under `all_models.add` and `models.<id>.add`, for the models the machine declares with `"use": "preset"` or `"use": "custom"`; nothing the machine declares changes |
-| `rules` | Also change which rules a model receives: `use`, `enable`, `disable`, wildcard keys, and a rule with the id of one of the machine's rules, which replaces it; and set `scopes`, `session` and `on_undeclared` |
+| `rules` | Also change which rules a model receives: `use`, `enable`, `disable`, `replaces`, wildcard keys, and a rule with the id of one of the machine's rules, which replaces it; and set `scopes`, `session` and `on_undeclared` |
 | `all` | Also set `routing`, `classifier` and `subagents` |
 
 The default lets a trusted project add its rules and nothing else: it never removes or replaces one of the person's rules, never declares a model the person did not, never changes the model a task runs on, never turns the classifier on or changes its settings, and never answers a permission prompt.
@@ -262,6 +262,10 @@ Every value a project writes replaces the machine's, key by key, with these exce
 - **Rule lists add up.**
   A model receives the preset's rules, then `all_models.add`, the machine's then the project's, then its own `add`, the machine's then the project's.
   Under `add`, a project rule id must be new for each model that receives it, as any rule id; above `add`, a project rule with the id of one of the machine's rules in the same list replaces it in its place.
+- **A replaced preset rule stays replaced.**
+  A project rule with `replaces` needs `rules`, since it turns a preset rule off; under `add`, it is refused.
+  A project rule that takes the place of a machine rule with `replaces` takes its `replaces` too, unless it names its own, so the preset rule the person turned off stays off.
+  A project rule that replaces the preset rule a machine rule of the same model replaces takes that machine rule's place, the project's choice winning, as for `enable` and `disable`.
 - **A model entry merges when it keeps the machine's `use`.**
   An entry without `use`, or with the machine's, is merged into the machine's entry: `enable` and `disable` by rule id, the project's choice winning, and `add` as above.
   An entry with another `use` replaces the machine's entry, so the machine's `enable`, `disable` and `add` for that model no longer apply in the project.

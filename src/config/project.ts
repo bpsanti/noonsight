@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { writeFileAtomic } from '../state/files.js';
-import type { ProjectLayer, RawConfig, RawModelEntry, RawUserRule } from './load.js';
+import type { ProjectLayer, RawConfig, RawModelEntry, RawModelRule, RawUserRule } from './load.js';
 
 /** Where a project keeps its configuration, relative to the project directory. */
 export const PROJECT_FILE = path.join('.noonsight', 'noonsight.json');
@@ -175,7 +175,9 @@ function insideProject(dir: string, file: string): boolean {
  * against `baseDir`, the project file's directory, and must stay inside `projectDir`. Every value the project writes replaces the
  * machine's, key by key, with these exceptions:
  *   - rule lists ("all_models.add", "models.<id>.add") add up, the machine's rules first; above
- *     "add", a project rule with the id of a machine rule in the same list replaces it in its place;
+ *     "add", a project rule with the id of a machine rule in the same list replaces it in its place,
+ *     taking its "replaces" unless it gives its own, and a project rule that replaces the preset rule
+ *     a machine rule replaces takes that machine rule's place;
  *   - a model entry with the machine's "use", or none, is merged into the machine's entry: "enable"
  *     and "disable" by rule id, the project's choice winning, and "add" as above; an entry with
  *     another "use" replaces the machine's entry;
@@ -201,25 +203,36 @@ export function mergeProject(
   for (const key of Object.keys(project))
     if (key !== 'version' && key !== '$schema' && !KEYS[allow].includes(key)) refuse(`/${key}`, `"${key}"`, levelFor(key));
   if (allow === 'add')
-    for (const [model, entry] of Object.entries(project.models ?? {}))
+    for (const [model, entry] of Object.entries(project.models ?? {})) {
       for (const key of Object.keys(entry)) if (key !== 'add') refuse(`/models/${model}/${key}`, `"${key}" for a model`, 'rules');
+      (entry.add ?? []).forEach((u, i) => {
+        if (u.replaces !== undefined) refuse(`/models/${model}/add/${i}/replaces`, '"replaces" for a rule', 'rules');
+      });
+    }
   if (problems.length) return { raw: machine, problems, notes, origins };
 
   const replace = allow !== 'add';
-  const rules = (base: readonly RawUserRule[] | undefined, added: readonly RawUserRule[] | undefined, at: string): RawUserRule[] => {
+  const rules = <R extends RawModelRule>(base: readonly R[] | undefined, added: readonly R[] | undefined, at: string): R[] => {
     const out = [...(base ?? [])];
     (added ?? []).forEach((u, i) => {
-      const rule: RawUserRule = { ...u, file: path.resolve(baseDir, u.file) };
+      const rule: R = { ...u, file: path.resolve(baseDir, u.file) };
       if (path.isAbsolute(u.file))
         problems.push(`${at}/${i}/file: "${u.file}" is an absolute path; a project rule file must be relative to the project file`);
       else if (!insideProject(projectDir, rule.file))
         problems.push(`${at}/${i}/file: "${u.file}" is outside the project directory ${projectDir}; a project rule file must stay inside it`);
       origins.set(rule, { at: `${at}/${i}`, file: u.file });
       // Only one of the machine's rules is replaced; a project rule that repeats an id is left for the
-      // loader to report, as a repeated id always is.
+      // loader to report, as a repeated id always is. A project rule that takes the place of a machine
+      // rule keeps the preset rule that machine rule replaces off, unless it names its own.
       const same = replace ? out.findIndex((r) => r.id === u.id && !origins.has(r)) : -1;
+      if (same >= 0 && rule.replaces === undefined && out[same]?.replaces !== undefined) rule.replaces = out[same].replaces;
+      // A project rule that replaces the preset rule a machine rule replaces takes that machine rule's place.
+      const rival =
+        replace && rule.replaces !== undefined ? out.findIndex((r, j) => j !== same && r.replaces === rule.replaces && !origins.has(r)) : -1;
       if (same >= 0) out[same] = rule;
+      else if (rival >= 0) out[rival] = rule;
       else out.push(rule);
+      if (same >= 0 && rival >= 0) out.splice(rival, 1);
     });
     return out;
   };
@@ -269,7 +282,7 @@ function mergeEntry(
   mine: RawModelEntry,
   theirs: Partial<RawModelEntry>,
   use: RawModelEntry['use'],
-  addRules: (list: readonly RawUserRule[] | undefined) => RawUserRule[],
+  addRules: (list: readonly RawModelRule[] | undefined) => RawModelRule[],
 ): RawModelEntry {
   const on = new Set(theirs.enable ?? []);
   const off = new Set(theirs.disable ?? []);

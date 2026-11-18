@@ -230,6 +230,60 @@ test('a project rule file must stay inside the project directory, symlinks follo
   assert.match(text.status === 'matched' ? text.text : '', new RegExp(TEAM));
 });
 
+test('"replaces": a project needs "rules" to replace a preset rule, and a preset rule the machine replaced stays replaced', () => {
+  const finish = { id: 'team/finish-work', file: 'team-sonnet.md', replaces: 'sonnet/investigate' };
+  // Under "add", a project never turns a preset rule off.
+  const refused = load(machineTree(), projectTree({ models: { 'claude-sonnet-5-5': { add: [finish] } } }));
+  assert.equal(refused.project?.status, 'refused');
+  assert.match(
+    refused.project?.problems.join('\n') ?? '',
+    /\/models\/claude-sonnet-5-5\/add\/0\/replaces: "replaces" for a rule needs "projects": \{ "allow": "rules" \} in the machine's configuration, which allows "add"/,
+  );
+  assert.deepEqual(rulesOf(refused, 'claude-sonnet-5-5'), ['sonnet/general', 'user/own']);
+
+  const rules = (add: unknown[]) =>
+    machineTree({ projects: { allow: 'rules' }, models: { 'claude-sonnet-5-5': { use: 'preset', add }, 'claude-haiku-5-5': { use: 'preset' } } });
+  const investigating = (d: ConfigDetails) => resolve(d.config, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' });
+
+  // Under "rules", the project's rule is delivered in the preset rule's place, with its scopes.
+  const own = load(rules([{ id: 'user/own', file: 'own.md' }]), projectTree({ models: { 'claude-sonnet-5-5': { add: [finish] } } }));
+  assert.equal(own.project?.status, 'applied', own.project?.problems.join('\n'));
+  assert.deepEqual(rulesOf(own, 'claude-sonnet-5-5', 'investigate'), ['sonnet/general', 'team/finish-work', 'user/own']);
+
+  // A project rule that takes the place of a machine rule, by id, keeps the preset rule it replaced off.
+  const machineFinish = { id: 'team/finish-work', file: 'own.md', replaces: 'sonnet/investigate' };
+  const byId = load(rules([machineFinish]), projectTree({ models: { 'claude-sonnet-5-5': { add: [{ id: 'team/finish-work', file: 'team-sonnet.md' }] } } }));
+  assert.equal(byId.project?.status, 'applied', byId.project?.problems.join('\n'));
+  const d = investigating(byId);
+  assert.deepEqual(d.status === 'matched' && d.rules, ['sonnet/general', 'team/finish-work']);
+  assert.match(d.status === 'matched' ? d.text : '', new RegExp(TEAM_SONNET));
+  assert.doesNotMatch(d.status === 'matched' ? d.text : '', new RegExp(OWN));
+
+  // A project rule that replaces the preset rule a machine rule replaces wins, in that rule's place.
+  const rival = load(rules([{ id: 'user/finish', file: 'own.md', replaces: 'sonnet/investigate' }, { id: 'user/two', file: 'two.md' }]), projectTree({ models: { 'claude-sonnet-5-5': { add: [finish] } } }));
+  assert.equal(rival.project?.status, 'applied', rival.project?.problems.join('\n'));
+  assert.deepEqual(rulesOf(rival, 'claude-sonnet-5-5', 'investigate'), ['sonnet/general', 'team/finish-work', 'user/two']);
+
+  // A problem with a project rule's "replaces" is located in the project file.
+  const unknown = load(
+    rules([{ id: 'user/own', file: 'own.md' }, { id: 'user/two', file: 'two.md' }]),
+    projectTree({ models: { 'claude-sonnet-5-5': { add: [{ id: 'team/x', file: 'team.md', replaces: 'sonnet/gone' }] } } }),
+  );
+  assert.equal(unknown.project?.status, 'refused');
+  assert.match(unknown.project?.problems.join('\n') ?? '', /^\/models\/claude-sonnet-5-5\/add\/0\/replaces: preset "lab" has no rule "sonnet\/gone"/m);
+});
+
+test('`noonsight models` shows a project rule that replaces a preset rule as a pair, from the project', () => {
+  const machine = machineTree({ projects: { allow: 'rules' } });
+  const repo = projectTree({ models: { 'claude-sonnet-5-5': { add: [{ id: 'team/finish-work', file: 'team-sonnet.md', replaces: 'sonnet/investigate' }] } } });
+  const h = hookHome(machine, { NOONSIGHT_PRESETS_DIR: LAB_PRESETS });
+  const cli = (args: string[]) => runCli(args, { ...h.env, CLAUDE_PROJECT_DIR: repo });
+  cli(['trust', repo]);
+  const text = cli(['models']).stdout;
+  assert.match(text, /sonnet\/investigate .*replaced by team\/finish-work/);
+  assert.match(text, /team\/finish-work .*from the project; replaces sonnet\/investigate/);
+});
+
 test('a machine configuration with a problem is refused whatever the project', () => {
   const machine = machineTree({ models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'user/gone', file: 'gone.md' }] } } });
   assert.throws(() => load(machine, projectTree({ all_models: { add: [team] } })), (e: unknown) => e instanceof ConfigError && e.file === machine);
@@ -408,8 +462,7 @@ test('the project schema is the configuration schema without the preset keys and
   assert.deepEqual(Object.keys(project.properties), machineKeys);
   for (const key of machineKeys) assert.deepEqual(project.properties[key], machine.properties[key], key);
   const { modelEntry: projectEntry, ...projectDefs } = project.$defs;
-  // A project rule cannot replace a preset rule, so the project schema has no "modelRule".
-  const { modelEntry: machineEntry, modelRule: _modelRule, ...machineDefs } = machine.$defs;
+  const { modelEntry: machineEntry, ...machineDefs } = machine.$defs;
   // Only the description of a rule's file differs: a project's must stay inside the project.
   const withoutFileText = (defs: any): any => ({
     ...defs,
@@ -420,6 +473,7 @@ test('the project schema is the configuration schema without the preset keys and
   assert.equal(projectEntry.required, undefined);
   assert.deepEqual(projectEntry.properties.use.enum, machineEntry.properties.use.enum);
   assert.deepEqual(projectEntry.allOf, machineEntry.allOf);
+  assert.deepEqual(projectEntry.properties.add, machineEntry.properties.add);
   assert.deepEqual(machine.properties.projects.properties.allow.enum, [...PROJECT_ALLOW]);
 });
 
