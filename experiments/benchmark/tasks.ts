@@ -78,6 +78,7 @@ export function materialize(set: SetName, id: string, src: Sources, work: string
     case 'review': {
       const from = set === 'investigate' ? path.join(src.sweAtlas, 'data', 'qa', id) : reviewTaskDir(src.reviewBench, id);
       fs.cpSync(from, dir, { recursive: true });
+      if (set === 'review') unpinBase(dir);
       grading = path.join(work, 'grading', set, id);
       fs.rmSync(grading, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(grading), { recursive: true });
@@ -91,6 +92,17 @@ export function materialize(set: SetName, id: string, src: Sources, work: string
     }
   }
   return { set, id, dir, sha256: treeHash(dir), ...(grading ? { grading } : {}) };
+}
+
+/**
+ * Let a review task's image build for this machine: ReviewBench pins its base, a multi-architecture
+ * Node.js image, to the digest of its amd64 variant, and Claude Code's own binary does not run under
+ * amd64 emulation here, so the digest goes and the tag picks the native variant.
+ */
+export function unpinBase(dir: string): void {
+  const file = path.join(dir, 'environment', 'Dockerfile');
+  const text = fs.readFileSync(file, 'utf8');
+  fs.writeFileSync(file, text.replace(/^(FROM\s+[^\s@]+)@sha256:[0-9a-f]{64}/m, '$1'));
 }
 
 /** Point a SWE-bench task's Dockerfile at the instance's arm64 image. */

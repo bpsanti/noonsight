@@ -375,7 +375,361 @@
         "verifier": 2.7
       },
       "at": "2026-11-17T03:59:39.933Z"
+    },
+    {
+      "set": "build",
+      "id": "sphinx-doc__sphinx-9281",
+      "sha256": "f767fb8135a2b49f86431b27c95e4b6662ac5bd1b74cd1b5b4a34a5f1c97e013",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 89.8,
+        "environment": 60.4,
+        "agent": 0.3,
+        "verifier": 18.1
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:41:03.704Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-16145",
+      "sha256": "86929ebbfd857d4ba814d5ed4f3aeeeaa27c70e7c92b88044110a72a9a97f110",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 83.5,
+        "environment": 28.7,
+        "agent": 0.3,
+        "verifier": 43.6
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:41:46.553Z"
+    },
+    {
+      "set": "build",
+      "id": "sphinx-doc__sphinx-7889",
+      "sha256": "9b1e9285cf48d80aea910d32d4b87942f141af28fe62b964ffb029ac2d4812cc",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 38.6,
+        "environment": 16.6,
+        "agent": 0.3,
+        "verifier": 10.5
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:42:28.204Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-13670",
+      "sha256": "17efaa883fe1c0e4759e5dde2658b991deea0dd90294b61a54a6e0d9a51abe98",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 58.3,
+        "environment": 30.5,
+        "agent": 0.3,
+        "verifier": 16.1
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:43:13.003Z"
+    },
+    {
+      "set": "build",
+      "id": "sympy__sympy-23824",
+      "sha256": "42da15e1c38503c8ee238c3d7828c8476f70935d381212258fe6ce783b7d27c8",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 48,
+        "environment": 20.9,
+        "agent": 0.3,
+        "verifier": 15.7
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:43:57.367Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-15563",
+      "sha256": "bd6a7655d714d21866377a14f948ff7a6e619f4c9e05e94735a89f29ad87bafe",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 70.5,
+        "environment": 42.3,
+        "agent": 0.3,
+        "verifier": 16.8
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:44:40.611Z"
+    },
+    {
+      "set": "build",
+      "id": "pytest-dev__pytest-5631",
+      "sha256": "b149df1568743edfae9146f46e57cfaad5cf89a680fd1e914fff90bb795750fe",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 55.5,
+        "environment": 28.5,
+        "agent": 0.3,
+        "verifier": 15.7
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:45:21.810Z"
+    },
+    {
+      "set": "build",
+      "id": "astropy__astropy-13236",
+      "sha256": "4b54a3dadfb9338fd5966d5899e6c005e55987fce89c0c3b40d110177a62e248",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 105.3,
+        "environment": 28.4,
+        "agent": 0.4,
+        "verifier": 65.3
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:46:05.735Z"
+    },
+    {
+      "set": "build",
+      "id": "sympy__sympy-24066",
+      "sha256": "1a7a2cbd2343cec54d123f5336a0f9b395f5031ca41883914d50ea14795d192b",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 46.5,
+        "environment": 24.4,
+        "agent": 0.3,
+        "verifier": 10.6
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:46:50.283Z"
+    },
+    {
+      "set": "build",
+      "id": "django__django-16560",
+      "sha256": "ae60ec1802119cfc8bf617abad2fbb9906305f0605e1ff744b410e409d154e9f",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 54.1,
+        "environment": 26.7,
+        "agent": 0.3,
+        "verifier": 16.1
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:47:33.268Z"
+    },
+    {
+      "set": "build",
+      "id": "pytest-dev__pytest-6197",
+      "sha256": "8ee8bb952d9a06164125df76a01849a97a6250e8e590af74f650830779af0d9e",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 63.3,
+        "environment": 26.5,
+        "agent": 0.3,
+        "verifier": 25.6
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:48:12.196Z"
+    },
+    {
+      "set": "build",
+      "id": "pylint-dev__pylint-8898",
+      "sha256": "ffe4f496951e02fac00159203244f2f73a53d737164f68a24f52b13ebc9c738c",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 45.5,
+        "environment": 21.4,
+        "agent": 0.3,
+        "verifier": 12.7
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:48:50.640Z"
+    },
+    {
+      "set": "routine",
+      "id": "pytorch-model-recovery",
+      "sha256": "871f95379ae4bddbf58f2e97632ca07899e309748143ab601ad6093baad41c20",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 64.3,
+        "environment": 13.8,
+        "agent": 6.7,
+        "verifier": 32.5
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:49:32.774Z"
+    },
+    {
+      "set": "routine",
+      "id": "vulnerable-secret",
+      "sha256": "44a764782dc7f98b9ce2524549bbe0ad16390300d91989a5c56401c023e7b055",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 37.3,
+        "environment": 18.8,
+        "agent": 0.3,
+        "verifier": 7.4
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:50:19.904Z"
+    },
+    {
+      "set": "routine",
+      "id": "prove-plus-comm",
+      "sha256": "4012d81f9029d62c651774620a5b7b2b7b557fd3deab29f4fec5f639e04c3c80",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 118.5,
+        "environment": 90.9,
+        "agent": 0.5,
+        "verifier": 15.9
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:51:19.247Z"
+    },
+    {
+      "set": "routine",
+      "id": "sanitize-git-repo",
+      "sha256": "ceed956f1fdd6f3e2ca65ca667c68a0b9506565f1bded28314b4c7ec1a831661",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 29.4,
+        "environment": 10.8,
+        "agent": 0.6,
+        "verifier": 7.2
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:52:02.565Z"
+    },
+    {
+      "set": "routine",
+      "id": "nginx-request-logging",
+      "sha256": "11fdbcff089718523b7e0d9edb47d0f3f2b7626213b3dcedfbd27a932faee530",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 30,
+        "environment": 9,
+        "agent": 3.5,
+        "verifier": 6.7
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:52:44.839Z"
+    },
+    {
+      "set": "routine",
+      "id": "kv-store-grpc",
+      "sha256": "b0b684a46c84a36bfa59672941d5f85c6dbfb9df75aa43341de9f2c52c5b12b3",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 23.7,
+        "environment": 3,
+        "agent": 6.1,
+        "verifier": 3.8
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:53:28.196Z"
+    },
+    {
+      "set": "digest",
+      "id": "django__django-15957",
+      "sha256": "5c7fa64cf259cffce5c0aaadd82b06d6a329946725f78671e8a6a00eee9e8557",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 30.9,
+        "environment": 19.5,
+        "agent": 0.3,
+        "verifier": 0.4
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:54:06.664Z"
+    },
+    {
+      "set": "digest",
+      "id": "django__django-14351",
+      "sha256": "738ca6e46c3c7f87443d2149e671e622d2e346f0d3a342268200b57697cdec09",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 35,
+        "environment": 23.7,
+        "agent": 0.3,
+        "verifier": 0.3
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:54:43.453Z"
+    },
+    {
+      "set": "review",
+      "id": "NCATSTranslator_translator-ingests_336",
+      "sha256": "a9340578dab46c8076eaf2dd766b5a81404662dc9e43de331eec0cbb049fe344",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 43.3,
+        "environment": 26.9,
+        "agent": 2.5,
+        "verifier": 2.6
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:56:12.891Z"
+    },
+    {
+      "set": "review",
+      "id": "sdsykes_fastimage_165",
+      "sha256": "c129df0efdf109cef6415498015d4e83d712294427e01c7edb6e113e1b186a94",
+      "passed": true,
+      "reward": 1,
+      "error": null,
+      "seconds": {
+        "total": 26.1,
+        "environment": 9.8,
+        "agent": 2.6,
+        "verifier": 2.6
+      },
+      "agent_setup": true,
+      "at": "2026-11-18T00:58:42.365Z"
     }
   ],
-  "skipped": {}
+  "skipped": {
+    "investigate": "SWE Atlas images are built only for amd64, and Claude Code's x64 binary cannot run here (no amd64, or no AVX under emulation)"
+  }
 }

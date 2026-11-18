@@ -74,7 +74,7 @@ class NoonsightClaudeCode(ClaudeCode):
             command=(
                 "set -euo pipefail; "
                 f"echo '{manifest['node'][node_arch]['sha256']}  {UPLOAD}/{node_file}' | sha256sum -c - && "
-                f"tar -xJf {UPLOAD}/{node_file} -C {ROOT}/node --strip-components=1 && "
+                f"tar -xzf {UPLOAD}/{node_file} -C {ROOT}/node --strip-components=1 && "
                 f"{ROOT}/node/bin/node {ROOT}/node/lib/node_modules/npm/bin/npm-cli.js install -g --offline --no-audit --no-fund "
                 f"--prefix {ROOT}/prefix {UPLOAD}/{manifest['package']} && "
                 f"{ROOT}/node/bin/node {ROOT}/prefix/lib/node_modules/noonsight/dist/src/cli.js --version"

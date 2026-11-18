@@ -8,9 +8,10 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { runTrial } from './harbor.js';
-import { selection, wanted, type Excluded, type Plan, type Selection } from './plan.js';
+import { BENCH_DIR, selection, wanted, type Excluded, type Plan, type Selection } from './plan.js';
 import type { SwebenchInstance, TerminalBenchTask } from './select.js';
-import { materialize, SETS, type SetName, type Sources } from './tasks.js';
+import { bundleBase, writeBundle } from './run.js';
+import { materialize, SETS, type Materialized, type SetName, type Sources } from './tasks.js';
 
 export interface GoldEntry {
   readonly set: SetName;
@@ -21,6 +22,8 @@ export interface GoldEntry {
   readonly error: string | null;
   /** Wall time of the whole trial and of its parts, in seconds; the first trial of an image includes its pull or build. */
   readonly seconds: { readonly total: number; readonly environment: number; readonly agent: number; readonly verifier: number };
+  /** Whether the noonsight agent installed on the task's image (checked once the oracle passes). */
+  readonly agent_setup?: boolean;
   readonly at: string;
 }
 
@@ -35,12 +38,16 @@ export function readGold(file: string): GoldRecord {
   return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, 'utf8')) as GoldRecord) : { machine: '', entries: [], skipped: {} };
 }
 
-/** The tasks each set has dropped: the latest entry of a task decides, so a recheck can bring one back. */
-export function excludedBy(record: GoldRecord): Excluded {
+/**
+ * The tasks each set has dropped: the latest entry of a task decides, so a recheck can bring one back.
+ * With `currentSha`, a failure recorded for an earlier version of a task (a task the pilot has since
+ * changed, such as an image now built for this machine) drops nothing, so the task is checked again.
+ */
+export function excludedBy(record: GoldRecord, currentSha?: (set: SetName, id: string) => string): Excluded {
   const latest = new Map<string, GoldEntry>();
   for (const e of record.entries) latest.set(`${e.set}/${e.id}`, e);
   const out: Partial<Record<SetName, Set<string>>> = {};
-  for (const e of latest.values()) if (!e.passed) (out[e.set] ??= new Set()).add(e.id);
+  for (const e of latest.values()) if (!e.passed && (!currentSha || currentSha(e.set, e.id) === e.sha256)) (out[e.set] ??= new Set()).add(e.id);
   return out;
 }
 
@@ -55,10 +62,14 @@ export function dockerUp(): boolean {
   return spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], { encoding: 'utf8', timeout: 30_000 }).status === 0;
 }
 
-/** Whether this Docker can run an amd64 image: SWE Atlas publishes its images only for amd64. */
+/**
+ * Whether the agent can run in an amd64 image here: SWE Atlas publishes its images only for amd64, and
+ * Claude Code's x64 binary needs a CPU with AVX, which amd64 emulation on Apple silicon does not offer.
+ */
 export function canRunAmd64(): boolean {
-  const r = spawnSync('docker', ['run', '--rm', '--platform', 'linux/amd64', 'alpine:3.20', 'uname', '-m'], { encoding: 'utf8', timeout: 180_000 });
-  return r.status === 0 && r.stdout.trim() === 'x86_64';
+  const r = spawnSync('docker', ['run', '--rm', '--platform', 'linux/amd64', 'alpine:3.20', 'sh', '-c', 'uname -m; grep -c -w avx /proc/cpuinfo || true'], { encoding: 'utf8', timeout: 180_000 });
+  const [arch, avx] = r.stdout.trim().split('\n');
+  return r.status === 0 && arch === 'x86_64' && Number(avx) > 0;
 }
 
 export interface GoldOptions {
@@ -76,11 +87,44 @@ export interface GoldOptions {
   readonly log: (line: string) => void;
 }
 
-/** Check every chosen task not yet checked, one at a time, refilling the sets until nothing new is chosen. */
+/**
+ * Whether the noonsight agent installs on a task's image: Claude Code, the pinned Node.js and
+ * noonsight, through Harbor's install-only mode, with no token and no model. The oracle proves the
+ * task; this proves the agent can run on it, which an image without xz, or an amd64 image under
+ * emulation without AVX, does not allow.
+ */
+async function agentInstalls(o: GoldOptions, task: Materialized): Promise<{ ok: boolean; error: string | null }> {
+  const base = bundleBase(o.plan, o.work, o.log);
+  const bundle = path.join(o.work, 'bundles', 'gold-agent-check');
+  const model = o.plan.models.haiku?.id ?? Object.values(o.plan.models)[0]!.id;
+  writeBundle(o.plan, base, bundle, model, 'off');
+  const trial = await runTrial({
+    harbor: o.harbor,
+    task: task.dir,
+    jobsDir: path.join(o.work, 'gold'),
+    jobName: `${task.set}-${task.id}-agent-${Date.now()}`,
+    agentArgs: ['--install-only', '--skip-credential-checks', '--agent', 'noonsight_agent:NoonsightClaudeCode', '-m', `anthropic/${model}`, '--ak', `version=${o.plan.pins.claude_code}`, '--ak', `config=${path.join(bundle, 'condition', 'settings.json')}`],
+    env: { PYTHONPATH: path.join(BENCH_DIR, 'harbor'), NOONSIGHT_BENCH_BUNDLE: bundle },
+    timeoutMs: 30 * 60 * 1000,
+  });
+  if (trial.dir === null || !dockerUp()) throw new Error(`the agent check of ${task.set}/${task.id} ended without a result or with Docker unreachable; nothing was recorded for it`);
+  return { ok: trial.error === null, error: trial.error ? `agent setup: ${clean(trial.error)}` : null };
+}
+
+/** An error as the committed record keeps it: without Harbor's command line and without this machine's paths. */
+function clean(error: string): string {
+  return (error.split('. Command: ')[0] ?? error).replace(/\/(Users|home|private|var|tmp)\/\S*/g, '<path>');
+}
+
+/**
+ * Check every chosen task whose latest entry does not settle it, one at a time, refilling the sets
+ * until nothing new is chosen. An entry settles a task when it is for the task as written now (the
+ * same sha256) and either failed, or passed both the oracle and the agent check.
+ */
 export async function goldCheck(o: GoldOptions): Promise<{ selection: Selection; record: GoldRecord }> {
   let record = readGold(o.record);
   const skipped: Partial<Record<SetName, string>> = { ...record.skipped };
-  if (o.sets.includes('investigate') && !canRunAmd64()) skipped.investigate = 'SWE Atlas images are built only for amd64, and this Docker cannot run amd64 images';
+  if (o.sets.includes('investigate') && !canRunAmd64()) skipped.investigate = "SWE Atlas images are built only for amd64, and Claude Code's x64 binary cannot run here (no amd64, or no AVX under emulation)";
   else delete skipped.investigate;
   const save = (): void => {
     record = { ...record, machine: o.machine, skipped };
@@ -88,35 +132,58 @@ export async function goldCheck(o: GoldOptions): Promise<{ selection: Selection;
   };
   save();
   for (;;) {
-    const sel = selection(o.plan, o.swebench, o.arm64, o.terminalBench, excludedBy(record));
-    const todo = unchecked(sel, record).filter((t) => o.sets.includes(t.set) && !skipped[t.set]);
-    if (todo.length === 0) {
-      const want = wanted(o.plan);
-      for (const set of o.sets) if (sel[set].length < want[set]) o.log(`${set}: the pool ran out with ${sel[set].length} of ${want[set]} tasks`);
-      return { selection: sel, record };
+    const sha = new Map<string, string>();
+    const currentSha = (set: SetName, id: string): string => {
+      const k = `${set}/${id}`;
+      if (!sha.has(k)) sha.set(k, materialize(set, id, o.sources, o.work, o.hasArm64).sha256);
+      return sha.get(k) as string;
+    };
+    const sel = selection(o.plan, o.swebench, o.arm64, o.terminalBench, excludedBy(record, (set, id) => (skipped[set] ? '' : currentSha(set, id))));
+    let checked = 0;
+    for (const set of SETS) {
+      if (!o.sets.includes(set) || skipped[set]) continue;
+      for (const id of sel[set]) {
+        const m = materialize(set, id, o.sources, o.work, o.hasArm64);
+        const latest = [...record.entries].reverse().find((e) => e.set === set && e.id === id);
+        if (latest && latest.sha256 === m.sha256 && (!latest.passed || latest.agent_setup === true)) continue;
+        if (!dockerUp()) throw new Error('Docker is not reachable; the gold check stops without recording anything for the tasks left');
+        checked++;
+        // The oracle runs again only when the task changed or has no oracle result yet.
+        let oracle: Pick<GoldEntry, 'passed' | 'reward' | 'error' | 'seconds'>;
+        if (latest && latest.sha256 === m.sha256 && latest.passed) oracle = latest;
+        else {
+          o.log(`gold ${set}/${id}`);
+          const trial = await runTrial({ harbor: o.harbor, task: m.dir, jobsDir: path.join(o.work, 'gold'), jobName: `${set}-${id}-${Date.now()}`, agentArgs: ['-a', 'oracle'], timeoutMs: 90 * 60 * 1000 });
+          // A trial that failed because Docker went away says nothing about the task: stop, and check it again on the next call.
+          if (trial.dir === null || !dockerUp()) throw new Error(`the trial of ${set}/${id} ended without a result or with Docker unreachable (${trial.error ?? 'no error recorded'}); nothing was recorded for it`);
+          const passed = trial.reward === 1 && trial.error === null;
+          oracle = { passed, reward: trial.reward, error: trial.error ? clean(trial.error) : passed ? null : `reward ${trial.reward}`, seconds: { total: trial.seconds.total, environment: trial.seconds.environment, agent: trial.seconds.agent, verifier: trial.seconds.verifier } };
+        }
+        let agent: { ok: boolean; error: string | null } | null = null;
+        if (oracle.passed) {
+          o.log(`agent ${set}/${id}`);
+          agent = await agentInstalls(o, m);
+        }
+        const entry: GoldEntry = {
+          set,
+          id,
+          sha256: m.sha256,
+          passed: oracle.passed && agent?.ok === true,
+          reward: oracle.reward,
+          error: oracle.error ?? agent?.error ?? null,
+          seconds: oracle.seconds,
+          ...(agent ? { agent_setup: agent.ok } : {}),
+          at: new Date().toISOString(),
+        };
+        record = { ...record, entries: [...record.entries, entry] };
+        save();
+        o.log(`     ${entry.passed ? 'pass' : 'FAIL'}${entry.error ? `: ${entry.error.slice(0, 160)}` : ''}`);
+      }
     }
-    for (const t of todo) {
-      const m = materialize(t.set, t.id, o.sources, o.work, o.hasArm64);
-      if (!dockerUp()) throw new Error('Docker is not reachable; the gold check stops without recording anything for the tasks left');
-      o.log(`gold ${t.set}/${t.id}`);
-      const trial = await runTrial({ harbor: o.harbor, task: m.dir, jobsDir: path.join(o.work, 'gold'), jobName: `${t.set}-${t.id}-${Date.now()}`, agentArgs: ['-a', 'oracle'], timeoutMs: 90 * 60 * 1000 });
-      // A trial that failed because Docker went away says nothing about the task: stop, and check it again on the next call.
-      if (trial.dir === null || !dockerUp()) throw new Error(`the trial of ${t.set}/${t.id} ended without a result or with Docker unreachable (${trial.error ?? 'no error recorded'}); nothing was recorded for it`);
-      const passed = trial.reward === 1 && trial.error === null;
-      const entry: GoldEntry = {
-        set: t.set,
-        id: t.id,
-        sha256: m.sha256,
-        passed,
-        reward: trial.reward,
-        // The record is committed: the reason without Harbor's command line and without this machine's paths.
-        error: trial.error ? trial.error.split('. Command: ')[0]!.replace(/\/(Users|home|private|var|tmp)\/\S*/g, '<path>') : passed ? null : `reward ${trial.reward}`,
-        seconds: { total: trial.seconds.total, environment: trial.seconds.environment, agent: trial.seconds.agent, verifier: trial.seconds.verifier },
-        at: new Date().toISOString(),
-      };
-      record = { ...record, entries: [...record.entries, entry] };
-      save();
-      o.log(`     ${passed ? 'pass' : 'FAIL'} in ${entry.seconds.total}s${entry.error ? `: ${entry.error.slice(0, 160)}` : ''}`);
+    if (checked === 0) {
+      const want = wanted(o.plan);
+      for (const set of o.sets) if (!skipped[set] && sel[set].length < want[set]) o.log(`${set}: the pool ran out with ${sel[set].length} of ${want[set]} tasks`);
+      return { selection: sel, record };
     }
   }
 }

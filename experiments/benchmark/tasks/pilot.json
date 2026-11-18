@@ -87,18 +87,15 @@
         "sha256": "738ca6e46c3c7f87443d2149e671e622d2e346f0d3a342268200b57697cdec09"
       }
     ],
-    "investigate": [
-      {
-        "id": "qa-6905333b74f22949d97baa05",
-        "sha256": "b7483c440f57f6fd59165e568e266b8aac13e76d5e56d19dca758ac46aa2dea0"
-      }
-    ],
+    "investigate": [],
     "review": [
       {
-        "id": "NCATSTranslator_translator-ingests_336",
-        "sha256": "58699256d191998b05560b71a6b4eedb18ce83973ee6d52f15e5d2c96c4a6233"
+        "id": "sdsykes_fastimage_165",
+        "sha256": "c129df0efdf109cef6415498015d4e83d712294427e01c7edb6e113e1b186a94"
       }
     ]
   },
-  "not_run_here": {}
+  "not_run_here": {
+    "investigate": "SWE Atlas images are built only for amd64, and Claude Code's x64 binary cannot run here (no amd64, or no AVX under emulation)"
+  }
 }

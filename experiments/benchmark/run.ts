@@ -96,6 +96,8 @@ export interface RunnerOptions {
   readonly quotaFloorFallback?: number;
   /** Runs at a time for this night, when it is not the plan's. */
   readonly concurrency?: number;
+  /** Run again the cells recorded as infrastructure failures (they stay recorded; a later run of the same key is the result). */
+  readonly retryInfra?: boolean;
   /** Runs still going at this time are stopped and left interrupted: counted at their budget, and run again on the next night. */
   readonly stopBy: Date | null;
   readonly dryRun: boolean;
@@ -147,6 +149,12 @@ export function interrupted(journal: readonly JournalLine[]): JournalLine[] {
   return [...open.values()];
 }
 
+/** The cells that need no run: those with a result, and those recorded as infrastructure failures unless the night retries them. */
+export function doneKeys(runs: readonly Recorded[], retryInfra: boolean): Set<string> {
+  const results = new Set(runs.filter((r) => r.infra_failure === null).map((r) => r.key));
+  return new Set(runs.filter((r) => results.has(r.key) || !retryInfra).map((r) => r.key));
+}
+
 /** The money counted against the cap so far: every recorded run, every grade, every retry, and every interrupted run at its budget. */
 export function spent(runs: readonly Recorded[], journal: readonly JournalLine[], grades: readonly Pick<Grade, 'cost_usd'>[] = []): number {
   const runsCost = runs.reduce((s, r) => s + r.cost_counted_usd, 0) + grades.reduce((s, g) => s + g.cost_usd, 0);
@@ -173,7 +181,8 @@ export function bundleBase(plan: Plan, work: string, log: (s: string) => void): 
   fs.mkdirSync(dir, { recursive: true });
   const node = {} as Record<'arm64' | 'x64', { file: string; sha256: string }>;
   for (const arch of ['arm64', 'x64'] as const) {
-    const file = `node-v${plan.pins.node.version}-linux-${arch}.tar.xz`;
+    // gzip, not xz: some task images (Terminal-Bench's) have no xz to unpack it.
+    const file = `node-v${plan.pins.node.version}-linux-${arch}.tar.gz`;
     const target = path.join(dir, file);
     const want = plan.pins.node.sha256[arch];
     if (!fs.existsSync(target) || sha256(target) !== want) {
@@ -196,7 +205,7 @@ function sha256(file: string): string {
 }
 
 /** One run's bundle: the shared files linked in, the condition written, and the manifest the agent reads. */
-function writeBundle(plan: Plan, base: ReturnType<typeof bundleBase>, dir: string, modelId: string, condition: string): string {
+export function writeBundle(plan: Plan, base: ReturnType<typeof bundleBase>, dir: string, modelId: string, condition: string): string {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   for (const f of [base.package, base.node.arm64.file, base.node.x64.file]) fs.linkSync(path.join(base.dir, f), path.join(dir, f));
@@ -428,7 +437,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   const nightsFile = path.join(results, 'nights.jsonl');
   const runs = readJsonl<Recorded>(runsFile);
   const journal = readJsonl<JournalLine>(journalFile);
-  const done = new Set(runs.map((r) => r.key));
+  const done = doneKeys(runs, o.retryInfra === true);
   const night = readJsonl<NightSummary>(nightsFile).length + 1;
   const wasInterrupted = interrupted(journal);
   const all = rounds(o.plan, o.selection, o.models);
@@ -445,6 +454,8 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   if (o.dryRun || plannedCells.length === 0) return null;
 
   const awake = keepAwake(o.log);
+  // Grades the judge could not give earlier (an error, or a rubric that came later) are tried again first.
+  const regraded = gradePending(o);
   const startedAt = new Date().toISOString();
   const base = bundleBase(o.plan, o.work, o.log);
   const tasks = new Map<string, Materialized>();
@@ -461,8 +472,8 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
     return m;
   };
 
-  let total = totalBefore;
-  let tonight = 0;
+  let total = totalBefore + regraded;
+  let tonight = regraded;
   let completed = 0;
   let failedAttempts = 0;
   let infra = 0;

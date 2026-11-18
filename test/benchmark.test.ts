@@ -15,12 +15,12 @@ import { judgeMessage, parseRatings, scrub, tally, type Item } from '../experime
 import { BENCH_DIR, loadPlan, selection, wanted } from '../experiments/benchmark/plan.js';
 import { accountEnv, aboveFloor, parseQuota } from '../experiments/benchmark/quota.js';
 import os from 'node:os';
-import { interrupted, measured, spent, type Recorded } from '../experiments/benchmark/run.js';
+import { doneKeys, interrupted, measured, spent, type Recorded } from '../experiments/benchmark/run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from '../experiments/benchmark/schedule.js';
 import { parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
 import { chooseSwebench, chooseTerminalBench, rank, type SwebenchInstance } from '../experiments/benchmark/select.js';
 import { tomlValue } from '../experiments/benchmark/sources.js';
-import { dropKey, dropSection, useArm64Image } from '../experiments/benchmark/tasks.js';
+import { dropKey, dropSection, unpinBase, useArm64Image } from '../experiments/benchmark/tasks.js';
 import { tempTree } from './helpers.js';
 
 const plan = loadPlan();
@@ -104,6 +104,9 @@ test('the gold record excludes a task by its latest entry, per set, and lists th
   const ex = excludedBy(record);
   assert.deepEqual([...(ex.build ?? [])], ['a']);
   assert.deepEqual([...(ex.digest ?? [])], ['c']);
+  // A failure of an earlier version of the task drops nothing once the task changed.
+  assert.deepEqual([...(excludedBy(record, () => 'y').build ?? [])], []);
+  assert.deepEqual([...(excludedBy(record, () => 'x').build ?? [])], ['a']);
   const sel = { build: ['a', 'b', 'd'], routine: [], digest: ['c'], investigate: [], review: ['r'] };
   assert.deepEqual(unchecked(sel, record), [
     { set: 'build', id: 'd' },
@@ -188,6 +191,15 @@ test('a run started and never ended is interrupted: it counts at its budget once
   assert.equal(interrupted(closed).length, 0);
   assert.equal(spent(runs, closed, [{ cost_usd: 0.1 }]), 0.4 + 3.5 + 0.1);
   assert.deepEqual(measured([{ model: 'opus', set: 'build', cost_usd: 0.2, infra_failure: null } as unknown as Recorded, { model: 'opus', set: 'build', infra_failure: 'x' } as unknown as Recorded]).get('opus/build'), { n: 1, mean: 0.2 });
+});
+
+test('an infrastructure failure is done unless the night retries it, and a later result of the same key is done either way', () => {
+  const ok = { key: 'a', infra_failure: null } as unknown as Recorded;
+  const infra = { key: 'b', infra_failure: 'setup failed' } as unknown as Recorded;
+  const retried = [infra, { key: 'b', infra_failure: null } as unknown as Recorded];
+  assert.deepEqual([...doneKeys([ok, infra], false)].sort(), ['a', 'b']);
+  assert.deepEqual([...doneKeys([ok, infra], true)], ['a']);
+  assert.deepEqual([...doneKeys([ok, ...retried], true)].sort(), ['a', 'b']);
 });
 
 test('the quota reading takes the all-models scope and each model scope of quota-axi, and an unreadable quota stops the night', () => {
@@ -418,6 +430,9 @@ test('task files: one key or one section leaves a task.toml, and a SWE-bench tas
   useArm64Image(dir, 'django__django-12308');
   assert.match(fs.readFileSync(path.join(dir, 'environment', 'Dockerfile'), 'utf8'), /^FROM swebench\/sweb\.eval\.arm64\.django_1776_django-12308:latest$/m);
   assert.throws(() => useArm64Image(dir, 'django__django-1'));
+  const review = tempTree({ 'environment/Dockerfile': 'FROM node:22-bookworm-slim@sha256:' + 'e'.repeat(64) + '\nRUN true\n' });
+  unpinBase(review);
+  assert.equal(fs.readFileSync(path.join(review, 'environment', 'Dockerfile'), 'utf8'), 'FROM node:22-bookworm-slim\nRUN true\n');
 });
 
 test('the committed pilot list is the selection of the committed arm64 list after the gold check', () => {

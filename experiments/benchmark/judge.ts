@@ -119,6 +119,16 @@ export function tally(items: readonly Item[], votes: readonly (boolean | null)[]
   return { items: out, score: decided.length === scored.length && scored.length > 0 ? decided.filter((o) => o.verdict).length / scored.length : null };
 }
 
+/** What Claude Code needs from the environment to find the account's login, and nothing else: on macOS the login is in the keychain, found through USER. */
+export function loginEnv(): Record<string, string> {
+  const env: Record<string, string> = { HOME: os.homedir() };
+  for (const name of ['PATH', 'USER', 'LOGNAME', 'TMPDIR', 'SHELL']) {
+    const value = process.env[name];
+    if (value) env[name] = value;
+  }
+  return env;
+}
+
 /** One vote: a `claude -p` call with the judge's system prompt and no tools. */
 function vote(plan: Plan, account: string, rubric: Rubric, answer: string): { text: string; cost: number; error: string | null } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-judge-'));
@@ -132,7 +142,7 @@ function vote(plan: Plan, account: string, rubric: Rubric, answer: string): { te
         '--system-prompt', rubric.system,
         '--tools', '', '--setting-sources', 'project,local', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence',
       ],
-      { cwd: dir, encoding: 'utf8', timeout: 600_000, maxBuffer: 64 * 2 ** 20, env: { ...accountEnv(account, { PATH: process.env.PATH ?? '', HOME: os.homedir() }), NOONSIGHT_DISABLE: '1', DISABLE_AUTOUPDATER: '1' } },
+      { cwd: dir, encoding: 'utf8', timeout: 600_000, maxBuffer: 64 * 2 ** 20, env: { ...accountEnv(account, loginEnv()), NOONSIGHT_DISABLE: '1', DISABLE_AUTOUPDATER: '1' } },
     );
     const out = JSON.parse(r.stdout || '{}') as { result?: string; total_cost_usd?: number; is_error?: boolean; subtype?: string };
     return { text: String(out.result ?? ''), cost: Number(out.total_cost_usd ?? 0), error: r.status === 0 && !out.is_error ? null : `judge exited ${r.status} (${out.subtype ?? 'no result'})` };

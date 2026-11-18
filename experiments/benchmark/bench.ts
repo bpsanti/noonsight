@@ -4,7 +4,7 @@
 //
 //   npm run benchmark -- fetch  --work <dir> [--python python3.12] [--arm64]
 //   npm run benchmark -- gold   --work <dir> [--sets build,routine,...]
-//   npm run benchmark -- run    --work <dir> --account <claude config dir> --token-file <file> [--night-usd 45] [--until 07:30] [--stop-by 07:45] [--quota-floor 50] [--quota-floor-fallback 35] [--concurrency 1] [--dry-run]
+//   npm run benchmark -- run    --work <dir> --account <claude config dir> --token-file <file> [--night-usd 45] [--until 07:30] [--stop-by 07:45] [--quota-floor 50] [--quota-floor-fallback 35] [--concurrency 1] [--retry-infra] [--dry-run]
 //   npm run benchmark -- smoke  --work <dir> --account <dir> --token-file <file> --set build --task <id> --model fable --condition off --budget 0.9
 //   npm run benchmark -- grade  --work <dir> --account <dir>
 //   npm run benchmark -- rescore --work <dir>     (the signals again, from the saved streams, into results/signals.jsonl)
@@ -254,6 +254,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       ...(opts.has('quota-floor') ? { quotaFloor: Number(required(opts, 'quota-floor')) } : {}),
       ...(opts.has('quota-floor-fallback') ? { quotaFloorFallback: Number(required(opts, 'quota-floor-fallback')) } : {}),
       ...(opts.has('concurrency') ? { concurrency: Number(required(opts, 'concurrency')) } : {}),
+      ...(opts.has('retry-infra') ? { retryInfra: true } : {}),
       dryRun,
       commit,
       log,

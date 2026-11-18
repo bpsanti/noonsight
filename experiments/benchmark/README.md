@@ -70,7 +70,8 @@ Nothing reaches Anthropic and no token is spent.
 ### The gold check
 
 Before any paid run, [gold.ts](gold.ts) runs each chosen task's reference solution here with Harbor's `oracle` agent, without a model.
-A task that fails, or whose environment does not start on this machine, is dropped and replaced by the next one in the seeded order.
+Once the reference passes, it also installs the noonsight agent on the task's image (Harbor's install-only mode, no model), since an image can pass the oracle and still not run the agent: one without `xz`, or an amd64 image under emulation, where Claude Code's x64 binary finds no AVX.
+A task that fails either check, or whose environment does not start on this machine, is dropped and replaced by the next one in the seeded order.
 The record, [tasks/gold.json](tasks/gold.json), and the resulting list, [tasks/pilot.json](tasks/pilot.json), are committed; each task's sha256 there pins the exact task the paid runs use.
 
 ### Nights, the cap and the quota floor
@@ -80,6 +81,7 @@ A night continues the first unfinished round and then starts whole rounds while 
 A round is cut into units, one per task and model with every condition of its phase, and a night only ever stops between units, so every recorded run has its partners under the other conditions.
 Before each unit the runner reads the account's quota with `quota-axi --provider claude` and stops below the floor; it also stops when the next unit, at full budgets, could pass the cap, or at the `--until` time.
 At the `--stop-by` time, runs still going are stopped and left interrupted.
+`--retry-infra` runs again the cells recorded as infrastructure failures, under the same keys, once their cause is fixed; the failure records stay.
 `--quota-floor` replaces the plan's floor for one night, and `--quota-floor-fallback` gives a lower floor the night falls back to when its floor would stop it; the night's summary records the floor in force when it ended and the lowest quota it read.
 Every run is recorded the moment it ends; a run that was in flight when the machine slept or rebooted is counted at its full budget and run again on the next night.
 The night runs under `caffeinate -ims` and ends with a summary line: runs planned, completed and interrupted, spend, and quota before and after.
