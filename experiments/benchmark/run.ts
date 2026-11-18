@@ -453,7 +453,14 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   const quotaBefore = readQuota(o.account);
   o.log(`night ${night}: ${plannedCells.length} runs in ${plan.rounds.length} round(s), projected $${plan.projected_usd.toFixed(2)}; $${totalBefore.toFixed(2)} of $${o.plan.cap_usd} spent; quota ${quotaBefore.all_models ?? '?'}% left; ${plan.stop}`);
   for (const r of plan.rounds) o.log(`  ${r.phase}, round ${r.rep}: ${r.units.length} units`);
-  if (wasInterrupted.length) o.log(`  ${wasInterrupted.length} run(s) interrupted earlier will run again: ${wasInterrupted.map((j) => j.key).join(', ')}`);
+  if (wasInterrupted.length) {
+    // An interrupted run is closed at its full budget; it runs again only if its cell is still in the plan (a set dropped since is not).
+    const planned = new Set(all.flatMap((r) => r.units.flatMap((u) => u.cells.map(cellKey))));
+    const again = wasInterrupted.filter((j) => planned.has(j.key)).map((j) => j.key);
+    const dropped = wasInterrupted.filter((j) => !planned.has(j.key)).map((j) => j.key);
+    if (again.length) o.log(`  ${again.length} run(s) interrupted earlier will run again: ${again.join(', ')}`);
+    if (dropped.length) o.log(`  ${dropped.length} run(s) interrupted earlier are closed and not run again, their task being out of the pilot: ${dropped.join(', ')}`);
+  }
   if (o.dryRun || plannedCells.length === 0) return null;
 
   const awake = keepAwake(o.log);
