@@ -266,7 +266,7 @@ Every value a project writes replaces the machine's, key by key, with these exce
   A project rule with `replaces` needs `rules`, since it turns a preset rule off; under `add`, it is refused.
   A project rule that takes the place of a machine rule with `replaces` takes its `replaces` too, unless it names its own, so the preset rule the person turned off stays off.
   A project rule that replaces the preset rule a machine rule of the same model replaces takes that machine rule's place, the project's choice winning, as for `enable` and `disable`.
-  The project's choice also wins where its `replaces`, `enable` or `disable` meets the machine's:
+  The project's choice also wins where its `replaces`, `enable` or `disable` meets the machine's, an id a preset rule had before a rename naming the same rule as its current id:
   a project `enable` of a preset rule the machine replaced brings that rule back, and the machine's rule that replaced it is delivered as one of the model's own;
   a project `disable` of a preset rule the machine replaced changes nothing, since the rule is already off;
   and a project rule that replaces a preset rule drops the machine's `enable` or `disable` of it.
