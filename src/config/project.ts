@@ -48,8 +48,6 @@ export interface ProjectFile {
 export interface ProjectInput extends ProjectFile {
   /** true: trusted; false: declined with `noonsight untrust`; null: never decided. */
   readonly trusted: boolean | null;
-  /** The file's content, read instead of the file; rule files are still found next to the file. */
-  readonly content?: string;
 }
 
 /**

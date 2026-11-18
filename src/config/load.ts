@@ -335,7 +335,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   if (project.trusted === false) return alone('declined');
 
   const own: string[] = [];
-  const read = project.content !== undefined ? parseJson(project.content, own) : readJson(project.file, own, 'the project file is gone');
+  const read = readJson(project.file, own, 'the project file is gone');
   if (read !== undefined) own.push(...validateSchema(schema('noonsight-project.schema.json'), read));
   if (own.length) return alone('refused', own);
   const projectRaw = read as RawProject;

@@ -247,8 +247,9 @@ The machine's configuration decides how far a project may change it, with `proje
 | `rules` | Also change which rules a model receives: `use`, `enable`, `disable`, wildcard keys, and a rule with the id of one of the machine's rules, which replaces it; and set `scopes`, `session` and `on_undeclared` |
 | `all` | Also set `routing`, `classifier` and `subagents` |
 
-The default lets a trusted project add its rules and nothing else: it never removes or replaces one of the person's rules, never declares a model the person did not, never changes the model a task runs on, never spends usage on the classifier, and never answers a permission prompt.
+The default lets a trusted project add its rules and nothing else: it never removes or replaces one of the person's rules, never declares a model the person did not, never changes the model a task runs on, never turns the classifier on or changes its settings, and never answers a permission prompt.
 `rules` keeps the last three out, since they act beyond the text a model receives.
+A project rule written for a list of scopes can still make the person's classifier run, when it is on, for a task it would otherwise skip ([The classifier](#the-classifier)): the scope then changes what the model receives.
 A project that writes a key its level does not allow is refused, and the problem names the level the key needs.
 
 ### How the two files merge
