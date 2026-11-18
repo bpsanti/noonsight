@@ -67,6 +67,9 @@ When there are no rules to add, `claude` starts with its arguments unchanged:
 | No configuration file, or a refused configuration | Warns; `noonsight check` lists the problems |
 | `NOONSIGHT_DISABLE=1` | Nothing, and no log line; no routing either |
 
+The launcher reads the project configuration of the directory it runs in (`CLAUDE_PROJECT_DIR`, else its own working directory), as the hooks of the session it starts will ([Project configuration](configuration.md#project-configuration)).
+A project this account has not trusted, or one that is refused, adds a warning, and the machine's configuration applies alone.
+
 ## Routing
 
 With `routing.enabled` and the target `launcher` ([Routing](configuration.md#routing)), the launcher chooses the session's model and effort from its scope:

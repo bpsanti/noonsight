@@ -29,6 +29,7 @@ None is delivered where Claude Code already sends the same advice.
 
 It works on its own and alongside agent orchestrators.
 One configuration file serves the whole machine, for every Claude Code account on it.
+A repository can commit its own, `.noonsight/noonsight.json`, which applies over the machine's for the sessions that run in it once each person trusts the project with `noonsight trust`; by default a project can only add rules ([docs/configuration.md](docs/configuration.md#project-configuration)).
 
 ## Install
 

@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import { ConfigError, loadConfigDetails, type ConfigDetails } from '../../config/load.js';
 import { changesDelivery, comparePresets, describeChanges } from '../../config/preset-changes.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
+import { projectFields, projectFor, projectWarning } from '../../config/project.js';
 import { normalizeModel } from '../../core/normalize.js';
 import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
@@ -95,9 +96,11 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     // A machine-wide install reaches every account; an account that never set noonsight up is left alone.
     if (!ctx.env.NOONSIGHT_CONFIG && !fs.existsSync(file)) return '';
     record.config = file;
+    // The session's project: the directory Claude Code names for its hooks, else the input's cwd.
+    const project = projectFor(ctx.env.CLAUDE_PROJECT_DIR || str(input.cwd), file, state);
     let details: ConfigDetails;
     try {
-      details = loadConfigDetails(file, {}, ctx.env);
+      details = loadConfigDetails(file, { project }, ctx.env);
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
       // The call that started the subagent already warned, and logged that nothing was delivered; the
@@ -118,6 +121,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       );
     }
     const config = details.config;
+    Object.assign(record, projectFields(details.project));
     if (subagentEvent) {
       const sub = { env: ctx.env, home: ctx.home, now: ctx.now, state, parentPid: ctx.parentPid, file };
       const outcome =
@@ -161,11 +165,15 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
             () => launcherPrompt(ctx.env, commandLine),
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
-    const update = event === 'SessionStart' && input.source === 'startup' ? presetUpdate(details, result.state?.model ?? null, file, ctx.env) : null;
+    const startup = event === 'SessionStart' && input.source === 'startup';
+    const update = startup ? presetUpdate(details, result.state?.model ?? null, file, ctx.env) : null;
     if (update !== null) {
       result.record.preset_update = update.fields;
       result.record.warned = true;
     }
+    // A project left out is reported once, as the session starts.
+    const projectNote = startup ? projectWarning(details.project) : null;
+    if (projectNote !== null) result.record.warned = true;
     log(result.record);
     if (result.state) {
       const saved: DeliveryState = { ...result.state, at: ctx.now.toISOString() };
@@ -177,7 +185,10 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
         // Without the record, a later resume delivers again: the safe direction.
       }
     }
-    return output([...result.messages, ...(update !== null ? [update.message] : [])], result.context ? { hookEventName: event, additionalContext: result.context } : null);
+    return output(
+      [...result.messages, ...(update !== null ? [update.message] : []), ...(projectNote !== null ? [projectNote] : [])],
+      result.context ? { hookEventName: event, additionalContext: result.context } : null,
+    );
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     // The edit itself is done, and a warning after every edit would only repeat; the log keeps the error.

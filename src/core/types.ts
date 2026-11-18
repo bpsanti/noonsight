@@ -43,6 +43,8 @@ export interface Rule {
   readonly allModels?: true;
   /** Set on a user rule delivered in place of a preset rule: that rule's id, as the preset it is delivered from names it. */
   readonly replaces?: string;
+  /** Set on a user rule that came from the project's configuration, laid over the machine's. */
+  readonly project?: true;
 }
 
 /** What a declared model resolves to, after preset rules, enable, disable and add are applied. */

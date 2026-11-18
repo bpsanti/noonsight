@@ -16,6 +16,7 @@ Six hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`
 - **A configuration with any problem is refused whole.**
   The hook delivers nothing, warns the person, and logs `config-invalid`; `noonsight check` lists the problems.
   The result of an agent call under a refused configuration is logged as `config-invalid` too, without a second warning, and its subagent's start does nothing.
+  A project's configuration with a problem is refused alone: the hooks apply the machine's configuration as if there were no project ([Project configuration](configuration.md#a-project-with-a-problem)).
 - **It decides from what Claude Code itself uses.**
   The model comes from the hook input Claude Code sends, from noonsight's own record of the same session or of the same Claude Code process, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
   The decision log names the source every time.
@@ -96,6 +97,9 @@ When the launcher's rules are for another model, the hook delivers this model's 
 At `startup`, when the installed preset is not the version the configuration accepted (`preset_version`) and the package keeps a copy of that version, the person is warned when the update changes the session's model's rules: rules turned on or off, rules whose text, scopes, places or triggers changed (including those a user rule that replaces them takes), and `enable`, `disable` or `replaces` entries that name a rule the preset no longer has.
 Under `"on_preset_change": "warn"` the warning says what the session now receives; under `"hold"` the session keeps the accepted version's rules, and the warning says what accepting the installed version would change ([Preset updates](configuration.md#preset-updates)).
 A model the update leaves as it was gets no warning, nor does a start other than `startup`, and a failure in this comparison never costs the session its rules: `noonsight check` reports it.
+
+The session's project is `CLAUDE_PROJECT_DIR`, else the input's `cwd`, and every hook of the session lays the project's configuration over the machine's, when there is one and this account trusts it ([Project configuration](configuration.md#project-configuration)).
+At `startup`, a session in a project this account has not trusted is warned that only the machine's configuration applies and how to trust the project, and a session in a project whose configuration is refused is warned that it was refused; a project the account declined with `noonsight untrust`, or that `projects.allow` ignores, gives no warning.
 
 ## PostModelSwitch
 
@@ -322,6 +326,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `route_from`, `route_skipped` | For a route that consulted a row: whether it was the scope's row (`table`) or `default`, and the options passed over, with why |
 | `subagent_id`, `predicted`, `models_used`, `result` | For `agent-result`: the subagent's agent id, the model predicted for it, the models it switched between, and the check's `result` |
 | `install` | `managed` or `account`: which install ran the hook |
+| `project`, `project_status` | When the session's directory has a project configuration: the project directory, and what became of the project: `applied`, `untrusted`, `declined`, `ignored` (`"projects.allow": "none"`) or `refused` ([Project configuration](configuration.md#project-configuration)) |
 | `model`, `from_model` | The normalized model identifiers |
 | `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
 | `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
@@ -344,6 +349,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `problems` | For `config-invalid`, how many problems the configuration has |
 
 What each session last received is kept in `~/.local/state/noonsight/sessions/` and `processes/`, one small file per session id and per Claude Code process, and the triggers each session revealed in `triggers/`; files nobody wrote for 30 days are removed, and so are the system prompt files of `noonsight run` in `launch/`.
+This account's trust in each project is kept in `~/.local/state/noonsight/projects.json`, which `noonsight trust` and `noonsight untrust` write and nothing removes.
 The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-links/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
 
 ## Turning noonsight off
