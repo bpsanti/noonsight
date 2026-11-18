@@ -166,14 +166,19 @@ One that was already there, made while the watcher was off, or kept outside the 
 
 ### What it cannot cover
 
-Claude Code decides early which hooks the first session of a new login starts with, and in two cases that is before the watcher can write them.
+The watcher writes the hooks into a new configuration directory a fraction of a second after Claude Code creates it, before Claude Code shows its first screen.
+Whether the first session of the new login starts with them depends on when Claude Code reads its settings, which differs between the two ways of starting it.
+The behavior below was measured with Claude Code 2.1.327 on macOS ([verification](verification/claude-code.md#checked-live)).
 
-- **The first `claude -p` with a new configuration directory.**
-  Claude Code runs `SessionStart` right after it creates the directory, which can be before the watcher has written the hooks.
-  That first session starts without the rules.
-- **The first interactive session, when the theme is confirmed first.**
-  The session starts with the hooks that were in `settings.json` when the theme is confirmed on Claude Code's first screen.
-  If that happens before the watcher has written them, the session starts without the rules, and receives them after `/clear` or `/model`.
+- **The first interactive session receives the rules.**
+  An interactive session starts with the hooks that are in `settings.json` when the theme is confirmed on Claude Code's first screen.
+  The watcher has written them before that screen appears, so the first session received the rules in every run, even with the theme confirmed the moment it showed.
+  Only a watcher held up past that moment, such as on a heavily loaded machine, would leave the first session without them; the session then receives them after `/clear` or `/model`.
+- **The first `claude -p` receives the rules only when Claude Code waits for server-managed settings.**
+  `claude -p` reads `settings.json` as it starts, while the new directory has no hooks yet, and runs `SessionStart` with what it read then; it notices the hooks the watcher wrote only after that.
+  On a login whose organization delivers [server-managed settings](#why-it-is-the-default), Claude Code first waits for those settings and reads its settings files again, by which time the watcher has written the hooks, so the first `claude -p` receives the rules.
+  When Claude Code does not wait for server-managed settings, the first `claude -p` starts without the rules, and the next one receives them.
+  That case was measured with the fetch failing (the API address pointed at a closed port), not on a login that has no server-managed settings, such as a personal Pro or Max one.
 
 Every later session of that login receives the rules from its start.
 To close the gap entirely, for instance when logins are made by a script, create the configuration directory and run `noonsight install --account <dir>` before the first `claude` that uses it.
