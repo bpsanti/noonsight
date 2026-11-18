@@ -273,6 +273,57 @@ test('"replaces": a project needs "rules" to replace a preset rule, and a preset
   assert.match(unknown.project?.problems.join('\n') ?? '', /^\/models\/claude-sonnet-5-5\/add\/0\/replaces: preset "lab" has no rule "sonnet\/gone"/m);
 });
 
+test('"replaces" meets "enable" and "disable": the project\'s choice wins, and the project is not refused', () => {
+  const machine = (entry: Record<string, unknown>) =>
+    machineTree({ projects: { allow: 'rules' }, models: { 'claude-sonnet-5-5': { use: 'preset', ...entry }, 'claude-haiku-5-5': { use: 'preset' } } });
+  const sonnet = (d: ConfigDetails) => {
+    assert.equal(d.project?.status, 'applied', d.project?.problems.join('\n'));
+    return rulesOf(d, 'claude-sonnet-5-5', 'investigate');
+  };
+  const machineFinish = { add: [{ id: 'user/finish', file: 'own.md', replaces: 'sonnet/investigate' }] };
+  const projectFinish = { id: 'team/finish-work', file: 'team-sonnet.md' };
+
+  // The machine replaced sonnet/investigate. A project "enable" brings it back, and the machine's rule
+  // is delivered as one of the model's own; a project "disable" leaves the replacement as it is.
+  assert.deepEqual(sonnet(load(machine(machineFinish), projectTree({ models: { 'claude-sonnet-5-5': { enable: ['sonnet/investigate'] } } }))), [
+    'sonnet/general',
+    'sonnet/investigate',
+    'user/finish',
+  ]);
+  assert.deepEqual(sonnet(load(machine(machineFinish), projectTree({ models: { 'claude-sonnet-5-5': { disable: ['sonnet/investigate'] } } }))), [
+    'sonnet/general',
+    'user/finish',
+  ]);
+
+  // The machine turned a preset rule off, or an off-by-default one on; a project rule replacing it wins.
+  assert.deepEqual(
+    sonnet(
+      load(
+        machine({ disable: ['sonnet/investigate'] }),
+        projectTree({ models: { 'claude-sonnet-5-5': { add: [{ ...projectFinish, replaces: 'sonnet/investigate' }] } } }),
+      ),
+    ),
+    ['sonnet/general', 'team/finish-work'],
+  );
+  assert.deepEqual(
+    sonnet(
+      load(
+        machine({ enable: ['sonnet/progress-updates'] }),
+        projectTree({ models: { 'claude-sonnet-5-5': { add: [{ ...projectFinish, replaces: 'sonnet/progress-updates' }] } } }),
+      ),
+    ),
+    ['sonnet/general', 'sonnet/investigate', 'team/finish-work'],
+  );
+
+  // A conflict inside the project file itself is still refused, located in the project file.
+  const own = load(
+    machine({ add: [{ id: 'user/own', file: 'own.md' }, { id: 'user/two', file: 'two.md' }] }),
+    projectTree({ models: { 'claude-sonnet-5-5': { enable: ['sonnet/progress-updates'], add: [{ ...projectFinish, replaces: 'sonnet/progress-updates' }] } } }),
+  );
+  assert.equal(own.project?.status, 'refused');
+  assert.match(own.project?.problems.join('\n') ?? '', /^\/models\/claude-sonnet-5-5\/add\/0\/replaces: rule "sonnet\/progress-updates" is both replaced and enabled/m);
+});
+
 test('`noonsight models` shows a project rule that replaces a preset rule as a pair, from the project', () => {
   const machine = machineTree({ projects: { allow: 'rules' } });
   const repo = projectTree({ models: { 'claude-sonnet-5-5': { add: [{ id: 'team/finish-work', file: 'team-sonnet.md', replaces: 'sonnet/investigate' }] } } });

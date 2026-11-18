@@ -277,18 +277,35 @@ export function mergeProject(
   return { raw, problems, notes, origins };
 }
 
-/** A project entry merged into the machine's entry of the same "use". */
+/**
+ * A project entry merged into the machine's entry of the same "use", the project's choice winning
+ * where it meets one of the machine's "replaces": a project "enable" of a preset rule the machine
+ * replaced brings the rule back, and the machine's rule that replaced it stays as a rule of "add";
+ * a project "disable" of such a rule changes nothing; a project "replaces" drops the machine's
+ * "enable" or "disable" of the rule.
+ */
 function mergeEntry(
   mine: RawModelEntry,
   theirs: Partial<RawModelEntry>,
   use: RawModelEntry['use'],
   addRules: (list: readonly RawModelRule[] | undefined) => RawModelRule[],
 ): RawModelEntry {
+  const replacedBy = (list: readonly RawModelRule[] | undefined): Set<string> =>
+    new Set((list ?? []).flatMap((r) => (r.replaces === undefined ? [] : [r.replaces])));
+  const machineReplaces = replacedBy(mine.add);
+  const projectReplaces = replacedBy(theirs.add);
   const on = new Set(theirs.enable ?? []);
-  const off = new Set(theirs.disable ?? []);
-  const enable = unique([...(mine.enable ?? []).filter((id) => !off.has(id)), ...on]);
-  const disable = unique([...(mine.disable ?? []).filter((id) => !on.has(id)), ...off]);
+  const off = new Set((theirs.disable ?? []).filter((id) => !machineReplaces.has(id)));
+  const enable = unique([...(mine.enable ?? []).filter((id) => !off.has(id) && !projectReplaces.has(id)), ...on]);
+  const disable = unique([...(mine.disable ?? []).filter((id) => !on.has(id) && !projectReplaces.has(id)), ...off]);
   const add = addRules(theirs.add);
+  add.forEach((r, i) => {
+    if (r.replaces === undefined || !on.has(r.replaces) || projectReplaces.has(r.replaces)) return;
+    if (mine.add?.includes(r)) {
+      const { replaces: _replaces, ...rest } = r;
+      add[i] = rest;
+    } else delete r.replaces;
+  });
   return { use, ...(enable.length ? { enable } : {}), ...(disable.length ? { disable } : {}), ...(add.length || mine.add ? { add } : {}) };
 }
 

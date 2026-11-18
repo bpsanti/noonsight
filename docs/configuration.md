@@ -266,6 +266,10 @@ Every value a project writes replaces the machine's, key by key, with these exce
   A project rule with `replaces` needs `rules`, since it turns a preset rule off; under `add`, it is refused.
   A project rule that takes the place of a machine rule with `replaces` takes its `replaces` too, unless it names its own, so the preset rule the person turned off stays off.
   A project rule that replaces the preset rule a machine rule of the same model replaces takes that machine rule's place, the project's choice winning, as for `enable` and `disable`.
+  The project's choice also wins where its `replaces`, `enable` or `disable` meets the machine's:
+  a project `enable` of a preset rule the machine replaced brings that rule back, and the machine's rule that replaced it is delivered as one of the model's own;
+  a project `disable` of a preset rule the machine replaced changes nothing, since the rule is already off;
+  and a project rule that replaces a preset rule drops the machine's `enable` or `disable` of it.
 - **A model entry merges when it keeps the machine's `use`.**
   An entry without `use`, or with the machine's, is merged into the machine's entry: `enable` and `disable` by rule id, the project's choice winning, and `add` as above.
   An entry with another `use` replaces the machine's entry, so the machine's `enable`, `disable` and `add` for that model no longer apply in the project.
