@@ -132,8 +132,8 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
 
 /**
  * The preset version the configuration accepted against the installed one, and, model by model, what
- * the installed version changes: rules turned on or off, renamed or changed, and enable or disable
- * entries that no longer name a rule.
+ * the installed version changes: rules turned on or off, renamed or changed, and enable, disable or
+ * replaces entries that no longer name a rule.
  */
 function checkPreset(details: ConfigDetails, env: Env, add: (level: Level, text: string) => void): void {
   const v = details.presetVersions;
