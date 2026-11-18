@@ -1,0 +1,432 @@
+{
+  "$schema": "../../schema/preset.schema.json",
+  "id": "claude",
+  "version": "1.3.0",
+  "claude_code": {
+    "version": "2.1.325",
+    "checked": "2026-11-16"
+  },
+  "scopes": {
+    "investigate": {
+      "description": "Open-ended investigation: diagnosing a root cause, debugging an outage, deciding an architecture, or other long work of many steps.",
+      "source": {
+        "url": "https://code.claude.com/docs/en/model-config",
+        "section": "Work with Fable",
+        "date": "2026-11-16"
+      }
+    },
+    "build": {
+      "description": "Implementation that needs reasoning: a fix whose cause or solution is not obvious, a change of contract, or a large refactor.",
+      "source": {
+        "url": "https://platform.claude.com/docs/en/about-claude/models/choosing-a-model",
+        "section": "Model selection matrix",
+        "date": "2026-11-16"
+      }
+    },
+    "review": {
+      "description": "Review of code, or of a result that is already done.",
+      "source": {
+        "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5",
+        "section": "Capabilities relevant to prompting",
+        "date": "2026-11-16"
+      }
+    },
+    "routine": {
+      "description": "A well-scoped change that can be described precisely: a mechanical edit, a configuration change, or documentation.",
+      "source": {
+        "url": "https://www.anthropic.com/claude-sonnet-5-5",
+        "section": "Opening paragraphs, before the Performance heading",
+        "date": "2026-11-16"
+      }
+    },
+    "digest": {
+      "description": "Reading material that already exists and condensing it: a summary, an extraction, a classification, or a search.",
+      "source": {
+        "url": "https://platform.claude.com/docs/en/models/overview",
+        "section": "Latest models",
+        "date": "2026-11-16"
+      }
+    }
+  },
+  "routing": {
+    "table": {
+      "investigate": {
+        "route": [
+          { "model": "fable", "effort": "high" },
+          { "model": "opus", "effort": "high" }
+        ],
+        "basis": "Claude Code describes the fable alias as being for your hardest and longest-running tasks, and the Fable 5.2 guide says high suits hard coding, research, agentic work and long unattended runs. Opus at high comes second, for a configuration that does not declare Fable, whose usage can bill to usage credits.",
+        "sources": [
+          { "url": "https://code.claude.com/docs/en/model-config", "section": "Model aliases", "date": "2026-11-16" },
+          { "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2", "section": "Calibrate effort", "date": "2026-11-16" },
+          { "url": "https://code.claude.com/docs/en/model-config", "section": "Fable and usage credits", "date": "2026-11-16" }
+        ]
+      },
+      "build": {
+        "route": [{ "model": "opus", "effort": "high" }],
+        "basis": "The Fable 5.2 announcement recommends starting with Opus 5.5 for most coding and knowledge tasks, and Claude Code gives high for work where verification matters or edge cases are likely, such as fixing a bug in an existing codebase.",
+        "sources": [
+          { "url": "https://www.anthropic.com/claude-fable-and-mythos-5-2", "section": "When to use Claude Fable 5.2 and Mythos 5.2", "date": "2026-11-16" },
+          { "url": "https://code.claude.com/docs/en/model-config", "section": "Choose an effort level", "date": "2026-11-16" }
+        ]
+      },
+      "review": {
+        "route": [{ "model": "opus", "effort": "high" }],
+        "basis": "The Opus 5.5 guide reports stronger code review, with more bugs caught and fewer false alarms, and Claude Code gives high for work where verification matters.",
+        "sources": [
+          { "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5", "section": "Capabilities relevant to prompting", "date": "2026-11-16" },
+          { "url": "https://code.claude.com/docs/en/model-config", "section": "Choose an effort level", "date": "2026-11-16" }
+        ]
+      },
+      "routine": {
+        "route": [{ "model": "sonnet", "effort": "medium" }],
+        "basis": "Sonnet 5.5 is described as strongest at well-scoped everyday tasks, and its guide says to start at medium for well-specified agentic coding tasks.",
+        "sources": [
+          { "url": "https://www.anthropic.com/claude-sonnet-5-5", "section": "Opening paragraphs, before the Performance heading", "date": "2026-11-16" },
+          { "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5", "section": "Calibrate effort", "date": "2026-11-16" }
+        ]
+      },
+      "digest": {
+        "route": {
+          "launcher": [{ "model": "sonnet", "effort": "medium" }],
+          "subagents": [{ "model": "haiku", "effort": "medium" }]
+        },
+        "basis": "Haiku 5.5 is described as pairing well with Opus 5.5 and Sonnet 5.5 as a subagent, while those two remain better choices for complex agentic coding tasks, so a session that digests runs on Sonnet and a subagent on Haiku. The Haiku 5.5 guide makes medium the starting point and warns that at low it is more likely to skip a search, stop early or skip a check.",
+        "sources": [
+          { "url": "https://www.anthropic.com/claude-haiku-5-5", "section": "Opening paragraphs, before the Performance heading; Further updates", "date": "2026-11-16" },
+          { "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5", "section": "Use effort to control thinking", "date": "2026-11-16" },
+          { "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5", "section": "Calibrate effort", "date": "2026-11-16" }
+        ]
+      }
+    }
+  },
+  "models": {
+    "claude-fable-5-2": {
+      "rules": [
+        {
+          "id": "fable-5-2/finish-work",
+          "file": "rules/fable-5-2/finish-work.md",
+          "scopes": [
+            "investigate",
+            "build"
+          ],
+          "where": [
+            "subagent"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2",
+            "section": "Finish the whole task",
+            "date": "2026-11-16"
+          },
+          "effect": "In replays of recorded sessions from an agentic coding product at medium effort, a version of this text left about half as many sessions ending with work that could have been continued.",
+          "cost": "Output tokens rose by about 30 percent."
+        },
+        {
+          "id": "fable-5-2/low-context-report",
+          "file": "rules/fable-5-2/low-context-report.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "unattended",
+            "subagent"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2",
+            "section": "Make reports easy to follow",
+            "date": "2026-11-16"
+          },
+          "effect": "On agentic tasks, final reports were less dense and used fewer semicolons; on workflow automation tasks, sentences were shorter.",
+          "cost": "Not reported by the source."
+        },
+        {
+          "id": "fable-5-2/code-ownership",
+          "file": "rules/fable-5-2/code-ownership.md",
+          "scopes": [
+            "build"
+          ],
+          "where": [
+            "session",
+            "unattended"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2",
+            "section": "Say who owns the code",
+            "date": "2026-11-16"
+          },
+          "effect": "On small coding tasks, duplicated code was consolidated into one shared function in about 75 percent of runs, against under 10 percent without the sentence.",
+          "cost": "Output tokens rose by about 70 to 80 percent, and the model made changes nobody asked for, many of them new tests and documentation, and in some runs changed how an existing feature behaves."
+        },
+        {
+          "id": "fable-5-2/progress-updates",
+          "file": "rules/fable-5-2/progress-updates.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "session"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2",
+            "section": "Keep users informed during long turns: Signal intent",
+            "date": "2026-11-16"
+          },
+          "effect": "On coding tasks, the model wrote a message before its first tool call in every run.",
+          "cost": "Output tokens per task rose by roughly 20 percent."
+        }
+      ]
+    },
+    "claude-opus-5-5": {
+      "rules": [
+        {
+          "id": "opus-5-5/unattended-run",
+          "file": "rules/opus-5-5/unattended-run.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "unattended"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5",
+            "section": "Unattended agentic runs",
+            "date": "2026-11-16"
+          },
+          "effect": "Fewer turns that end early in unattended agent loops: the model carries on where it would otherwise stop to check in. The source says to leave it out where someone is there to answer.",
+          "cost": "Somewhat more tool calls and output tokens per task; the source gives no figure."
+        },
+        {
+          "id": "opus-5-5/progress-updates",
+          "file": "rules/opus-5-5/progress-updates.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "session"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5",
+            "section": "User-facing progress updates (the third lever)",
+            "date": "2026-11-16"
+          },
+          "effect": "More frequent and predictable updates, such as a line of intent before the first tool call and a recap at the end; helps most where a person is in the loop.",
+          "cost": "Not reported by the source."
+        },
+        {
+          "id": "opus-5-5/explore-before-acting",
+          "file": "rules/opus-5-5/explore-before-acting.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "session",
+            "unattended"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5",
+            "section": "Explore context in multiapp workflows",
+            "date": "2026-11-16"
+          },
+          "effect": "On automation tasks across several connected apps, noticeably more tasks were completed correctly, at medium and at max effort.",
+          "cost": "Slightly more tool calls and tokens. Because the model acts on what it finds, keep untrusted content out of what it searches."
+        }
+      ]
+    },
+    "claude-sonnet-5-5": {
+      "rules": [
+        {
+          "id": "sonnet-5-5/carry-through",
+          "file": "rules/sonnet-5-5/carry-through.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "unattended",
+            "subagent"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5",
+            "section": "Steer initiative and scope: Carrying work through",
+            "date": "2026-11-16"
+          },
+          "effect": "At low and medium effort, the model carries more of the work through instead of checking in before it is done.",
+          "cost": "Sessions at low and medium effort run longer and cost more; the source gives no figure."
+        },
+        {
+          "id": "sonnet-5-5/stay-in-scope",
+          "file": "rules/sonnet-5-5/stay-in-scope.md",
+          "scopes": [
+            "routine"
+          ],
+          "where": [
+            "session",
+            "unattended",
+            "subagent"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5",
+            "section": "Steer initiative and scope: Unrequested additions when coding",
+            "date": "2026-11-16"
+          },
+          "effect": "Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.",
+          "cost": "Not reported by the source."
+        },
+        {
+          "id": "sonnet-5-5/verify-changes",
+          "file": "rules/sonnet-5-5/verify-changes.md",
+          "scopes": [
+            "investigate",
+            "build",
+            "routine"
+          ],
+          "where": [
+            "session",
+            "unattended",
+            "subagent"
+          ],
+          "triggers": [
+            "code-edit"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5",
+            "section": "Verification on coding tasks",
+            "date": "2026-11-16"
+          },
+          "effect": "At low effort, skipped or superficial checks became rare, with no measurable change in task quality.",
+          "cost": "Slightly higher cost per task."
+        },
+        {
+          "id": "sonnet-5-5/no-self-review-rounds",
+          "file": "rules/sonnet-5-5/no-self-review-rounds.md",
+          "scopes": [
+            "build",
+            "routine"
+          ],
+          "where": [
+            "session",
+            "unattended",
+            "subagent"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5",
+            "section": "Steer initiative and scope: Thoroughness at xhigh and max effort",
+            "date": "2026-11-16"
+          },
+          "effect": "On coding tasks at max effort, the model stopped launching reviewer subagents, with no change in quality; review rounds the main agent starts itself became less frequent. It only matters at xhigh and max effort.",
+          "cost": "Session cost fell by about a third: a saving, not a cost."
+        },
+        {
+          "id": "sonnet-5-5/ideas-first",
+          "file": "rules/sonnet-5-5/ideas-first.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "session"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5",
+            "section": "Steer initiative and scope: Open-ended requests",
+            "date": "2026-11-16"
+          },
+          "effect": "On open-ended requests, the model gives ideas or a plan and stops, instead of starting to build.",
+          "cost": "Not reported by the source."
+        },
+        {
+          "id": "sonnet-5-5/check-current-facts",
+          "file": "rules/sonnet-5-5/check-current-facts.md",
+          "scopes": [
+            "investigate",
+            "digest"
+          ],
+          "where": [
+            "session",
+            "unattended",
+            "subagent"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5",
+            "section": "Tool use in chat and knowledge work",
+            "date": "2026-11-16"
+          },
+          "effect": "The model searches for details that may have changed since its training instead of answering from training knowledge; matters most for research and support work.",
+          "cost": "Not reported by the source."
+        }
+      ]
+    },
+    "claude-haiku-5-5": {
+      "rules": [
+        {
+          "id": "haiku-5-5/carry-through",
+          "file": "rules/haiku-5-5/carry-through.md",
+          "scopes": [
+            "*"
+          ],
+          "where": [
+            "unattended",
+            "subagent"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5",
+            "section": "Prevent early stopping in long agent prompts",
+            "date": "2026-11-16"
+          },
+          "effect": "Fewer early stops that hand the task back to the user, which appear with a long coding-agent system prompt at low effort.",
+          "cost": "Not reported for the text. For comparison, raising effort from low to medium roughly halved early stopping and more than doubled output tokens."
+        },
+        {
+          "id": "haiku-5-5/verify-changes",
+          "file": "rules/haiku-5-5/verify-changes.md",
+          "scopes": [
+            "investigate",
+            "build",
+            "routine"
+          ],
+          "where": [
+            "session",
+            "unattended",
+            "subagent"
+          ],
+          "triggers": [
+            "code-edit"
+          ],
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5",
+            "section": "Tell coding agents to verify their changes",
+            "date": "2026-11-16"
+          },
+          "effect": "The model checked its changes more often, and its performance improved.",
+          "cost": "More tokens; the source gives no figure."
+        },
+        {
+          "id": "haiku-5-5/search-recent-facts",
+          "file": "rules/haiku-5-5/search-recent-facts.md",
+          "scopes": [
+            "investigate",
+            "digest"
+          ],
+          "where": [
+            "session",
+            "unattended",
+            "subagent"
+          ],
+          "enabled": false,
+          "source": {
+            "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5",
+            "section": "Accurate search results",
+            "date": "2026-11-16"
+          },
+          "effect": "More searches on questions whose answers had changed; on prompts that need no search, it added searches in only 0 to 3 percent of tries. The source pairs it with today's date in the context.",
+          "cost": "Only the extra searches; the source gives no other figure."
+        }
+      ]
+    }
+  }
+}

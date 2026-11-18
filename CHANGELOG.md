@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The `claude` preset, version 1.3.1: `haiku-5-5/carry-through` and `sonnet-5-5/stay-in-scope` end with a sentence that makes what the project's own instructions explicitly require, in its instruction files or in the documents they point to, part of the request, and says a convention they only describe is not a requirement.
+  Both rules tell the model to leave out what nobody requested, and a requirement that sat in a document the project's CLAUDE.md points to was often skipped as unrequested.
+  In 610 runs of `experiments/rules`, Haiku with the previous wording met such a requirement in 44 of 60 runs and with this one in 59 of 60, and added nothing unrequested in 60 of 60 runs of a task where the project only describes a convention; a shorter wording reached 30 of 30 but added unrequested changes in 12 of 30.
+  Sonnet showed no measurable change; the sentence is there for consistency.
+  `experiments/rules/results/2026-11-18/README.md` records the run.
+  `presets/claude/SOURCES.md` records the deviation from the guides' text; `noonsight check` reports the change to a configuration last checked against 1.3.0.
+
 - A conversation resumed with `claude --continue` or `claude --resume` and an explicit `--model` now gets the rules of the model it runs on.
   Claude Code reports no model when it resumes a conversation, and runs it on the model its `--model`, `ANTHROPIC_MODEL` or `model` setting names, falling back to the conversation's own model only when none names one; the hook took the model from the session's record first, so a conversation that last ran on Haiku and was resumed with `--model sonnet` kept Haiku's rules and logged `already-delivered`, without a warning.
   At `resume` and `fork` the launch now comes before the record, and when the record is for another model, the new model's rules come with a note that the earlier ones no longer apply, as after `/model`; the log line names the record's model in `from_model`.
