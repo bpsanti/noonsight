@@ -5,10 +5,11 @@
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session beyond a bound: it reads local files only and never
 //     the network itself. It starts no process, except `ps` on macOS to read the Claude Code command
-//     line when nothing else names the session's model (launch.ts), or when `noonsight run` started the
-//     session (launcher.ts); `git ls-files`, stopped after 3 seconds, for an edit of a code file until
-//     the session reveals code-edit (code-edit.ts); and, with classifier.mode on, the classifier for
-//     an agent call, stopped after classifier.timeout_ms (classifier.ts).
+//     line when the input does not name the session's model and, except at a resume, no record does
+//     (launch.ts), or when `noonsight run` started the session (launcher.ts); `git ls-files`, stopped
+//     after 3 seconds, for an edit of a code file until the session reveals code-edit (code-edit.ts);
+//     and, with classifier.mode on, the classifier for an agent call, stopped after
+//     classifier.timeout_ms (classifier.ts).
 //   - Prints nothing, or one JSON object: hookSpecificOutput for Claude Code (session or subagent
 //     context, or a subagent call routing changed), systemMessage for the person.
 //   - Writes one line to the decision log for every decision it makes.
@@ -231,9 +232,14 @@ interface Outcome {
  *   resume, fork    deliver only when the model or the rules changed since this session's record
  *   anything else   deliver: delivering twice costs little, missing a delivery is the defect
  *
- * The model comes from the input; when Claude Code leaves it out, from the record of the same
- * session or, after /clear and compaction, of the same Claude Code process; and when neither knows
- * it, as in every `claude -p` run, from what the session was started with (launch.ts).
+ * The model comes from the input. When Claude Code leaves it out, after /clear and compaction it comes
+ * from the record of the same session or of the same Claude Code process, which keeps the model a
+ * /model since the launch chose; and when neither knows it, as in every `claude -p` run, from what the
+ * session was started with (launch.ts). A resumed or forked conversation runs in a new Claude Code
+ * process, which takes its model from what it was started with, as any start does, and keeps the
+ * conversation's own model only when nothing it was started with names one; so there the launch comes
+ * first and the session's record after it. When the model is not the one the record holds, the
+ * conversation still holds that model's rules, and as at a /model switch a note says they no longer apply.
  *
  * A session `noonsight run` started already holds rules in its system prompt. Claude Code renders the
  * system prompt from the current launch for a new conversation, after /clear and after compaction,
@@ -256,24 +262,20 @@ function sessionStart(
   readLauncher: () => LauncherPrompt | null,
 ): Outcome {
   const source = str(input.source);
+  const resumed = source === 'resume' || source === 'fork';
   const reported = normalizeModel(str(input.model));
   const recorded = session?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
-  const launch = reported || recorded ? null : readLaunch();
-  const launched = launch?.kind === 'found' ? launch.model : null;
-  const model = reported || recorded || launched;
-  const modelSource = reported
-    ? 'hook-input'
-    : recorded
-      ? session?.model
-        ? 'session-record'
-        : 'process-record'
-      : launch?.kind === 'found'
-        ? launch.source
-        : null;
+  const launch = reported || (recorded && !resumed) ? null : readLaunch();
+  const launched = launch?.kind === 'found' ? launch : null;
+  const fromLaunch = !reported && launched !== null && (resumed || !recorded);
+  const model = reported || (fromLaunch ? launched.model : recorded);
+  const modelSource = reported ? 'hook-input' : fromLaunch ? launched.source : recorded ? (session?.model ? 'session-record' : 'process-record') : null;
   const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const repeat = (source === 'resume' || source === 'fork') && session !== null && session.model === decision.model && session.sha256 === sha;
+  const repeat = resumed && session !== null && session.model === decision.model && session.sha256 === sha;
+  // The model the resumed conversation's rules were for, when they were for another model.
+  const previous = resumed && session !== null && session.status === 'matched' && decision.model !== null && session.model !== decision.model ? session.model : null;
 
   const launcher = source === 'startup' || source === 'clear' || source === 'compact' ? readLauncher() : null;
   // The launcher's system prompt holds the rules for the session's scope; it never holds those a
@@ -284,7 +286,8 @@ function sessionStart(
   const sent = inPrompt ? (added?.status === 'matched' ? added : null) : decision.status === 'matched' ? decision : null;
   const otherModel = launcher !== null && !inPrompt && launcher.model !== null && launcher.model !== decision.model ? launcher.model : null;
   const rules = sent !== null && !repeat ? sent.text : null;
-  const note = otherModel !== null ? launcherNote(otherModel, decision.model ?? '') : null;
+  const note =
+    previous !== null ? switchNote(previous, decision.model ?? '') : otherModel !== null ? launcherNote(otherModel, decision.model ?? '') : null;
   const parts = [...(note ? [note] : []), ...(rules ? [rules] : [])];
   const messages = repeat
     ? []
@@ -304,6 +307,7 @@ function sessionStart(
       ...choiceFields(where.scope, where.place),
       ...triggerFields(where.triggers),
       model_source: modelSource,
+      ...(previous !== null ? { from_model: previous } : {}),
       ...launchFields(launch),
       ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),
       delivered: repeat ? 'already-delivered' : rules ? (note ? 'rules+note' : 'rules') : inPrompt ? 'launcher' : note ? 'note' : 'nothing',
