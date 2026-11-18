@@ -284,7 +284,9 @@ export async function runCell(
   const session = decisions.find((d) => d.event === 'session-start');
   // Without the hook's decision the run cannot say what it received, and without a result event it never reached the model.
   if (session && hitUsageLimit(stream)) return { record: null, failure: "the account's usage limit", cost_usd: u.cost_usd, usage_limit: true };
-  if (!session || u.outcome === 'no-result') {
+  // A run stopped at the task's own time limit is an outcome (unresolved), as the pre-registration says, not a failure to retry.
+  const timedOut = session !== undefined && /AgentTimeoutError/.test(trial.error ?? '');
+  if (!session || (u.outcome === 'no-result' && !timedOut)) {
     const why = !session ? 'noonsight logged no session start' : 'Claude Code reported no result';
     return { record: null, failure: `${why}${trial.error ? `; ${trial.error}` : ''}`, cost_usd: u.cost_usd };
   }
@@ -315,7 +317,7 @@ export async function runCell(
       rules: session.rules ?? [],
       sha256: session.sha256 ?? null,
     },
-    outcome: u.outcome,
+    outcome: timedOut && u.outcome === 'no-result' ? 'agent_timeout' : u.outcome,
     cost_usd: u.cost_usd,
     cost_counted_usd: u.cost_usd ?? budget,
     tokens: u.tokens,
@@ -497,6 +499,11 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
     const key = cellKey(cell);
     const budget = o.plan.models[cell.model]?.budget_usd ?? 0;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      // A retry is a new run: none starts after the night's end time; the cell stays open for the next night.
+      if (attempt > 1 && o.until && Date.now() >= o.until.getTime()) {
+        o.log(`leave ${key}: the night's end time has passed; it runs again on the next night`);
+        return;
+      }
       append(journalFile, { event: 'start', key, night, at: new Date().toISOString(), budget_usd: budget } satisfies JournalLine);
       o.log(`start ${key}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
       const left = o.stopBy ? o.stopBy.getTime() - Date.now() : 3 * 60 * 60 * 1000;

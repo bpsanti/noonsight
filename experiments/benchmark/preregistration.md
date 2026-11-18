@@ -226,3 +226,7 @@ Mechanism signals, as in the study's design:
   When its planned round ends before 05:30 and the account is above its floor, the session goes on into the next round as any night does.
 - 2026-11-17, 22:50 local: the judge's budget per graded answer rises from US$ 0.50 to US$ 1.50 (US$ 0.50 per vote), because the three votes on the first review answer each stopped at their budget before answering; a grade stopped that way is no grade and is asked again.
 - 2026-11-18, 03:28 local: when the extra session stopped at its night's budget, the author had the pilot go straight on, on the same account and with the same limits and no quota floor, into the next round (`claudemd`, round 1), so that the account's week would not end unused; it runs as a new night of the runner, with that night's own budget.
+- 2026-11-18, after the night of the `claudemd` round: two faults of the runner, fixed the same morning.
+  A run stopped at its task's agent time limit was treated as a failed attempt and tried again, though section 10 counts time limits as outcomes; it is now recorded as an unresolved run with the outcome `agent_timeout`.
+  It happened once, to `routine.pytorch-model-recovery.haiku.claudemd.1`: its first attempt reached the 900-second limit, and the recorded result is a second attempt, unresolved, which the runner also started at 05:39 local, after the night's 05:30 end time, because the end time was checked only before a batch, not before a retry; it ended at 05:41, before the account's new week.
+  A retry now starts only before the night's end time.
