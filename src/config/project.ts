@@ -159,9 +159,20 @@ export interface ProjectMerge {
   readonly origins: WeakMap<RawUserRule, RuleOrigin>;
 }
 
+/** Whether `file`, once symlinks are followed, is inside `dir`; a file that cannot be resolved is judged by its path. */
+function insideProject(dir: string, file: string): boolean {
+  let rel: string;
+  try {
+    rel = path.relative(fs.realpathSync(dir), fs.realpathSync(file));
+  } catch {
+    rel = path.relative(dir, file);
+  }
+  return rel !== '' && rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+}
+
 /**
  * Lay a project file over the machine's configuration; the project's rule files are resolved
- * against `baseDir`, the project file's directory. Every value the project writes replaces the
+ * against `baseDir`, the project file's directory, and must stay inside `projectDir`. Every value the project writes replaces the
  * machine's, key by key, with these exceptions:
  *   - rule lists ("all_models.add", "models.<id>.add") add up, the machine's rules first; above
  *     "add", a project rule with the id of a machine rule in the same list replaces it in its place;
@@ -173,7 +184,13 @@ export interface ProjectMerge {
  * An entry without "use" for a model the machine does not declare with "preset" or "custom" leaves
  * the model as the machine declares it, and is reported as a note.
  */
-export function mergeProject(machine: RawConfig, project: RawProject, allow: Exclude<ProjectAllow, 'none'>, baseDir: string): ProjectMerge {
+export function mergeProject(
+  machine: RawConfig,
+  project: RawProject,
+  allow: Exclude<ProjectAllow, 'none'>,
+  baseDir: string,
+  projectDir: string,
+): ProjectMerge {
   const problems: string[] = [];
   const notes: string[] = [];
   const origins = new WeakMap<RawUserRule, RuleOrigin>();
@@ -193,6 +210,8 @@ export function mergeProject(machine: RawConfig, project: RawProject, allow: Exc
     const out = [...(base ?? [])];
     (added ?? []).forEach((u, i) => {
       const rule: RawUserRule = { ...u, file: path.resolve(baseDir, u.file) };
+      if (path.isAbsolute(u.file) || !insideProject(projectDir, rule.file))
+        problems.push(`${at}/${i}/file: "${u.file}" is outside the project directory ${projectDir}; a project rule file must be a relative path that stays inside it`);
       origins.set(rule, { at: `${at}/${i}`, file: u.file });
       // Only one of the machine's rules is replaced; a project rule that repeats an id is left for the
       // loader to report, as a repeated id always is.

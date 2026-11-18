@@ -183,6 +183,43 @@ test('a project with a problem of its own is refused alone: a bad schema, a miss
   assert.match(load(machine, broken).project?.problems[0] ?? '', /not valid JSON/);
 });
 
+test('a project rule file must stay inside the project directory, symlinks followed; the machine\'s may be anywhere', () => {
+  const outside = tempTree({ 'secret.md': 'Account secret. SECRET-OUTSIDE-6093' });
+  const secret = path.join(outside, 'secret.md');
+  const machine = machineTree({ all_models: { add: [{ id: 'user/far', file: secret }] } });
+
+  const escape = projectTree({});
+  fs.writeFileSync(
+    path.join(escape, '.noonsight', 'noonsight.json'),
+    JSON.stringify({ version: 1, all_models: { add: [{ id: 'team/x', file: path.relative(path.join(escape, '.noonsight'), secret) }] } }),
+  );
+  const absolute = projectTree({ all_models: { add: [{ id: 'team/x', file: secret }] } });
+  // An absolute path is refused even when it names a file inside the project.
+  const absoluteInside = projectTree({});
+  fs.writeFileSync(
+    path.join(absoluteInside, '.noonsight', 'noonsight.json'),
+    JSON.stringify({ version: 1, all_models: { add: [{ id: 'team/x', file: path.join(absoluteInside, '.noonsight', 'team.md') }] } }),
+  );
+  const linked = projectTree({ all_models: { add: [{ id: 'team/x', file: 'linked.md' }] } });
+  fs.symlinkSync(secret, path.join(linked, '.noonsight', 'linked.md'));
+
+  for (const dir of [escape, absolute, absoluteInside, linked]) {
+    const d = load(machine, dir);
+    assert.equal(d.project?.status, 'refused', dir);
+    assert.match(d.project?.problems.join('\n') ?? '', /\/all_models\/add\/0\/file: .* is outside the project directory/);
+    // The machine's rules, its own absolute path outside every project included, still apply.
+    assert.deepEqual(rulesOf(d, 'claude-sonnet-5-5'), ['sonnet/general', 'user/far', 'user/own']);
+  }
+
+  // A symlink that stays inside the project, even out of .noonsight/, still works.
+  const inside = projectTree({ all_models: { add: [{ id: 'team/x', file: 'inside.md' }] } }, { 'docs/team.md': `Shared. ${TEAM}` });
+  fs.symlinkSync(path.join(inside, 'docs', 'team.md'), path.join(inside, '.noonsight', 'inside.md'));
+  const ok = load(machine, inside);
+  assert.equal(ok.project?.status, 'applied');
+  const text = resolve(ok.config, { model: 'claude-sonnet-5-5', place: 'session' });
+  assert.match(text.status === 'matched' ? text.text : '', new RegExp(TEAM));
+});
+
 test('a machine configuration with a problem is refused whatever the project', () => {
   const machine = machineTree({ models: { 'claude-sonnet-5-5': { use: 'custom', add: [{ id: 'user/gone', file: 'gone.md' }] } } });
   assert.throws(() => load(machine, projectTree({ all_models: { add: [team] } })), (e: unknown) => e instanceof ConfigError && e.file === machine);
@@ -362,7 +399,12 @@ test('the project schema is the configuration schema without the preset keys and
   for (const key of machineKeys) assert.deepEqual(project.properties[key], machine.properties[key], key);
   const { modelEntry: projectEntry, ...projectDefs } = project.$defs;
   const { modelEntry: machineEntry, ...machineDefs } = machine.$defs;
-  assert.deepEqual(projectDefs, machineDefs);
+  // Only the description of a rule's file differs: a project's must stay inside the project.
+  const withoutFileText = (defs: any): any => ({
+    ...defs,
+    userRule: { ...defs.userRule, properties: { ...defs.userRule.properties, file: { ...defs.userRule.properties.file, description: undefined } } },
+  });
+  assert.deepEqual(withoutFileText(projectDefs), withoutFileText(machineDefs));
   assert.deepEqual(machineEntry.required, ['use']);
   assert.equal(projectEntry.required, undefined);
   assert.deepEqual(projectEntry.properties.use.enum, machineEntry.properties.use.enum);

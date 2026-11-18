@@ -210,6 +210,8 @@ The file is `.noonsight/noonsight.json`, with its rule files, and it is laid ove
 The schema in `schema/noonsight-project.schema.json` is the authority on its shape.
 It takes the keys of the machine's configuration, except `preset`, `preset_version` and `on_preset_change`, which follow the noonsight installed on each machine, and `projects`, which only the machine decides; and a model entry may leave `use` out.
 Paths inside it are relative to the file itself, as in the machine's file, so the rules of the example are in `.noonsight/rules/`.
+Unlike the machine's file, a project's rule file must be a relative path that stays inside the project directory, the one that holds `.noonsight/`, once symlinks are followed; a project that names another file is refused.
+A trusted project must not read other files of the account into the model's context, and a path outside the repository exists only on one person's machine, so it would break for everyone else.
 
 ### Which project a session is in
 
@@ -248,8 +250,9 @@ The machine's configuration decides how far a project may change it, with `proje
 | `all` | Also set `routing`, `classifier` and `subagents` |
 
 The default lets a trusted project add its rules and nothing else: it never removes or replaces one of the person's rules, never declares a model the person did not, never changes the model a task runs on, never turns the classifier on or changes its settings, and never answers a permission prompt.
-`rules` keeps the last three out, since they act beyond the text a model receives.
 A project rule written for a list of scopes can still make the person's classifier run, when it is on, for a task it would otherwise skip ([The classifier](#the-classifier)): the scope then changes what the model receives.
+`rules` still keeps `routing`, `classifier` and `subagents` out, since they act beyond the text a model receives.
+Its scopes and model declarations can still change what those settings do when the person's routing is on: a scope's matchers decide which routing row a task takes, and whether the classifier is asked, and a model the project declares can make a routing option apply that did not.
 A project that writes a key its level does not allow is refused, and the problem names the level the key needs.
 
 ### How the two files merge

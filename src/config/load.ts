@@ -340,7 +340,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   if (own.length) return alone('refused', own);
   const projectRaw = read as RawProject;
   // Paths in the project file are relative to the file itself, as in the configuration.
-  const merged = mergeProject(machine, projectRaw, allow, path.dirname(project.file));
+  const merged = mergeProject(machine, projectRaw, allow, path.dirname(project.file), project.dir);
   if (merged.problems.length) return alone('refused', merged.problems, projectRaw);
   try {
     // The merged configuration is checked against the configuration's schema too: a project entry

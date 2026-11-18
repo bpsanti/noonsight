@@ -252,7 +252,7 @@
       "properties": {
         "id": { "$ref": "#/$defs/ruleId" },
         "file": {
-          "description": "Path to the rule text, relative to this configuration file or absolute.",
+          "description": "Path to the rule text, relative to this configuration file. It must stay inside the project directory, symlinks followed: a trusted project must not read other files of the account into the model's context, and a path outside the repository exists only on one person's machine.",
           "type": "string",
           "minLength": 1
         },
