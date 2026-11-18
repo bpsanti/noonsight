@@ -43,7 +43,7 @@ The preset also suggests a routing table, which applies only when the user turns
 {
   "$schema": "https://unpkg.com/noonsight@0/schema/noonsight.schema.json",
   "version": 1,
-  "preset_version": "1.3.0",
+  "preset_version": "1.3.1",
   "models": {
     "claude-sonnet-5-5": {
       "use": "custom",
@@ -70,7 +70,7 @@ The preset also suggests a routing table, which applies only when the user turns
 | --- | --- | --- | --- |
 | `version` | `1` | Required | Format version of the file. |
 | `preset` | Preset name | `claude` | The preset shipped with the package that `"use": "preset"` draws from. |
-| `preset_version` | A preset version, such as `1.3.0` | Absent | The preset version the configuration was last checked against. `noonsight init` and `noonsight accept` write it. See [Preset updates](#preset-updates). |
+| `preset_version` | A preset version, such as `1.3.1` | Absent | The preset version the configuration was last checked against. `noonsight init` and `noonsight accept` write it. See [Preset updates](#preset-updates). |
 | `on_preset_change` | `warn`, `hold` | `warn` | What an installed preset that is not `preset_version` does. `warn`: sessions receive its rules, and `noonsight check` and each session's start report what changed. `hold`: sessions keep receiving the rules of `preset_version` until `noonsight accept`. |
 | `models` | Model key to entry | Empty | The models declared active. A model missing from this map is undeclared. |
 | `models.<id>.use` | `preset`, `custom`, `none` | Required | `preset`: the preset's rules for this exact model. `custom`: only the rules in `add`. `none`: decided that this model needs no rules. |

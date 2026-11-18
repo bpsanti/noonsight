@@ -24,7 +24,7 @@ test('init writes a configuration that declares every preset model with "use": "
     $schema: 'https://unpkg.com/noonsight@0/schema/noonsight.schema.json',
     version: 1,
     preset: 'claude',
-    preset_version: '1.3.0',
+    preset_version: '1.3.1',
     models: {
       'claude-fable-5-2': { use: 'preset' },
       'claude-opus-5-5': { use: 'preset' },
@@ -34,7 +34,7 @@ test('init writes a configuration that declares every preset model with "use": "
   });
   assert.equal(
     r.stdout,
-    `wrote ${file}: preset claude 1.3.0, 4 models declared with "use": "preset"\n` +
+    `wrote ${file}: preset claude 1.3.1, 4 models declared with "use": "preset"\n` +
       '  claude-fable-5-2: 2 of 4 rules on\n' +
       '  claude-opus-5-5: 1 of 3 rules on\n' +
       '  claude-sonnet-5-5: 3 of 6 rules on\n' +
@@ -95,7 +95,7 @@ test('models lists each declared model with its rules on and off, their source, 
   const r = runCli(['models'], env, NO_NETWORK);
   assert.equal(r.status, 0, r.stderr);
   const out = r.stdout;
-  assert.match(out, /^preset claude 1\.3\.0: its rules were compared with the system prompts of Claude Code 2\.1\.325 on \d{4}-\d{2}-\d{2}/m);
+  assert.match(out, /^preset claude 1\.3\.1: its rules were compared with the system prompts of Claude Code 2\.1\.325 on \d{4}-\d{2}-\d{2}/m);
   assert.match(out, /^claude-sonnet-5-5: preset, 4 of 7 rules on; seen in 3 decisions, last 2026-11-16T11:00:00\.000Z$/m);
   assert.match(out, /^ {2}on {3}sonnet-5-5\/carry-through {2}\(scopes: every scope; places: unattended, subagent\)$/m);
   assert.match(out, /^ {2}off {2}sonnet-5-5\/stay-in-scope {2}\(scopes: routine; places: session, unattended, subagent\)$/m);
