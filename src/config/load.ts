@@ -41,7 +41,7 @@ import type {
 } from '../core/types.js';
 import { assertSupported, validateSchema, type Schema } from './json-schema.js';
 import { presetsDir as defaultPresetsDir, SCHEMA_DIR, type Env } from './paths.js';
-import { DEFAULT_PROJECT_ALLOW, mergeProject, type ProjectAllow, type ProjectInput, type RawProject, type RuleOrigin } from './project.js';
+import { DEFAULT_PROJECT_ALLOW, mergeProject, projectRules, type ProjectAllow, type ProjectInput, type RawProject, type RuleOrigin } from './project.js';
 
 export class ConfigError extends Error {
   constructor(
@@ -229,6 +229,8 @@ export interface ProjectLayer {
   readonly problems: readonly string[];
   /** Entries of an applied project that do not apply on this machine. */
   readonly notes: readonly string[];
+  /** The project's rules the merged configuration gives a model, as commands list them; empty unless applied. */
+  readonly rules: readonly string[];
   /** The project file as read, when it matched its schema. */
   readonly raw: RawProject | null;
 }
@@ -331,7 +333,7 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
   const allow = machine.projects?.allow ?? DEFAULT_PROJECT_ALLOW;
   const alone = (status: ProjectLayer['status'], why: readonly string[] = [], read: RawProject | null = null): ConfigDetails => ({
     ...own,
-    project: { dir: project.dir, file: project.file, allow, status, problems: why, notes: [], raw: read },
+    project: { dir: project.dir, file: project.file, allow, status, problems: why, notes: [], rules: [], raw: read },
   });
   if (allow === 'none') return alone('ignored');
   if (project.trusted === null) return alone('untrusted');
@@ -353,9 +355,10 @@ export function loadConfigDetails(file: string, options: LoadOptions = {}, env: 
     // merged into the machine's can make a combination neither file has alone.
     const combined = validateSchema(schema('noonsight.schema.json'), merged.raw);
     if (combined.length) throw new ConfigError(project.file, combined);
+    const built = build(merged.raw, configFile, options, env, merged.origins);
     return {
-      ...build(merged.raw, configFile, options, env, merged.origins),
-      project: { dir: project.dir, file: project.file, allow, status: 'applied', problems: [], notes: merged.notes, raw: projectRaw },
+      ...built,
+      project: { dir: project.dir, file: project.file, allow, status: 'applied', problems: [], notes: merged.notes, rules: projectRules(built.config), raw: projectRaw },
     };
   } catch (e) {
     if (!(e instanceof ConfigError)) throw e;

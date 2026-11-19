@@ -257,3 +257,61 @@ test('report refuses an unknown option, a stray argument and a --log it cannot r
   assert.equal(help.status, 0);
   assert.match(help.stdout, /^usage: noonsight report/);
 });
+
+test('report reads the configuration with the project of the directory it runs for, and names that project', () => {
+  const home = tempTree({});
+  const config = path.join(tempTree({ 'noonsight.json': { ...CONFIG, projects: { allow: 'add' } }, 'general.md': 'Say what you will do first.', 'investigate.md': 'x', 'review.md': 'x', 'haiku.md': 'Keep it short.' }), 'noonsight.json');
+  const teamText = 'Commits use the imperative mood.';
+  const repo = tempTree({
+    '.git/HEAD': 'ref: refs/heads/main\n',
+    'src/main.ts': 'export {};\n',
+    '.noonsight/team.md': teamText,
+    '.noonsight/noonsight.json': { version: 1, all_models: { add: [{ id: 'team/commits', file: 'team.md' }] } },
+  });
+  const projectFile = path.join(repo, '.noonsight', 'noonsight.json');
+  // One Haiku session in the project delivered the machine's rule and the project's.
+  writeLog(home, [
+    { ts: '2026-11-17T10:00:00.000Z', event: 'session-start', session_id: 'h1', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general', 'team/commits'], scope: null, place: 'session', delivered: 'rules', project: repo, project_status: 'applied' },
+  ]);
+  const env = { HOME: home, NOONSIGHT_CONFIG: config };
+  const report = (dir: string) => runCli(['report'], { ...env, CLAUDE_PROJECT_DIR: dir });
+  const neverHeading = (configuration: string) => `On in the configuration (${configuration}), never delivered in this log:`;
+
+  // Not trusted yet: the machine's configuration alone, and the header says why.
+  const untrusted = report(path.join(repo, 'src'));
+  assert.equal(untrusted.status, 0, untrusted.stderr);
+  assert.match(untrusted.stdout, /^log .*\nproject .*noonsight\.json: not trusted for this account, so sessions in .* get only the machine's configuration/);
+  assert.ok(untrusted.stdout.includes(neverHeading(config)), untrusted.stdout);
+  assert.doesNotMatch(untrusted.stdout, /team\/commits for /);
+
+  assert.equal(runCli(['trust', repo], env).status, 0);
+  const r = report(path.join(repo, 'src'));
+  assert.equal(r.status, 0, r.stderr);
+  const lines = r.stdout.split('\n');
+  assert.equal(lines[1], `project ${projectFile}: applied over the machine's configuration ("projects.allow": "add"), trusted for this account; rules: team/commits (all_models)`);
+  // The project's rule gets its length, as a machine rule does.
+  assert.ok(r.stdout.includes(`  team/commits: 1 delivery in 1 session, last 2026-11-17T10:00:00.000Z\n     models: claude-haiku-5-5 1\n     scopes: (none) 1\n     places: session 1\n     events: session-start 1\n     text: ${teamText.length} characters for claude-haiku-5-5\n`), r.stdout);
+  // And the models it is on for that no delivery carries are listed, under a heading that names the project.
+  const idle = r.stdout.slice(r.stdout.indexOf(neverHeading(`${config}, with the project ${projectFile}`)));
+  assert.ok(idle.length > 0 && idle.startsWith('On in'), r.stdout);
+  assert.match(idle, /^ {2}team\/commits for claude-sonnet-5-5 \(scopes: every scope; places: session, unattended, subagent\)$/m);
+  assert.doesNotMatch(idle, /team\/commits for claude-haiku-5-5/);
+
+  const json = JSON.parse(runCli(['report', '--json'], { ...env, CLAUDE_PROJECT_DIR: repo }).stdout) as Record<string, any>;
+  assert.deepEqual(
+    { file: json.project.file, dir: json.project.dir, allow: json.project.allow, status: json.project.status },
+    { file: projectFile, dir: repo, allow: 'add', status: 'applied' },
+  );
+  assert.deepEqual(json.rules.find((x: Record<string, any>) => x.id === 'team/commits').characters, { 'claude-haiku-5-5': teamText.length });
+  assert.ok(json.never_delivered.some((x: Record<string, any>) => x.id === 'team/commits' && x.model === 'claude-sonnet-5-5'));
+
+  // Outside the project, the machine's configuration alone, and no project line.
+  const outside = report(tempTree({}));
+  assert.equal(outside.status, 0, outside.stderr);
+  assert.doesNotMatch(outside.stdout, /^project /m);
+  assert.doesNotMatch(outside.stdout, /team\/commits for /);
+  assert.ok(outside.stdout.includes(neverHeading(config)), outside.stdout);
+  const outsideJson = JSON.parse(runCli(['report', '--json'], { ...env, CLAUDE_PROJECT_DIR: tempTree({}) }).stdout) as Record<string, any>;
+  assert.equal(outsideJson.project, null);
+  assert.equal(outsideJson.rules.find((x: Record<string, any>) => x.id === 'team/commits').characters, undefined);
+});

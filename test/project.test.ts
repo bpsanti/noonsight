@@ -7,9 +7,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { ConfigError, loadConfigDetails, type ConfigDetails } from '../src/config/load.js';
+import { ConfigError, loadConfigDetails, type ConfigDetails, type ProjectLayer } from '../src/config/load.js';
 import { SCHEMA_DIR } from '../src/config/paths.js';
-import { findProject, PROJECT_ALLOW, projectFor, setTrust, trustOf } from '../src/config/project.js';
+import { describeProject, findProject, PROJECT_ALLOW, projectFor, setTrust, trustOf } from '../src/config/project.js';
 import { resolve } from '../src/core/resolve.js';
 import type { Decision } from '../src/core/types.js';
 import { hookHome, hookInput, LAB_PRESETS, labPresetWith, runCli, tempTree } from './helpers.js';
@@ -143,6 +143,11 @@ test('"add": an entry for a model the machine leaves undeclared or declares "non
   assert.match(d.project?.notes.join('\n') ?? '', /claude-opus-5-5 with "use": "none"/);
   assert.match(d.project?.notes.join('\n') ?? '', /does not declare claude-fable-5-2/);
   assert.equal(resolve(d.config, { model: 'claude-fable-5-2', place: 'session' }).status, 'undeclared');
+  // What became of the project lists only the rules that reach a model.
+  assert.deepEqual(d.project?.rules, []);
+  assert.equal(describeProject(d.project as ProjectLayer), `applied over the machine's configuration ("projects.allow": "add"), trusted for this account`);
+  const some = load(machineTree(), projectTree({ all_models: { add: [team] }, models: { 'claude-opus-5-5': { add: [teamSonnet] }, 'claude-sonnet-5-5': { add: [teamSonnet] } } }));
+  assert.match(describeProject(some.project as ProjectLayer), /; rules: team\/commits \(all_models\), team\/sonnet \(claude-sonnet-5-5\)$/);
 });
 
 test('"add": a project that changes anything else is refused, and the machine\'s rules still apply', () => {
