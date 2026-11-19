@@ -170,6 +170,31 @@ test('report counts a subagent\'s rules once, where its start delivered them, an
   );
 });
 
+test('report does not count as delivered a switch the session\'s next line switches again from', () => {
+  const home = tempTree({});
+  const line = (n: number, session: string, fields: Record<string, unknown>) => ({ ts: `2026-11-17T12:00:0${n}.000Z`, session_id: session, ...fields });
+  const toSonnet = { event: 'model-switch', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], place: 'session', delivered: 'rules+note' };
+  const toHaiku = { ...toSonnet, model: 'claude-haiku-5-5', delivered: 'rules' };
+  writeLog(home, [
+    // Two switches in a row: the first one's return may never have reached a request.
+    line(0, 's1', toSonnet),
+    // Another session's line in between does not count.
+    line(1, 's2', { event: 'session-start', model: 'claude-opus-5-5', status: 'none', reason: 'declared-none', delivered: 'nothing' }),
+    line(2, 's1', toHaiku),
+    // A switch with a decision of its session after it, before the next switch: counted.
+    line(3, 's1', { event: 'agent-call', model: 'claude-haiku-5-5', status: 'none', reason: 'no-rule-applies', place: 'subagent', delivered: 'nothing' }),
+    line(4, 's1', toSonnet),
+    // The session's last switch: counted.
+  ]);
+  const report = JSON.parse(runCli(['report', '--json'], { HOME: home }).stdout) as Record<string, any>;
+  assert.deepEqual(report.delivering, { 'model-switch': 2 });
+  assert.deepEqual(report.not_delivering, { 'declared-none': 1, 'no-rule-applies': 1, 'switched-again': 1 });
+  assert.deepEqual(
+    report.rules.map((x: Record<string, any>) => [x.id, x.deliveries, x.models]),
+    [['team/general', 2, { 'claude-haiku-5-5': 1, 'claude-sonnet-5-5': 1 }]],
+  );
+});
+
 test('report summarizes the classifier: tasks by result, the median and longest run, and the total cost', () => {
   const home = tempTree({});
   const at = (n: number): string => `2026-11-17T11:00:0${n}.000Z`;

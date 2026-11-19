@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { modelArgument, optionCandidates } from '../src/adapters/claude-code/launch.js';
+import { conversationModel } from '../src/adapters/claude-code/predict.js';
 import { managedTarget } from '../src/adapters/claude-code/locations.js';
 import { RULES_TEXT_LIMIT } from '../src/core/types.js';
 import { CLI, FIXTURES, hookHome, hookInput, LAB_CONFIG, LAB_PRESETS, NO_NETWORK, runCli, runProgram, tempTree, type HookHome as Home } from './helpers.js';
@@ -205,30 +206,41 @@ test('/model: the new model gets its rules, with a note that the earlier rules n
   assert.match(text, /SONNET-GEN-3306/);
   assert.doesNotMatch(text, /HAIKU-GEN-9047/);
 
-  // To a model with no rules: only the note. Back from it: only the rules, there is nothing to withdraw.
+  // To a model with no rules: only the note. The switch to Sonnet may never have reached the
+  // conversation, so the note names Haiku again with Sonnet.
   const toOpus = h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-opus-5-5'));
-  assert.match(toOpus.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">[^]*<\/noonsight-rules-change>$/);
-  const back = h.hook('model-switch', switchTo('claude-opus-5-5', 'claude-sonnet-5-5'));
-  assert.match(back.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules model="claude-sonnet-5-5">/);
-
-  // Resuming restores the model and reports it as a switch: the rules are already there.
-  assert.equal(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-sonnet-5-5', { source: 'resume' })).raw, '');
+  assert.equal(
+    toOpus.out?.hookSpecificOutput.additionalContext,
+    '<noonsight-rules-change from="claude-haiku-5-5 claude-sonnet-5-5" to="claude-opus-5-5">\n' +
+      "The session's model changed from claude-sonnet-5-5 to claude-opus-5-5. " +
+      'The working rules noonsight delivered earlier in this conversation for claude-haiku-5-5 and claude-sonnet-5-5 no longer apply.\n' +
+      '</noonsight-rules-change>',
+  );
+  // Back to Sonnet: its rules, and the note for Haiku, whose rules no delivered note may have retired.
+  const back: string = h.hook('model-switch', switchTo('claude-opus-5-5', 'claude-sonnet-5-5')).out?.hookSpecificOutput.additionalContext;
+  assert.match(back, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">[^]*<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-sonnet-5-5">/);
   // To an undeclared model: the note for Claude and a warning for the person.
   const toFable = h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-fable-5-2'));
   assert.match(toFable.out?.systemMessage, /claude-fable-5-2 is not declared/);
-  assert.match(toFable.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-fable-5-2">/);
+  assert.match(toFable.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-haiku-5-5 claude-sonnet-5-5" to="claude-fable-5-2">/);
 
   assert.deepEqual(
-    h.log().map((l) => [l.event, l.from_model ?? null, l.model, l.status, l.delivered]),
+    h.log().map((l) => [l.event, l.from_model ?? null, l.model, l.status, l.retired ?? null, l.unconfirmed_switch ?? false, l.delivered]),
     [
-      ['session-start', null, 'claude-haiku-5-5', 'matched', 'rules'],
-      ['model-switch', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'matched', 'rules+note'],
-      ['model-switch', 'claude-sonnet-5-5', 'claude-opus-5-5', 'none', 'note'],
-      ['model-switch', 'claude-opus-5-5', 'claude-sonnet-5-5', 'matched', 'rules'],
-      ['model-switch', 'claude-sonnet-5-5', 'claude-sonnet-5-5', 'matched', 'already-delivered'],
-      ['model-switch', 'claude-sonnet-5-5', 'claude-fable-5-2', 'undeclared', 'note'],
+      ['session-start', null, 'claude-haiku-5-5', 'matched', null, false, 'rules'],
+      ['model-switch', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'matched', ['claude-haiku-5-5'], false, 'rules+note'],
+      ['model-switch', 'claude-sonnet-5-5', 'claude-opus-5-5', 'none', ['claude-haiku-5-5', 'claude-sonnet-5-5'], true, 'note'],
+      ['model-switch', 'claude-opus-5-5', 'claude-sonnet-5-5', 'matched', ['claude-haiku-5-5'], true, 'rules+note'],
+      ['model-switch', 'claude-sonnet-5-5', 'claude-fable-5-2', 'undeclared', ['claude-haiku-5-5', 'claude-sonnet-5-5'], true, 'note'],
     ],
   );
+
+  // Resuming restores the model and reports it as a switch: after a start, whose delivery the
+  // conversation keeps, the rules are already there.
+  const resumed = home();
+  resumed.hook('session-start', start('claude-sonnet-5-5'));
+  assert.equal(resumed.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-sonnet-5-5', { source: 'resume' })).raw, '');
+  assert.equal(resumed.log()[1]?.delivered, 'already-delivered');
 });
 
 test('the longest rules a configuration may hold, plus the model-change note, fit in the 10,000 characters Claude Code keeps', () => {
@@ -424,10 +436,22 @@ test('a reported model outranks the launch settings, and so does the record of t
 });
 
 // A conversation resumed in a new Claude Code process gets a SessionStart input that names no model,
-// and no PostModelSwitch. Claude Code 2.1.327 runs it on the model its --model, ANTHROPIC_MODEL or model
-// setting names, and on the conversation's own model only when none names one
-// (test/fixtures/hook-inputs/2.1.327/README.md).
-const resumeOf = (id: string): string => hookInput('session-start-resume-continue', { session_id: id });
+// and no PostModelSwitch. Claude Code runs it on the model its --model or ANTHROPIC_MODEL names, else on
+// the model of the conversation's last response since its last compaction, else on the model setting
+// (test/fixtures/hook-inputs/2.1.327/README.md, and on 2.1.328 test/live/lifecycle.test.ts).
+const resumeOf = (id: string, transcript?: string): string =>
+  hookInput('session-start-resume-continue', { session_id: id, ...(transcript !== undefined ? { transcript_path: transcript } : {}) });
+
+/** A transcript holding these records, one JSON line each, as Claude Code writes it. */
+function conversation(...records: readonly Record<string, unknown>[]): string {
+  const file = path.join(tempTree({}), 'conversation.jsonl');
+  fs.writeFileSync(file, records.map((r) => `${JSON.stringify(r)}\n`).join(''));
+  return file;
+}
+const turn = { type: 'user', isSidechain: false, message: { role: 'user', content: 'hello' } };
+const reply = (model: string, fields: Record<string, unknown> = {}) => ({ type: 'assistant', isSidechain: false, message: { model, role: 'assistant', content: [] }, ...fields });
+const COMPACTED = { type: 'system', subtype: 'compact_boundary', isSidechain: false, content: 'Conversation compacted' };
+const SUMMARY = { type: 'user', isSidechain: false, isCompactSummary: true, message: { role: 'user', content: 'summary' } };
 
 test('a resume started with --model gets that model\'s rules over the session record, with a note that the earlier ones no longer apply', () => {
   const h = home();
@@ -480,6 +504,126 @@ test('a resume whose launch names no model, or one noonsight cannot pin down, ke
       ['claude-haiku-5-5', 'hook-input', null, null, 'already-delivered'],
     ],
   );
+});
+
+test('a resume whose command line and ANTHROPIC_MODEL name no model runs on the conversation\'s last response since its last compaction, over the model setting', () => {
+  const h = home();
+  // A /model in any session saves the choice as the model setting, here Haiku.
+  const haikuSetting = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'haiku' } }) };
+  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'ran' }));
+  // The conversation last answered on Sonnet, before or after a compaction: it resumes on Sonnet.
+  const answered = conversation(turn, reply('claude-sonnet-5-5'));
+  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', answered), haikuSetting).raw, '');
+  const answeredSince = conversation(turn, reply('claude-haiku-5-5'), COMPACTED, SUMMARY, turn, reply('claude-sonnet-5-5'));
+  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', answeredSince), haikuSetting).raw, '');
+  // A label noonsight cannot pin down outranks the setting, and the conversation decides.
+  assert.equal(underClaude(h, ['--continue', '--model', 'opusplan'], resumeOf('ran', answered), haikuSetting).raw, '');
+  // No response since the last compaction: the model setting decides.
+  const compacted = conversation(turn, reply('claude-sonnet-5-5'), COMPACTED, SUMMARY);
+  assert.match(
+    context(underClaude(h, ['--continue'], resumeOf('ran', compacted), haikuSetting)),
+    /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">[\s\S]*HAIKU-GEN-9047/,
+  );
+  // Nor a setting: the session's record.
+  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', compacted)).raw, '');
+  // --model and ANTHROPIC_MODEL outrank the conversation, as the resume fix for an explicit --model keeps.
+  assert.match(context(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf('ran', answered), haikuSetting)), /SONNET-GEN-3306/);
+  assert.match(context(underClaude(h, ['--continue'], resumeOf('ran', answered), { ANTHROPIC_MODEL: 'claude-haiku-5-5' })), /HAIKU-GEN-9047/);
+  assert.deepEqual(
+    h.log().map((l) => [l.model, l.model_source, l.model_from ?? null, l.model_unresolved ?? null, l.from_model ?? null, l.delivered]),
+    [
+      ['claude-sonnet-5-5', 'hook-input', null, null, null, 'rules'],
+      ['claude-sonnet-5-5', 'session-transcript', null, null, null, 'already-delivered'],
+      ['claude-sonnet-5-5', 'session-transcript', null, null, null, 'already-delivered'],
+      ['claude-sonnet-5-5', 'session-transcript', '--model', 'opusplan', null, 'already-delivered'],
+      ['claude-haiku-5-5', 'settings', haikuSetting.CLAUDE_CONFIG_DIR + '/settings.json', null, 'claude-sonnet-5-5', 'rules+note'],
+      ['claude-haiku-5-5', 'session-record', null, null, null, 'already-delivered'],
+      ['claude-sonnet-5-5', 'claude-args', '--model', null, 'claude-haiku-5-5', 'rules+note'],
+      ['claude-haiku-5-5', 'env', 'ANTHROPIC_MODEL', null, 'claude-sonnet-5-5', 'rules+note'],
+    ],
+  );
+});
+
+test('the conversation\'s model is that of its own last response: not a subagent\'s, not a synthetic message, and none since a compaction', () => {
+  assert.equal(conversationModel(conversation(reply('claude-sonnet-5-5'), reply('claude-haiku-5-5', { isSidechain: true }), reply('<synthetic>'))), 'claude-sonnet-5-5');
+  assert.equal(conversationModel(conversation(reply('claude-sonnet-5-5'), COMPACTED, SUMMARY, turn)), null);
+  assert.equal(conversationModel(conversation(turn)), null);
+  assert.equal(conversationModel(path.join(tempTree({}), 'missing.jsonl')), null);
+  // A transcript longer than one read, with a line across the reads' boundary.
+  const file = conversation(reply('claude-opus-5-5', { padding: 'p'.repeat(1536 * 1024) }), ...Array.from({ length: 3 }, () => ({ ...turn, padding: 'q'.repeat(700 * 1024) })));
+  assert.equal(conversationModel(file), 'claude-opus-5-5');
+  // A line that is not whole, as when Claude Code is writing it, is passed over.
+  fs.appendFileSync(file, '{"type":"assistant","message":{"model":"claude-haiku');
+  assert.equal(conversationModel(file), 'claude-opus-5-5');
+});
+
+test('a /model delivery is unconfirmed: a switch right after it, or a resume, delivers again what may have been lost', () => {
+  const custom = (word: string) => ({ use: 'custom', add: [{ id: `user/${word}`, file: `${word}.md` }] });
+  const dir = tempTree({
+    'noonsight.json': { version: 1, models: { 'claude-haiku-5-5': custom('haiku'), 'claude-sonnet-5-5': custom('sonnet'), 'claude-fable-5-2': custom('fable') } },
+    'haiku.md': 'HAIKU-WORD',
+    'sonnet.md': 'SONNET-WORD',
+    'fable.md': 'FABLE-WORD',
+  });
+  const config = path.join(dir, 'noonsight.json');
+
+  // Haiku, /model sonnet, /model fable, a turn: the first switch's return never reaches a request, so
+  // the second one's note must retire Haiku, whose rules the conversation holds, as well as Sonnet.
+  const twice = home(config);
+  twice.hook('session-start', start('claude-haiku-5-5'));
+  twice.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5'));
+  const second: string = context(twice.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-fable-5-2')));
+  assert.match(second, /^<noonsight-rules-change from="claude-haiku-5-5 claude-sonnet-5-5" to="claude-fable-5-2">\n/);
+  assert.match(second, /for claude-haiku-5-5 and claude-sonnet-5-5 no longer apply\.\n<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-fable-5-2">[^]*FABLE-WORD/);
+
+  // Fable, a turn, /model haiku, exit, `claude --continue --model haiku`: the switch's return was lost
+  // with the process, so the resume delivers Haiku's rules again, with the note for Fable.
+  const exited = home(config);
+  exited.hook('session-start', start('claude-fable-5-2', { session_id: 'exited' }));
+  exited.hook('model-switch', switchTo('claude-fable-5-2', 'claude-haiku-5-5', { session_id: 'exited' }));
+  const again = context(underClaude(exited, ['--continue', '--model', 'haiku'], resumeOf('exited')));
+  assert.match(again, /^<noonsight-rules-change from="claude-fable-5-2" to="claude-haiku-5-5">\nThis session runs on claude-haiku-5-5\. The working rules noonsight delivered earlier in this conversation for claude-fable-5-2 no longer apply\./);
+  assert.match(again, /<noonsight-rules model="claude-haiku-5-5">[^]*HAIKU-WORD/);
+  // A session start's delivery is part of the conversation: the next resume finds it.
+  assert.equal(underClaude(exited, ['--continue', '--model', 'haiku'], resumeOf('exited')).raw, '');
+  assert.deepEqual(
+    exited.log().map((l) => [l.event, l.model, l.retired ?? null, l.unconfirmed_switch ?? false, l.delivered]),
+    [
+      ['session-start', 'claude-fable-5-2', null, false, 'rules'],
+      ['model-switch', 'claude-haiku-5-5', ['claude-fable-5-2'], false, 'rules+note'],
+      ['session-start', 'claude-haiku-5-5', ['claude-fable-5-2'], true, 'rules+note'],
+      ['session-start', 'claude-haiku-5-5', null, false, 'already-delivered'],
+    ],
+  );
+
+  // Fable, /model haiku, a turn, /model sonnet, a turn, /model haiku, exit, resume on Haiku: the resume
+  // retires every other model whose rules the conversation may hold, and delivers Haiku's after.
+  const many = home(config);
+  many.hook('session-start', start('claude-fable-5-2', { session_id: 'many' }));
+  for (const [from, to] of [
+    ['claude-fable-5-2', 'claude-haiku-5-5'],
+    ['claude-haiku-5-5', 'claude-sonnet-5-5'],
+    ['claude-sonnet-5-5', 'claude-haiku-5-5'],
+  ] as const)
+    many.hook('model-switch', switchTo(from, to, { session_id: 'many' }));
+  const last = context(underClaude(many, ['--continue', '--model', 'haiku'], resumeOf('many')));
+  assert.match(last, /^<noonsight-rules-change from="claude-fable-5-2 claude-sonnet-5-5" to="claude-haiku-5-5">\n/);
+  assert.match(last, /<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-haiku-5-5">[^]*HAIKU-WORD/);
+});
+
+test('a note that names more retired models than fit its room retires every model but the session\'s own', () => {
+  const name = (c: string) => `claude-${c.repeat(30)}-5-5`;
+  const models = ['a', 'b', 'c', 'd'].map(name);
+  const dir = tempTree({
+    'noonsight.json': { version: 1, models: Object.fromEntries(models.map((m, i) => [m, { use: 'custom', add: [{ id: `user/r${i}`, file: 'r.md' }] }])) },
+    'r.md': 'WORD',
+  });
+  const h = home(path.join(dir, 'noonsight.json'));
+  h.hook('session-start', start(models[0] as string));
+  for (let i = 1; i < models.length; i++) h.hook('model-switch', switchTo(models[i - 1] as string, models[i] as string));
+  const text = context(h.hook('model-switch', switchTo(models[3] as string, models[0] as string)));
+  assert.match(text, /^<noonsight-rules-change from="\*" to="claude-a+-5-5">\n[^]*for every model other than claude-a+-5-5 no longer apply\./);
+  assert.deepEqual(h.log().at(-1)?.retired, models.slice(1));
 });
 
 test('a command line read without argument boundaries, as on macOS, reports a --model it cannot read instead of falling through', () => {

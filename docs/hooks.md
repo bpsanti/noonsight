@@ -18,7 +18,7 @@ Six hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`
   The result of an agent call under a refused configuration is logged as `config-invalid` too, without a second warning, and its subagent's start does nothing.
   A project's configuration with a problem is refused alone: the hooks apply the machine's configuration as if there were no project ([Project configuration](configuration.md#a-project-with-a-problem)).
 - **It decides from what Claude Code itself uses.**
-  The model comes from the hook input Claude Code sends, from noonsight's own record of the same session or of the same Claude Code process, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
+  The model comes from the hook input Claude Code sends, from noonsight's own record of the same session or of the same Claude Code process, from the conversation's transcript, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
   The decision log names the source every time.
 - **It leaves foreign input alone.**
   Input that is not the expected Claude Code event, such as another tool reading the same settings, gets no output and no log line.
@@ -50,7 +50,7 @@ The hook decides by how the session started (the `source` field):
 | --- | --- | --- |
 | `startup` | Delivers the rules | A new session |
 | `clear`, `compact` | Delivers them again | The earlier context, and the rules in it, are gone |
-| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record; on another model, with a note that the rules the conversation holds no longer apply | The restored conversation already holds them |
+| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery came from a `/model` switch; with a note that the rules of any other model the conversation may hold no longer apply | The restored conversation already holds them, except a switch's, which may never have reached it ([PostModelSwitch](#postmodelswitch)) |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect noonsight exists to prevent |
 
 The model comes from the first of these that knows it:
@@ -65,12 +65,21 @@ The model comes from the first of these that knows it:
 
    The first of the three that names a model decides, as in Claude Code; a lower one is never consulted past it.
 
-At `resume` and `fork` without a `model` in the input, the third comes before the second.
-`claude --continue` and `claude --resume` start a new Claude Code process, which reports no model and fires no `PostModelSwitch`, and runs the conversation on the model its `--model`, `ANTHROPIC_MODEL` or `model` setting names, whatever model the conversation ran on before; only when none of them names a model does it keep the conversation's own model, which the session's record holds ([recorded on Claude Code 2.1.327](../test/fixtures/hook-inputs/2.1.327/README.md)).
-A launch setting noonsight cannot pin down leaves the record to decide, and the log line records the setting.
+At `resume` and `fork` without a `model` in the input, the order is another, the one Claude Code follows for a resumed conversation:
+
+1. the `--model` argument of the Claude Code process;
+2. `ANTHROPIC_MODEL`;
+3. the model of the conversation's last response since its last compaction, read from the transcript the input names (`transcript_path`), the session's own messages only (`model_source: "session-transcript"`);
+4. the `model` setting;
+5. noonsight's record of the session.
+
+`claude --continue` and `claude --resume` start a new Claude Code process, which reports no model and fires no `PostModelSwitch`.
+It runs the conversation on the model its `--model` or `ANTHROPIC_MODEL` names, else on the model the conversation last answered on, else on its `model` setting, which `/model` in any session changes; a compaction with no response since leaves the conversation no model of its own ([recorded on Claude Code 2.1.327](../test/fixtures/hook-inputs/2.1.327/README.md) and [2.1.328](verification/claude-code.md)).
+A `--model` or `ANTHROPIC_MODEL` value noonsight cannot pin down outranks the setting, as in Claude Code, so the conversation, then the record, decides, and the log line records the value.
+With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides.
 After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
 `/resume` typed inside a running session reports the model in the input.
-When the resumed conversation's record is for another model that had rules, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
+When the resumed conversation's record holds the rules of another model, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
 
 Only when none of them names a model does the session get no rules and a warning.
 
@@ -111,7 +120,7 @@ At `startup`, a session in a project this account has not trusted is warned that
 ## PostModelSwitch
 
 The hook delivers the new model's rules with the next request.
-The rules delivered earlier stay in the conversation, so when the previous model had received rules, the delivery starts with a note:
+The rules delivered earlier stay in the conversation, so when it may hold another model's rules, the delivery starts with a note:
 
 ```text
 <noonsight-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">
@@ -119,9 +128,17 @@ The session's model changed from claude-sonnet-5-5 to claude-opus-5-5. The worki
 </noonsight-rules-change>
 ```
 
+Claude Code adds what the hook returns to the next request only.
+When another `/model` or the end of the session comes before that request, the return never reaches the model, and no hook can tell whether it did ([recorded on Claude Code 2.1.328](verification/claude-code.md)).
+So noonsight treats a switch's delivery as unconfirmed: the session's record keeps every model whose rules the conversation may hold without a note after them, and each later delivery says again that all of them no longer apply.
+The note then names each of them in its `from` attribute and in its text; when their names would not fit in the room kept for the note, it says that the rules of every model other than the new one no longer apply (`from="*"`).
+A resume after a switch delivers the rules again ([SessionStart](#sessionstart)), and so does a resume that Claude Code reports as a switch.
+A session start's delivery is part of the conversation from its start, so after one, the record keeps only the session's model.
+Delivering twice costs a longer note or a repeated copy of the rules; a delivery lost without a word is the defect noonsight exists to prevent.
+
 A switch keeps the session's scope, place and triggers, so the new model also gets the rules the session's triggers add for it.
 A switch to a model with no rules delivers the note alone.
-Resuming a session restores its model and reports it as a switch; when the session's record shows the same model and rules, nothing is delivered again.
+Resuming a session restores its model and reports it as a switch; when the session's record shows the same model and rules, and its last delivery was not a switch's, nothing is delivered again.
 The configuration keeps room for the note: the rules for any model, scope and place must fit in 9,500 characters, so rules and note together stay within the 10,000 characters Claude Code accepts from a hook.
 
 ## PostToolUse on Edit and Write: the triggers
@@ -304,6 +321,7 @@ Past 20 MB the log moves to `decisions.1.jsonl`, replacing an older one, and a n
 `noonsight report` reads both files and prints, for each rule, how often it was delivered and to which models, scopes, places and events, with the length of its text, and, when a trigger brought some of the deliveries, how many it brought (`brought by`); then the triggers sessions revealed, each with the number of sessions, how many of them got rules, and the tools, extensions and files of the edits that revealed it, so an edit that should not have counted can be found; then the rules on in the configuration that the log never shows delivered, and the decisions that delivered no rules, by why.
 When the classifier acted, it also prints a classifier section: the tasks it was meant to place, by result, and for the classifications that ran, their median and longest time and the cost Claude Code reported.
 A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-prompt`; a session start that found the rules already in the launcher's system prompt (`launcher`) is counted once, under `launch`.
+On a `model-switch` line, `delivered` says what the hook returned to Claude Code, not what reached the model ([PostModelSwitch](#postmodelswitch)): a switch whose session's next line in the log is another switch is not counted as a delivery but as `switched-again`, since the second switch may have come before any request.
 A subagent's rules are counted once, on its `subagent-start` line; its `agent-call` line hands them over (`at-start`) and is not counted.
 `--log <file>` reads another log, such as one copied from another machine (a file it cannot read is a usage error), and `--json` prints the same as JSON.
 
@@ -335,7 +353,9 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `install` | `managed` or `account`: which install ran the hook |
 | `project`, `project_status` | When the session's directory has a project configuration: the project directory, and what became of the project: `applied`, `untrusted`, `declined`, `ignored` (`"projects.allow": "none"`) or `refused` ([Project configuration](configuration.md#project-configuration)) |
 | `model`, `from_model` | The normalized model identifiers; on a session start, `from_model` is the model of the resumed conversation's record when the session runs on another one |
-| `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
+| `retired` | For a delivery with a note: the models whose rules the note says no longer apply |
+| `unconfirmed_switch` | `true` on a session start or a switch that came after a switch's delivery, which may never have reached the conversation ([PostModelSwitch](#postmodelswitch)) |
+| `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `session-transcript` (a resumed conversation's last response), `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
 | `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
 | `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model noonsight cannot tell: the value, and why |
@@ -349,7 +369,7 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `matcher_scope` | With `classifier.mode` set to `always`: the scope a matcher had chosen before the classifier decided |
 | `unattended_env` | For a session in the place `unattended`: the variable that put it there |
 | `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
-| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`; `launcher` for a session start that found the rules in the system prompt `noonsight run` gave; `system-prompt` for a launch that added them; `at-start` for an agent call whose rules its subagent's start gives; and for a subagent with `subagents.delivery` set to `off`, `off` |
+| `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, as the hook returned them to Claude Code; `launcher` for a session start that found the rules in the system prompt `noonsight run` gave; `system-prompt` for a launch that added them; `at-start` for an agent call whose rules its subagent's start gives; and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `launch_file`, `launch_model` | For a session start under `noonsight run` with rules in the system prompt: the launcher's file, and the model its rules are for |
 | `preset_update` | For a session start warned about a preset update: the version the configuration accepted (`accepted`), the installed one (`installed`), and whether the session kept the accepted version's rules (`held`) |
 | `warned` | Whether the person was shown a warning |
