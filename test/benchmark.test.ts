@@ -495,23 +495,28 @@ test('the delivery check holds each condition to what it delivers', () => {
 test("a run's own share follows what its condition delivered: all under on, its part of the union under claudemd and a read scattered file, none otherwise", () => {
   const sonnet = { model: 'sonnet', model_id: 'claude-sonnet-5-5' } as const;
   const read = { read_rules: { read: true, before_first_edit: true } } as RunRecord['signals'];
-  const union = ownShare('claude-sonnet-5-5', MODELS.flatMap((m) => defaultOnRules(m)));
+  const size = (file: string): number => fs.readFileSync(path.join(PACKAGE_ROOT, 'presets', 'claude', 'rules', file), 'utf8').trim().length;
+  // The default-on rules of the four models, as preset.json ships them; Sonnet's are its carry-through, stay-in-scope and verify-changes.
+  const sonnetOwn = size('sonnet-5-5/carry-through.md') + size('sonnet-5-5/stay-in-scope.md') + size('sonnet-5-5/verify-changes.md');
+  const others = ['fable-5-2/finish-work.md', 'fable-5-2/low-context-report.md', 'opus-5-5/unattended-run.md', 'haiku-5-5/carry-through.md', 'haiku-5-5/verify-changes.md'].reduce((n, f) => n + size(f), 0);
+  const union = sonnetOwn / (sonnetOwn + others);
+  const close = (actual: number | null): void => assert.ok(actual !== null && Math.abs(actual - union) < 1e-9, `${actual} is not ${union}`);
   const matched = { status: 'matched', reason: null, place: 'unattended', scope: 'build', rules: ['sonnet-5-5/carry-through'], sha256: 'x' };
   assert.equal(runOwnShare(recorded({ key: 'a', condition: 'on', ...sonnet, noonsight: matched }), MODELS), 1);
   assert.equal(runOwnShare(recorded({ key: 'b', condition: 'on', ...sonnet, noonsight: { ...matched, rules: [] } }), MODELS), null);
   assert.equal(runOwnShare(recorded({ key: 'c', condition: 'off', ...sonnet }), MODELS), null);
-  assert.equal(runOwnShare(recorded({ key: 'd', condition: 'claudemd', ...sonnet }), MODELS), union);
+  close(runOwnShare(recorded({ key: 'd', condition: 'claudemd', ...sonnet }), MODELS));
   assert.equal(runOwnShare(recorded({ key: 'e', condition: 'scattered', ...sonnet }), MODELS), null);
-  assert.equal(runOwnShare(recorded({ key: 'f', condition: 'scattered', ...sonnet, signals: read }), MODELS), union);
+  close(runOwnShare(recorded({ key: 'f', condition: 'scattered', ...sonnet, signals: read }), MODELS));
   const cells = ownShareByCondition([recorded({ key: 'e', condition: 'scattered', ...sonnet }), recorded({ key: 'f', condition: 'scattered', ...sonnet, signals: read })], ['sonnet'], MODELS);
-  assert.deepEqual(cells.sonnet?.scattered, { runs: 2, with_rules: 1, mean: union });
+  assert.deepEqual({ ...cells.sonnet?.scattered, mean: null }, { runs: 2, with_rules: 1, mean: null });
+  close(cells.sonnet?.scattered?.mean ?? null);
   assert.deepEqual(cells.sonnet?.off, { runs: 0, with_rules: 0, mean: null });
   assert.equal(probeOwnShare('on', { path: 'start', model: 'claude-sonnet-5-5', own: true, others: [] }), 1);
-  assert.equal(probeOwnShare('claudemd', { path: 'start', model: 'claude-sonnet-5-5', own: true, others: MODELS.filter((m) => m !== 'claude-sonnet-5-5') }), union);
+  close(probeOwnShare('claudemd', { path: 'start', model: 'claude-sonnet-5-5', own: true, others: MODELS.filter((m) => m !== 'claude-sonnet-5-5') }));
   assert.equal(probeOwnShare('claudemd', { path: 'subagent Explore', model: 'claude-sonnet-5-5', own: false, others: [] }), null);
   assert.equal(probeOwnShare('on', { path: 'after-model-switch', model: 'claude-haiku-5-5', own: false, others: ['claude-sonnet-5-5'] }), 0);
   // A build task run unattended gets carry-through and verify-changes from each of Sonnet and Haiku; Sonnet's stay-in-scope is for routine tasks only.
-  const size = (file: string): number => fs.readFileSync(path.join(PACKAGE_ROOT, 'presets', 'claude', 'rules', file), 'utf8').trim().length;
   const haikuText = size('haiku-5-5/carry-through.md') + size('haiku-5-5/verify-changes.md');
   const sonnetText = size('sonnet-5-5/carry-through.md') + size('sonnet-5-5/verify-changes.md');
   const switched = probeOwnShare('on', { path: 'after-model-switch', model: 'claude-haiku-5-5', own: true, others: ['claude-sonnet-5-5'] }) as number;
