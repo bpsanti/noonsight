@@ -185,13 +185,16 @@ test('report does not count as delivered a switch the session\'s next line switc
     line(3, 's1', { event: 'agent-call', model: 'claude-haiku-5-5', status: 'none', reason: 'no-rule-applies', place: 'subagent', delivered: 'nothing' }),
     line(4, 's1', toSonnet),
     // The session's last switch: counted.
+    // A switch that delivered no rules keeps its own reason when another switch follows it.
+    line(5, 's3', { event: 'model-switch', model: 'claude-fable-5-2', status: 'undeclared', place: 'session', delivered: 'note' }),
+    line(6, 's3', toSonnet),
   ]);
   const report = JSON.parse(runCli(['report', '--json'], { HOME: home }).stdout) as Record<string, any>;
-  assert.deepEqual(report.delivering, { 'model-switch': 2 });
-  assert.deepEqual(report.not_delivering, { 'declared-none': 1, 'no-rule-applies': 1, 'switched-again': 1 });
+  assert.deepEqual(report.delivering, { 'model-switch': 3 });
+  assert.deepEqual(report.not_delivering, { 'declared-none': 1, 'no-rule-applies': 1, 'switched-again': 1, undeclared: 1 });
   assert.deepEqual(
     report.rules.map((x: Record<string, any>) => [x.id, x.deliveries, x.models]),
-    [['team/general', 2, { 'claude-haiku-5-5': 1, 'claude-sonnet-5-5': 1 }]],
+    [['team/general', 3, { 'claude-haiku-5-5': 1, 'claude-sonnet-5-5': 2 }]],
   );
 });
 

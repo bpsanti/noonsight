@@ -330,8 +330,6 @@ function sessionStart(
       ...triggerFields(where.triggers),
       model_source: chosen.source,
       ...(changedFrom !== null ? { from_model: changedFrom } : {}),
-      ...(note !== null && retired.length ? { retired } : {}),
-      ...(unconfirmed ? { unconfirmed_switch: true } : {}),
       ...launchFields(launch),
       ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),
       delivered: repeat ? 'already-delivered' : rules ? (note ? 'rules+note' : 'rules') : inPrompt ? 'launcher' : note ? 'note' : 'nothing',
@@ -393,7 +391,6 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     ...triggerFields(where.triggers),
     model_source: 'hook-input',
     from_model: from || null,
-    ...(unconfirmed ? { unconfirmed_switch: true } : {}),
   };
   // Without a record, the previous model's rules are those the conversation may hold.
   const kept = session
@@ -419,7 +416,6 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
   return {
     record: {
       ...base,
-      ...(note !== null ? { retired } : {}),
       delivered: decision.status === 'matched' ? (note ? 'rules+note' : 'rules') : note ? 'note' : 'nothing',
       warned: messages.length > 0,
     },

@@ -225,13 +225,13 @@ test('/model: the new model gets its rules, with a note that the earlier rules n
   assert.match(toFable.out?.hookSpecificOutput.additionalContext, /^<noonsight-rules-change from="claude-haiku-5-5 claude-sonnet-5-5" to="claude-fable-5-2">/);
 
   assert.deepEqual(
-    h.log().map((l) => [l.event, l.from_model ?? null, l.model, l.status, l.retired ?? null, l.unconfirmed_switch ?? false, l.delivered]),
+    h.log().map((l) => [l.event, l.from_model ?? null, l.model, l.status, l.delivered]),
     [
-      ['session-start', null, 'claude-haiku-5-5', 'matched', null, false, 'rules'],
-      ['model-switch', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'matched', ['claude-haiku-5-5'], false, 'rules+note'],
-      ['model-switch', 'claude-sonnet-5-5', 'claude-opus-5-5', 'none', ['claude-haiku-5-5', 'claude-sonnet-5-5'], true, 'note'],
-      ['model-switch', 'claude-opus-5-5', 'claude-sonnet-5-5', 'matched', ['claude-haiku-5-5'], true, 'rules+note'],
-      ['model-switch', 'claude-sonnet-5-5', 'claude-fable-5-2', 'undeclared', ['claude-haiku-5-5', 'claude-sonnet-5-5'], true, 'note'],
+      ['session-start', null, 'claude-haiku-5-5', 'matched', 'rules'],
+      ['model-switch', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'matched', 'rules+note'],
+      ['model-switch', 'claude-sonnet-5-5', 'claude-opus-5-5', 'none', 'note'],
+      ['model-switch', 'claude-opus-5-5', 'claude-sonnet-5-5', 'matched', 'rules+note'],
+      ['model-switch', 'claude-sonnet-5-5', 'claude-fable-5-2', 'undeclared', 'note'],
     ],
   );
 
@@ -587,12 +587,12 @@ test('a /model delivery is unconfirmed: a switch right after it, or a resume, de
   // A session start's delivery is part of the conversation: the next resume finds it.
   assert.equal(underClaude(exited, ['--continue', '--model', 'haiku'], resumeOf('exited')).raw, '');
   assert.deepEqual(
-    exited.log().map((l) => [l.event, l.model, l.retired ?? null, l.unconfirmed_switch ?? false, l.delivered]),
+    exited.log().map((l) => [l.event, l.model, l.delivered]),
     [
-      ['session-start', 'claude-fable-5-2', null, false, 'rules'],
-      ['model-switch', 'claude-haiku-5-5', ['claude-fable-5-2'], false, 'rules+note'],
-      ['session-start', 'claude-haiku-5-5', ['claude-fable-5-2'], true, 'rules+note'],
-      ['session-start', 'claude-haiku-5-5', null, false, 'already-delivered'],
+      ['session-start', 'claude-fable-5-2', 'rules'],
+      ['model-switch', 'claude-haiku-5-5', 'rules+note'],
+      ['session-start', 'claude-haiku-5-5', 'rules+note'],
+      ['session-start', 'claude-haiku-5-5', 'already-delivered'],
     ],
   );
 
@@ -623,7 +623,6 @@ test('a note that names more retired models than fit its room retires every mode
   for (let i = 1; i < models.length; i++) h.hook('model-switch', switchTo(models[i - 1] as string, models[i] as string));
   const text = context(h.hook('model-switch', switchTo(models[3] as string, models[0] as string)));
   assert.match(text, /^<noonsight-rules-change from="\*" to="claude-a+-5-5">\n[^]*for every model other than claude-a+-5-5 no longer apply\./);
-  assert.deepEqual(h.log().at(-1)?.retired, models.slice(1));
 });
 
 test('a command line read without argument boundaries, as on macOS, reports a --model it cannot read instead of falling through', () => {

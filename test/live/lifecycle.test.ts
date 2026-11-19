@@ -140,7 +140,7 @@ test('live, no tokens: /model, then the end of the session, then a resume on the
     assert.equal(model, 'claude-haiku-5-5');
     assert.match(text, /<noonsight-rules model="claude-haiku-5-5"/, 'Haiku\'s rules reach the resumed conversation');
     assert.ok(retiredAfterLastCopy(text, 'claude-fable-5-2'), 'a note after Fable\'s rules says they no longer apply');
-    assert.equal(decisions(l).at(-1)?.unconfirmed_switch, true);
+    assert.equal(decisions(l).at(-1)?.delivered, 'rules+note');
   } finally {
     await l.stub.close();
   }

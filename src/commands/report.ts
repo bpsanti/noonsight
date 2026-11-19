@@ -202,8 +202,9 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
     // A subagent's rules are counted once: delivered at its start, or not delivered at its call.
     if (event === 'agent-call' && r.delivered === 'at-start') continue;
     const ids = Array.isArray(r.rules) ? r.rules.filter((x): x is string => typeof x === 'string') : [];
-    if (!(DELIVERING as readonly unknown[]).includes(r.delivered) || ids.length === 0 || superseded.has(index)) {
-      if (superseded.has(index)) count(notDelivering, SWITCHED_AGAIN);
+    const delivers = (DELIVERING as readonly unknown[]).includes(r.delivered) && ids.length > 0;
+    if (!delivers || superseded.has(index)) {
+      if (delivers) count(notDelivering, SWITCHED_AGAIN);
       else if (event !== 'subagent-start') count(notDelivering, whyNothing(r));
       // Rules the call had that a start shared between several calls could not give.
       else if (text(r.reason) === 'calls-differ') count(notDelivering, 'calls-differ');

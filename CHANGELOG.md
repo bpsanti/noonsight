@@ -6,7 +6,6 @@
   Claude Code adds what the `PostModelSwitch` hook returns to the next request only, and drops it when another `/model` or the end of the session comes first; the hook recorded it as delivered all the same.
   So in a session started on Haiku, after `/model sonnet` and `/model fable` with no request between them, Fable read Haiku's rules from the session's start with no note saying they no longer applied, and a conversation resumed on the model a lost switch chose logged `already-delivered` and never got its rules.
   The session's record now keeps every model whose rules the conversation may hold without a note after them: each later note names all of them (`from` lists them, or reads `*` when their names do not fit), and a resume after a switch delivers the rules again.
-  The log line names the models a note retires in `retired`, and marks a decision that came after an unconfirmed switch with `unconfirmed_switch`.
   `noonsight report` no longer counts as delivered a switch whose session's next line is another switch, and lists it as `switched-again`.
   See `docs/hooks.md` ("PostModelSwitch").
 

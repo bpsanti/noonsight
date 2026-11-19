@@ -353,8 +353,6 @@ A subagent's rules are counted once, on its `subagent-start` line; its `agent-ca
 | `install` | `managed` or `account`: which install ran the hook |
 | `project`, `project_status` | When the session's directory has a project configuration: the project directory, and what became of the project: `applied`, `untrusted`, `declined`, `ignored` (`"projects.allow": "none"`) or `refused` ([Project configuration](configuration.md#project-configuration)) |
 | `model`, `from_model` | The normalized model identifiers; on a session start, `from_model` is the model of the resumed conversation's record when the session runs on another one |
-| `retired` | For a delivery with a note: the models whose rules the note says no longer apply |
-| `unconfirmed_switch` | `true` on a session start or a switch that came after a switch's delivery, which may never have reached the conversation ([PostModelSwitch](#postmodelswitch)) |
 | `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `session-transcript` (a resumed conversation's last response), `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
 | `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
 | `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |
