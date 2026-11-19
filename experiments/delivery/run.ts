@@ -2,7 +2,7 @@
 // stub, or reads their results; none sends anything to Anthropic or spends a token.
 //
 //   npm run delivery -- corpus     [--only <name,...>] [--concurrency 4]
-//   npm run delivery -- fuzz       [--arm on|claudemd|rules|skills|off] [--n 300] [--seed 1] [--from 0] [--concurrency 6]
+//   npm run delivery -- fuzz       [--arm on|claudemd|rules|skills|off] [--n 300] [--seed 1] [--from 0] [--concurrency 6] [--fresh]
 //   npm run delivery -- selfcheck  [--plant <name>|all] [--n 60] [--seed 1] [--concurrency 6]
 //   npm run delivery -- shrink     --sessions <file> --id <session> [--class <class> --kind main|subagent] [--plant <name>]
 //   npm run delivery -- measure    the four measures of every sessions/*.jsonl in the results folder
@@ -13,7 +13,8 @@
 //
 // Common options: --claude <binary> (default `claude`), --results <dir> (default
 // results/claude-code-<version>/<date>-<commit>/), --work <dir> (default a new folder in the system's
-// temporary directory, which must not be inside a Claude Code scratchpad folder).
+// temporary directory, which must not be inside a Claude Code scratchpad folder). A fuzz run continues the
+// sessions file an interrupted run of the same arm, seed and size left, unless --fresh.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -143,9 +144,13 @@ async function fuzz(ctx: Context, arm: Arm, n: number, plant: string | null = nu
   const from = num(ctx.args, 'from', 0);
   const name = `${plant ? `plant-${plant}` : arm}-s${seed}-${from ? `${from}-` : ''}n${n}`;
   const file = sessionsFile(ctx, name);
-  fs.writeFileSync(file, '');
+  // A sessions file left by an interrupted run is continued: the sessions it holds are not run again.
+  const done = fs.existsSync(file) && !ctx.args.fresh ? readLines(file) : [];
+  if (!done.length) fs.writeFileSync(file, '');
+  const have = new Set(done.map((l) => l.id));
   const opts = plant ? { ...ctx.opts, noonsightRoot: buildPlant(plantNamed(plant), path.join(ctx.work, `plant-${plant}-build`)) } : ctx.opts;
-  const lines = await runMany(fuzzRuns(seed, n, arm, plant, from), opts, num(ctx.args, 'concurrency', 6), file);
+  const runs = fuzzRuns(seed, n, arm, plant, from);
+  const lines = [...done, ...(await runMany(runs.filter((r) => !have.has(r.id)), opts, num(ctx.args, 'concurrency', 6), file))].sort((a, b) => a.id.localeCompare(b.id));
   const ok = lines.filter((l) => l.harness === 'ok');
   process.stdout.write(`${name}: ${ok.length} of ${lines.length} sessions ran; ${ok.filter(failed).length} with an unexplained violation\n`);
   return { file, lines };

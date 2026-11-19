@@ -100,6 +100,7 @@ npm run delivery -- all                         # all of the above but shrink, f
 ```
 
 `--claude <binary>` runs another Claude Code version; `--concurrency` sets how many sessions run at once.
+An interrupted fuzz run continues where it stopped when run again with the same arm, seed and size; `--fresh` starts it over.
 `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` runs the corpus as a test (`test/live/delivery-corpus.test.ts`), next to the delivery probe of the benchmark pilot.
 Nothing in this folder installs anything machine-wide, and it refuses to run where noonsight is installed machine-wide, since those hooks would run in its sessions too.
 

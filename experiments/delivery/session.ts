@@ -188,10 +188,14 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
 
   let child: ChildProcess | null = null;
   let exited = true;
-  const send = (cmd: Record<string, unknown>): void => void child?.stdin?.write(`${JSON.stringify(cmd)}\n`);
+  // The bridge can exit between a check and a write (the session ended by itself); that write is lost, not an error.
+  const send = (cmd: Record<string, unknown>): void => {
+    if (!exited) child?.stdin?.write(`${JSON.stringify(cmd)}\n`);
+  };
   const launch = (args: readonly string[], extraEnv: Record<string, string> = {}): void => {
     const c = spawn('python3', [BRIDGE, screen, opts.claude, ...args, ...tools], { cwd: project, env: { ...env, ...extraEnv }, stdio: ['pipe', 'ignore', 'ignore'] });
     child = c;
+    c.stdin?.on('error', () => undefined);
     exited = false;
     c.on('close', () => (exited = true));
   };
