@@ -1,5 +1,5 @@
 // The author's calibration of the judge: about 15 graded open-task answers, spread over the
-// conditions, exported blind. Each answer gets a random id and is scrubbed of noonsight's strings;
+// conditions, exported blind. Each answer gets a random id and the judge's scrub (judge.ts);
 // the sheet lists the rubric items to mark yes or no. The map from id to run is written apart, and
 // its sha256 is printed so it can be recorded (sealed) before the author starts grading.
 

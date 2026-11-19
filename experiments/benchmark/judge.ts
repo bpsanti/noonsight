@@ -2,10 +2,10 @@
 // It is the same family as the models under test, a limitation the pre-registration declares; the
 // author grades about 15 answers blind to calibrate it (calibration.ts).
 //
-// The judge sees the task, the answer and the rubric, never the condition: the answer is scrubbed
-// of noonsight's strings first. Each vote is one `claude -p` call from the given account's login,
-// with Claude Code's system prompt replaced by the judge's, no tools, and none of the person's
-// settings, hooks or MCP servers.
+// The judge sees the task, the answer and the rubric, never the condition: the answer is first
+// scrubbed of every string that could reveal the condition (SCRUB below). Each vote is one
+// `claude -p` call from the given account's login, with Claude Code's system prompt replaced by
+// the judge's, no tools, and none of the person's settings, hooks or MCP servers.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
