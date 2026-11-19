@@ -1,0 +1,30 @@
+{
+  "name": "parallel-subagents",
+  "about": "Three subagents started in one response, one with a model parameter: each gets the rules of the model it runs on.",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": "haiku"
+        },
+        {
+          "type": "Explore",
+          "model": null
+        },
+        {
+          "type": "Plan",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

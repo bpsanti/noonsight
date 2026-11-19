@@ -1,0 +1,35 @@
+{
+  "name": "f2-subagent-after-switch",
+  "about": "/model writes the model setting; a resume without --model then runs on the conversation's model while the hook believes the setting's, and the subagent gets another model's rules.",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "Plan",
+          "model": null
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "failure": "F2",
+    "shows": [
+      "foreign-unretired/subagent"
+    ]
+  }
+}

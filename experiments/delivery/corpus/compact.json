@@ -1,0 +1,19 @@
+{
+  "name": "compact",
+  "about": "Compaction drops the conversation, so the rules are delivered again and reach the turn after it. The compact-as-resume plant fails here.",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

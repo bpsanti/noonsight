@@ -1,0 +1,59 @@
+{
+  "name": "probe-session",
+  "about": "The delivery probe's session (test/live/delivery.test.ts): a first turn, a subagent of each built-in type, /model haiku, /compact and /clear, each followed by a turn.",
+  "model": "sonnet",
+  "scope": "build",
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "Explore",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "Plan",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

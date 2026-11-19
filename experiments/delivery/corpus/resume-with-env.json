@@ -1,0 +1,21 @@
+{
+  "name": "resume-with-env",
+  "about": "claude --continue with ANTHROPIC_MODEL naming Haiku, on a conversation that ran on Opus: Haiku's rules, and a note that retires Opus's.",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "env": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

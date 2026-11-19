@@ -1,0 +1,19 @@
+{
+  "name": "clear",
+  "about": "/clear starts a new conversation, which receives the rules again.",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

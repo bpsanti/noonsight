@@ -1,0 +1,20 @@
+{
+  "name": "resume",
+  "about": "Leaving and coming back with claude --continue and nothing that names a model: the conversation keeps its model and its rules.",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

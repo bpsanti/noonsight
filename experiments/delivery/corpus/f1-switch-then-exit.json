@@ -1,0 +1,30 @@
+{
+  "name": "f1-switch-then-exit",
+  "about": "A /model switch and then leaving the session before any request: the switch's delivery is lost, and the resume on the same model logs already-delivered.",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": {
+    "failure": "F1",
+    "shows": [
+      "missing-own/main",
+      "foreign-unretired/main"
+    ]
+  }
+}

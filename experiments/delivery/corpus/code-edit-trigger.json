@@ -1,0 +1,17 @@
+{
+  "name": "code-edit-trigger",
+  "about": "The first edit of a tracked code file reveals the code-edit trigger and delivers the rules it brings, right after the edit's result.",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "edit",
+      "target": "code"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

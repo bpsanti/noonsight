@@ -1,0 +1,29 @@
+{
+  "name": "f2-compact-then-resume",
+  "about": "A resume without --model of a conversation compacted with no turn after: it runs on Claude Code's default model, while the hook keeps the recorded one.",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": {
+    "failure": "F2",
+    "shows": [
+      "foreign-unretired/main",
+      "missing-own/main"
+    ]
+  }
+}

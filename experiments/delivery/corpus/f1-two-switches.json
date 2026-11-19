@@ -1,0 +1,26 @@
+{
+  "name": "f1-two-switches",
+  "about": "Two /model switches with no request between them: Claude Code never sends what the first switch's hook returned, so the starting model's rules stay with no note that retires them.",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "model",
+      "to": "sonnet"
+    },
+    {
+      "k": "model",
+      "to": "fable"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": {
+    "failure": "F1",
+    "shows": [
+      "foreign-unretired/main"
+    ]
+  }
+}
