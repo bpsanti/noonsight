@@ -383,6 +383,7 @@ test('the judge sees no condition, reads ratings by statement or order, and take
   assert.equal(scrub('noonsight-rules said opus-5-5/unattended-run and local/workspace-notes-3'), '[removed] said [removed] and [removed]');
   assert.equal(scrub('I read /opt/agent-notes/rules.md first.'), 'I read [removed] first.');
   assert.equal(scrub('My CLAUDE.md lists Working rules; each section is written for one model.'), 'My [removed] lists [removed]; [removed].');
+  assert.equal(scrub('Under For Claude Opus 5.5:\nApplies to: every kind of task; when nobody is watching.\nDone.'), 'Under [removed]:\n[removed]\nDone.');
   const items: Item[] = [
     { id: '1', statement: 'A', scored: true },
     { id: '2', statement: 'B', scored: true },

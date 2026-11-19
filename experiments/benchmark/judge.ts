@@ -40,7 +40,7 @@ export interface Grade {
   readonly error: string | null;
 }
 
-const SCRUB = /noonsight[-\w]*|(\/opt\/)?agent-notes[-\w/.]*|CLAUDE\.md|working rules|each section is written for one model|(fable|opus|sonnet|haiku)-5-[25]\/[\w-]+|local\/[\w-]+/gi;
+const SCRUB = /noonsight[-\w]*|(\/opt\/)?agent-notes[-\w/.]*|CLAUDE\.md|working rules|each section is written for one model|for claude (fable|opus|sonnet|haiku) 5\.\d|applies to:[^\n]*|(fable|opus|sonnet|haiku)-5-[25]\/[\w-]+|local\/[\w-]+/gi;
 
 /** The answer as the judge sees it: without any string that could reveal the condition. */
 export function scrub(answer: string): string {

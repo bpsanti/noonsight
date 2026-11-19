@@ -122,6 +122,7 @@ The table per model is in [summary.md](summary.md).
 
 The open answers (digest and review) were graded by a Claude Opus 5.5 judge with three votes per item.
 The judge is not calibrated yet, so its scores are reported in [summary.md](summary.md) as they came and are not read here.
+These grades were given before the judge's scrub also removed the strings only `claudemd` and `scattered` put in a session (the `CLAUDE.md` name, the rules file's path and the union file's text around the rules), so their blinding is the earlier one; grade the open answers again before reading them.
 
 ## Open
 
