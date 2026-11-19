@@ -54,6 +54,7 @@ NOONSIGHT_LIVE_DELIVERY=1 NOONSIGHT_DELIVERY_OUT=<dir> npm run test:live
 It runs one interactive session per condition (`on`, `claudemd`, `scattered`) against a local stand-in for the API ([test/live/stub-api.ts](../../test/live/stub-api.ts)), which records every request and answers with fixed replies: a first turn, three turns that each start a subagent (general-purpose, Explore, Plan), `/model haiku` and a turn, `/compact` and a turn, `/clear` and a turn.
 Nothing reaches Anthropic and no token is spent.
 [delivery.ts](delivery.ts) reads, in each request, whether the rules written for the request's model are there, and whose other rules came along; the table goes to `<dir>/delivery.md`.
+The probe's session is also the first entry of the delivery benchmark's corpus, which measures every request of random lifecycle sequences, resumes and the native alternatives included ([experiments/delivery](../delivery/README.md)).
 
 ### The tasks
 

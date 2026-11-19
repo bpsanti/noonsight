@@ -1,0 +1,21 @@
+{
+  "name": "f2-model-setting",
+  "about": "A resume without --model after the model setting changed: the conversation keeps running on the model of its last response, and must get that model's rules, not the setting's (F2, fixed).",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "setting": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

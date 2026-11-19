@@ -1,0 +1,35 @@
+{
+  "name": "f1-switches-and-resume",
+  "about": "Switches back to a model whose rules a later note retired, then a resume on it before any request: the resume must deliver again what the last switch's lost delivery held (F1, fixed).",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

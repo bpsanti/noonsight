@@ -1,0 +1,21 @@
+{
+ "on-s1-n300": {
+  "sessions": 296,
+  "mainRequests": 3121,
+  "model": 3089,
+  "due": 3120,
+  "covered": 3103,
+  "chars": 2842,
+  "all": 2842,
+  "coverage": {
+   "log": 1,
+   "stub": 0.993
+  },
+  "ownShare": {
+   "log": 0.7239,
+   "stub": 0.7612
+  },
+  "sessionsWhereTheyDiffer": 60,
+  "ofWhichWithoutTwoQuietStepsInARow": []
+ }
+}

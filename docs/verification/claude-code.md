@@ -9,6 +9,7 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 The preset checks send one short request to each of the four current models, Fable 5.2 included; in `claude -p`, Claude Code bills Fable usage to usage credits without asking, on plans where Fable draws on them.
 Run them again whenever the preset changes or Claude Code is upgraded: the `system-prompt` check fails when what Claude Code sends each model changes.
 `NOONSIGHT_LIVE_DELIVERY=1` adds the delivery probe of the benchmark pilot (`test/live/delivery.test.ts`): sessions against a local stand-in for the API that records every request and answers with fixed replies, so they run real turns, start subagents and compact without sending anything to Anthropic.
+It also runs the corpus of the delivery benchmark (`test/live/delivery-corpus.test.ts`, [experiments/delivery](../../experiments/delivery/README.md)), whose sessions resume, switch models, compact and start subagents against the same kind of stand-in.
 The lifecycle checks (`test/live/lifecycle.test.ts`) run with every `npm run test:live` against the same stand-in: they need `claude` and `expect` on PATH and are skipped without them.
 
 ## Checked live

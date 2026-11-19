@@ -1,0 +1,17 @@
+{
+  "name": "switch-model",
+  "about": "A /model switch: the new model's rules and the note that retires the earlier model's rules reach the next request. The no-switch-note plant fails here.",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "model",
+      "to": "sonnet"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

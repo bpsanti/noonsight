@@ -29,7 +29,8 @@
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:live": "npm run build && node --test dist/test/live/*.test.js",
     "experiment": "npm run build && node dist/experiments/rules/run.js",
-    "benchmark": "npm run build && node dist/experiments/benchmark/bench.js"
+    "benchmark": "npm run build && node dist/experiments/benchmark/bench.js",
+    "delivery": "npm run build && node dist/experiments/delivery/run.js"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

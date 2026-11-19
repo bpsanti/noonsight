@@ -1,0 +1,20 @@
+{
+  "name": "resume-with-model",
+  "about": "claude --continue --model haiku on a conversation that ran on Opus: Haiku's rules, and a note that retires Opus's.",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

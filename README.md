@@ -105,6 +105,8 @@ The samples are small (3 to 10 runs per arm), so these are directions, not signi
 
 `experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
 
+`experiments/delivery/` measures whether each model's rules reach every request it receives, and only those rules, through `/model`, compaction, `/clear`, resumes, subagents and file edits, for noonsight and for a `CLAUDE.md`, `.claude/rules` and a skill per model; it runs real Claude Code sessions against a local stand-in for the API, so it spends no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).
+
 ## Try the core
 
 ```bash
@@ -128,6 +130,7 @@ Without a login, `npm run test:live` also runs a `claude -p` session against a l
 `NOONSIGHT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session), the scope cases (two sessions on one model in two scopes through `NOONSIGHT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) the preset cases (what Claude Code's own system prompt already sends each model, compared with the preset, and the real preset reaching a session and a subagent with the hash `noonsight resolve` gives) the launcher cases (`noonsight run` with an explicit model, with and without the hooks, next to another `--append-system-prompt` or `--append-system-prompt-file`, and routed without `--model`) the routing cases (`route-subagents`, `explicit-model` and `orchestrator-env`) and the classifier cases (`classifier-agreement` over the hand-labeled tasks, `classifier-subagent` and `classifier-timeout`) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage, Fable 5.2 included.
 `npm run experiment -- run` runs the rule effect experiment from the same login, within a spending cap it states ([experiments/rules/README.md](experiments/rules/README.md)).
 `npm run benchmark -- gold` runs the benchmark pilot's reference solutions in Docker, with no model; its paid nights need a token of the account they bill ([experiments/benchmark/README.md](experiments/benchmark/README.md)).
+`npm run delivery -- all` runs the delivery benchmark for the installed Claude Code: the corpus, the lifecycle fuzz and the fuzzer's self-check, with no login and no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).
 `NOONSIGHT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` asks the session models which rules they received; the token stays in the environment.
 See [docs/verification/claude-code.md](docs/verification/claude-code.md).
 

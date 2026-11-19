@@ -1,0 +1,29 @@
+{
+  "name": "limit-default-model-after-compact",
+  "about": "A resume without --model of a conversation compacted with no response since, with no model setting: Claude Code runs its default model, which noonsight cannot tell, so the session's record decides and the running model gets another model's rules (docs/hooks.md, \"SessionStart\"). A documented limit, kept so a change in it shows.",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": {
+    "failure": "default-model",
+    "shows": [
+      "foreign-unretired/main",
+      "missing-own/main"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "f2-subagent-after-resume",
+  "about": "A resume with --model, then one without: the conversation runs on its last response's model, and its subagent must get the rules of the model it runs on (F2, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "opus"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "Plan",
+          "model": null
+        }
+      ]
+    }
+  ],
+  "expect": "pass"
+}
