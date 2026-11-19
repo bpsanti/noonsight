@@ -55,9 +55,11 @@ const num = (args: Args, k: string, fallback: number): number => {
   return n;
 };
 
-/** The commit this checkout is at, with `-dirty` when anything outside the results has changed. */
+/** The commit this checkout is at, with `-dirty` when anything outside the results has changed; `unknown` outside a git checkout of its own. */
 function commit(): string {
   const git = (...a: string[]): string => spawnSync('git', ['-C', PACKAGE_ROOT, ...a], { encoding: 'utf8' }).stdout.trim();
+  const top = git('rev-parse', '--show-toplevel');
+  if (!top || fs.realpathSync(top) !== fs.realpathSync(PACKAGE_ROOT)) return 'unknown';
   const head = git('rev-parse', '--short', 'HEAD') || 'unknown';
   return git('status', '--porcelain', '--', '.', ':!experiments/delivery/results') ? `${head}-dirty` : head;
 }
@@ -110,7 +112,9 @@ function context(args: Args): Context {
 function logCommand(ctx: Context, command: string, started: number): void {
   const meta = path.join(ctx.results, 'run.json');
   const m = JSON.parse(fs.readFileSync(meta, 'utf8')) as { commands: unknown[] };
-  m.commands.push({ command, args: ctx.args, at: new Date(started).toISOString(), seconds: Math.round((Date.now() - started) / 1000) });
+  // The options that name a path of this machine are left out.
+  const args = Object.fromEntries(Object.entries(ctx.args).filter(([k]) => !['results', 'work', 'claude', 'sessions'].includes(k)));
+  m.commands.push({ command, args, at: new Date(started).toISOString(), seconds: Math.round((Date.now() - started) / 1000) });
   fs.writeFileSync(meta, `${JSON.stringify(m, null, 1)}\n`);
 }
 
