@@ -11,14 +11,15 @@ import { CONTAINER, conditionConfig, defaultOnRules, hookSettings, modelName, ow
 import { deliveries, deliveryTable, pathOf, rulesIn, signatures } from '../experiments/benchmark/delivery.js';
 import { excludedBy, unchecked, type GoldRecord } from '../experiments/benchmark/gold.js';
 import { reward } from '../experiments/benchmark/harbor.js';
-import { judgeMessage, parseRatings, scrub, tally, type Item } from '../experiments/benchmark/judge.js';
+import { judgeMessage, parseRatings, scrub, tally, type Grade, type Item } from '../experiments/benchmark/judge.js';
 import { BENCH_DIR, loadPlan, selection, wanted } from '../experiments/benchmark/plan.js';
 import { accountEnv, aboveFloor, parseQuota } from '../experiments/benchmark/quota.js';
 import os from 'node:os';
-import { doneKeys, interrupted, measured, spent, type Recorded } from '../experiments/benchmark/run.js';
+import { doneKeys, interrupted, measured, spent, type Recorded, type RunRecord } from '../experiments/benchmark/run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from '../experiments/benchmark/schedule.js';
 import { hitUsageLimit, parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
 import { chooseSwebench, chooseTerminalBench, rank, type SwebenchInstance } from '../experiments/benchmark/select.js';
+import { costByCondition, deliveryCheck, expectedRules, modelSwitches, openScores, readResults, resolution, rulesRead, summaryMarkdown } from '../experiments/benchmark/summary.js';
 import { tomlValue } from '../experiments/benchmark/sources.js';
 import { dropKey, dropSection, unpinBase, useArm64Image } from '../experiments/benchmark/tasks.js';
 import { tempTree } from './helpers.js';
@@ -448,4 +449,123 @@ test('the committed pilot list is the selection of the committed arm64 list afte
   const arm64 = new Set((JSON.parse(fs.readFileSync(path.join(BENCH_DIR, 'tasks', 'swebench-arm64.json'), 'utf8')) as { instances: string[] }).instances);
   for (const t of [...(pilot.sets.build ?? []), ...(pilot.sets.digest ?? [])]) assert.ok(arm64.has(t.id), `${t.id} has an arm64 image`);
   assert.ok(typeof selection === 'function');
+});
+
+/** A recorded run with only the fields the summary reads. */
+function recorded(over: Partial<RunRecord> & Pick<RunRecord, 'key' | 'condition' | 'model' | 'model_id'>): RunRecord {
+  return {
+    set: 'build',
+    task: 't',
+    rep: 1,
+    effort: 'medium',
+    night: 1,
+    started: '2026-11-17T00:00:00Z',
+    attempts: 1,
+    pins: { noonsight_commit: 'c', claude_code: '2.1.326', harbor: '0.26.0', task_sha256: 't', condition_sha256: `${over.condition}-${over.model}` },
+    noonsight: { status: 'none', reason: 'declared-none', place: 'unattended', scope: 'build', rules: [], sha256: null },
+    outcome: 'success',
+    cost_usd: 0.1,
+    cost_counted_usd: 0.1,
+    tokens: { input: 10, cache_creation: 1000, cache_read: 9000, output: 100 },
+    turns: 3,
+    duration_ms: 1000,
+    wall_s: { total: 1, environment: 0, agent_setup: 0, agent: 1, verifier: 0 },
+    models_used: [over.model_id],
+    resolved: true,
+    answer_written: null,
+    changed_files: [],
+    signals: { read_rules: { read: false, before_first_edit: false } } as RunRecord['signals'],
+    infra_failure: null,
+    ...over,
+  };
+}
+
+const userClaudeMd = [{ file_path: '/logs/agent/sessions/CLAUDE.md', memory_type: 'User', load_reason: 'session_start', agent_id: null }];
+
+test('the preset rules a run expects follow the model, the scope and the place', () => {
+  assert.deepEqual(expectedRules('claude-sonnet-5-5', 'routine', 'unattended'), ['sonnet-5-5/carry-through', 'sonnet-5-5/stay-in-scope', 'sonnet-5-5/verify-changes']);
+  assert.deepEqual(expectedRules('claude-sonnet-5-5', 'digest', 'unattended'), ['sonnet-5-5/carry-through']);
+  assert.deepEqual(expectedRules('claude-fable-5-2', 'build', 'unattended'), ['fable-5-2/low-context-report']);
+  assert.deepEqual(expectedRules('claude-opus-5-5', 'build', 'session'), []);
+});
+
+test('the delivery check holds each condition to what it delivers', () => {
+  const sonnet = { model: 'sonnet', model_id: 'claude-sonnet-5-5' } as const;
+  const matched = { status: 'matched', reason: null, place: 'unattended', scope: 'build', rules: ['sonnet-5-5/carry-through', 'sonnet-5-5/verify-changes'], sha256: 'x' };
+  const runs = [
+    recorded({ key: 'off-ok', condition: 'off', ...sonnet }),
+    recorded({ key: 'off-with-claudemd', condition: 'off', ...sonnet, instruction_loads: userClaudeMd }),
+    recorded({ key: 'on-ok', condition: 'on', ...sonnet, noonsight: matched }),
+    recorded({ key: 'on-wrong-rules', condition: 'on', ...sonnet, noonsight: { ...matched, rules: ['sonnet-5-5/carry-through'] } }),
+    recorded({ key: 'claudemd-ok', condition: 'claudemd', ...sonnet, instruction_loads: userClaudeMd }),
+    recorded({ key: 'claudemd-not-loaded', condition: 'claudemd', ...sonnet, instruction_loads: [] }),
+    recorded({ key: 'scattered-noonsight-too', condition: 'scattered', ...sonnet, instruction_loads: userClaudeMd, noonsight: matched }),
+  ];
+  const byCondition = Object.fromEntries(deliveryCheck(runs).map((d) => [d.condition, d]));
+  assert.deepEqual(byCondition.off?.unexpected, ['off-with-claudemd']);
+  assert.deepEqual(byCondition.on?.unexpected, ['on-wrong-rules']);
+  assert.deepEqual(byCondition.claudemd?.unexpected, ['claudemd-not-loaded']);
+  assert.deepEqual(byCondition.scattered?.unexpected, ['scattered-noonsight-too']);
+  assert.equal(byCondition.on?.as_expected, 1);
+  assert.deepEqual(byCondition.off?.texts_per_model, { sonnet: 1 });
+});
+
+test('the scattered rules file counts as read per model, and model switches come from the decision log', () => {
+  const read = { read: true, before_first_edit: false };
+  const runs = [
+    recorded({ key: 'a', condition: 'scattered', model: 'haiku', model_id: 'claude-haiku-5-5', signals: { read_rules: read } as RunRecord['signals'] }),
+    recorded({ key: 'b', condition: 'scattered', model: 'haiku', model_id: 'claude-haiku-5-5' }),
+    recorded({ key: 'c', condition: 'claudemd', model: 'haiku', model_id: 'claude-haiku-5-5', signals: { read_rules: read } as RunRecord['signals'] }),
+  ];
+  assert.deepEqual(rulesRead(runs, ['haiku', 'opus']), [
+    { model: 'haiku', runs: 2, read: 1, before_first_edit: 0 },
+    { model: 'opus', runs: 0, read: 0, before_first_edit: 0 },
+  ]);
+  const switches = modelSwitches([
+    { event: 'session-start', experiment_run: 'routine.t.opus.on.1' },
+    { event: 'model-switch', experiment_run: 'routine.t.opus.on.1', from_model: 'claude-opus-5-5', model: 'claude-opus-4-8', source: 'auto', delivered: 'note' },
+    { event: 'model-switch', from_model: 'claude-opus-5-5', model: 'claude-haiku-5-5', source: 'user', delivered: 'rules' },
+  ]);
+  assert.deepEqual(switches, [{ run: 'routine.t.opus.on.1', condition: 'on', from: 'claude-opus-5-5', to: 'claude-opus-4-8', source: 'auto', delivered: 'note' }]);
+});
+
+test('cost, resolution and open scores are per model and condition, over the runs kept', () => {
+  const opus = { model: 'opus', model_id: 'claude-opus-5-5' } as const;
+  const runs = [
+    recorded({ key: 'o1', condition: 'off', ...opus, cost_usd: 0.1 }),
+    recorded({ key: 'o2', condition: 'off', ...opus, cost_usd: 0.3, rep: 2, resolved: false }),
+    recorded({ key: 'c1', condition: 'claudemd', ...opus, cost_usd: null }),
+    recorded({ key: 'd1', condition: 'on', ...opus, set: 'digest', resolved: null }),
+    recorded({ key: 'd2', condition: 'on', ...opus, set: 'digest', resolved: null }),
+  ];
+  const all = costByCondition(runs, ['opus']);
+  assert.equal(all.opus?.off?.runs, 2);
+  assert.ok(Math.abs((all.opus?.off?.mean_usd ?? 0) - 0.2) < 1e-9);
+  assert.equal(all.opus?.off?.mean_input_tokens, 10010);
+  assert.deepEqual(all.opus?.claudemd, { runs: 0, mean_usd: null, mean_input_tokens: null });
+  assert.equal(costByCondition(runs, ['opus'], (r) => r.rep === 1).opus?.off?.runs, 1);
+  assert.deepEqual(resolution(runs, ['opus']).all?.off, { resolved: 1, runs: 2 });
+  assert.deepEqual(resolution(runs, ['opus']).opus?.on, { resolved: 0, runs: 0 });
+  const grades: Grade[] = [
+    { key: 'd1', set: 'digest', score: 0.5, items: [], votes: 3, cost_usd: 0.1, error: null },
+    { key: 'd2', set: 'digest', score: null, items: [], votes: 3, cost_usd: 0.1, error: 'no answer' },
+  ];
+  assert.deepEqual(openScores(runs, grades).digest?.on, { graded: 1, answers: 2, mean: 0.5 });
+  assert.equal(openScores(runs, grades).review, undefined);
+});
+
+test('summarize reads a results folder, leaves infrastructure failures out and prefers rescored signals', () => {
+  const dir = tempTree({});
+  const run = recorded({ key: 'build.t.haiku.scattered.1', condition: 'scattered', model: 'haiku', model_id: 'claude-haiku-5-5', instruction_loads: userClaudeMd });
+  const failure = { key: 'build.u.haiku.scattered.1', set: 'build', task: 'u', model: 'haiku', condition: 'scattered', rep: 1, model_id: 'claude-haiku-5-5', night: 1, started: '', attempts: 3, infra_failure: 'setup failed', cost_counted_usd: 0 };
+  fs.writeFileSync(path.join(dir, 'runs.jsonl'), `${JSON.stringify(run)}\n${JSON.stringify(failure)}\n`);
+  fs.writeFileSync(path.join(dir, 'signals.jsonl'), `${JSON.stringify({ key: run.key, scorer: 'c', signals: { read_rules: { read: true, before_first_edit: true } } })}\n`);
+  const res = readResults(dir);
+  assert.equal(res.runs.length, 1);
+  assert.deepEqual(res.decisions, []);
+  assert.equal(res.runs[0]?.signals.read_rules.read, true);
+  const text = summaryMarkdown(res, ['haiku']);
+  assert.match(text, /\| `scattered` \| 1 \| 1 of 1 \| haiku 1 \|/);
+  assert.match(text, /\| haiku \| 1 \| 1 of 1 \| 1 of 1 \|/);
+  assert.match(text, /## Model switches during the paid runs\n\nNone\./);
 });

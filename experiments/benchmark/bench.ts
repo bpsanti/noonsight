@@ -11,6 +11,7 @@
 //   npm run benchmark -- calibration --work <dir> [--n 15]
 //   npm run benchmark -- status --work <dir> [--account <dir>]
 //   npm run benchmark -- project --work <dir> [--night-usd 45] [--night-hours 6.5] [--concurrency 2]
+//   npm run benchmark -- summarize --results <dir> [--out <file>]   (the reading's tables, from a folder of result files)
 //
 // `fetch` and `gold` call no model. `run` and `grade` do, from the login of the account given.
 
@@ -26,6 +27,7 @@ import { arm64Instances, fetchSwebenchRows, hubImageHasArm64, readSwebenchRows, 
 import { readQuota } from './quota.js';
 import { bundleBase, gradePending, measured, readJsonl, resultsDir, runCell, runNight, summaryLine, type NightSummary, type Recorded } from './run.js';
 import { cellKey, expectedCost, planNight, rounds, type Cell } from './schedule.js';
+import { readResults, summaryMarkdown } from './summary.js';
 import { parseStream, signals } from './score.js';
 import { ANSWER_FILE, materialize, OPEN_SETS, SETS, type SetName, type Sources } from './tasks.js';
 
@@ -180,6 +182,12 @@ function options(argv: readonly string[]): { command: string | undefined; opts: 
 
 export async function main(argv: readonly string[]): Promise<number> {
   const { command, opts } = options(argv);
+  if (command === 'summarize') {
+    const text = summaryMarkdown(readResults(path.resolve(required(opts, 'results'))), Object.keys(loadPlan().models));
+    if (opts.has('out')) fs.writeFileSync(path.resolve(required(opts, 'out')), text);
+    else process.stdout.write(text);
+    return 0;
+  }
   const work = path.resolve(opts.get('work') ?? path.join(os.tmpdir(), 'noonsight-benchmark'));
   fs.mkdirSync(work, { recursive: true });
   if (command === 'fetch') {
@@ -354,7 +362,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     if (opts.has('account')) log(`quota: ${readQuota(required(opts, 'account')).all_models ?? '?'}% of the week left`);
     return 0;
   }
-  process.stderr.write('usage: fetch|gold|run|smoke|grade|calibration|status --work <dir> [options]; see the header of experiments/benchmark/bench.ts\n');
+  process.stderr.write('usage: fetch|gold|run|smoke|grade|rescore|calibration|project|status --work <dir> [options], or summarize --results <dir>; see the header of experiments/benchmark/bench.ts\n');
   return 2;
 }
 
