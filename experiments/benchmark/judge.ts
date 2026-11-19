@@ -40,7 +40,7 @@ export interface Grade {
   readonly error: string | null;
 }
 
-const SCRUB = /noonsight[-\w]*|workspace-notes[-\w]*|(fable|opus|sonnet|haiku)-5-[25]\/[\w-]+|local\/[\w-]+/gi;
+const SCRUB = /noonsight[-\w]*|(\/opt\/)?agent-notes[-\w/.]*|(fable|opus|sonnet|haiku)-5-[25]\/[\w-]+|local\/[\w-]+/gi;
 
 /** The answer as the judge sees it: without any string that could reveal the condition. */
 export function scrub(answer: string): string {

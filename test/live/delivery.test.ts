@@ -105,8 +105,7 @@ async function runArm(arm: Arm): Promise<Delivery[]> {
 
 test('delivery probe: where the rules reach the model, under noonsight, one CLAUDE.md, and a CLAUDE.md that only points to them', { skip: !enabled && 'set NOONSIGHT_LIVE_DELIVERY=1', timeout: 1_800_000 }, async (t) => {
   assert.equal(spawnSync('expect', ['-v']).status, 0, 'expect is not on PATH');
-  const only = process.env.NOONSIGHT_DELIVERY_ARM as Arm | undefined;
-  const arms: Record<Arm, Delivery[]> = { on: only && only !== 'on' ? [] : await runArm('on'), claudemd: only && only !== 'claudemd' ? [] : await runArm('claudemd'), scattered: only && only !== 'scattered' ? [] : await runArm('scattered') };
+  const arms: Record<Arm, Delivery[]> = { on: await runArm('on'), claudemd: await runArm('claudemd'), scattered: await runArm('scattered') };
   const table = deliveryTable(arms, PATHS);
   t.diagnostic(`\n${table}`);
   const out = process.env.NOONSIGHT_DELIVERY_OUT;
