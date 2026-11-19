@@ -1,0 +1,1 @@
+The user's editor shows line numbers in a narrow gutter and uses a dark color theme. Files in this workspace are UTF-8 plain text with Unix line endings. The terminal font is monospaced, at a medium size, and the session is read on a laptop screen of ordinary size. Dates in the user's notes are written as year, month and day. The keyboard has a layout for the user's own language.

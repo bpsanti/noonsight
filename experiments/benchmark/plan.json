@@ -1,0 +1,189 @@
+{
+  "seed": "noonsight-eval-2026-11-16",
+  "effort": "medium",
+  "unattended_env": "NOONSIGHT_EXPERIMENT",
+  "rounds": 2,
+  "cap_usd": 200,
+  "night_usd": 45,
+  "quota_floor_percent": 50,
+  "concurrency": 2,
+  "pins": {
+    "claude_code": "2.1.326",
+    "harbor": "0.26.0",
+    "node": {
+      "version": "20.20.2",
+      "sha256": {
+        "arm64": "47ef73d543ecf6eb19435f6c03a0ac4809b3bf0dd6b26c7c571efc2a6572a74d",
+        "x64": "19e56f0825510207dd904f087fe52faa0a4eb6b2aab5f0ea7a33830d04888b8b"
+      }
+    },
+    "datasets": {
+      "build": "swebench-verified@1.0",
+      "routine": "terminal-bench/terminal-bench-2-1@latest",
+      "review": "review-bench/reviewbench-public@v1",
+      "investigate": "scaleapi/SWE-Atlas@b3cdddf44414c0ccca50c6e89fe978bb4d844d26"
+    }
+  },
+  "models": {
+    "fable": {
+      "id": "claude-fable-5-2",
+      "budget_usd": 3.5,
+      "expected_usd": 0.88
+    },
+    "opus": {
+      "id": "claude-opus-5-5",
+      "budget_usd": 1.5,
+      "expected_usd": 0.38
+    },
+    "sonnet": {
+      "id": "claude-sonnet-5-5",
+      "budget_usd": 1.0,
+      "expected_usd": 0.27
+    },
+    "haiku": {
+      "id": "claude-haiku-5-5",
+      "budget_usd": 0.15,
+      "expected_usd": 0.03
+    }
+  },
+  "conditions": {
+    "off": {
+      "use": "none"
+    },
+    "on": {
+      "use": "preset"
+    },
+    "claudemd": {
+      "use": "none",
+      "claude_md": "union"
+    },
+    "scattered": {
+      "use": "none",
+      "claude_md": "pointer"
+    }
+  },
+  "phases": [
+    {
+      "name": "build off-on",
+      "sets": [
+        "build"
+      ],
+      "conditions": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "name": "other sets off-on",
+      "sets": [
+        "routine",
+        "investigate",
+        "review",
+        "digest"
+      ],
+      "conditions": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "name": "claudemd",
+      "sets": [
+        "build",
+        "routine",
+        "investigate",
+        "review",
+        "digest"
+      ],
+      "conditions": [
+        "claudemd"
+      ]
+    },
+    {
+      "name": "scattered",
+      "sets": [
+        "build",
+        "routine",
+        "investigate",
+        "review",
+        "digest"
+      ],
+      "conditions": [
+        "scattered"
+      ],
+      "rounds": 1
+    }
+  ],
+  "sets": {
+    "build": {
+      "scope": "build",
+      "strata": {
+        "<15 min fix": 3,
+        "15 min - 1 hour": 6,
+        "1-4 hours": 3
+      },
+      "capped_repo": "django/django",
+      "capped_share": 0.4,
+      "max_per_other_repo": 2
+    },
+    "routine": {
+      "scope": "routine",
+      "n": 6,
+      "max_expert_min": 30,
+      "max_agent_timeout_sec": 1800,
+      "max_memory_mb": 4096
+    },
+    "digest": {
+      "scope": "digest",
+      "n": 2,
+      "strata": [
+        "15 min - 1 hour",
+        "1-4 hours"
+      ],
+      "min_hints_chars": 3000,
+      "max_per_repo": 2
+    },
+    "investigate": {
+      "scope": "investigate",
+      "n": 1,
+      "ranked": [
+        "qa-6905333b74f22949d97baa05",
+        "qa-6905333b74f22949d97ba9de",
+        "qa-6905333b74f22949d97baa25",
+        "qa-6905333b74f22949d97ba9b6",
+        "qa-6905333b74f22949d97ba9f1",
+        "qa-6905333b74f22949d97ba9ad",
+        "qa-6905333b74f22949d97ba9bf",
+        "qa-6905333b74f22949d97ba99b"
+      ]
+    },
+    "review": {
+      "scope": "review",
+      "n": 1,
+      "ranked": [
+        "sdsykes_fastimage_165",
+        "NCATSTranslator_translator-ingests_336",
+        "cmik_apilix_12",
+        "Marvell-Consulting_statswales-frontend_626",
+        "DisciplinedSoftware_Codebase-Conversion_1",
+        "konturio_disaster-ninja-fe_1230",
+        "allan-mobley-jr_gimmes_468",
+        "scottlz0310_Mcp-Docker_29"
+      ]
+    }
+  },
+  "expected_wall_min": {
+    "build": 8,
+    "routine": 6,
+    "digest": 5,
+    "review": 6,
+    "investigate": 8
+  },
+  "judge": {
+    "model": "claude-opus-5-5",
+    "effort": "high",
+    "votes": 3,
+    "budget_usd": 1.5,
+    "expected_usd": 0.3
+  }
+}

@@ -1,0 +1,1 @@
+The user's own terminal uses a dark color theme with a monospaced font, and the session is read on a laptop screen of ordinary size. The machine's clock follows the local time zone of the user's city. Files here are UTF-8 plain text files.

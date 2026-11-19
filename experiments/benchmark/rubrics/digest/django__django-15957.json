@@ -1,0 +1,12 @@
+{
+  "instance": "django__django-15957",
+  "written": "2026-11-17",
+  "key_points": [
+    "O problema: o prefetch de objetos (prefetch_related / Prefetch) não funciona com querysets fatiados (slices).",
+    "Proposta: extrair os objetos do queryset e filtrar com um join em memória, que não resolve o problema.",
+    "Proposta: um refactor maior em como o prefetch é feito.",
+    "Proposta: usar Window queries, apontada como talvez a melhor saída.",
+    "Nada foi acordado em específico. Quem quisesse resolver antes do ticket #28333 poderia tentar combinar Queryset.raw com Query.compile.",
+    "A solução segue em aberto, e esse caminho é só uma hipótese."
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "on": [
+    {
+      "path": "start",
+      "model": "claude-sonnet-5-5",
+      "own": true,
+      "others": []
+    },
+    {
+      "path": "subagent general-purpose",
+      "model": "claude-sonnet-5-5",
+      "own": true,
+      "others": []
+    },
+    {
+      "path": "subagent Explore",
+      "model": "claude-sonnet-5-5",
+      "own": true,
+      "others": []
+    },
+    {
+      "path": "subagent Plan",
+      "model": "claude-sonnet-5-5",
+      "own": true,
+      "others": []
+    },
+    {
+      "path": "after-model-switch",
+      "model": "claude-haiku-5-5",
+      "own": true,
+      "others": [
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "path": "after-compact",
+      "model": "claude-haiku-5-5",
+      "own": true,
+      "others": []
+    },
+    {
+      "path": "after-clear",
+      "model": "claude-haiku-5-5",
+      "own": true,
+      "others": []
+    }
+  ],
+  "claudemd": [
+    {
+      "path": "start",
+      "model": "claude-sonnet-5-5",
+      "own": true,
+      "others": [
+        "claude-fable-5-2",
+        "claude-opus-5-5",
+        "claude-haiku-5-5"
+      ]
+    },
+    {
+      "path": "subagent general-purpose",
+      "model": "claude-sonnet-5-5",
+      "own": true,
+      "others": [
+        "claude-fable-5-2",
+        "claude-opus-5-5",
+        "claude-haiku-5-5"
+      ]
+    },
+    {
+      "path": "subagent Explore",
+      "model": "claude-sonnet-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "subagent Plan",
+      "model": "claude-sonnet-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "after-model-switch",
+      "model": "claude-haiku-5-5",
+      "own": true,
+      "others": [
+        "claude-fable-5-2",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "path": "after-compact",
+      "model": "claude-haiku-5-5",
+      "own": true,
+      "others": [
+        "claude-fable-5-2",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    },
+    {
+      "path": "after-clear",
+      "model": "claude-haiku-5-5",
+      "own": true,
+      "others": [
+        "claude-fable-5-2",
+        "claude-opus-5-5",
+        "claude-sonnet-5-5"
+      ]
+    }
+  ],
+  "scattered": [
+    {
+      "path": "start",
+      "model": "claude-sonnet-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "subagent general-purpose",
+      "model": "claude-sonnet-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "subagent Explore",
+      "model": "claude-sonnet-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "subagent Plan",
+      "model": "claude-sonnet-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "after-model-switch",
+      "model": "claude-haiku-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "after-compact",
+      "model": "claude-haiku-5-5",
+      "own": false,
+      "others": []
+    },
+    {
+      "path": "after-clear",
+      "model": "claude-haiku-5-5",
+      "own": false,
+      "others": []
+    }
+  ]
+}

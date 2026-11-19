@@ -8,6 +8,7 @@ Recheck them all when raising the Claude Code version that CI pins (`.github/wor
 `NOONSIGHT_LIVE_LOGIN=1` adds the subagent (one of them in auto mode), scope, preset, launcher and routing checks (`test/live/subagents.test.ts`, `test/live/scopes.test.ts`, `test/live/preset.test.ts`, `test/live/launcher.test.ts`, `test/live/routing.test.ts`), which send prompts from the Claude Code login of whoever runs them: they read no token, give noonsight's hook entries through `--settings`, and leave the person's own settings out with `--setting-sources project,local`, so nothing is installed into that account.
 The preset checks send one short request to each of the four current models, Fable 5.2 included; in `claude -p`, Claude Code bills Fable usage to usage credits without asking, on plans where Fable draws on them.
 Run them again whenever the preset changes or Claude Code is upgraded: the `system-prompt` check fails when what Claude Code sends each model changes.
+`NOONSIGHT_LIVE_DELIVERY=1` adds the delivery probe of the benchmark pilot (`test/live/delivery.test.ts`): sessions against a local stand-in for the API that records every request and answers with fixed replies, so they run real turns, start subagents and compact without sending anything to Anthropic.
 
 ## Checked live
 
@@ -56,6 +57,11 @@ Run them again whenever the preset changes or Claude Code is upgraded: the `syst
 | A hook inherits a variable set in the environment `claude -p` starts with, so `routing.yield_when_env` sees an orchestrator's variable in the agent call hook | 2.1.325 | 2026-11-16 | `NOONSIGHT_LIVE_LOGIN=1 npm run test:live` (orchestrator-env) |
 | A session `noonsight run` starts with `--model <alias> --effort <level>` ahead of the other arguments runs on that model, and its `SessionStart` hook finds the routed model's rules in the system prompt | 2.1.325 | 2026-11-16 | `NOONSIGHT_LIVE_LOGIN=1 npm run test:live` (launcher routing) |
 | With the shipped preset, a session and a subagent read the rules delivered to them and name their ids, and the decision log records the hash `noonsight resolve` gives for the same model, scope and place | 2.1.325 | 2026-11-16 | `NOONSIGHT_LIVE_LOGIN=1 npm run test:live` (preset-hash) |
+| The user `CLAUDE.md` is read from `$CLAUDE_CONFIG_DIR/CLAUDE.md`, and `InstructionsLoaded` fires for it and for each project `CLAUDE.md` from the working directory up, with `load_reason: "session_start"`, before any prompt | 2.1.326 | 2026-11-17 | Checked by hand: an `InstructionsLoaded` hook in an interactive session with a placeholder token; and inside a benchmark task container (`experiments/benchmark`) |
+| `CLAUDE.md` reaches the model in the first user message, inside a `<system-reminder>` with Claude Code's own preamble, not in the system prompt; it is the same after `/model`, and present again after `/compact` and `/clear` | 2.1.326 | 2026-11-17 | `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` (the recorded requests) |
+| A `general-purpose` subagent's first request holds the `CLAUDE.md`; an `Explore` or `Plan` subagent's does not; `SubagentStart` context reaches all three | 2.1.326 | 2026-11-17 | `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` |
+| `/model` in a conversation already cached for another model asks to confirm the switch before it applies | 2.1.326 | 2026-11-17 | `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` |
+| `/clear` fires `SessionStart` again but not `InstructionsLoaded` | 2.1.326 | 2026-11-17 | Checked by hand: an `InstructionsLoaded` hook in an interactive session with a placeholder token |
 
 ## From the documentation, not checked live
 
