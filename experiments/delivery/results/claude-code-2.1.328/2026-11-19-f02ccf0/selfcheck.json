@@ -1,0 +1,57 @@
+{
+ "no-switch-note": {
+  "about": "A /model switch delivers the new model rules without the note that retires the earlier model rules.",
+  "caught": true,
+  "plant": "no-switch-note",
+  "sessions": 30,
+  "failedOnReal": 0,
+  "failedOnPlanted": 13,
+  "failedOnlyOnPlanted": [
+   "plant-no-switch-note-s1-0001",
+   "plant-no-switch-note-s1-0008",
+   "plant-no-switch-note-s1-0009",
+   "plant-no-switch-note-s1-0010",
+   "plant-no-switch-note-s1-0014",
+   "plant-no-switch-note-s1-0016",
+   "plant-no-switch-note-s1-0017",
+   "plant-no-switch-note-s1-0020",
+   "plant-no-switch-note-s1-0021",
+   "plant-no-switch-note-s1-0023",
+   "plant-no-switch-note-s1-0024",
+   "plant-no-switch-note-s1-0025",
+   "plant-no-switch-note-s1-0026"
+  ],
+  "exposed": 14,
+  "exposedAndCaught": 13,
+  "exposedNotCaught": [
+   "plant-no-switch-note-s1-0022"
+  ],
+  "caughtNotExposed": [],
+  "minimal": "start(haiku, scope=none, unattended) > /model opus > turn",
+  "shrinkRuns": 5,
+  "minimalOnReal": "passes"
+ },
+ "compact-as-resume": {
+  "about": "A compaction is treated as a resume, so the rules compaction dropped are not delivered again.",
+  "caught": true,
+  "plant": "compact-as-resume",
+  "sessions": 30,
+  "failedOnReal": 0,
+  "failedOnPlanted": 4,
+  "failedOnlyOnPlanted": [
+   "plant-compact-as-resume-s1-0008",
+   "plant-compact-as-resume-s1-0014",
+   "plant-compact-as-resume-s1-0016",
+   "plant-compact-as-resume-s1-0028"
+  ],
+  "exposed": 5,
+  "exposedAndCaught": 4,
+  "exposedNotCaught": [
+   "plant-compact-as-resume-s1-0020"
+  ],
+  "caughtNotExposed": [],
+  "minimal": "start(opus, scope=none, unattended) > turn > /compact > turn",
+  "shrinkRuns": 12,
+  "minimalOnReal": "passes"
+ }
+}

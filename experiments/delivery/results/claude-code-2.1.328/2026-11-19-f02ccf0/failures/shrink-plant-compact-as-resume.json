@@ -1,0 +1,30 @@
+{
+ "session": "plant-compact-as-resume-s1-0008",
+ "target": {
+  "class": "missing-own",
+  "kind": "main"
+ },
+ "originalSteps": 7,
+ "minimalSteps": 3,
+ "runs": 12,
+ "seconds": 66,
+ "original": "start(opus, scope=none, unattended) > turn > /clear > turn > /compact > edit(code) > /model haiku > turn",
+ "minimal": "start(opus, scope=none, unattended) > turn > /compact > turn",
+ "spec": {
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ },
+ "minimalOnReal": "passes"
+}

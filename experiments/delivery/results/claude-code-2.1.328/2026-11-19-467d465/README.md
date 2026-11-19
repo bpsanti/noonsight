@@ -8,7 +8,7 @@ The fix changes neither the sessions nor the measures, and the planted runs were
 No request reached Anthropic and no token was spent.
 
 These results predate the fixes of F1 and F2, the two failures the fuzzer found here: they measure noonsight as it was at `467d465`, and the corpus then expected the F1 and F2 entries to fail.
-The corpus on the fixed build is in [the next folder](../2026-11-19-FIXED/README.md).
+The corpus on the fixed build is in [the next folder](../2026-11-19-f02ccf0/README.md).
 
 ## Corpus
 
