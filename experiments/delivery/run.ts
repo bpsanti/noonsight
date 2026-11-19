@@ -100,10 +100,11 @@ function context(args: Args): Context {
   fs.mkdirSync(work, { recursive: true });
   const ref = loadReference(work);
   const meta = path.join(results, 'run.json');
-  const prior = fs.existsSync(meta) ? (JSON.parse(fs.readFileSync(meta, 'utf8')) as { commands?: unknown[] }) : {};
+  // The folder's commit is the first command's; each command records its own.
+  const prior = fs.existsSync(meta) ? (JSON.parse(fs.readFileSync(meta, 'utf8')) as { commit?: string; commands?: unknown[] }) : {};
   fs.writeFileSync(
     meta,
-    `${JSON.stringify({ claudeCode: version, commit: commit(), preset: ref.presetVersion, node: process.version, platform: `${process.platform}-${process.arch}`, commands: prior.commands ?? [] }, null, 1)}\n`,
+    `${JSON.stringify({ claudeCode: version, commit: prior.commit ?? commit(), preset: ref.presetVersion, node: process.version, platform: `${process.platform}-${process.arch}`, commands: prior.commands ?? [] }, null, 1)}\n`,
   );
   process.stderr.write(`Claude Code ${version}; results in ${results}; sessions in ${work}\n`);
   return { args, results, work, opts: { ref, workRoot: work, claude, claudeCode: version, noonsightRoot: PACKAGE_ROOT } };
@@ -115,7 +116,7 @@ function logCommand(ctx: Context, command: string, started: number): void {
   const m = JSON.parse(fs.readFileSync(meta, 'utf8')) as { commands: unknown[] };
   // The options that name a path of this machine are left out.
   const args = Object.fromEntries(Object.entries(ctx.args).filter(([k]) => !['results', 'work', 'claude', 'sessions'].includes(k)));
-  m.commands.push({ command, args, at: new Date(started).toISOString(), seconds: Math.round((Date.now() - started) / 1000) });
+  m.commands.push({ command, args, commit: commit(), at: new Date(started).toISOString(), seconds: Math.round((Date.now() - started) / 1000) });
   fs.writeFileSync(meta, `${JSON.stringify(m, null, 1)}\n`);
 }
 
@@ -168,7 +169,7 @@ function checker(opts: RunOptions, label: string, target: Target, plant: string 
   let n = 0;
   return async (spec: Sequence): Promise<boolean> => {
     const id = `shrink-${label}-${n++}`;
-    const r = await runSession({ id, arm: 'on', plant, ...spec }, opts);
+    const r = await runSession({ model: spec.model, scope: spec.scope, unattended: spec.unattended, steps: spec.steps, id, arm: 'on', plant }, opts);
     const hit = r.harness === 'ok' && violationsOf(r).some((v) => !v.known && v.class === target.class && v.kind === target.kind);
     process.stderr.write(`  ${id}: ${spec.steps.length} steps, ${r.harness}, ${hit ? 'still fails' : 'passes'}\n`);
     return hit;

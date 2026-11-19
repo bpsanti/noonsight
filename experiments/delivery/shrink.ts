@@ -80,6 +80,8 @@ export async function shrink(base: Sequence, target: Target, check: Check, concu
     return null;
   };
 
+  // Only the sequence: a session id or arm the caller's object carries must not reach the candidates.
+  base = { model: base.model, scope: base.scope, unattended: base.unattended, steps: base.steps };
   if (!(await fails(base))) throw new Error(`the failure does not reproduce: ${show(base)}`);
   let spec = base;
   let n = 2;

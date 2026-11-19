@@ -173,14 +173,17 @@ test('fuzz: violations, the documented exception, and what counts as a failure',
 
 test('shrink: delta debugging finds the shortest sequence that still fails, then simplifies it', async () => {
   // A stand-in for a real session: it fails when two /model switches follow each other.
-  const fails = async (s: Sequence): Promise<boolean> => s.steps.some((x, i) => x.k === 'model' && s.steps[i + 1]?.k === 'model');
+  const fails = async (s: Sequence): Promise<boolean> => {
+    assert.deepEqual(Object.keys(s).sort(), ['model', 'scope', 'steps', 'unattended'], 'a candidate carries only the sequence, never the session id it came from');
+    return s.steps.some((x, i) => x.k === 'model' && s.steps[i + 1]?.k === 'model');
+  };
   const base: Sequence = {
     model: 'haiku',
     scope: 'build',
     unattended: true,
     steps: [{ k: 'edit', target: 'code' }, { k: 'clear' }, { k: 'turn' }, { k: 'model', to: 'sonnet' }, { k: 'model', to: 'fable' }, { k: 'spawn', calls: [{ type: 'Plan', model: 'opus' }] }, { k: 'turn' }],
   };
-  const r = await shrink(base, { class: 'foreign-unretired', kind: 'main' }, fails, 3);
+  const r = await shrink({ ...base, id: 'on-s1-0170' } as Sequence, { class: 'foreign-unretired', kind: 'main' }, fails, 3);
   assert.deepEqual(r.spec, {
     model: 'haiku',
     scope: null,
