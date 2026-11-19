@@ -382,6 +382,7 @@ test('usage reads the last result event: subtype, cost, tokens over every model,
 test('the judge sees no condition, reads ratings by statement or order, and takes the majority per item', () => {
   assert.equal(scrub('noonsight-rules said opus-5-5/unattended-run and local/workspace-notes-3'), '[removed] said [removed] and [removed]');
   assert.equal(scrub('I read /opt/agent-notes/rules.md first.'), 'I read [removed] first.');
+  assert.equal(scrub('My CLAUDE.md lists Working rules; each section is written for one model.'), 'My [removed] lists [removed]; [removed].');
   const items: Item[] = [
     { id: '1', statement: 'A', scored: true },
     { id: '2', statement: 'B', scored: true },
