@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- A `/model` switch's delivery is no longer taken as received.
+  Claude Code adds what the `PostModelSwitch` hook returns to the next request only, and drops it when another `/model` or the end of the session comes first; the hook recorded it as delivered all the same.
+  So in a session started on Haiku, after `/model sonnet` and `/model fable` with no request between them, Fable read Haiku's rules from the session's start with no note saying they no longer applied, and a conversation resumed on the model a lost switch chose logged `already-delivered` and never got its rules.
+  The session's record now keeps every model whose rules the conversation may hold without a note after them: each later note names all of them (`from` lists them, or reads `*` when their names do not fit), and a resume after a switch delivers the rules again.
+  `noonsight report` no longer counts as delivered a switch whose session's next line is another switch, and lists it as `switched-again`.
+  See `docs/hooks.md` ("PostModelSwitch").
+
+- A conversation resumed with `claude --continue` or `claude --resume` without `--model` or `ANTHROPIC_MODEL` now gets the rules of the model it runs on when the `model` setting names another.
+  Claude Code resumes such a conversation on the model of its last response since its last compaction, and only without one on the `model` setting, which `/model` in any session changes; the hook took the setting first, so a conversation that last answered on Opus, resumed after the setting became Haiku, got Haiku's rules and a note that Opus's no longer applied.
+  At `resume` and `fork` the order is now `--model`, `ANTHROPIC_MODEL`, the conversation's last response read from the transcript (`model_source: "session-transcript"`), the `model` setting, then the session's record; an explicit `--model` keeps outranking the conversation.
+  See `docs/hooks.md` ("SessionStart").
+
 - The `claude` preset, version 1.3.1: `haiku-5-5/carry-through` and `sonnet-5-5/stay-in-scope` end with a sentence that makes what the project's own instructions explicitly require, in its instruction files or in the documents they point to, part of the request, and says a convention they only describe is not a requirement.
   Both rules tell the model to leave out what nobody requested, and a requirement that sat in a document the project's CLAUDE.md points to was often skipped as unrequested.
   In 610 runs of `experiments/rules`, Haiku with the previous wording met such a requirement in 44 of 60 runs and with this one in 59 of 60, and added nothing unrequested in 60 of 60 runs of a task where the project only describes a convention; a shorter wording reached 30 of 30 but added unrequested changes in 12 of 30.

@@ -142,20 +142,32 @@ export function envelope(model: string, scope: string | null, ruleIds: readonly 
 }
 
 /**
- * The note delivered when the session's model changes away from a model that had received rules.
- * Rules delivered earlier stay in the conversation, so the new model is told, as a fact, that they
- * no longer apply. Model names are cut to a fixed length so the note always fits SWITCH_NOTE_RESERVE.
+ * The note that says which working rules in the conversation no longer apply: those noonsight
+ * delivered for every model in `retired`, after the session's model changed from `from` to `to`, or,
+ * when `from` is null or `to` itself, while the session runs on `to`. Rules delivered earlier stay in
+ * the conversation, so the model is told, as a fact, that they no longer apply. The `from` attribute
+ * lists the retired models. Model names are cut to a fixed length, and when the list of retired
+ * models would not fit, the note retires the rules of every model but `to`, so it always fits
+ * SWITCH_NOTE_RESERVE.
  */
-export function switchNote(fromModel: string, toModel: string): string {
-  const from = noteName(fromModel);
-  const to = noteName(toModel);
-  const note =
-    `<noonsight-rules-change from="${from}" to="${to}">\n` +
-    `The session's model changed from ${from} to ${to}. ` +
-    `The working rules noonsight delivered earlier in this conversation for ${from} no longer apply.\n` +
+export function switchNote(from: string | null, to: string, retired: readonly string[] = from === null ? [] : [from]): string {
+  const target = noteName(to);
+  const change = from !== null && from !== to ? `The session's model changed from ${noteName(from)} to ${target}. ` : `This session runs on ${target}. `;
+  const build = (attribute: string, names: string): string =>
+    `<noonsight-rules-change from="${attribute}" to="${target}">\n` +
+    change +
+    `The working rules noonsight delivered earlier in this conversation for ${names} no longer apply.\n` +
     `</noonsight-rules-change>`;
+  const names = [...new Set(retired.map(noteName))];
+  const listed = build(names.join(' '), listText(names));
+  const note = listed.length + 2 <= SWITCH_NOTE_RESERVE ? listed : build('*', `every model other than ${target}`);
   if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('switchNote: the note outgrew its reserve');
   return note;
+}
+
+/** "a", "a and b", "a, b and c". */
+function listText(names: readonly string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 /**

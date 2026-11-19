@@ -26,11 +26,12 @@ import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '.
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import type { Config, Decision, Trigger } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
-import { processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
+import { heldModels, processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
 import { sessionTriggers } from '../../state/triggers.js';
-import { launchFields, launchModel, readCommandLine, type LaunchModel } from './launch.js';
+import { launchFields, launchModel, readCommandLine, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
+import { conversationModel } from './predict.js';
 import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
 import { agentCall, agentResult, choiceFields, decisionFields, subagentStart } from './subagents.js';
@@ -139,7 +140,10 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       log(outcome.record);
       if (outcome.state)
         try {
-          writeState(sessionState, { ...outcome.state, at: ctx.now.toISOString() });
+          // The conversation still holds what it held, and a /model delivery the edit cannot confirm stays unconfirmed.
+          const before = readState(sessionState);
+          const held = [...new Set([...heldModels(before), ...heldModels(outcome.state)])];
+          writeState(sessionState, { ...outcome.state, held, unconfirmed: before?.unconfirmed === true, at: ctx.now.toISOString() });
         } catch {
           // Without the record, a later resume delivers again: the safe direction.
         }
@@ -162,7 +166,8 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
             where,
             readState(sessionState),
             readState(processState),
-            () => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }),
+            (sources) => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }, sources),
+            () => conversationModel(str(input.transcript_path)),
             () => launcherPrompt(ctx.env, commandLine),
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
@@ -229,17 +234,19 @@ interface Outcome {
  * SessionStart, by how the session started:
  *   startup         deliver
  *   clear, compact  deliver again: the earlier context, and the rules in it, are gone
- *   resume, fork    deliver only when the model or the rules changed since this session's record
+ *   resume, fork    deliver only when the model or the rules changed since this session's record, or
+ *                   when its last delivery came from a /model switch, which may never have arrived
  *   anything else   deliver: delivering twice costs little, missing a delivery is the defect
  *
  * The model comes from the input. When Claude Code leaves it out, after /clear and compaction it comes
  * from the record of the same session or of the same Claude Code process, which keeps the model a
  * /model since the launch chose; and when neither knows it, as in every `claude -p` run, from what the
  * session was started with (launch.ts). A resumed or forked conversation runs in a new Claude Code
- * process, which takes its model from what it was started with, as any start does, and keeps the
- * conversation's own model only when nothing it was started with names one; so there the launch comes
- * first and the session's record after it. When the model is not the one the record holds, the
- * conversation still holds that model's rules, and as at a /model switch a note says they no longer apply.
+ * process, which takes its model from --model, else ANTHROPIC_MODEL, else the model of the
+ * conversation's last response since its last compaction, else the model setting; so there those come
+ * first, in that order, and the session's record after them. When the model is not the one the record
+ * holds, the conversation still holds that model's rules, and as at a /model switch a note says they no
+ * longer apply.
  *
  * A session `noonsight run` started already holds rules in its system prompt. Claude Code renders the
  * system prompt from the current launch for a new conversation, after /clear and after compaction,
@@ -258,24 +265,32 @@ function sessionStart(
   where: Where,
   session: DeliveryState | null,
   process: DeliveryState | null,
-  readLaunch: () => LaunchModel,
+  readLaunch: (sources: LaunchSources) => LaunchModel,
+  readConversation: () => string | null,
   readLauncher: () => LauncherPrompt | null,
 ): Outcome {
   const source = str(input.source);
   const resumed = source === 'resume' || source === 'fork';
   const reported = normalizeModel(str(input.model));
   const recorded = session?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
-  const launch = reported || (recorded && !resumed) ? null : readLaunch();
-  const launched = launch?.kind === 'found' ? launch : null;
-  const fromLaunch = !reported && launched !== null && (resumed || !recorded);
-  const model = reported || (fromLaunch ? launched.model : recorded);
-  const modelSource = reported ? 'hook-input' : fromLaunch ? launched.source : recorded ? (session?.model ? 'session-record' : 'process-record') : null;
+  const chosen: ModelChoice = reported
+    ? { model: reported, source: 'hook-input', launch: null }
+    : resumed
+      ? resumedModel(recorded, readLaunch, readConversation)
+      : recorded
+        ? { model: recorded, source: session?.model ? 'session-record' : 'process-record', launch: null }
+        : launchChoice(readLaunch('all'), null);
+  const { model, launch } = chosen;
   const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const repeat = resumed && session !== null && session.model === decision.model && session.sha256 === sha;
-  // The model the resumed conversation's rules were for, when they were for another model.
-  const previous = resumed && session !== null && session.status === 'matched' && decision.model !== null && session.model !== decision.model ? session.model : null;
+  // A /model delivery may never have reached the conversation, so a resume after one delivers again.
+  const unconfirmed = resumed && session?.unconfirmed === true;
+  const repeat = resumed && session !== null && !unconfirmed && session.model === decision.model && session.sha256 === sha;
+  // A resumed conversation still holds the rules it held; those of another model no longer apply.
+  const kept = resumed ? heldModels(session) : [];
+  const retired = repeat || decision.model === null ? [] : kept.filter((m) => m !== decision.model);
+  const changedFrom = resumed && session?.model && decision.model !== null && session.model !== decision.model ? session.model : null;
 
   const launcher = source === 'startup' || source === 'clear' || source === 'compact' ? readLauncher() : null;
   // The launcher's system prompt holds the rules for the session's scope; it never holds those a
@@ -286,8 +301,11 @@ function sessionStart(
   const sent = inPrompt ? (added?.status === 'matched' ? added : null) : decision.status === 'matched' ? decision : null;
   const otherModel = launcher !== null && !inPrompt && launcher.model !== null && launcher.model !== decision.model ? launcher.model : null;
   const rules = sent !== null && !repeat ? sent.text : null;
-  const note =
-    previous !== null ? switchNote(previous, decision.model ?? '') : otherModel !== null ? launcherNote(otherModel, decision.model ?? '') : null;
+  const note = retired.length
+    ? switchNote(changedFrom, decision.model ?? '', retired)
+    : otherModel !== null
+      ? launcherNote(otherModel, decision.model ?? '')
+      : null;
   const parts = [...(note ? [note] : []), ...(rules ? [rules] : [])];
   const messages = repeat
     ? []
@@ -300,14 +318,18 @@ function sessionStart(
           : []),
         ...undeclaredMessages(decision, file, launch),
       ];
+  // A session start's delivery reaches the conversation, so its note leaves only this model's rules
+  // standing: those it delivers or finds, or, when it has none now, those it held before.
+  const holds = decision.model !== null && (decision.status === 'matched' || kept.includes(decision.model));
+  const held = repeat ? kept : holds ? [decision.model as string] : [];
   return {
     record: {
       // Rules sent beside the launcher's are only those a trigger added, so the line names those.
       ...decisionFields(sent !== null && sent !== decision && !repeat ? sent : decision),
       ...choiceFields(where.scope, where.place),
       ...triggerFields(where.triggers),
-      model_source: modelSource,
-      ...(previous !== null ? { from_model: previous } : {}),
+      model_source: chosen.source,
+      ...(changedFrom !== null ? { from_model: changedFrom } : {}),
       ...launchFields(launch),
       ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),
       delivered: repeat ? 'already-delivered' : rules ? (note ? 'rules+note' : 'rules') : inPrompt ? 'launcher' : note ? 'note' : 'nothing',
@@ -315,13 +337,46 @@ function sessionStart(
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha },
+    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, unconfirmed: false },
   };
 }
 
+/** The session's model, where it came from, and the launch setting read for it, for the log line. */
+interface ModelChoice {
+  readonly model: string | null;
+  readonly source: string | null;
+  readonly launch: LaunchModel | null;
+}
+
+function launchChoice(launch: LaunchModel, fallback: { model: string; source: string } | null): ModelChoice {
+  if (launch.kind === 'found') return { model: launch.model, source: launch.source, launch };
+  return { model: fallback?.model ?? null, source: fallback?.source ?? null, launch };
+}
+
 /**
- * PostModelSwitch: deliver the new model's rules. The rules delivered for the previous model stay in
- * the conversation, so when the previous model had rules, a note says they no longer apply.
+ * The model of a resumed or forked conversation, which Claude Code reports no model for, in the order
+ * Claude Code itself takes it: --model, else ANTHROPIC_MODEL, else the model of the conversation's
+ * last response since its last compaction, else the model setting. A value noonsight cannot tell
+ * which model it selects leaves the conversation to decide, and below the setting the session's record
+ * does: Claude Code then runs its default model, which noonsight cannot tell either.
+ */
+function resumedModel(recorded: string | null, readLaunch: (sources: LaunchSources) => LaunchModel, readConversation: () => string | null): ModelChoice {
+  const explicit = readLaunch('explicit');
+  if (explicit.kind === 'found') return launchChoice(explicit, null);
+  const conversation = readConversation();
+  if (conversation !== null) return { model: conversation, source: 'session-transcript', launch: explicit.kind === 'none' ? null : explicit };
+  // An explicit value noonsight cannot pin down outranks the setting, as it does in Claude Code.
+  const settings = explicit.kind === 'none' ? readLaunch('settings') : explicit;
+  if (settings.kind === 'found') return launchChoice(settings, null);
+  return launchChoice(settings, recorded !== null ? { model: recorded, source: 'session-record' } : null);
+}
+
+/**
+ * PostModelSwitch: deliver the new model's rules. The rules delivered for earlier models stay in the
+ * conversation, so when the conversation may hold any, a note says they no longer apply. Claude Code
+ * adds what this hook returns to the next request only, and loses it when another switch or the end
+ * of the session comes first, so a switch's delivery stays unconfirmed: the next switch's note again
+ * names every model whose rules the conversation may hold, and the next resume delivers again.
  */
 function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null): Outcome {
   const to = normalizeModel(str(input.to_model));
@@ -329,6 +384,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
   const request = { scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
+  const unconfirmed = session?.unconfirmed === true;
   const base = {
     ...decisionFields(decision),
     ...choiceFields(where.scope, where.place),
@@ -336,17 +392,25 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     model_source: 'hook-input',
     from_model: from || null,
   };
-  const state = decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha };
+  // Without a record, the previous model's rules are those the conversation may hold.
+  const kept = session
+    ? heldModels(session)
+    : from && resolve(config, { model: from, ...request }).status === 'matched'
+      ? [from]
+      : [];
+  const held = [...new Set([...kept, ...(decision.status === 'matched' && decision.model !== null ? [decision.model] : [])])];
 
   // Resuming a session restores its model and reports it as a switch; the rules may already be there.
-  if (session !== null && session.model === decision.model && session.sha256 === sha)
-    return { record: { ...base, delivered: 'already-delivered', warned: false }, context: null, messages: [], state };
+  if (session !== null && !unconfirmed && session.model === decision.model && session.sha256 === sha)
+    return {
+      record: { ...base, delivered: 'already-delivered', warned: false },
+      context: null,
+      messages: [],
+      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, unconfirmed: false },
+    };
 
-  const previous = session ? session.model : from || null;
-  const previousHadRules = session
-    ? session.status === 'matched'
-    : previous !== null && resolve(config, { model: previous, ...request }).status === 'matched';
-  const note = previous !== null && previousHadRules && previous !== decision.model ? switchNote(previous, to) : null;
+  const retired = kept.filter((m) => m !== decision.model);
+  const note = retired.length ? switchNote(from || session?.model || null, to, retired) : null;
   const parts = [...(note ? [note] : []), ...(decision.status === 'matched' ? [decision.text] : [])];
   const messages = undeclaredMessages(decision, file);
   return {
@@ -357,7 +421,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state,
+    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, unconfirmed: parts.length > 0 },
   };
 }
 

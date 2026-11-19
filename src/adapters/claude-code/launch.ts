@@ -59,21 +59,29 @@ export interface LaunchContext {
   readonly commandLine?: () => CommandLine | null;
 }
 
-export function launchModel(ctx: LaunchContext): LaunchModel {
-  return launchModelFrom(ctx.commandLine ? ctx.commandLine() : readCommandLine(ctx.pid, ctx.platform ?? process.platform), ctx);
+/**
+ * Which sources to read: all three, in Claude Code's order; only the two a person names for one
+ * launch, --model and ANTHROPIC_MODEL; or only the settings files.
+ */
+export type LaunchSources = 'all' | 'explicit' | 'settings';
+
+export function launchModel(ctx: LaunchContext, sources: LaunchSources = 'all'): LaunchModel {
+  return launchModelFrom(ctx.commandLine ? ctx.commandLine() : readCommandLine(ctx.pid, ctx.platform ?? process.platform), ctx, sources);
 }
 
 /**
  * The same choice for a known command line: the Claude Code arguments as the launcher is about to
  * pass them, or null when they cannot be read.
  */
-export function launchModelFrom(cmd: CommandLine | null, ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>): LaunchModel {
-  const flag = cmd ? modelArgument(cmd, ctx.env) : null;
-  if (flag !== null) return flag;
+export function launchModelFrom(cmd: CommandLine | null, ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>, sources: LaunchSources = 'all'): LaunchModel {
+  if (sources !== 'settings') {
+    const flag = cmd ? modelArgument(cmd, ctx.env) : null;
+    if (flag !== null) return flag;
 
-  const fromEnv = ctx.env.ANTHROPIC_MODEL;
-  if (fromEnv) return resolveValue(fromEnv, 'env', 'ANTHROPIC_MODEL', ctx.env);
-
+    const fromEnv = ctx.env.ANTHROPIC_MODEL;
+    if (fromEnv) return resolveValue(fromEnv, 'env', 'ANTHROPIC_MODEL', ctx.env);
+    if (sources === 'explicit') return { kind: 'none' };
+  }
   return settingsModel(ctx, cmd);
 }
 

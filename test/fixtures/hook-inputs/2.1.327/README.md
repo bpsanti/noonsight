@@ -13,6 +13,8 @@ Home directory, project path and temporary directory were replaced with neutral 
 
 The same recordings showed which model a resumed conversation runs on, by the model of the requests that followed:
 
-- A conversation resumed in a new Claude Code process (`claude --continue` or `claude --resume`) runs on the model its `--model` names, else `ANTHROPIC_MODEL`, else the `model` setting, as any start does, whatever model the conversation ran on before.
-- With none of the three naming a model, it runs on the model the conversation ran on before.
+- A conversation resumed in a new Claude Code process (`claude --continue` or `claude --resume`) runs on the model its `--model` names, else `ANTHROPIC_MODEL`, whatever model the conversation ran on before.
+- With none of them naming a model, it runs on the model the conversation ran on before.
 - No `PostModelSwitch` fires for either.
+
+These sessions left the `model` setting as it was. A later recording on 2.1.328 (`test/live/lifecycle.test.ts`, [docs/verification/claude-code.md](../../../../docs/verification/claude-code.md)) showed that the conversation's last response outranks the `model` setting: a conversation that last answered on Opus resumes on Opus when the setting names Haiku.

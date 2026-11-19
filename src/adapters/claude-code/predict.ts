@@ -248,42 +248,86 @@ function readHead(file: string): string {
 // transcript sits next to the session's, at <session transcript dir>/<session id>/subagents/
 // agent-<agent id>.jsonl, as the agent_transcript_path of the SubagentStop input shows
 // (https://code.claude.com/docs/en/hooks, "SubagentStop input"). The documentation warns that a
-// transcript can lag behind the conversation, so a transcript is read only when no record knows.
+// transcript can lag behind the conversation, so a transcript is read only when no record knows,
+// except at a resume, when the conversation's earlier process has finished writing it.
+//
+// A compaction writes a system record with subtype compact_boundary, and the messages it kept are
+// referred to there, not written again after it.
 
-const TAIL_BYTES = 256 * 1024;
+/** How much of a transcript is read at a time, from its end. */
+const CHUNK_BYTES = 1024 * 1024;
+/** How far back from its end a transcript is read at most, so the hook stays within its bound. */
+const MAX_SCAN_BYTES = 64 * 1024 * 1024;
 
 /** The model of the last assistant message in a transcript; for the session, its own messages only. */
 export function transcriptModel(file: string | null, ownOnly: boolean): string | null {
+  return lastResponseModel(file, ownOnly, false);
+}
+
+/**
+ * The model of the conversation's last response since its last compaction, its own messages only:
+ * the model Claude Code resumes a conversation on when nothing it was started with names one. Null
+ * when the conversation has no response since, or the transcript cannot be read.
+ */
+export function conversationModel(file: string | null): string | null {
+  return lastResponseModel(file, true, true);
+}
+
+function lastResponseModel(file: string | null, ownOnly: boolean, sinceCompaction: boolean): string | null {
   if (file === null) return null;
-  let text: string;
+  let found: string | null = null;
   try {
-    const fd = fs.openSync(file, 'r');
-    try {
-      const size = fs.fstatSync(fd).size;
-      const length = Math.min(size, TAIL_BYTES);
-      const buffer = Buffer.alloc(length);
-      fs.readSync(fd, buffer, 0, length, size - length);
-      text = buffer.toString('utf8');
-    } finally {
-      fs.closeSync(fd);
-    }
+    scanLinesBackward(file, (line) => {
+      const boundary = sinceCompaction && line.includes('"compact_boundary"');
+      if (!boundary && !line.includes('"assistant"')) return false;
+      let r: { type?: unknown; subtype?: unknown; isSidechain?: unknown; message?: { model?: unknown } };
+      try {
+        r = JSON.parse(line) as typeof r;
+      } catch {
+        // A torn line being written, or not a record.
+        return false;
+      }
+      if (ownOnly && r.isSidechain === true) return false;
+      if (boundary && r.type === 'system' && r.subtype === 'compact_boundary') return true;
+      if (r.type !== 'assistant') return false;
+      const model = typeof r.message?.model === 'string' ? normalizeModel(r.message.model) : '';
+      if (!model || model === '<synthetic>') return false;
+      found = model;
+      return true;
+    });
   } catch {
     return null;
   }
-  const lines = text.split('\n');
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const line = lines[i] ?? '';
-    if (!line.includes('"assistant"')) continue;
-    try {
-      const r = JSON.parse(line) as { type?: unknown; isSidechain?: unknown; message?: { model?: unknown } };
-      if (r.type !== 'assistant' || (ownOnly && r.isSidechain === true)) continue;
-      const model = typeof r.message?.model === 'string' ? normalizeModel(r.message.model) : '';
-      if (model && model !== '<synthetic>') return model;
-    } catch {
-      // A torn line at the start of the window, or not a record.
+  return found;
+}
+
+/** Each line of a file, the last first, until `visit` returns true or MAX_SCAN_BYTES are read. */
+function scanLinesBackward(file: string, visit: (line: string) => boolean): void {
+  const fd = fs.openSync(file, 'r');
+  try {
+    let position = fs.fstatSync(fd).size;
+    const floor = Math.max(0, position - MAX_SCAN_BYTES);
+    // The start of the line the previous chunk ended in, which this chunk completes.
+    let carry = Buffer.alloc(0);
+    while (position > floor) {
+      const length = Math.min(CHUNK_BYTES, position - floor);
+      position -= length;
+      const chunk = Buffer.alloc(length);
+      fs.readSync(fd, chunk, 0, length, position);
+      const buffer = carry.length ? Buffer.concat([chunk, carry]) : chunk;
+      let end = buffer.length;
+      for (let i = end - 1; i >= 0; i--) {
+        if (buffer[i] !== 0x0a) continue;
+        if (visit(buffer.toString('utf8', i + 1, end))) return;
+        end = i;
+      }
+      carry = buffer.subarray(0, end);
     }
+    // The file's first line; a line the scan's limit cut is not whole, so it is left out.
+    if (position === 0 && carry.length) visit(carry.toString('utf8'));
+  } finally {
+    fs.closeSync(fd);
   }
-  return null;
 }
 
 /** Where a subagent's transcript is, given the session's transcript path from the hook input. */

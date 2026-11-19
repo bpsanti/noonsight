@@ -42,6 +42,14 @@ const FILES_SHOWN = 10;
 /** The values of `delivered` that mean the rules reached the model: by the hook, or in the system prompt. */
 export const DELIVERING = ['rules', 'rules+note', 'system-prompt'] as const;
 
+/**
+ * Why a /model line's rules are not counted as delivered when the same session's next line is another
+ * /model line: Claude Code adds what the hook returns to the next request only, and loses it when
+ * another switch comes first. The log records no requests, so a switch followed at once by another
+ * may never have reached the model.
+ */
+export const SWITCHED_AGAIN = 'switched-again';
+
 export interface Tally {
   readonly [key: string]: number;
 }
@@ -103,7 +111,7 @@ export interface Report {
   readonly last: string | null;
   /** Decisions that delivered rules, by event. */
   readonly delivering: Tally;
-  /** Decisions that delivered no rules, by why: a status, or a reason for status "none", or the `delivered` value. */
+  /** Decisions that delivered no rules, by why: a status, or a reason for status "none", or the `delivered` value, or SWITCHED_AGAIN. */
   readonly not_delivering: Tally;
   /** Subagent checks after the start, by result. */
   readonly agent_results: Tally;
@@ -150,6 +158,7 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
   const files = options.log !== null ? [path.resolve(options.log)] : [path.join(dir, ROTATED_LOG_FILE), path.join(dir, LOG_FILE)];
   if (options.log !== null && !readableFile(files[0] as string)) throw new UsageError(`cannot read the log file ${options.log}`, REPORT_USAGE);
   const records = options.log !== null ? readDecisionFile(files[0] as string) : readDecisions(dir);
+  const superseded = switchedAgain(records);
 
   const delivering: Record<string, number> = {};
   const notDelivering: Record<string, number> = {};
@@ -162,7 +171,7 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
   let first: string | null = null;
   let last: string | null = null;
 
-  for (const r of records) {
+  for (const [index, r] of records.entries()) {
     const ts = typeof r.ts === 'string' ? r.ts : null;
     if (ts !== null) {
       if (first === null || ts < first) first = ts;
@@ -193,8 +202,10 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
     // A subagent's rules are counted once: delivered at its start, or not delivered at its call.
     if (event === 'agent-call' && r.delivered === 'at-start') continue;
     const ids = Array.isArray(r.rules) ? r.rules.filter((x): x is string => typeof x === 'string') : [];
-    if (!(DELIVERING as readonly unknown[]).includes(r.delivered) || ids.length === 0) {
-      if (event !== 'subagent-start') count(notDelivering, whyNothing(r));
+    const delivers = (DELIVERING as readonly unknown[]).includes(r.delivered) && ids.length > 0;
+    if (!delivers || superseded.has(index)) {
+      if (delivers) count(notDelivering, SWITCHED_AGAIN);
+      else if (event !== 'subagent-start') count(notDelivering, whyNothing(r));
       // Rules the call had that a start shared between several calls could not give.
       else if (text(r.reason) === 'calls-differ') count(notDelivering, 'calls-differ');
       continue;
@@ -290,6 +301,20 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
             cost_usd: Math.round(classifierCost * 1e6) / 1e6,
           },
   };
+}
+
+/** The positions of the model-switch lines whose session's next line is another model-switch line. */
+function switchedAgain(records: readonly Record<string, unknown>[]): Set<number> {
+  const superseded = new Set<number>();
+  const previous = new Map<string, number>();
+  for (const [index, r] of records.entries()) {
+    const session = text(r.session_id);
+    if (session === null) continue;
+    const before = previous.get(session);
+    if (before !== undefined && r.event === 'model-switch' && records[before]?.event === 'model-switch') superseded.add(before);
+    previous.set(session, index);
+  }
+  return superseded;
 }
 
 /** The middle value, or the mean of the two middle values; null for none. */

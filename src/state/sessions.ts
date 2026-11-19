@@ -17,6 +17,19 @@ export interface DeliveryState {
   readonly status: 'matched' | 'none' | 'undeclared';
   /** The hash of the rules delivered, or null when no rules were delivered. */
   readonly sha256: string | null;
+  /**
+   * Every model whose rules the conversation may hold with no note after them that says they no longer
+   * apply, the current model's included: rules delivered, or returned to Claude Code for delivery,
+   * since the conversation last started empty or a session start's note retired them. A record
+   * written before this field existed holds its own model when it had rules.
+   */
+  readonly held?: readonly string[];
+  /**
+   * Whether the last delivery came from a /model switch: Claude Code adds what that hook returns to
+   * the next request only, so another switch or the end of the session before one loses it, and no
+   * hook can tell whether it arrived.
+   */
+  readonly unconfirmed?: boolean;
   readonly at: string;
 }
 
@@ -42,11 +55,28 @@ export function readState(file: string | null): DeliveryState | null {
       (value.status === 'matched' || value.status === 'none' || value.status === 'undeclared') &&
       (value.sha256 === null || typeof value.sha256 === 'string')
     )
-      return { model: value.model, status: value.status, sha256: value.sha256, at: String(value.at) };
+      return {
+        model: value.model,
+        status: value.status,
+        sha256: value.sha256,
+        held: Array.isArray(value.held)
+          ? value.held.filter((m): m is string => typeof m === 'string' && m !== '')
+          : value.status === 'matched' && value.model
+            ? [value.model]
+            : [],
+        unconfirmed: value.unconfirmed === true,
+        at: String(value.at),
+      };
   } catch {
     // Missing or unreadable: the same as never recorded.
   }
   return null;
+}
+
+/** The models whose rules a conversation may hold, as a record keeps them. */
+export function heldModels(state: Pick<DeliveryState, 'model' | 'status' | 'held'> | null): string[] {
+  if (state === null) return [];
+  return [...(state.held ?? (state.status === 'matched' && state.model ? [state.model] : []))];
 }
 
 export function writeState(file: string | null, state: DeliveryState): void {
