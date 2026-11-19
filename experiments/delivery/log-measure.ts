@@ -64,7 +64,8 @@ export function ruleLibrary(): Library {
 
 interface Item {
   readonly type: 'note' | 'rules';
-  readonly from?: string | null;
+  /** For a note, the models it retires. */
+  readonly retires?: readonly string[];
   readonly model?: string;
   readonly ids?: readonly string[];
 }
@@ -87,10 +88,10 @@ function account(items: readonly Item[], model: string, expected: readonly strin
     return { key: id, length: null, owners: new Set([owner]) };
   };
   const keys = new Map<string, { e: Entry; copies: number; last: number }>();
-  const notes: { at: number; from: string | null }[] = [];
+  const notes: { at: number; retires: ReadonlySet<string> }[] = [];
   items.forEach((it, at) => {
     if (it.type === 'note') {
-      notes.push({ at, from: it.from ?? null });
+      notes.push({ at, retires: new Set(it.retires ?? []) });
       return;
     }
     for (const id of it.ids ?? []) {
@@ -101,7 +102,7 @@ function account(items: readonly Item[], model: string, expected: readonly strin
       keys.set(e.key, k);
     }
   });
-  const retiredAfter = (owners: ReadonlySet<string>, at: number): boolean => notes.some((n) => n.from !== null && owners.has(n.from) && n.at > at);
+  const retiredAfter = (owners: ReadonlySet<string>, at: number): boolean => notes.some((n) => n.at > at && [...owners].some((m) => n.retires.has(m)));
   const want = new Set(expected.map((id) => entryOf(id, model).key));
   const c = { ownFirst: 0, ownDuplicate: 0, ownUnexpected: 0, foreignRetired: 0, foreignUnretired: 0 };
   let unknownLength = false;
@@ -202,7 +203,10 @@ export function replay(decisions: readonly Decision[], lib: Library): Replay {
     const delivered = String(d.delivered ?? '');
     let deliveredChars = 0;
     if (delivered === 'rules+note' || delivered === 'note') {
-      s.items.push({ type: 'note', from: d.from_model ?? null });
+      // The log names one model in from_model; the note retires every other model whose rules the
+      // conversation may hold, as noonsight's hook does since it treats a switch's delivery as unconfirmed.
+      const held = s.items.filter((it) => it.type === 'rules' && it.model !== d.model).map((it) => String(it.model));
+      s.items.push({ type: 'note', retires: [...new Set([...(d.from_model ? [String(d.from_model)] : []), ...held])] });
       deliveredChars += lib.noteLength(d.from_model ?? null, d.model ?? null);
     }
     const ids = (d.rules ?? []) as string[];

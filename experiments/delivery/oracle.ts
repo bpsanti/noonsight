@@ -10,7 +10,8 @@
 // The invariant, checked on every request of a session's own conversation and of each subagent:
 //   missing-own        every right rule of the request's model is in the request;
 //   own-retired        no model-change note that says the request's model's rules no longer apply comes
-//                      after the last copy of one of them;
+//                      after the last copy of one of them (a note names the models it retires, or says
+//                      `*` for every model but the one the session now runs on);
 //   foreign-unretired  a rule written only for other models is in the request only when a model-change
 //                      note naming one of its models comes after its last copy.
 //
@@ -139,6 +140,16 @@ function positions(hay: string, needle: string): number[] {
   return out;
 }
 
+/**
+ * Which models a note retires, from its `from` attribute: one model, several separated by spaces, or
+ * `*` for every model but the one the session now runs on.
+ */
+export function retiredBy(from: string, to: string): (model: string) => boolean {
+  if (from === '*') return (m) => m !== to;
+  const names = new Set(from.split(' ').filter(Boolean));
+  return (m) => names.has(m);
+}
+
 const NOTE = /<noonsight-rules-change from="([^"]+)" to="([^"]+)">[\s\S]*?<\/noonsight-rules-change>/g;
 const ENVELOPE_HEAD = /<noonsight-rules model="[^"]*"[^>]*>\n[^\n]*\n/g;
 const ENVELOPE_TAIL = /<\/noonsight-rules>/g;
@@ -181,7 +192,7 @@ export interface Fact {
   readonly covered: boolean | null;
   readonly expectedPresent: number;
   readonly chars: Chars;
-  /** The model-change notes in the request, as `from>to`. */
+  /** The model-change notes in the request, as `from>to`, `from` as the note's attribute writes it. */
   readonly notes: readonly string[];
   readonly violations: readonly Violation[];
 }
@@ -201,8 +212,8 @@ export function inspect(ref: Reference, body: Body, where: Where): Fact {
   const request = kind === 'subagent' ? { model, scope: null, place: 'subagent' as const, triggers: [] } : { model, scope: where.scope, place: where.place, triggers: where.triggers };
   const decision = resolve(ref.config, request);
   const expected = decision.status === 'matched' ? [...new Set(decision.rules.map((id) => ref.byId.get(id)).filter((e): e is RuleText => e !== undefined))] : [];
-  const notes = [...flat.matchAll(NOTE)].map((m) => ({ at: m.index ?? 0, from: m[1] ?? '', to: m[2] ?? '', length: m[0].length }));
-  const retiredAfter = (models: ReadonlySet<string>, at: number): boolean => notes.some((n) => models.has(n.from) && n.at > at);
+  const notes = [...flat.matchAll(NOTE)].map((m) => ({ at: m.index ?? 0, attr: m[1] ?? '', from: retiredBy(m[1] ?? '', m[2] ?? ''), to: m[2] ?? '', length: m[0].length }));
+  const retiredAfter = (models: ReadonlySet<string>, at: number): boolean => notes.some((n) => n.at > at && [...models].some((m) => n.from(m)));
 
   let ownFirst = 0;
   let ownDuplicate = 0;
@@ -253,7 +264,7 @@ export function inspect(ref: Reference, body: Body, where: Where): Fact {
     covered: expected.length === 0 ? null : missing.length === 0 && ownRetired.length === 0,
     expectedPresent: expected.length - missing.length,
     chars: { ownFirst, ownDuplicate, ownUnexpected, foreignRetired, foreignUnretired, overhead, rule: ownFirst + ownDuplicate + ownUnexpected + foreignRetired + foreignUnretired, request: flat.length },
-    notes: notes.map((n) => `${n.from}>${n.to}`),
+    notes: notes.map((n) => `${n.attr}>${n.to}`),
     violations,
   };
 }

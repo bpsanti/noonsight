@@ -57,8 +57,8 @@ Sessions the driver could not run (`harness` other than `ok`) are counted and le
 From the cheapest to the most expensive:
 
 1. **Corpus.**
-   The hand-kept sequences in [corpus/](corpus), one per file, each with the outcome it must have under `on`: the delivery probe's session, one sequence per lifecycle path, and the shortest known reproduction of each open failure.
-   An entry that reproduces a known failure names the violations it must show, so the corpus stays green while the failure is open and goes red when it is fixed; the entry's `expect` then becomes `"pass"`.
+   The hand-kept sequences in [corpus/](corpus), one per file, each with the outcome it must have under `on`: the delivery probe's session, one sequence per lifecycle path, the shortest reproductions of the failures the fuzzer found, which must pass since their fix, and the documented limits.
+   An entry that reproduces an open failure or a limit names the violations it must show, so the corpus stays green while it holds and goes red when it changes; the entry's `expect` then becomes `"pass"`.
    Run it before each release and on each new Claude Code version.
 2. **Fuzz.**
    Random sequences from a seed ([fuzz.ts](fuzz.ts)): 300 sessions under `on`, and the first 60 of the same seed under each native arm.
@@ -130,16 +130,20 @@ results/
 
 The folder for one version holds what was measured on that version; comparing two versions is comparing their `summary.json` and `corpus.json`.
 
-## Known failures
+## Failures found, and a limit
 
-The corpus entries that start with `f1-` and `f2-` reproduce two failures of noonsight the fuzzer found.
+The corpus entries that start with `f1-` and `f2-` are the shortest reproductions of two failures of noonsight the fuzzer found; both are fixed, and the entries must pass.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
-  When another `/model` or the end of the session comes first, that text reaches no request, while the decision log records it as delivered.
+  When another `/model` or the end of the session came first, that text reached no request, while the decision log recorded it as delivered.
+  noonsight now treats a switch's delivery as unconfirmed (`docs/hooks.md`, "PostModelSwitch").
 - **F2, the wrong model on resume.**
-  On `claude --continue` without `--model`, the hook input names no model, and the hook takes the `model` setting before the session's record; but Claude Code runs the conversation on the model of its last response when there is one.
-  `/model` writes the setting, so a resume after a switch can get another model's rules and a note that retires its own, and its subagents are predicted on the wrong model.
+  On `claude --continue` without `--model`, the hook input names no model, and the hook took the `model` setting before the conversation's own model; but Claude Code runs the conversation on the model of its last response when there is one.
+  `/model` writes the setting, so a resume after a switch got another model's rules and a note that retired its own, and its subagents were predicted on the wrong model.
+  noonsight now reads the conversation's last response from the transcript (`docs/hooks.md`, "SessionStart").
+
+`limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 
 ## Limits
 

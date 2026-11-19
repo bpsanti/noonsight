@@ -126,6 +126,18 @@ test('oracle: the three parts of the invariant', () => {
     ['own-retired'],
   );
 
+  // A note can retire several models at once, or every model but the new one.
+  const sonnet = rulesOf('claude-sonnet-5-5');
+  const several = switchNote('claude-sonnet-5-5', 'claude-opus-5-5', ['claude-sonnet-5-5', 'claude-haiku-5-5']);
+  assert.match(several, /from="claude-sonnet-5-5 claude-haiku-5-5"/);
+  assert.deepEqual(inspect(ref, body('claude-opus-5-5', [...haiku, ...sonnet, several, ...opus].join('\n\n')), where).violations, []);
+  const every = several.replace(/from="[^"]*"/, 'from="*"');
+  assert.deepEqual(inspect(ref, body('claude-opus-5-5', [...haiku, ...sonnet, every, ...opus].join('\n\n')), where).violations, []);
+  assert.deepEqual(
+    inspect(ref, body('claude-opus-5-5', [...opus, every.replace('to="claude-opus-5-5"', 'to="claude-haiku-5-5"')].join('\n\n')), where).violations.map((v) => v.class),
+    ['own-retired'],
+  );
+
   // A repeated rule is counted once as the right rule and once as a duplicate.
   const twice = inspect(ref, body('claude-opus-5-5', [...opus, ...opus].join('\n\n')), where);
   assert.equal(twice.chars.ownDuplicate, twice.chars.ownFirst);
@@ -240,6 +252,9 @@ test('log replay: what the conversation holds after each decision', () => {
   );
   assert.ok((good.points[1]?.chars.foreignRetired ?? 0) > 0);
   assert.equal(replay([start, lost], lib).points[1]?.foreignUnretired, true);
+  // Two switches: the second note retires Opus too, though the log names only Haiku in from_model.
+  const back = { ...sw, ts: '2026-11-19T00:00:03Z', model: 'claude-sonnet-5-5', from_model: 'claude-haiku-5-5', rules: [] as string[], status: 'none', delivered: 'note' };
+  assert.equal(replay([start, sw, back], lib).points[2]?.foreignUnretired, false);
   const clear = { ...start, ts: '2026-11-19T00:00:04Z', source: 'clear' };
   assert.equal(replay([start, sw, clear], lib).points[2]?.chars.foreignRetired, 0, '/clear empties the conversation');
   const a = aggregate(good);
@@ -283,7 +298,7 @@ test('corpus: every entry can be driven, and expects a pass or names the violati
   assert.ok(entries.length >= 10);
   assert.equal(new Set(entries.map((e) => e.name)).size, entries.length);
   assert.ok(entries.some((e) => e.name === 'probe-session' && e.expect === 'pass'), 'the delivery probe session is in the corpus');
-  for (const failure of ['F1', 'F2']) assert.ok(entries.some((e) => e.expect !== 'pass' && e.expect.failure === failure), `the corpus reproduces ${failure}`);
+  for (const prefix of ['f1-', 'f2-']) assert.ok(entries.some((e) => e.name.startsWith(prefix) && e.expect === 'pass'), `the corpus keeps the ${prefix} sequences, which must pass since their fix`);
   for (const e of entries) if (e.expect !== 'pass') for (const s of e.expect.shows) assert.match(s, /^(missing-own|own-retired|foreign-unretired)\/(main|subagent)$/, e.name);
 });
 

@@ -1,6 +1,6 @@
 {
   "name": "f2-model-setting",
-  "about": "A resume without --model after the model setting changed: the conversation keeps running on its own model, but the hook takes the setting's, so the running model gets another model's rules and a note retiring its own.",
+  "about": "A resume without --model after the model setting changed: the conversation keeps running on the model of its last response, and must get that model's rules, not the setting's (F2, fixed).",
   "model": "opus",
   "scope": null,
   "unattended": true,
@@ -17,11 +17,5 @@
       "k": "turn"
     }
   ],
-  "expect": {
-    "failure": "F2",
-    "shows": [
-      "own-retired/main",
-      "foreign-unretired/main"
-    ]
-  }
+  "expect": "pass"
 }

@@ -7,6 +7,9 @@ The fix changes neither the sessions nor the measures, and the planted runs were
 `run.json` lists each command with its commit.
 No request reached Anthropic and no token was spent.
 
+These results predate the fixes of F1 and F2, the two failures the fuzzer found here: they measure noonsight as it was at `467d465`, and the corpus then expected the F1 and F2 entries to fail.
+The corpus on the fixed build is in [the next folder](../2026-11-19-FIXED/README.md).
+
 ## Corpus
 
 All 16 entries had the outcome they record ([corpus.json](corpus.json)): the 9 sequences expected to pass broke no part of the invariant, and the 7 that reproduce F1 and F2 showed every violation they name.

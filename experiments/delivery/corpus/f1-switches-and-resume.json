@@ -1,6 +1,6 @@
 {
   "name": "f1-switches-and-resume",
-  "about": "Switches back to a model whose rules a later note retired, then a resume on it before any request: the last switch's delivery is lost.",
+  "about": "Switches back to a model whose rules a later note retired, then a resume on it before any request: the resume must deliver again what the last switch's lost delivery held (F1, fixed).",
   "model": "fable",
   "scope": null,
   "unattended": true,
@@ -31,11 +31,5 @@
       "k": "turn"
     }
   ],
-  "expect": {
-    "failure": "F1",
-    "shows": [
-      "foreign-unretired/main",
-      "own-retired/main"
-    ]
-  }
+  "expect": "pass"
 }

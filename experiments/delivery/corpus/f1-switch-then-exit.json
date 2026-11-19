@@ -1,6 +1,6 @@
 {
   "name": "f1-switch-then-exit",
-  "about": "A /model switch and then leaving the session before any request: the switch's delivery is lost, and the resume on the same model logs already-delivered.",
+  "about": "A /model switch and then leaving the session before any request: the switch's delivery is lost, so the resume on the same model must deliver the rules again (F1, fixed).",
   "model": "fable",
   "scope": null,
   "unattended": true,
@@ -20,11 +20,5 @@
       "k": "turn"
     }
   ],
-  "expect": {
-    "failure": "F1",
-    "shows": [
-      "missing-own/main",
-      "foreign-unretired/main"
-    ]
-  }
+  "expect": "pass"
 }

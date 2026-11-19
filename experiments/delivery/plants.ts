@@ -31,7 +31,11 @@ type Decision = Record<string, any>;
 /** A note a `/model` delivered sits in a request that also holds another model's rule that a note retires. */
 function exposedToSwitchNote(r: Line): boolean {
   const switches = (r.decisions as Decision[]).filter((d) => d.event === 'model-switch' && (d.delivered === 'rules+note' || d.delivered === 'note'));
-  return r.facts.some((f) => f.kind === 'main' && f.chars.foreignRetired > 0 && switches.some((d) => d.session_id === f.session && String(d.ts) <= f.at && f.notes.includes(`${d.from_model}>${d.model}`)));
+  const fromSwitch = (note: string, d: Decision): boolean => {
+    const [from = '', to = ''] = note.split('>');
+    return to === d.model && (from === '*' || from.split(' ').includes(String(d.from_model)));
+  };
+  return r.facts.some((f) => f.kind === 'main' && f.chars.foreignRetired > 0 && switches.some((d) => d.session_id === f.session && String(d.ts) <= f.at && f.notes.some((n) => fromSwitch(n, d))));
 }
 
 /** A compaction delivered the rules again, and a request with rules due came after it, before any later delivery. */
@@ -49,7 +53,7 @@ export const PLANTS: readonly Plant[] = [
     name: 'no-switch-note',
     about: 'A /model switch delivers the new model rules without the note that retires the earlier model rules.',
     file: HOOK,
-    find: 'const note = previous !== null && previousHadRules && previous !== decision.model ? switchNote(previous, to) : null;',
+    find: 'const note = retired.length ? switchNote(from || session?.model || null, to, retired) : null;',
     replace: 'const note = null; /* planted: no model-change note */',
     exposed: exposedToSwitchNote,
   },

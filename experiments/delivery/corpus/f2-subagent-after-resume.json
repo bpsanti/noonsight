@@ -1,6 +1,6 @@
 {
   "name": "f2-subagent-after-resume",
-  "about": "A resume with --model, then one without: the hook predicts the subagent's model from the model it believes the session has, and the subagent gets no rules for the model it runs on.",
+  "about": "A resume with --model, then one without: the conversation runs on its last response's model, and its subagent must get the rules of the model it runs on (F2, fixed).",
   "model": "sonnet",
   "scope": null,
   "unattended": true,
@@ -26,10 +26,5 @@
       ]
     }
   ],
-  "expect": {
-    "failure": "F2",
-    "shows": [
-      "missing-own/subagent"
-    ]
-  }
+  "expect": "pass"
 }

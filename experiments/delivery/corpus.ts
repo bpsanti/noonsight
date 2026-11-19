@@ -1,7 +1,8 @@
 // The corpus level: short hand-kept sequences, one per file in corpus/, each with the outcome it must
 // have under `on`. A sequence expected to pass must break no part of the invariant; a sequence that
-// reproduces a known failure names the violations it must show, so the corpus stays green while the
-// failure is open and goes red the day it is fixed, when the entry's expectation becomes "pass".
+// reproduces a known failure or a documented limit names the violations it must show, so the corpus
+// stays green while the failure is open and goes red the day it changes, when the entry's expectation
+// becomes "pass".
 
 import fs from 'node:fs';
 import path from 'node:path';

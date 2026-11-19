@@ -5,8 +5,8 @@
 //   NOONSIGHT_LIVE_DELIVERY=1 npm run test:live
 //
 // Needs `claude` and `python3`. An entry expected to pass must break no part of the invariant; an entry
-// that reproduces a known failure must still show it, so this test goes red the day the failure is
-// fixed, and the entry's expectation then becomes "pass".
+// that reproduces a known failure or a documented limit must still show it, so this test goes red the
+// day it changes, and the entry's expectation then becomes "pass".
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
