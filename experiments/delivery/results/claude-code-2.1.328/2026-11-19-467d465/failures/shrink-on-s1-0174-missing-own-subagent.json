@@ -1,0 +1,40 @@
+{
+ "session": "on-s1-0174",
+ "target": {
+  "class": "missing-own",
+  "kind": "subagent"
+ },
+ "originalSteps": 10,
+ "minimalSteps": 4,
+ "runs": 18,
+ "seconds": 144,
+ "original": "start(sonnet, scope=build, unattended) > turn > turn > spawn(general-purpose:sonnet) > spawn(Explore) > /compact > turn > resume --model opus > resume > spawn(general-purpose + Plan) > turn",
+ "minimal": "start(sonnet, scope=none, unattended) > turn > resume --model opus > resume > spawn(Plan)",
+ "spec": {
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "resume",
+    "model": "opus"
+   },
+   {
+    "k": "resume",
+    "model": null
+   },
+   {
+    "k": "spawn",
+    "calls": [
+     {
+      "type": "Plan",
+      "model": null
+     }
+    ]
+   }
+  ]
+ }
+}

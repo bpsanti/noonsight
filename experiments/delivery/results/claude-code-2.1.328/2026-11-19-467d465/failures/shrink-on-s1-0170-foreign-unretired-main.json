@@ -1,0 +1,31 @@
+{
+ "session": "on-s1-0170",
+ "target": {
+  "class": "foreign-unretired",
+  "kind": "main"
+ },
+ "originalSteps": 6,
+ "minimalSteps": 3,
+ "runs": 7,
+ "seconds": 38,
+ "original": "start(haiku, scope=none, unattended) > edit(code) > /clear > turn > /model sonnet > /model fable > turn",
+ "minimal": "start(haiku, scope=none, unattended) > /model sonnet > /model fable > turn",
+ "spec": {
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "model",
+    "to": "sonnet"
+   },
+   {
+    "k": "model",
+    "to": "fable"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}
