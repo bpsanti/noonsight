@@ -13,6 +13,7 @@ import { excludedBy, unchecked, type GoldRecord } from '../experiments/benchmark
 import { reward } from '../experiments/benchmark/harbor.js';
 import { judgeMessage, parseRatings, scrub, tally, type Grade, type Item } from '../experiments/benchmark/judge.js';
 import { BENCH_DIR, loadPlan, selection, wanted } from '../experiments/benchmark/plan.js';
+import { PACKAGE_ROOT } from '../src/config/paths.js';
 import { accountEnv, aboveFloor, parseQuota } from '../experiments/benchmark/quota.js';
 import os from 'node:os';
 import { doneKeys, interrupted, measured, spent, type Recorded, type RunRecord } from '../experiments/benchmark/run.js';
@@ -505,10 +506,16 @@ test("a run's own share follows what its condition delivered: all under on, its 
   const cells = ownShareByCondition([recorded({ key: 'e', condition: 'scattered', ...sonnet }), recorded({ key: 'f', condition: 'scattered', ...sonnet, signals: read })], ['sonnet'], MODELS);
   assert.deepEqual(cells.sonnet?.scattered, { runs: 2, with_rules: 1, mean: union });
   assert.deepEqual(cells.sonnet?.off, { runs: 0, with_rules: 0, mean: null });
-  assert.equal(probeOwnShare({ path: 'start', model: 'claude-sonnet-5-5', own: true, others: [] }), 1);
-  assert.equal(probeOwnShare({ path: 'start', model: 'claude-sonnet-5-5', own: true, others: MODELS.filter((m) => m !== 'claude-sonnet-5-5') }), union);
-  assert.equal(probeOwnShare({ path: 'subagent Explore', model: 'claude-sonnet-5-5', own: false, others: [] }), null);
-  assert.equal(probeOwnShare({ path: 'after-model-switch', model: 'claude-haiku-5-5', own: false, others: ['claude-sonnet-5-5'] }), 0);
+  assert.equal(probeOwnShare('on', { path: 'start', model: 'claude-sonnet-5-5', own: true, others: [] }), 1);
+  assert.equal(probeOwnShare('claudemd', { path: 'start', model: 'claude-sonnet-5-5', own: true, others: MODELS.filter((m) => m !== 'claude-sonnet-5-5') }), union);
+  assert.equal(probeOwnShare('claudemd', { path: 'subagent Explore', model: 'claude-sonnet-5-5', own: false, others: [] }), null);
+  assert.equal(probeOwnShare('on', { path: 'after-model-switch', model: 'claude-haiku-5-5', own: false, others: ['claude-sonnet-5-5'] }), 0);
+  // A build task run unattended gets carry-through and verify-changes from each of Sonnet and Haiku; Sonnet's stay-in-scope is for routine tasks only.
+  const size = (file: string): number => fs.readFileSync(path.join(PACKAGE_ROOT, 'presets', 'claude', 'rules', file), 'utf8').trim().length;
+  const haikuText = size('haiku-5-5/carry-through.md') + size('haiku-5-5/verify-changes.md');
+  const sonnetText = size('sonnet-5-5/carry-through.md') + size('sonnet-5-5/verify-changes.md');
+  const switched = probeOwnShare('on', { path: 'after-model-switch', model: 'claude-haiku-5-5', own: true, others: ['claude-sonnet-5-5'] }) as number;
+  assert.ok(Math.abs(switched - haikuText / (haikuText + sonnetText)) < 1e-9, `${switched}`);
 });
 
 test('the scattered rules file counts as read per model, and model switches come from the decision log', () => {

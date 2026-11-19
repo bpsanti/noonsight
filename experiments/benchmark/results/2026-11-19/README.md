@@ -50,7 +50,7 @@ For each path, the table says whether the rules written for the request's model 
 
 The probe's own output is in [delivery-probe/](delivery-probe).
 
-The pre-registered share of the delivered rule text written for the request's model, per path, with each model's rule text sized by its default-on rules ([summary.md](summary.md)):
+The pre-registered share of the delivered rule text written for the request's model, per path ([summary.md](summary.md)); under `on` each model's text is the preset's rules for the probe's build scope and unattended place, and under `claudemd` every default-on rule:
 
 | Path | Model of the request | `on` | `claudemd` | `scattered` |
 | --- | --- | --- | --- | --- |
@@ -58,7 +58,7 @@ The pre-registered share of the delivered rule text written for the request's mo
 | subagent general-purpose | Sonnet 5.5 | 100% | 29% | no rule text |
 | subagent Explore | Sonnet 5.5 | 100% | no rule text | no rule text |
 | subagent Plan | Sonnet 5.5 | 100% | no rule text | no rule text |
-| after `/model haiku` | Haiku 5.5 | 46% | 25% | no rule text |
+| after `/model haiku` | Haiku 5.5 | 55% | 25% | no rule text |
 | after `/compact` | Haiku 5.5 | 100% | 25% | no rule text |
 | after `/clear` | Haiku 5.5 | 100% | 25% | no rule text |
 

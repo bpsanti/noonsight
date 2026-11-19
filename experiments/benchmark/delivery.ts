@@ -5,6 +5,9 @@
 
 import { defaultOnRules, presetText } from './conditions.js';
 
+/** The scope and place of the probe's sessions: a build task, run unattended. */
+export const PROBE = { scope: 'build', place: 'unattended' } as const;
+
 /** The rule texts that belong to one model only: a text two models share cannot say whose rule arrived. */
 export function signatures(models: readonly string[]): Map<string, string[]> {
   const owners = new Map<string, Set<string>>();

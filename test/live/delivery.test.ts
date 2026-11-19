@@ -17,7 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { POINTER_CLAUDE_MD, unionRules } from '../../experiments/benchmark/conditions.js';
-import { deliveries, deliveryTable, type Delivery } from '../../experiments/benchmark/delivery.js';
+import { deliveries, deliveryTable, PROBE, type Delivery } from '../../experiments/benchmark/delivery.js';
 import { PACKAGE_ROOT } from '../../src/config/paths.js';
 import { runCli } from '../helpers.js';
 import { startStub } from './stub-api.js';
@@ -72,7 +72,7 @@ async function runArm(arm: Arm): Promise<Delivery[]> {
       LANG: 'en_US.UTF-8',
       CLAUDE_CONFIG_DIR: claudeDir,
       NOONSIGHT_CONFIG: config,
-      NOONSIGHT_SCOPE: 'build',
+      NOONSIGHT_SCOPE: PROBE.scope,
       NOONSIGHT_EXPERIMENT: '1',
       DISABLE_AUTOUPDATER: '1',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',

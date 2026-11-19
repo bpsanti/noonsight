@@ -7,7 +7,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { defaultOnRules, ownShare } from './conditions.js';
-import type { Delivery } from './delivery.js';
+import { PROBE, type Delivery } from './delivery.js';
 import type { Grade } from './judge.js';
 import { readJsonl, type Recorded, type RunRecord } from './run.js';
 import type { Signals } from './score.js';
@@ -137,11 +137,13 @@ export function ownShareByCondition(runs: readonly RunRecord[], models: readonly
 
 /**
  * The share of the rule text in a probe request that was written for the request's model, or null
- * when the request carries none, sized by each present model's default-on rule text.
+ * when the request carries none. Each model present is sized by the rule text its arm delivers: under
+ * `on`, the preset's rules for the probe's scope and place; under the others, every default-on rule.
  */
-export function probeOwnShare(d: Delivery): number | null {
+export function probeOwnShare(arm: string, d: Delivery): number | null {
   const present = d.own ? [d.model, ...d.others] : [...d.others];
-  return ownShare(d.model, present.flatMap((m) => defaultOnRules(m)));
+  const delivered = (m: string) => (arm === 'on' ? defaultOnRules(m).filter((r) => expectedRules(m, PROBE.scope, PROBE.place).includes(r.id)) : defaultOnRules(m));
+  return ownShare(d.model, present.flatMap(delivered));
 }
 
 export interface RulesRead {
@@ -289,7 +291,7 @@ export function summaryMarkdown(res: Results, models: readonly string[], modelId
         ['Path', 'Model of the request', ...arms.map((a) => `\`${a}\``)],
         paths.map((p) => {
           const rows = arms.map((a) => res.probe?.[a]?.find((d) => d.path === p));
-          return [p, rows.find(Boolean)?.model ?? '', ...rows.map((d) => (d ? percent(probeOwnShare(d)) : 'not reached'))];
+          return [p, rows.find(Boolean)?.model ?? '', ...rows.map((d, i) => (d ? percent(probeOwnShare(arms[i] as string, d)) : 'not reached'))];
         }),
       ),
       '',

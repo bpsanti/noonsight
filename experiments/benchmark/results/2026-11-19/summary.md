@@ -28,7 +28,7 @@
 | subagent general-purpose | claude-sonnet-5-5 | 100% | 29% | no rule text |
 | subagent Explore | claude-sonnet-5-5 | 100% | no rule text | no rule text |
 | subagent Plan | claude-sonnet-5-5 | 100% | no rule text | no rule text |
-| after-model-switch | claude-haiku-5-5 | 46% | 25% | no rule text |
+| after-model-switch | claude-haiku-5-5 | 55% | 25% | no rule text |
 | after-compact | claude-haiku-5-5 | 100% | 25% | no rule text |
 | after-clear | claude-haiku-5-5 | 100% | 25% | no rule text |
 
