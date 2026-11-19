@@ -16,18 +16,62 @@
   },
   "tasks": {
     "question": {
+      "fixture": "harbor-clock",
       "scope": "investigate",
       "prompt": "This is a read-only question about the code in this directory: change no file except report.md. Which of the scheduled jobs honor the pause switch and the quiet hours, and does any job ignore either one? Give file and line evidence for each job. Write a short report in report.md, and make its last line exactly \"Ignores a control: \" followed by the names of the jobs that ignore the pause switch or the quiet hours, separated by commas, or \"none\".",
       "report": "report.md",
       "answer_prefix": "Ignores a control:",
       "expected": ["digest", "metrics", "sync"],
-      "allowed_changes": ["report.md"]
+      "allowed_changes": ["report.md"],
+      "solution": "solutions/question"
     },
     "fix": {
+      "fixture": "harbor-clock",
       "scope": "routine",
       "prompt": "The digest job sends its digest during quiet hours. Change src/jobs/digest.js so that it also stays silent during quiet hours, the same way src/jobs/backup.js does. Then reply with a short report of what you changed.",
-      "check": "check/digest.test.js",
-      "allowed_changes": ["src/jobs/digest.js"]
+      "check": "checks/fix.test.js",
+      "allowed_changes": ["src/jobs/digest.js"],
+      "solution": "solutions/fix"
+    },
+    "bug": {
+      "fixture": "rain-gauge",
+      "scope": "build",
+      "prompt": "Station operators report that the weekly totals in a station's season report sometimes add up to more than the season total. Find the cause and fix it. Then reply with a short report of the cause and of what you changed.",
+      "check": "checks/bug.test.js",
+      "allowed_changes": ["src/*", "test/*"],
+      "solution": "solutions/bug"
+    },
+    "feature": {
+      "fixture": "parcel-rates",
+      "scope": "build",
+      "prompt": "Add an express option to the parcel rates. An express parcel costs twice the standard price in zones 1 to 3. Zone 4 has no express service, so asking for it there must fail with an error that names the zone. Offer it as an `express: true` field of `quote()` and as an `--express` flag of the command line, and document the flag in README.md. Then reply with a short report of what you changed.",
+      "check": "checks/feature.test.js",
+      "allowed_changes": ["src/*", "bin/*", "test/*", "README.md"],
+      "solution": "solutions/feature"
+    }
+  },
+  "designs": {
+    "expanded": {
+      "description": "The rules whose effect showed on 2026-11-16, each on three tasks of different shapes, 30 runs per arm.",
+      "reps": 30,
+      "cap_usd": 120,
+      "arms": ["rules", "none"],
+      "cells": {
+        "fable": ["question", "bug", "feature"],
+        "sonnet": ["fix", "bug", "feature"],
+        "haiku": ["fix", "bug", "feature"]
+      },
+      "expected_usd": {
+        "fable": { "question": 0.3, "fix": 0.165, "bug": 0.36, "feature": 0.46 },
+        "sonnet": { "question": 0.051, "fix": 0.032, "bug": 0.061, "feature": 0.077 },
+        "haiku": { "question": 0.004, "fix": 0.002, "bug": 0.005, "feature": 0.006 }
+      },
+      "primary": [
+        { "rule": "sonnet-5-5/verify-changes", "model": "sonnet", "tasks": ["fix", "bug", "feature"], "signal": "verified", "direction": "higher" },
+        { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix", "bug", "feature"], "signal": "verified", "direction": "higher" },
+        { "rule": "fable-5-2/low-context-report", "model": "fable", "tasks": ["question", "bug", "feature"], "signal": "words_per_sentence", "direction": "lower" },
+        { "rule": "fable-5-2/low-context-report", "model": "fable", "tasks": ["question", "bug", "feature"], "signal": "semicolons_per_1k_words", "direction": "lower" }
+      ]
     }
   },
   "signals": {

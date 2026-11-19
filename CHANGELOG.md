@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The rule effect experiment (`experiments/rules`) has three fixtures and four tasks of different shapes: the read-only question and the one-file fix, a bug known only by its symptom whose cause is in another module, and a feature across several files, each with a hidden check and a reference solution that `npm test` checks against it.
+  The design `expanded` (`--design expanded`) runs the three rules whose effect showed on 2026-11-16 on three tasks each, 30 runs per arm, with twelve comparisons fixed before it runs and read with Fisher's exact test or the Mann-Whitney U test and Holm's adjustment; `npm run experiment -- estimate` prints its cost projection, $78 expected against a $120 cap.
+  `run --stub` runs every session against a scripted local stand-in for the API, with no login and no tokens, so the harness is checked end to end for free.
+  A run cut short by the cap now stops at the first run that does not fit, so every cell keeps the same number of repetitions, instead of going on with cheaper models.
+
 - A `/model` switch's delivery is no longer taken as received.
   Claude Code adds what the `PostModelSwitch` hook returns to the next request only, and drops it when another `/model` or the end of the session comes first; the hook recorded it as delivered all the same.
   So in a session started on Haiku, after `/model sonnet` and `/model fable` with no request between them, Fable read Haiku's rules from the session's start with no note saying they no longer applied, and a conversation resumed on the model a lost switch chose logged `already-delivered` and never got its rules.

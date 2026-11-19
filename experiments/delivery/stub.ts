@@ -29,6 +29,8 @@ interface Block {
 export interface Answer {
   readonly content: readonly Block[];
   readonly stop: 'end_turn' | 'tool_use';
+  /** The usage the reply reports, from which Claude Code computes the session's cost; a token or so when absent. */
+  readonly usage?: { readonly input_tokens: number; readonly output_tokens: number };
 }
 
 function blocks(message: Body | undefined): Block[] {
@@ -99,7 +101,7 @@ export function reply(body: Body, project: string): Answer {
 function sse(res: http.ServerResponse, model: string, r: Answer): void {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
   const send = (event: string, data: unknown): void => void res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-  const usage = { input_tokens: 10, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
+  const usage = { input_tokens: r.usage?.input_tokens ?? 10, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
   send('message_start', { type: 'message_start', message: { id: `msg_db_${calls++}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, stop_sequence: null, usage } });
   r.content.forEach((b, index) => {
     if (b.type === 'text') {
@@ -111,7 +113,7 @@ function sse(res: http.ServerResponse, model: string, r: Answer): void {
     }
     send('content_block_stop', { type: 'content_block_stop', index });
   });
-  send('message_delta', { type: 'message_delta', delta: { stop_reason: r.stop, stop_sequence: null }, usage: { output_tokens: 5 } });
+  send('message_delta', { type: 'message_delta', delta: { stop_reason: r.stop, stop_sequence: null }, usage: { output_tokens: r.usage?.output_tokens ?? 5 } });
   send('message_stop', { type: 'message_stop' });
   res.end();
 }
@@ -127,7 +129,7 @@ function json(res: http.ServerResponse, model: string, r: Answer): void {
       content: r.content,
       stop_reason: r.stop,
       stop_sequence: null,
-      usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+      usage: { input_tokens: r.usage?.input_tokens ?? 10, output_tokens: r.usage?.output_tokens ?? 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
     }),
   );
 }
@@ -140,7 +142,16 @@ export interface Stub {
 }
 
 /** Start the stub on a free local port. `onRequest` sees every Messages request and its answer before the answer is sent. */
-export async function startStub(project: string, onRequest: (body: Body, answer: Answer) => void): Promise<Stub> {
+export function startStub(project: string, onRequest: (body: Body, answer: Answer) => void): Promise<Stub> {
+  return serveMessages((body) => reply(body, project), onRequest);
+}
+
+/**
+ * A local Messages API on a free port that answers each request with `respond`, streamed when the
+ * request asks for a stream; `onRequest` sees every Messages request and its answer before the answer
+ * is sent. Token counting answers a fixed count, and any other method is refused.
+ */
+export async function serveMessages(respond: (body: Body) => Answer, onRequest: (body: Body, answer: Answer) => void = () => undefined): Promise<Stub> {
   let count = 0;
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -162,7 +173,7 @@ export async function startStub(project: string, onRequest: (body: Body, answer:
         return;
       }
       count++;
-      const answer = reply(body, project);
+      const answer = respond(body);
       try {
         onRequest(body, answer);
       } catch (e) {
