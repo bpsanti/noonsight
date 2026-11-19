@@ -53,10 +53,6 @@
     "on": {
       "use": "preset"
     },
-    "placebo": {
-      "use": "custom",
-      "placebo": true
-    },
     "claudemd": {
       "use": "none",
       "claude_md": "union"
@@ -189,55 +185,5 @@
     "votes": 3,
     "budget_usd": 1.5,
     "expected_usd": 0.3
-  },
-  "placebo": {
-    "claude-fable-5-2": [
-      {
-        "id": "local/workspace-notes-5",
-        "file": "workspace-notes-5.md",
-        "mirrors": "fable-5-2/finish-work"
-      },
-      {
-        "id": "local/workspace-notes-6",
-        "file": "workspace-notes-6.md",
-        "mirrors": "fable-5-2/low-context-report"
-      }
-    ],
-    "claude-opus-5-5": [
-      {
-        "id": "local/workspace-notes-4",
-        "file": "workspace-notes-4.md",
-        "mirrors": "opus-5-5/unattended-run"
-      }
-    ],
-    "claude-sonnet-5-5": [
-      {
-        "id": "local/workspace-notes-1",
-        "file": "workspace-notes-1.md",
-        "mirrors": "sonnet-5-5/carry-through"
-      },
-      {
-        "id": "local/workspace-notes-2",
-        "file": "workspace-notes-2.md",
-        "mirrors": "sonnet-5-5/stay-in-scope"
-      },
-      {
-        "id": "local/workspace-notes-3",
-        "file": "workspace-notes-3.md",
-        "mirrors": "sonnet-5-5/verify-changes"
-      }
-    ],
-    "claude-haiku-5-5": [
-      {
-        "id": "local/workspace-notes-7",
-        "file": "workspace-notes-7.md",
-        "mirrors": "haiku-5-5/carry-through"
-      },
-      {
-        "id": "local/workspace-notes-8",
-        "file": "workspace-notes-8.md",
-        "mirrors": "haiku-5-5/verify-changes"
-      }
-    ]
   }
 }

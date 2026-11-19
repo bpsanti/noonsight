@@ -554,7 +554,7 @@ export async function runNight(o: RunnerOptions): Promise<NightSummary | null> {
   };
   const pool = Math.max(1, o.concurrency ?? o.plan.concurrency);
   // Whole units are gathered into a batch until it holds `pool` runs, and the batch runs together, so a
-  // placebo unit (one run) does not leave the second slot idle; every stop falls between batches, so
+  // scattered unit (one run) does not leave the second slot idle; every stop falls between batches, so
   // between units, and the quota is read before each batch.
   let batch: Cell[] = [];
   let quota: QuotaReading | null = null;

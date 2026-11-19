@@ -183,7 +183,8 @@ function options(argv: readonly string[]): { command: string | undefined; opts: 
 export async function main(argv: readonly string[]): Promise<number> {
   const { command, opts } = options(argv);
   if (command === 'summarize') {
-    const text = summaryMarkdown(readResults(path.resolve(required(opts, 'results'))), Object.keys(loadPlan().models));
+    const plan = loadPlan();
+    const text = summaryMarkdown(readResults(path.resolve(required(opts, 'results'))), Object.keys(plan.models), Object.values(plan.models).map((m) => m.id));
     if (opts.has('out')) fs.writeFileSync(path.resolve(required(opts, 'out')), text);
     else process.stdout.write(text);
     return 0;

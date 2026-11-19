@@ -11,6 +11,27 @@
 | `claudemd` | 168 | 168 of 168 | fable 1, opus 1, sonnet 1, haiku 1 |
 | `scattered` | 84 | 84 of 84 | fable 1, opus 1, sonnet 1, haiku 1 |
 
+## Share of the received rule text written for the run's model
+
+| Model | `off` | `on` | `claudemd` | `scattered` |
+| --- | --- | --- | --- | --- |
+| fable | no rule text (42 runs) | 100% (42 of 42 runs received rule text) | 29% (42 of 42 runs received rule text) | 29% (21 of 21 runs received rule text) |
+| opus | no rule text (42 runs) | 100% (42 of 42 runs received rule text) | 18% (42 of 42 runs received rule text) | 18% (21 of 21 runs received rule text) |
+| sonnet | no rule text (42 runs) | 100% (42 of 42 runs received rule text) | 29% (42 of 42 runs received rule text) | 29% (21 of 21 runs received rule text) |
+| haiku | no rule text (42 runs) | 100% (42 of 42 runs received rule text) | 25% (42 of 42 runs received rule text) | 25% (21 of 21 runs received rule text) |
+
+## Share of the rule text written for the request's model, per path of the delivery probe
+
+| Path | Model of the request | `on` | `claudemd` | `scattered` |
+| --- | --- | --- | --- | --- |
+| start | claude-sonnet-5-5 | 100% | 29% | no rule text |
+| subagent general-purpose | claude-sonnet-5-5 | 100% | 29% | no rule text |
+| subagent Explore | claude-sonnet-5-5 | 100% | no rule text | no rule text |
+| subagent Plan | claude-sonnet-5-5 | 100% | no rule text | no rule text |
+| after-model-switch | claude-haiku-5-5 | 46% | 25% | no rule text |
+| after-compact | claude-haiku-5-5 | 100% | 25% | no rule text |
+| after-clear | claude-haiku-5-5 | 100% | 25% | no rule text |
+
 ## The scattered rules file, opened
 
 | Model | Runs | Opened the rules file | Before its first edit |

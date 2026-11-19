@@ -1,10 +1,13 @@
 // The tables a pilot's reading is written from, computed from its result files alone: what each
-// condition delivered to each run (the primary measure), what a run cost under each condition, and
-// the verifier's and the judge's verdicts. `npm run benchmark -- summarize --results <dir>` prints
-// them for a folder holding runs.jsonl, decisions.jsonl, grades.jsonl and, if present, signals.jsonl.
+// condition delivered to each run and how much of it was written for the run's model (the primary
+// measure), what a run cost under each condition, and the verifier's and the judge's verdicts.
+// `npm run benchmark -- summarize --results <dir>` prints them for a folder holding runs.jsonl,
+// decisions.jsonl, grades.jsonl and, if present, signals.jsonl and delivery-probe/delivery.json.
 
 import path from 'node:path';
-import { defaultOnRules } from './conditions.js';
+import fs from 'node:fs';
+import { defaultOnRules, ownShare } from './conditions.js';
+import type { Delivery } from './delivery.js';
 import type { Grade } from './judge.js';
 import { readJsonl, type Recorded, type RunRecord } from './run.js';
 import type { Signals } from './score.js';
@@ -28,6 +31,8 @@ export interface Results {
   readonly runs: readonly RunRecord[];
   readonly decisions: readonly DecisionLine[];
   readonly grades: readonly Grade[];
+  /** The delivery probe's rows per condition, when the folder holds them. */
+  readonly probe: Readonly<Record<string, readonly Delivery[]>> | null;
 }
 
 /** The result files of one pilot. Infrastructure failures leave the analysis; a rescored signal replaces the recorded one. */
@@ -36,7 +41,9 @@ export function readResults(dir: string): Results {
   const runs = readJsonl<Recorded>(path.join(dir, 'runs.jsonl'))
     .filter((r): r is RunRecord => r.infra_failure === null)
     .map((r) => ({ ...r, signals: rescored.get(r.key) ?? r.signals }));
-  return { runs, decisions: readJsonl<DecisionLine>(path.join(dir, 'decisions.jsonl')), grades: readJsonl<Grade>(path.join(dir, 'grades.jsonl')) };
+  const probeFile = path.join(dir, 'delivery-probe', 'delivery.json');
+  const probe = fs.existsSync(probeFile) ? (JSON.parse(fs.readFileSync(probeFile, 'utf8')) as Record<string, Delivery[]>) : null;
+  return { runs, decisions: readJsonl<DecisionLine>(path.join(dir, 'decisions.jsonl')), grades: readJsonl<Grade>(path.join(dir, 'grades.jsonl')), probe };
 }
 
 /** The rules noonsight's preset gives a model in a scope and place, in the preset's order. */
@@ -64,10 +71,11 @@ export interface DeliveryCheck {
 }
 
 /**
- * Whether each run received what its condition delivers: under `off`, nothing from noonsight and no
- * user CLAUDE.md; under `on`, exactly the preset's rules for the run's model, scope and place, and no
- * CLAUDE.md; under `claudemd` and `scattered`, nothing from noonsight and the user CLAUDE.md loaded at
- * the session's start.
+ * Whether each run received what its condition delivers: under `off`, nothing from noonsight; under
+ * `on`, exactly the preset's rules for the run's model, scope and place; under `claudemd` and
+ * `scattered`, nothing from noonsight and the user CLAUDE.md loaded at the session's start. That `off`
+ * and `on` get no CLAUDE.md holds by construction (their condition writes none, and installs no
+ * InstructionsLoaded hook), so it is not observed here.
  */
 export function deliveryCheck(runs: readonly RunRecord[]): DeliveryCheck[] {
   return CONDITION_ORDER.map((condition) => {
@@ -75,9 +83,8 @@ export function deliveryCheck(runs: readonly RunRecord[]): DeliveryCheck[] {
     const ok = (r: RunRecord): boolean => {
       const n = r.noonsight;
       const quiet = n.status === 'none' && n.reason === 'declared-none' && n.rules.length === 0;
-      if (condition === 'off') return quiet && !loadedUserClaudeMd(r);
-      if (condition === 'on')
-        return n.status === 'matched' && n.scope !== null && n.place !== null && JSON.stringify(n.rules) === JSON.stringify(expectedRules(r.model_id, n.scope, n.place)) && !loadedUserClaudeMd(r);
+      if (condition === 'off') return quiet;
+      if (condition === 'on') return n.status === 'matched' && n.scope !== null && n.place !== null && JSON.stringify(n.rules) === JSON.stringify(expectedRules(r.model_id, n.scope, n.place));
       return quiet && loadedUserClaudeMd(r);
     };
     const texts: Record<string, Set<string>> = {};
@@ -90,6 +97,51 @@ export function deliveryCheck(runs: readonly RunRecord[]): DeliveryCheck[] {
       texts_per_model: Object.fromEntries(Object.entries(texts).map(([m, s]) => [m, s.size])),
     };
   });
+}
+
+/**
+ * The share of the rule text a run received that was written for its model, or null when it received
+ * none: under `on`, the rules noonsight's decision log shows; under `claudemd`, and under `scattered`
+ * once the agent opened the rules file, every default-on rule of every model in the plan.
+ */
+export function runOwnShare(r: RunRecord, modelIds: readonly string[]): number | null {
+  const all = modelIds.flatMap((m) => defaultOnRules(m));
+  if (r.condition === 'on') return ownShare(r.model_id, all.filter((x) => r.noonsight.rules.includes(x.id)));
+  if (r.condition === 'claudemd' || (r.condition === 'scattered' && r.signals.read_rules.read)) return ownShare(r.model_id, all);
+  return null;
+}
+
+export interface ShareCell {
+  readonly runs: number;
+  /** Runs that received any rule text. */
+  readonly with_rules: number;
+  readonly mean: number | null;
+}
+
+/** The mean share of received rule text written for the run's model, by model and condition. */
+export function ownShareByCondition(runs: readonly RunRecord[], models: readonly string[], modelIds: readonly string[]): Record<string, Record<string, ShareCell>> {
+  const out: Record<string, Record<string, ShareCell>> = {};
+  for (const model of models) {
+    out[model] = {};
+    for (const condition of CONDITION_ORDER) {
+      const rs = runs.filter((r) => r.condition === condition && r.model === model);
+      const shares = rs.flatMap((r) => {
+        const s = runOwnShare(r, modelIds);
+        return s === null ? [] : [s];
+      });
+      out[model]![condition] = { runs: rs.length, with_rules: shares.length, mean: mean(shares) };
+    }
+  }
+  return out;
+}
+
+/**
+ * The share of the rule text in a probe request that was written for the request's model, or null
+ * when the request carries none, sized by each present model's default-on rule text.
+ */
+export function probeOwnShare(d: Delivery): number | null {
+  const present = d.own ? [d.model, ...d.others] : [...d.others];
+  return ownShare(d.model, present.flatMap((m) => defaultOnRules(m)));
 }
 
 export interface RulesRead {
@@ -191,6 +243,7 @@ export function openScores(runs: readonly RunRecord[], grades: readonly Grade[])
   return out;
 }
 
+const percent = (x: number | null): string => (x === null ? 'no rule text' : `${Math.round(x * 100)}%`);
 const usd = (x: number | null): string => (x === null ? '' : `$${x.toFixed(3)}`);
 const thousands = (x: number | null): string => (x === null ? '' : `${Math.round(x / 1000)}k`);
 
@@ -199,7 +252,7 @@ function table(head: readonly string[], rows: readonly (readonly string[])[]): s
 }
 
 /** The summary as Markdown: the tables the pilot's reading cites. */
-export function summaryMarkdown(res: Results, models: readonly string[]): string {
+export function summaryMarkdown(res: Results, models: readonly string[], modelIds: readonly string[]): string {
   const out: string[] = ['# Summary', '', '`npm run benchmark -- summarize --results <this folder>` prints this file from the result files beside it.', ''];
 
   const checks = deliveryCheck(res.runs);
@@ -212,6 +265,36 @@ export function summaryMarkdown(res: Results, models: readonly string[]): string
   out.push(table(['Condition', 'Runs', 'Received what the condition delivers', 'Condition texts per model'], checks.map((d) => [`\`${d.condition}\``, String(d.runs), `${d.as_expected} of ${d.runs}`, byModel(d.texts_per_model)])), '');
   const unexpected = checks.flatMap((d) => d.unexpected);
   if (unexpected.length) out.push(`Runs that did not: ${unexpected.join(', ')}.`, '');
+
+  out.push('## Share of the received rule text written for the run\'s model', '');
+  out.push(
+    table(
+      ['Model', ...CONDITION_ORDER.map((c) => `\`${c}\``)],
+      Object.entries(ownShareByCondition(res.runs, models, modelIds)).map(([model, byCond]) => [
+        model,
+        ...CONDITION_ORDER.map((c) => {
+          const s = byCond[c];
+          return s && s.with_rules ? `${percent(s.mean)} (${s.with_rules} of ${s.runs} runs received rule text)` : `no rule text (${s?.runs ?? 0} runs)`;
+        }),
+      ]),
+    ),
+    '',
+  );
+  if (res.probe) {
+    const arms = Object.keys(res.probe);
+    const paths = [...new Set(arms.flatMap((a) => (res.probe?.[a] ?? []).map((d) => d.path)))];
+    out.push('## Share of the rule text written for the request\'s model, per path of the delivery probe', '');
+    out.push(
+      table(
+        ['Path', 'Model of the request', ...arms.map((a) => `\`${a}\``)],
+        paths.map((p) => {
+          const rows = arms.map((a) => res.probe?.[a]?.find((d) => d.path === p));
+          return [p, rows.find(Boolean)?.model ?? '', ...rows.map((d) => (d ? percent(probeOwnShare(d)) : 'not reached'))];
+        }),
+      ),
+      '',
+    );
+  }
 
   out.push('## The scattered rules file, opened', '');
   out.push(table(['Model', 'Runs', 'Opened the rules file', 'Before its first edit'], rulesRead(res.runs, models).map((r) => [r.model, String(r.runs), `${r.read} of ${r.runs}`, `${r.before_first_edit} of ${r.runs}`])), '');

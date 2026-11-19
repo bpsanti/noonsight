@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { pickCalibration } from '../experiments/benchmark/calibration.js';
-import { CONTAINER, conditionConfig, defaultOnRules, hookSettings, modelName, ownShare, placeboText, POINTER_CLAUDE_MD, presetText, unionRules, writeCondition } from '../experiments/benchmark/conditions.js';
+import { CONTAINER, conditionConfig, defaultOnRules, hookSettings, modelName, ownShare, POINTER_CLAUDE_MD, presetText, unionRules, writeCondition } from '../experiments/benchmark/conditions.js';
 import { deliveries, deliveryTable, pathOf, rulesIn, signatures } from '../experiments/benchmark/delivery.js';
 import { excludedBy, unchecked, type GoldRecord } from '../experiments/benchmark/gold.js';
 import { reward } from '../experiments/benchmark/harbor.js';
@@ -19,7 +19,7 @@ import { doneKeys, interrupted, measured, spent, type Recorded, type RunRecord }
 import { cellKey, expectedCost, planNight, rounds, type Cell } from '../experiments/benchmark/schedule.js';
 import { hitUsageLimit, parseStream, readFile, usage, verification } from '../experiments/benchmark/score.js';
 import { chooseSwebench, chooseTerminalBench, rank, type SwebenchInstance } from '../experiments/benchmark/select.js';
-import { costByCondition, deliveryCheck, expectedRules, modelSwitches, openScores, readResults, resolution, rulesRead, summaryMarkdown } from '../experiments/benchmark/summary.js';
+import { costByCondition, deliveryCheck, expectedRules, modelSwitches, openScores, ownShareByCondition, probeOwnShare, readResults, resolution, rulesRead, runOwnShare, summaryMarkdown } from '../experiments/benchmark/summary.js';
 import { tomlValue } from '../experiments/benchmark/sources.js';
 import { dropKey, dropSection, unpinBase, useArm64Image } from '../experiments/benchmark/tasks.js';
 import { tempTree } from './helpers.js';
@@ -124,7 +124,7 @@ test('Harbor rewards are read from rewards.reward, or the only reward', () => {
 
 const twoTasks = { build: ['b1', 'b2'], routine: ['r1'], digest: ['d1'], investigate: [], review: [] } as const;
 
-test('rounds run in the priority order: build off and on, then the other sets off and on, then placebo, round by round', () => {
+test('rounds run in the priority order: build off and on, then the other sets off and on, then claudemd and scattered, round by round', () => {
   const all = rounds(plan, twoTasks, ['opus', 'haiku']);
   assert.deepEqual(
     all.map((r) => `${r.phase}#${r.rep}`),
@@ -233,38 +233,15 @@ test('an account is selected by its configuration directory, except the default 
   assert.equal(def.PATH, 'p');
 });
 
-test('off and on differ only in "use"; placebo delivers one neutral text per default-on rule with its scopes and places', () => {
+test('off and on differ only in "use"', () => {
   for (const model of ['claude-fable-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) {
     const off = conditionConfig(plan, model, 'off').config as any;
     const on = conditionConfig(plan, model, 'on').config as any;
     assert.deepEqual(off.models[model], { use: 'none' });
     assert.deepEqual(on.models[model], { use: 'preset' });
     assert.deepEqual(off.session, on.session);
-    const { config, files } = conditionConfig(plan, model, 'placebo');
-    const add = (config as any).models[model].add as { id: string; file: string; scopes?: string[]; where?: string[] }[];
-    const rules = defaultOnRules(model);
-    assert.equal(add.length, rules.length);
-    for (const p of plan.placebo[model] ?? []) {
-      const rule = rules.find((r) => r.id === p.mirrors);
-      const a = add.find((x) => x.id === p.id);
-      assert.ok(rule && a);
-      assert.deepEqual(a.scopes, rule.scopes);
-      assert.deepEqual(a.where, rule.where);
-      const ratio = (files[p.file] as string).length / presetText(rule).length;
-      assert.ok(Math.abs(ratio - 1) <= 0.02, `${p.id} is ${ratio} times the length of ${rule.id}`);
-    }
   }
-});
-
-test('the placebo texts give no instruction and name none of the things the rules are about', () => {
-  for (const f of fs.readdirSync(path.join(BENCH_DIR, 'placebo')).filter((f) => f.endsWith('.md'))) {
-    const t = placeboText(f).toLowerCase();
-    for (const w of ['test', 'check', 'verif', 'finish', 'scope', 'report', 'stop', 'continue', 'confirm', 'should', 'must', 'please', 'ask', 'done', 'task', 'work '])
-      assert.ok(!t.includes(w), `${f} contains "${w}"`);
-    assert.match(placeboText(f), /^The user/);
-  }
-  const sums = fs.readFileSync(path.join(BENCH_DIR, 'placebo', 'SHA256SUMS'), 'utf8');
-  for (const f of fs.readdirSync(path.join(BENCH_DIR, 'placebo')).filter((f) => f.endsWith('.md'))) assert.match(sums, new RegExp(`  ${f}$`, 'm'));
+  assert.throws(() => conditionConfig(plan, 'claude-haiku-5-5', 'placebo'), /unknown condition placebo/);
 });
 
 const MODELS = ['claude-fable-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
@@ -292,10 +269,14 @@ test('scattered puts only a pointer in the user CLAUDE.md, without an import, an
   assert.equal(c.rulesFile, unionRules(MODELS));
 });
 
-test('the share of the rules written for the receiving model is its own text over all of them, and the shares sum to one', () => {
-  const shares = MODELS.map((m) => ownShare(m, MODELS));
+test("the share of the rules written for the receiving model is 1 for its own, 0 for another's, null for none, and sums to one over every model", () => {
+  const all = MODELS.flatMap((m) => defaultOnRules(m));
+  const shares = MODELS.map((m) => ownShare(m, all) as number);
   assert.ok(Math.abs(shares.reduce((a, b) => a + b, 0) - 1) < 1e-9);
   for (const s of shares) assert.ok(s > 0.1 && s < 0.4);
+  assert.equal(ownShare('claude-sonnet-5-5', defaultOnRules('claude-sonnet-5-5')), 1);
+  assert.equal(ownShare('claude-sonnet-5-5', defaultOnRules('claude-haiku-5-5')), 0);
+  assert.equal(ownShare('claude-sonnet-5-5', []), null);
 });
 
 test('a condition writes its Markdown beside the configuration, and only claudemd and scattered log instruction loads', () => {
@@ -421,10 +402,10 @@ test('the judge sees no condition, reads ratings by statement or order, and take
 });
 
 test('calibration picks take the conditions in turn', () => {
-  const items = ['off', 'off', 'off', 'on', 'on', 'placebo'].map((condition, i) => ({ condition, i }));
+  const items = ['off', 'off', 'off', 'on', 'on', 'claudemd'].map((condition, i) => ({ condition, i }));
   assert.deepEqual(
     pickCalibration(items, 5).map((x) => x.condition),
-    ['off', 'on', 'placebo', 'off', 'on'],
+    ['claudemd', 'off', 'on', 'off', 'on'],
   );
 });
 
@@ -494,7 +475,7 @@ test('the delivery check holds each condition to what it delivers', () => {
   const matched = { status: 'matched', reason: null, place: 'unattended', scope: 'build', rules: ['sonnet-5-5/carry-through', 'sonnet-5-5/verify-changes'], sha256: 'x' };
   const runs = [
     recorded({ key: 'off-ok', condition: 'off', ...sonnet }),
-    recorded({ key: 'off-with-claudemd', condition: 'off', ...sonnet, instruction_loads: userClaudeMd }),
+    recorded({ key: 'off-noonsight-delivered', condition: 'off', ...sonnet, noonsight: matched }),
     recorded({ key: 'on-ok', condition: 'on', ...sonnet, noonsight: matched }),
     recorded({ key: 'on-wrong-rules', condition: 'on', ...sonnet, noonsight: { ...matched, rules: ['sonnet-5-5/carry-through'] } }),
     recorded({ key: 'claudemd-ok', condition: 'claudemd', ...sonnet, instruction_loads: userClaudeMd }),
@@ -502,12 +483,32 @@ test('the delivery check holds each condition to what it delivers', () => {
     recorded({ key: 'scattered-noonsight-too', condition: 'scattered', ...sonnet, instruction_loads: userClaudeMd, noonsight: matched }),
   ];
   const byCondition = Object.fromEntries(deliveryCheck(runs).map((d) => [d.condition, d]));
-  assert.deepEqual(byCondition.off?.unexpected, ['off-with-claudemd']);
+  assert.deepEqual(byCondition.off?.unexpected, ['off-noonsight-delivered']);
   assert.deepEqual(byCondition.on?.unexpected, ['on-wrong-rules']);
   assert.deepEqual(byCondition.claudemd?.unexpected, ['claudemd-not-loaded']);
   assert.deepEqual(byCondition.scattered?.unexpected, ['scattered-noonsight-too']);
   assert.equal(byCondition.on?.as_expected, 1);
   assert.deepEqual(byCondition.off?.texts_per_model, { sonnet: 1 });
+});
+
+test("a run's own share follows what its condition delivered: all under on, its part of the union under claudemd and a read scattered file, none otherwise", () => {
+  const sonnet = { model: 'sonnet', model_id: 'claude-sonnet-5-5' } as const;
+  const read = { read_rules: { read: true, before_first_edit: true } } as RunRecord['signals'];
+  const union = ownShare('claude-sonnet-5-5', MODELS.flatMap((m) => defaultOnRules(m)));
+  const matched = { status: 'matched', reason: null, place: 'unattended', scope: 'build', rules: ['sonnet-5-5/carry-through'], sha256: 'x' };
+  assert.equal(runOwnShare(recorded({ key: 'a', condition: 'on', ...sonnet, noonsight: matched }), MODELS), 1);
+  assert.equal(runOwnShare(recorded({ key: 'b', condition: 'on', ...sonnet, noonsight: { ...matched, rules: [] } }), MODELS), null);
+  assert.equal(runOwnShare(recorded({ key: 'c', condition: 'off', ...sonnet }), MODELS), null);
+  assert.equal(runOwnShare(recorded({ key: 'd', condition: 'claudemd', ...sonnet }), MODELS), union);
+  assert.equal(runOwnShare(recorded({ key: 'e', condition: 'scattered', ...sonnet }), MODELS), null);
+  assert.equal(runOwnShare(recorded({ key: 'f', condition: 'scattered', ...sonnet, signals: read }), MODELS), union);
+  const cells = ownShareByCondition([recorded({ key: 'e', condition: 'scattered', ...sonnet }), recorded({ key: 'f', condition: 'scattered', ...sonnet, signals: read })], ['sonnet'], MODELS);
+  assert.deepEqual(cells.sonnet?.scattered, { runs: 2, with_rules: 1, mean: union });
+  assert.deepEqual(cells.sonnet?.off, { runs: 0, with_rules: 0, mean: null });
+  assert.equal(probeOwnShare({ path: 'start', model: 'claude-sonnet-5-5', own: true, others: [] }), 1);
+  assert.equal(probeOwnShare({ path: 'start', model: 'claude-sonnet-5-5', own: true, others: MODELS.filter((m) => m !== 'claude-sonnet-5-5') }), union);
+  assert.equal(probeOwnShare({ path: 'subagent Explore', model: 'claude-sonnet-5-5', own: false, others: [] }), null);
+  assert.equal(probeOwnShare({ path: 'after-model-switch', model: 'claude-haiku-5-5', own: false, others: ['claude-sonnet-5-5'] }), 0);
 });
 
 test('the scattered rules file counts as read per model, and model switches come from the decision log', () => {
@@ -564,7 +565,8 @@ test('summarize reads a results folder, leaves infrastructure failures out and p
   assert.equal(res.runs.length, 1);
   assert.deepEqual(res.decisions, []);
   assert.equal(res.runs[0]?.signals.read_rules.read, true);
-  const text = summaryMarkdown(res, ['haiku']);
+  assert.equal(res.probe, null);
+  const text = summaryMarkdown(res, ['haiku'], MODELS);
   assert.match(text, /\| `scattered` \| 1 \| 1 of 1 \| haiku 1 \|/);
   assert.match(text, /\| haiku \| 1 \| 1 of 1 \| 1 of 1 \|/);
   assert.match(text, /## Model switches during the paid runs\n\nNone\./);

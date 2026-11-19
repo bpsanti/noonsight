@@ -41,7 +41,7 @@ The conditions ([conditions.ts](conditions.ts)):
 
 The `CLAUDE.md` goes where Claude Code reads the user's own, `$CLAUDE_CONFIG_DIR/CLAUDE.md`, so the task's repository, its diff and its verifier see nothing of it.
 Runs under these two conditions also carry an `InstructionsLoaded` hook that only records each instruction load, under `/logs/agent/instructions/`.
-The `placebo` condition, length-matched neutral texts in [placebo/](placebo), was pre-registered and replaced by these two before it ran; the texts and their hashes stay.
+The `placebo` condition, length-matched neutral texts in [placebo/](placebo), was pre-registered and replaced by these two before it ran; the texts and their hashes stay as pre-registration artifacts, and no condition runs them.
 
 ### The delivery probe
 
@@ -130,7 +130,7 @@ npm run benchmark -- smoke --work $WORK --account <account dir> --token-file <to
 The result lines hold no path of the machine that ran them.
 `rescore` computes the signals again from each run's saved event stream with the checkout's scorer, into `signals.jsonl`; the analysis reads those, so a fix to the scorer reaches runs already recorded.
 A pilot's results go to `results/<date>/` with a reading of them, as in [experiments/rules](../rules/README.md).
-`summarize` prints the tables a reading is written from, for a folder holding those result files: the delivery check of every run, how often the `scattered` rules file was opened, the model switches, cost and input tokens per run, the verifier's verdicts and the judge's scores.
+`summarize` prints the tables a reading is written from, for a folder holding those result files: the delivery check of every run, the share of the received rule text written for the run's model (and, when the folder holds `delivery-probe/delivery.json`, for each probe path), how often the `scattered` rules file was opened, the model switches, cost and input tokens per run, the verifier's verdicts and the judge's scores.
 
 ```bash
 npm run benchmark -- summarize --results experiments/benchmark/results/2026-11-19

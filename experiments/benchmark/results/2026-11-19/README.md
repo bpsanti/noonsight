@@ -1,8 +1,8 @@
 # Benchmark pilot, 2026-11-16 to 2026-11-19
 
 The pilot's primary measure is whether the rules reach the model they were written for.
-noonsight put each model's own rules, and only those, in every path the delivery probe checks: 7 of 7.
-One user `CLAUDE.md` holding every model's rules reached 5 of 7 paths, missed the Explore and Plan subagents, and everywhere it reached it carried the other three models' rules along with the model's own.
+noonsight put each model's own rules in every path the delivery probe checks (7 of 7), and other models' rules in none of them except after a model switch, where the earlier model's rules stay in the conversation's history alongside noonsight's note that they no longer apply.
+One user `CLAUDE.md` holding every model's rules reached 5 of 7 paths, missed the Explore and Plan subagents, and everywhere it reached it carried the other three models' rules along with the model's own: only 18 to 29 percent of the rule text a model received was written for it, against 100 percent under noonsight in the paid runs.
 A `CLAUDE.md` that only points to a rules file delivered nothing by itself in any path (0 of 7): the rules arrive only if the agent opens the file.
 In the 588 paid runs, every condition delivered exactly what it is meant to, run by run.
 
@@ -50,6 +50,18 @@ For each path, the table says whether the rules written for the request's model 
 
 The probe's own output is in [delivery-probe/](delivery-probe).
 
+The pre-registered share of the delivered rule text written for the request's model, per path, with each model's rule text sized by its default-on rules ([summary.md](summary.md)):
+
+| Path | Model of the request | `on` | `claudemd` | `scattered` |
+| --- | --- | --- | --- | --- |
+| start | Sonnet 5.5 | 100% | 29% | no rule text |
+| subagent general-purpose | Sonnet 5.5 | 100% | 29% | no rule text |
+| subagent Explore | Sonnet 5.5 | 100% | no rule text | no rule text |
+| subagent Plan | Sonnet 5.5 | 100% | no rule text | no rule text |
+| after `/model haiku` | Haiku 5.5 | 46% | 25% | no rule text |
+| after `/compact` | Haiku 5.5 | 100% | 25% | no rule text |
+| after `/clear` | Haiku 5.5 | 100% | 25% | no rule text |
+
 - `on`: each path carries the rules of the request's model.
   After `/model haiku` the Sonnet rules are still in the request because they are in the conversation's history, from the session's start; noonsight adds the Haiku rules and a note that the earlier model's rules no longer apply.
 - `claudemd`: the user `CLAUDE.md` is in the session's requests and the general-purpose subagent's, and not in the Explore and Plan subagents' requests, so those two subagents run without any rule.
@@ -59,16 +71,18 @@ The probe's own output is in [delivery-probe/](delivery-probe).
 
 ### The paid runs
 
-Every run's decision log and its `InstructionsLoaded` records ([summary.md](summary.md), "Delivery check of the paid runs") show what it received:
+Every run's decision log, and under `claudemd` and `scattered` its `InstructionsLoaded` records ([summary.md](summary.md), "Delivery check of the paid runs"), show what it received.
+Under `off` and `on` no `CLAUDE.md` is written and no `InstructionsLoaded` hook is installed, so their having no `CLAUDE.md` holds by construction and was not observed.
 
 | Condition | Runs | Received what the condition delivers |
 | --- | --- | --- |
-| `off` | 168 | 168: nothing from noonsight, no user `CLAUDE.md` |
-| `on` | 168 | 168: exactly the preset's rules for the run's model, scope and place, and no `CLAUDE.md` |
+| `off` | 168 | 168: nothing from noonsight |
+| `on` | 168 | 168: exactly the preset's rules for the run's model, scope and place |
 | `claudemd` | 168 | 168: nothing from noonsight, and the user `CLAUDE.md` loaded at the session's start |
 | `scattered` | 84 | 84: nothing from noonsight, and the pointer loaded at the session's start |
 
 Every run of a model under a condition got the same text (one condition hash per model and condition).
+The share of the rule text a run received that was written for its model was 100 percent under `on` for every model, and under `claudemd`, and under `scattered` once the file was opened, 29 percent for Fable 5.2 and Sonnet 5.5, 25 percent for Haiku 5.5 and 18 percent for Opus 5.5.
 No paid run started a subagent, so the subagent paths are measured by the probe only.
 
 Under `scattered`, all 84 agents opened the rules file, 83 of them before their first edit, because the pointer tells them to.

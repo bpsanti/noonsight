@@ -2,7 +2,7 @@
 // without Harbor or a model.
 //
 // Runs go phase by phase in the plan's priority order (build off and on first, then the other sets'
-// off and on, then placebo), and within a phase round by round. A round is cut into units, one per
+// off and on, then claudemd, then scattered), and within a phase round by round. A round is cut into units, one per
 // task and model, holding that pair's runs under each condition of the phase; the units and the
 // conditions inside each unit are shuffled with the seed. A stop inside a round (the cap, the quota
 // floor, an interruption) therefore leaves only whole units: every recorded run has its partners

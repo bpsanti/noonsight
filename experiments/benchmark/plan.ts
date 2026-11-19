@@ -26,13 +26,6 @@ export interface Phase {
   readonly rounds?: number;
 }
 
-export interface Placebo {
-  readonly id: string;
-  readonly file: string;
-  /** The preset rule whose scopes, places and length this text copies. */
-  readonly mirrors: string;
-}
-
 export interface Plan {
   readonly seed: string;
   readonly effort: string;
@@ -50,7 +43,7 @@ export interface Plan {
     readonly datasets: Readonly<Record<string, string>>;
   };
   readonly models: Readonly<Record<string, ModelPlan>>;
-  readonly conditions: Readonly<Record<string, { readonly use: 'none' | 'preset' | 'custom'; readonly placebo?: boolean; readonly claude_md?: 'union' | 'pointer' }>>;
+  readonly conditions: Readonly<Record<string, { readonly use: 'none' | 'preset'; readonly claude_md?: 'union' | 'pointer' }>>;
   readonly phases: readonly Phase[];
   readonly sets: {
     readonly build: BuildRule & { readonly scope: string };
@@ -62,7 +55,6 @@ export interface Plan {
   /** Minutes one run takes from container start to verdict, used to plan nights until the pilot has measured its own. */
   readonly expected_wall_min: Readonly<Record<SetName, number>>;
   readonly judge: { readonly model: string; readonly effort: string; readonly votes: number; readonly budget_usd: number; readonly expected_usd: number };
-  readonly placebo: Readonly<Record<string, readonly Placebo[]>>;
 }
 
 export function loadPlan(file = path.join(BENCH_DIR, 'plan.json')): Plan {
