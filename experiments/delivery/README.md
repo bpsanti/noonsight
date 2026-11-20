@@ -169,7 +169,7 @@ The folder for one version holds what was measured on that version; comparing tw
 ## Failures found, and a limit
 
 The corpus entries that start with `f1-` to `f4-` are the shortest reproductions of four failures of noonsight the fuzzer found.
-F1 and F2 are fixed, and their entries must pass; F3 and F4 are open, and their entries name the violations they show.
+All four are fixed, and their entries must pass.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
@@ -179,14 +179,15 @@ F1 and F2 are fixed, and their entries must pass; F3 and F4 are open, and their 
   On `claude --continue` without `--model`, the hook input names no model, and the hook took the `model` setting before the conversation's own model; but Claude Code runs the conversation on the model of its last response when there is one.
   `/model` writes the setting, so a resume after a switch got another model's rules and a note that retired its own, and its subagents were predicted on the wrong model.
   noonsight now reads the conversation's last response from the transcript (`docs/hooks.md`, "SessionStart").
-- **F3, a resume's delivery lost to another resume** (open).
+- **F3, a resume's delivery lost to another resume.**
   Two resumes with `--model` and no request between them: the first resume's rules and note reach no request, and the second resume's note retires only the first resume's model, so the model the session started on keeps its rules with nothing retiring them (`f3-two-resumes`).
   It is F1 with a resume in place of `/model`.
-- **F4, the resumed model after a switch from Sonnet to Haiku** (open).
-  After `/model haiku` in a conversation that last answered on Sonnet, a resume without `--model` runs on Haiku, the model setting, while the hook takes Sonnet, the model of the last response, since the fix of F2 (`f4-resume-after-switch-from-sonnet`).
-  Every other pair probed resumed on the last response's model; what makes Claude Code choose the setting here is not established.
+  noonsight now treats a resume's delivery as unconfirmed until the transcript holds a response of the conversation from after it (`docs/hooks.md`, "SessionStart").
+- **F4, the resumed model after a switch from Sonnet to Haiku.**
+  After `/model haiku` in a conversation that last answered on Sonnet, a resume without `--model` runs on Haiku, the model setting, while the hook took Sonnet, the model of the last response, since the fix of F2 (`f4-resume-after-switch-from-sonnet`).
+  Under the setting `haiku`, written exactly so, Claude Code resumes a conversation that last answered on Haiku or Sonnet on Haiku, and noonsight now does the same (`docs/hooks.md`, "SessionStart").
 
-Both were found by the run [after the fixes of F1 and F2](results/claude-code-2.1.328/2026-11-20-4e18c43/README.md).
+F3 and F4 were found by the run [after the fixes of F1 and F2](results/claude-code-2.1.328/2026-11-20-4e18c43/README.md).
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 

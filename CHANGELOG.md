@@ -23,7 +23,7 @@
 
 - The delivery benchmark (`experiments/delivery`) ran its fuzz level and native arms again on the build with the fixes of F1 and F2, with the seed, sizes and Claude Code version of the run before them, against comparisons fixed beforehand in `experiments/delivery/plan.json`.
   Sessions under `on` that break the invariant went from 26 of 296 to 3 of 300, and on the same 60 sequences `on` covered every request with rules due, against 87.4% for a `CLAUDE.md`, 70.9% for `.claude/rules` and none for skills; all eight primary comparisons are supported.
-  The fuzzer found two open failures, F3 (a resume's delivery lost to another resume) and F4 (a resume after `/model` from Sonnet to Haiku runs on the setting, not on the last response's model); the corpus records both, and neither is fixed yet.
+  The fuzzer found two open failures, F3 (a resume's delivery lost to another resume) and F4 (a resume after `/model` from Sonnet to Haiku runs on the setting, not on the last response's model); the corpus records both, and the two entries above fix them.
   `npm run delivery -- compare --design <name>` evaluates a design's comparisons against an earlier run, pairing the sessions of the same sequence with the exact McNemar test.
   See `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/README.md`.
 
