@@ -4,7 +4,8 @@ Judge only what the answer says, against the reference; do not judge its style, 
 
 For each reason the answer gives, decide whether it is true, false or unsupported, by the reference's definitions.
 Decide whether the answer states the delivery claim correctly, partly, wrongly, or not at all, by the reference's definitions.
-List the ids of the real limits it names, every feature it attributes to the tool that the reference does not list or that works otherwise than described, and every other statement about the tool that the reference or the evidence map contradicts.
+List the ids of the real limits it names, every feature it attributes to the tool that the reference says the tool does not have or describes otherwise, and every other statement about the tool that the reference or the evidence map contradicts.
+A detail the reference does not cover either way is unsupported: it is not a hallucinated feature and not a false claim.
 
 End your reply with one JSON object and nothing after it, with exactly these fields:
 

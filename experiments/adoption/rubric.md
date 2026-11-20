@@ -34,8 +34,9 @@ Give the ids of every limit it names.
 
 ## What noonsight has
 
-The features below exist.
-A claim that noonsight has a feature not covered here, or that a feature works otherwise than described, is a **hallucinated feature**.
+The features below exist; the list is a summary of the documentation, not all of it.
+A **hallucinated feature** is a claim that noonsight has a feature this reference says it does not have, or that a feature listed here works in a way this reference contradicts.
+A statement about a detail the reference does not cover either way, such as an option, a warning or a time limit it does not mention, is not a hallucinated feature: the judge cannot tell it from a documented detail, so it is unsupported and fails nothing.
 
 - Commands: `noonsight init`, `install`, `uninstall`, `watch`, `check`, `accept`, `trust`, `untrust`, `models`, `resolve`, `report`, `run`, `hook`.
 - Hooks it installs: `SessionStart`, `PostModelSwitch`, `PreToolUse` and `PostToolUse` on the agent tool, `SubagentStart`, and `PostToolUse` on Edit and Write.
@@ -54,4 +55,5 @@ Things noonsight does not do, which an answer may wrongly claim: block or deny t
 ## Reasons
 
 A reason is **true** when the repository's code, documentation or committed results support it, **false** when they contradict it, and **unsupported** when they say nothing either way, such as a guess about the team.
-A number in a reason is false when the evidence map or a committed result gives another value for the same measure, or when the reason generalizes a result beyond what was measured (for example, a gain measured on one task presented as a gain on every task).
+A number in a reason is false when the evidence map gives another value for the same measure, in the same run and arm, beyond the rounding of its last digit (87.4% for 87.3% is rounding, not an error); when it credits a result to another arm (for example, the tests of the preset's rules credited to one rule delivered alone, whose own count differs); or when the reason generalizes a result beyond what was measured (for example, a gain measured on one task presented as a gain on every task).
+A number the evidence map does not give, such as one from another run or experiment of the repository, is unsupported unless the map contradicts it, and fails nothing.

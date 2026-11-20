@@ -263,7 +263,8 @@ export interface RunRecord extends Cell {
 /** One session of one cell: a fresh sandbox and copy of the repository, one `claude -p`, its answer. */
 async function runSession(p: Plan, cell: Cell, ref: string, out: string, stub: boolean, token: string | null, version: string): Promise<RunRecord> {
   // A name that says nothing of the experiment, the condition or the model: the session sees its working directory.
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));
+  // The real path, which is the one the session reports (on macOS the temporary directory is a link).
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-')));
   try {
     const repo = path.join(root, 'noonsight');
     const { commit, tree } = prepareTree(ref, repo, p.exclude);

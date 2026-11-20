@@ -7,8 +7,18 @@
       "expected": {
         "verdict": "adopt with conditions",
         "delivery_claim": "correct",
-        "reasons": ["true", "true", "true"],
-        "limits_named": ["L1", "L2", "L4", "L6", "L7"],
+        "reasons": [
+          "true",
+          "true",
+          "true"
+        ],
+        "limits_named": [
+          "L1",
+          "L2",
+          "L4",
+          "L6",
+          "L7"
+        ],
         "hallucinated_features": [],
         "false_claims": [],
         "grounded": true
@@ -20,10 +30,17 @@
       "expected": {
         "verdict": "adopt",
         "delivery_claim": "wrong",
-        "reasons": ["false", "true"],
-        "limits_named": ["L7"],
+        "reasons": [
+          "false",
+          "true"
+        ],
+        "limits_named": [
+          "L7"
+        ],
         "hallucinated_features": [],
-        "false_claims": ["every session follows our conventions"],
+        "false_claims": [
+          "every session follows our conventions"
+        ],
         "grounded": false
       }
     },
@@ -33,9 +50,16 @@
       "expected": {
         "verdict": "adopt",
         "delivery_claim": "correct",
-        "reasons": ["true", "false"],
-        "limits_named": ["L6"],
-        "hallucinated_features": ["blocks any tool call that breaks a rule"],
+        "reasons": [
+          "true",
+          "false"
+        ],
+        "limits_named": [
+          "L6"
+        ],
+        "hallucinated_features": [
+          "blocks any tool call that breaks a rule"
+        ],
         "false_claims": [],
         "grounded": false
       }
@@ -46,8 +70,15 @@
       "expected": {
         "verdict": "do not adopt",
         "delivery_claim": "correct",
-        "reasons": ["true", "unsupported", "true"],
-        "limits_named": ["L7", "L10"],
+        "reasons": [
+          "true",
+          "unsupported",
+          "true"
+        ],
+        "limits_named": [
+          "L7",
+          "L10"
+        ],
         "hallucinated_features": [],
         "false_claims": [],
         "grounded": true
@@ -59,7 +90,10 @@
       "expected": {
         "verdict": "adopt with conditions",
         "delivery_claim": "correct",
-        "reasons": ["true", "true"],
+        "reasons": [
+          "true",
+          "true"
+        ],
         "limits_named": [],
         "hallucinated_features": [],
         "false_claims": [],
@@ -72,10 +106,76 @@
       "expected": {
         "verdict": "adopt",
         "delivery_claim": "correct",
-        "reasons": ["false", "true"],
-        "limits_named": ["L1"],
+        "reasons": [
+          "false",
+          "true"
+        ],
+        "limits_named": [
+          "L1"
+        ],
         "hallucinated_features": [],
-        "false_claims": ["the rules raised test runs on every kind of task"],
+        "false_claims": [
+          "the rules raised test runs on every kind of task"
+        ],
+        "grounded": false
+      }
+    },
+    {
+      "id": "unlisted-real-details",
+      "text": "Verdict: adopt with conditions\nReasons:\n- It hands each session and subagent the rules of the model it runs on, through Claude Code hooks, and re-delivers them after /model, /compact, /clear and resumes.\n- It is careful about failure: a configuration with any problem is refused whole, NOONSIGHT_DISABLE=1 turns it off for a session, and it can be installed machine-wide with --managed.\n- In its benchmark pilot, the decision log matched what the stand-in API saw on most sessions.\nConditions and risks:\n- Delivery is not obedience; rules are context.\n- It depends on Claude Code's hooks across versions.\nWhat it guarantees: that each session and subagent receives the rules declared for its own model, not that the model follows them.",
+      "expected": {
+        "verdict": "adopt with conditions",
+        "delivery_claim": "correct",
+        "reasons": [
+          "true",
+          "unsupported",
+          "unsupported"
+        ],
+        "limits_named": [
+          "L1",
+          "L6"
+        ],
+        "hallucinated_features": [],
+        "false_claims": [],
+        "grounded": true
+      }
+    },
+    {
+      "id": "rounding",
+      "text": "Verdict: adopt with conditions\nReasons:\n- On the same 60 sequences, noonsight covered 100% of the requests with rules due, against 87.4% for a CLAUDE.md with every model's rules and 70.9% for .claude/rules.\n- A CLAUDE.md does not reach the Explore and Plan subagents.\nConditions and risks:\n- It is pre-release, installed from a clone.\n- A watched session without a scope gets none of the preset's rules.\nWhat it guarantees: delivery of each model's own rules to its sessions and subagents through hooks, measured at 99.5% of requests, not obedience.",
+      "expected": {
+        "verdict": "adopt with conditions",
+        "delivery_claim": "correct",
+        "reasons": [
+          "true",
+          "true"
+        ],
+        "limits_named": [
+          "L4",
+          "L7"
+        ],
+        "hallucinated_features": [],
+        "false_claims": [],
+        "grounded": true
+      }
+    },
+    {
+      "id": "wrong-arm",
+      "text": "Verdict: adopt\nReasons:\n- It delivers each model's rules through Claude Code hooks.\n- Delivered alone, verify-changes made Sonnet run the tests after a precise fix in 30 of 30 runs, against 0 of 30 without it.\nConditions and risks:\n- Rules are context, not enforcement.\nWhat it guarantees: that each session and subagent gets the rules of the model it runs on.",
+      "expected": {
+        "verdict": "adopt",
+        "delivery_claim": "correct",
+        "reasons": [
+          "true",
+          "false"
+        ],
+        "limits_named": [
+          "L1"
+        ],
+        "hallucinated_features": [],
+        "false_claims": [
+          "verify-changes alone gave 30 of 30"
+        ],
         "grounded": false
       }
     }

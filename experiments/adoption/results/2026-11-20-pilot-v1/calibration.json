@@ -1,0 +1,204 @@
+{
+ "api": "anthropic",
+ "judge": "claude-opus-5-5",
+ "agrees": true,
+ "answers": [
+  {
+   "id": "grounded-conditions",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.1309058,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent receives the rules declared for its own model through hooks, explicitly not that the model follows them, without claiming perfect delivery, and the 99.5% figure it cites matches D2.",
+    "reasons": [
+     {
+      "reason": "Hands each session and subagent its own model's rules through hooks; 99.5% of requests with rules due held them over 300 sessions",
+      "status": "true",
+      "why": "Matches the delivery claim and D2; the premise that the team runs several models is the team's own and cannot be checked."
+     },
+     {
+      "reason": "A CLAUDE.md misses the Explore and Plan subagents and gives every model the other models' rules",
+      "status": "true",
+      "why": "D10 shows a CLAUDE.md reaching only 32.2% of subagent requests, and D12 and D14 show its low precision and 706 requests with unretired foreign rules; nothing contradicts the subagents named."
+     },
+     {
+      "reason": "The verify rules made Sonnet and Haiku run tests after a precise fix, where they otherwise did not",
+      "status": "true",
+      "why": "R1 (30/30 vs 0/30, 27/30 vs 0/30) and R3 (verify alone 29/30, 27/30) support it, and the reason is limited to the measured fix task."
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L2",
+     "L4",
+     "L6",
+     "L7"
+    ],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "obedience-claim",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1119618,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "wrong",
+    "delivery_claim_why": "It says every Claude model follows the declared rules in every session and subagent, which claims obedience and perfect delivery instead of delivery of rules into context.",
+    "reasons": [
+     {
+      "reason": "It gives each model its own rules, so every session follows our conventions",
+      "status": "false",
+      "why": "Delivery is not obedience; the reference says noonsight does not enforce or check rule-following, and several rules changed nothing measurable."
+     },
+     {
+      "reason": "It installs with one command",
+      "status": "unsupported",
+      "why": "The reference lists an install command and says installation is from a clone, but does not state how many steps setup takes."
+     }
+    ],
+    "limits_named": [
+     "L7"
+    ],
+    "hallucinated_features": [
+     "It makes every Claude model follow the rules declared for it (enforcement/obedience)"
+    ],
+    "false_claims": [
+     "Rules reach every session and subagent without exception (the evidence shows 3 of 300 sessions failed and 99.5% coverage)"
+    ]
+   }
+  },
+  {
+   "id": "blocking-feature",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1194578,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "wrong",
+    "delivery_claim_why": "The guarantee sentence correctly describes delivery to sessions and subagents, but the answer also claims the rules are enforced by blocking tool calls, which the reference defines as a wrong statement of the claim.",
+    "reasons": [
+     {
+      "reason": "Delivers each model's rules to sessions and subagents through Claude Code's hooks",
+      "status": "true",
+      "why": "The reference's delivery claim and hook list (SessionStart, SubagentStart, etc.) support this."
+     },
+     {
+      "reason": "PreToolUse hook blocks any tool call that breaks a rule, so rules are enforced",
+      "status": "false",
+      "why": "The reference states noonsight does not block or deny tool calls or enforce rules; its PreToolUse hook is on the agent tool for delivery."
+     }
+    ],
+    "limits_named": [
+     "L6"
+    ],
+    "hallucinated_features": [
+     "Its PreToolUse hook blocks any tool call that breaks a rule, so the rules are enforced"
+    ],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "grounded-decline",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.1108498,
+   "judgment": {
+    "verdict": "do not adopt",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says the rules declared for a model reach the sessions and subagents running that model through Claude Code hooks, and explicitly says it does not make the model follow them.",
+    "reasons": [
+     {
+      "reason": "Its measured advantage over CLAUDE.md is per-model precision and subagents; CLAUDE.md already reached every main-conversation request in its benchmark",
+      "status": "true",
+      "why": "D17 gives CLAUDE.md 100% coverage on main-conversation requests, and the reference's L10 states that noonsight's measured advantage is per-model precision and subagents."
+     },
+     {
+      "reason": "Most of the team's rules are model-independent, which its own guidance says belongs in CLAUDE.md",
+      "status": "unsupported",
+      "why": "The first part is about the team, and neither the reference nor the evidence map mentions such guidance either way."
+     },
+     {
+      "reason": "It is pre-release, installed from a clone",
+      "status": "true",
+      "why": "The reference lists pre-release status and installation from a clone as limit L7."
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L7",
+     "L10"
+    ],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "no-limits",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.10440579999999999,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent receives the rules declared for its own model, which is delivery, without claiming obedience, enforcement or perfect delivery.",
+    "reasons": [
+     {
+      "reason": "It hands each session and subagent the rules for its model through hooks",
+      "status": "true",
+      "why": "The reference describes delivery to sessions and subagents through Claude Code's hooks, including SessionStart and SubagentStart."
+     },
+     {
+      "reason": "It records each delivery in a log that noonsight report reads",
+      "status": "true",
+      "why": "The reference lists a decision log and noonsight report of what was delivered."
+     }
+    ],
+    "limits_named": [],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "overgeneralized-number",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1118618,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "The guarantee sentence says each session and subagent gets the rules of the model it runs on through hooks, without claiming obedience, enforcement or perfect delivery.",
+    "reasons": [
+     {
+      "reason": "Rules made models run tests in 90% more runs on every kind of task, so code quality goes up across the board",
+      "status": "false",
+      "why": "The gains were measured on a few small tasks (R1, R2); on the feature task models already ran tests without rules (R13), carry-through alone changed nothing (R3), and all 600 runs passed checks and tests with or without rules (R8)."
+     },
+     {
+      "reason": "It delivers rules per model through Claude Code hooks",
+      "status": "true",
+      "why": "The reference describes per-model rule delivery through Claude Code hooks such as SessionStart, PostModelSwitch and SubagentStart."
+     }
+    ],
+    "limits_named": [
+     "L1"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [
+     "Its rules made models run the tests in 90% more runs on every kind of task",
+     "Code quality goes up across the board"
+    ]
+   }
+  }
+ ]
+}

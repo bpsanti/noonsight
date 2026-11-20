@@ -15,7 +15,7 @@ This README is the pre-registration: the prompt, the sessions, the scoring, the 
 | Condition | Commit | What differs |
 | --- | --- | --- |
 | `before` | `f061f03`, `main` before the rewrite | The README as it was, and no `docs/evidence.md`, `docs/sources.md` or `docs/usage.md` |
-| `after` | `d956687`, the rewrite with the recording of its first-delivery session | The rewritten README and those three pages |
+| `after` | `d956687` in the pilot; `c6a919c` from v2 on (below) | The rewritten README and those three pages |
 
 Each session gets `git archive` of its commit, without this folder, so no session can read the prompt, the reference or the scoring.
 The code is the same in both but for one usage line.
@@ -90,6 +90,33 @@ npm run adoption -- judge <dir> --token-file <file>
 
 `--stub` in place of `--token-file` runs every step against a local stand-in for the Messages API, with no login and no tokens: each session reads the README and answers with one of the calibration answers, and the judge answers with that answer's expected judgment, so the sandbox, the copy of the repository, the parsing, the scoring and the summary are checked end to end.
 `npm test` checks the scoring, the verdict parsing, the allocation and the summary without Claude Code (`test/adoption.test.ts`).
+
+## Revision after the pilot (v2)
+
+This section was written after the pilot, and before any v2 judgment or v2 session; it departs from the plan above, which said the reference could be revised only before any real answer was judged.
+The pilot's record is kept whole in [results/2026-11-20-pilot-v1](results/2026-11-20-pilot-v1/README.md).
+
+**What the pilot showed.**
+The judge passed its calibration, six of six, then scored none of the eight pilot answers grounded, in either condition, and most of the failures were the judge's:
+
+- It counted as invented features details that the documentation describes but the reference's summary list does not, such as `NOONSIGHT_DISABLE`, a configuration refused whole, `--managed`, or the warning on a subagent model mismatch.
+- It counted as false the numbers that a committed result gives but the evidence map does not, such as the log's coverage against the stand-in's, and the rounding of 87.3% to 87.4%, the value the delivery results' own README prints.
+- The calibration answers had no such case, so it could not catch either.
+
+One failure was the README's: two of the four `after` answers credited the 30 of 30 runs of Sonnet's preset rules to `verify-changes` alone, whose own count is 29 of 30, which the README's bullet invited by putting the two in one sentence.
+
+**What changes.**
+
+- The README separates the two results and gives the cost of `verify-changes` (commit `c6a919c`), which becomes the `after` condition; `before` is unchanged.
+- [rubric.md](rubric.md) and [judge.md](judge.md): a feature is invented only when the reference says noonsight does not have it or describes it otherwise, and a number is false only when the evidence map gives another value for the same measure, run and arm, beyond the rounding of its last digit, or when it credits a result to another arm; what the reference cannot settle is unsupported and fails nothing.
+- [calibration.json](calibration.json) gains three answers for those cases: real details the summary does not list, the rounding, and the result credited to the wrong arm. The judge must again reach the expected `grounded` on all nine before any answer counts.
+- **Models and repetitions.** The pilot's allocation, by the rule above, left Fable 5.2 out and gave five sessions per model and condition; the spending on the pilot and on the revision leaves room for three, the plan's minimum, for Opus 5.5, Sonnet 5.5 and Haiku 5.5.
+  The pilot's `before` sessions of those three models count as their first: same commit, prompt, model and settings.
+  The pilot's `after` sessions do not, since `after` changed; they and Fable's two pilot sessions are reported with the pilot only.
+- **Money.** The cap stays $20 for everything, the pilot's $7.82 included; the runner gets what remains after the calibration, and the evaluation stops and reports if the measured costs project past it.
+
+The pass bar, the prompt, the sandbox and the scoring formula are unchanged.
+v2's results are in `results/2026-11-20-v2/`.
 
 ## Limits
 
