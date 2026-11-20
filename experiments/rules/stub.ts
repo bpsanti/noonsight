@@ -6,7 +6,8 @@
 //
 // The script plays the task's reference solution (solutions/<task>): it reads the files the solution
 // touches that the fixture already has, writes the solution's files, runs `npm test` when the session
-// received a verify-changes rule and the task changes code, and ends with a short report. So a stub
+// received a verify-changes rule and the task changes code, and ends with a short report; given the
+// verify rule as a pointer to its text, it reads that file first. So a stub
 // run exercises every path a real run takes, and the summary must show the difference the script
 // builds in: tests after the last edit only with a verify rule, and a denser report without any rule.
 // Its numbers say nothing about any model.
@@ -27,8 +28,11 @@ export function deliveredRules(body: Body): string[] {
   return [...new Set(ids.filter(Boolean))];
 }
 
-/** Whether the rules delivered include a verify rule, the one whose source claims the tests. */
-const verifies = (rules: readonly string[]): boolean => rules.some((id) => id.endsWith('/verify-changes'));
+/** Whether the rules delivered include a verify rule, the one whose source claims the tests, inline or as a pointer to its text. */
+const verifies = (rules: readonly string[]): boolean => rules.some((id) => id.endsWith('/verify-changes') || id.endsWith('/verify-changes-pointer'));
+
+/** Whether the rules delivered include a pointer rule, which says to read the file holding a rule's text. */
+const points = (rules: readonly string[]): boolean => rules.some((id) => id.endsWith('-pointer'));
 
 /** The reports the script ends with: plain short sentences with any rule, one dense sentence without. */
 export const STUB_REPORTS = {
@@ -55,12 +59,16 @@ interface Step {
   readonly text?: string;
 }
 
-/** The script of one run: what the stand-in does at each turn of the session's own conversation. */
-export function script(task: Task, solution: Record<string, string>, fixture: string, project: string, rules: readonly string[]): Step[] {
+/**
+ * The script of one run: what the stand-in does at each turn of the session's own conversation. With
+ * a pointer rule delivered, it first reads `ruleFile`, the file the pointer names.
+ */
+export function script(task: Task, solution: Record<string, string>, fixture: string, project: string, rules: readonly string[], ruleFile: string | null = null): Step[] {
   const files = Object.keys(solution).sort();
   const existing = files.filter((f) => fs.existsSync(path.join(fixture, f)));
   const changesCode = task.check !== undefined;
   const steps: Step[] = [];
+  if (ruleFile && points(rules)) steps.push({ calls: [{ name: 'Read', input: { file_path: ruleFile } }] });
   if (existing.length) steps.push({ calls: existing.map((f) => ({ name: 'Read', input: { file_path: path.join(project, f) } })) });
   steps.push({ calls: files.map((f) => ({ name: 'Write', input: { file_path: path.join(project, f), content: solution[f] } })) });
   if (verifies(rules) && changesCode) steps.push({ calls: [{ name: 'Bash', input: { command: 'npm test', description: 'Run the tests' } }] });

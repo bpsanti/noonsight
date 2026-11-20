@@ -198,7 +198,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
     }
     lines.push(table(['Task', 'Model', 'Arm', 'Signal', 'With the rule', 'Without (arm none)', 'p'], rowsRule), '');
   }
-  if (design) lines.push(...preregistered(design, runs), ...(design.arms.length > 2 ? eachArm(design, runs) : []), ...costAgainstProjection(design, runs));
+  if (design) lines.push(...preregistered(design, runs), ...(design.arms.length > 2 ? eachArm(design, runs) : []), ...pointerReads(runs), ...costAgainstProjection(design, runs));
   return `${lines.join('\n')}\n`;
 }
 
@@ -345,6 +345,44 @@ function eachArm(design: Design, runs: readonly RunRecord[]): string[] {
     'Descriptive, beside the comparisons above: for each arm, the tests after the last edit and the mean cost per run, each with its difference from the arm `none` and, for an arm with fewer rules than `rules`, that difference as a part of the difference of the arm `rules`. Parts need not add up to 100%: rules can overlap or add to each other, and chance moves every mean.',
     '',
     table(['Model', 'Task', 'Arm', 'Rules delivered', 'Runs', 'Tests after last edit', 'Against none', 'Part of rules', 'Cost per run', 'Against none', 'Part of rules', 'Turns per run'], rows),
+    '',
+  ];
+}
+
+/**
+ * For the runs of a pointer arm, whether and when the session read the file holding the rule's text,
+ * beside the tests after the last edit, which the rule asks for.
+ */
+function pointerReads(runs: readonly RunRecord[]): string[] {
+  const pointed = runs.filter((r) => r.signals.pointer);
+  if (!pointed.length) return [];
+  const rows: Row[] = [];
+  const groups = [...new Set(pointed.map((r) => `${r.model}\u0000${r.task}\u0000${r.arm}`))];
+  for (const group of groups) {
+    const [model, task, arm] = group.split('\u0000') as [string, string, string];
+    const g = pointed.filter((r) => r.model === model && r.task === task && r.arm === arm);
+    const read = g.filter((r) => r.signals.pointer?.read);
+    const firsts = read.map((r) => r.signals.pointer?.first_call ?? 0);
+    const verified = BINARY.verified as (r: RunRecord) => boolean | undefined;
+    rows.push([
+      model,
+      task,
+      arm,
+      String(g.length),
+      shareWithInterval(count(g, (r) => r.signals.pointer?.read)),
+      `${read.filter((r) => r.signals.pointer?.before_first_edit).length} of ${read.length}`,
+      firsts.length ? `${median(firsts)} (${Math.min(...firsts)} to ${Math.max(...firsts)})` : 'n/a',
+      String(g.filter((r) => !r.signals.pointer?.read && (r.signals.pointer?.attempts ?? 0) > 0).length),
+      shareWithInterval(count(g, verified)),
+      shareWithInterval(count(read, verified)),
+    ]);
+  }
+  return [
+    '## The pointer arm: reading the rule file',
+    '',
+    'The runs that received a rule as a pointer to a file holding its text: whether the session read that file (with Read, Grep or a Bash command naming it), whether the read came before its first edit of code, and at which tool call the first read came.',
+    '',
+    table(['Model', 'Task', 'Arm', 'Runs', 'Read the file', 'Read before the first edit, of those that read it', 'First read at tool call (median, range)', 'Tried and refused, never read', 'Tests after last edit', 'Tests after last edit, of those that read it'], rows),
     '',
   ];
 }

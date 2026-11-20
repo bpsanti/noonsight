@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { allowedChange, armEntry, cellKey, cells, designCells, EXPERIMENT_DIR, loadPlan, projection, renderProjection, stubEnv, type RunRecord } from '../experiments/rules/run.js';
-import { answerLine, answerScore, changedFiles, handsBack, prose, toolCalls, verification } from '../experiments/rules/score.js';
+import { allowedChange, armEntry, armSetup, cellKey, experimentPreset, pointerText, cells, designCells, EXPERIMENT_DIR, loadPlan, projection, renderProjection, stubEnv, type RunRecord } from '../experiments/rules/run.js';
+import { answerLine, answerScore, changedFiles, handsBack, prose, ruleFileRead, toolCalls, verification } from '../experiments/rules/score.js';
 import { fisher, holm, mannWhitney, wilson } from '../experiments/rules/stats.js';
 import { deliveredRules, RULES_MARKER, script, solutionFiles, STUB_REPORTS, stubReply } from '../experiments/rules/stub.js';
 import { comparisons, summarize } from '../experiments/rules/summary.js';
@@ -434,26 +434,93 @@ test('an arm with one rule is the preset with every other rule that ships on for
   assert.deepEqual(delivered('rules', 'claude-sonnet-5-5', 'routine'), ['sonnet-5-5/carry-through', 'sonnet-5-5/stay-in-scope', 'sonnet-5-5/verify-changes']);
 });
 
-test('the single-rule design runs Sonnet and Haiku on fix and bug in four arms, 30 times each, within a cap above its projection', () => {
+test('a pointer arm replaces the rule with a short rule naming a file that holds its text, delivered where the rule would be', () => {
+  const plan = loadPlan();
+  const dir = tempTree({});
+  const preset = experimentPreset();
+  const setup = armSetup(plan, 'pointer', 'claude-sonnet-5-5', dir, preset);
+  assert.deepEqual(setup.entry, {
+    use: 'preset',
+    disable: ['sonnet-5-5/carry-through', 'sonnet-5-5/stay-in-scope'],
+    add: [{ id: 'experiment/verify-changes-pointer', file: 'verify-changes-pointer.md', replaces: 'sonnet-5-5/verify-changes' }],
+  });
+  assert.equal(setup.ruleFile, path.join(dir, 'verify-changes.md'));
+  assert.equal(setup.files['verify-changes-pointer.md'], `${pointerText(path.join(dir, 'verify-changes.md'))}\n`);
+  const inline = preset.models.get('claude-sonnet-5-5')?.find((r) => r.id === 'sonnet-5-5/verify-changes')?.text.trim();
+  assert.equal(setup.files['verify-changes.md'], `${inline}\n`);
+  assert.equal(armSetup(plan, 'verify', 'claude-sonnet-5-5', dir, preset).ruleFile, null);
+
+  // noonsight delivers the pointer exactly where it would deliver the rule inline, and nothing else.
+  for (const model of ['claude-sonnet-5-5', 'claude-haiku-5-5'])
+    for (const scope of ['routine', 'build'])
+      for (const triggers of [[], ['code-edit']] as 'code-edit'[][]) {
+        const d = tempTree({});
+        const s = armSetup(plan, 'pointer', model, d, preset);
+        for (const [file, text] of Object.entries(s.files)) fs.writeFileSync(path.join(d, file), text);
+        fs.writeFileSync(path.join(d, 'noonsight.json'), JSON.stringify({ version: 1, models: { [model]: s.entry }, session: { unattended_when_env: [plan.unattended_env] } }));
+        const decision = resolve(loadConfig(path.join(d, 'noonsight.json'), { presetsDir: path.join(PACKAGE_ROOT, 'presets') }, {}), { model, scope, place: 'unattended', triggers });
+        assert.equal(decision.status, 'matched');
+        if (decision.status !== 'matched') continue;
+        assert.deepEqual(decision.rules, ['experiment/verify-changes-pointer']);
+        assert.match(decision.text, new RegExp(`is in the file ${path.join(d, 'verify-changes.md').replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}\\. Read that file`));
+        assert.doesNotMatch(decision.text, /gets a real check that exercises it/);
+      }
+});
+
+test('ruleFileRead says whether and when the session opened the rule file, refused attempts apart', () => {
+  const project = '/work/project';
+  const file = '/lab/rules/verify-changes.md';
+  const call = (id: string, name: string, input: Record<string, unknown>): [string, string, Record<string, unknown>] => [id, name, input];
+  const before = toolCalls(stream([call('1', 'Read', { file_path: file }), call('2', 'Edit', { file_path: `${project}/src/a.js` })]));
+  assert.deepEqual(ruleFileRead(before, file, project), { read: true, attempts: 1, first_call: 1, before_first_edit: true });
+  const after = toolCalls(stream([call('1', 'Read', { file_path: `${project}/src/a.js` }), call('2', 'Edit', { file_path: `${project}/src/a.js` }), call('3', 'Bash', { command: `cat ${file}` })]));
+  assert.deepEqual(ruleFileRead(after, file, project), { read: true, attempts: 1, first_call: 3, before_first_edit: false });
+  const refused = toolCalls(stream([call('1', 'Read', { file_path: file })], ['1']));
+  assert.deepEqual(ruleFileRead(refused, file, project), { read: false, attempts: 1, first_call: null, before_first_edit: null });
+  // A read with no edit at all still counts as before the first edit.
+  const readOnly = toolCalls(stream([call('1', 'Grep', { pattern: 'check', path: file })]));
+  assert.equal(ruleFileRead(readOnly, file, project).before_first_edit, true);
+  assert.equal(ruleFileRead(toolCalls(stream([])), file, project).read, false);
+});
+
+test('the stub reads the rule file first when the session received the pointer rule, then tests as with the rule inline', () => {
+  const plan = loadPlan();
+  const task = plan.tasks.fix;
+  assert.ok(task);
+  const solution = solutionFiles(path.join(EXPERIMENT_DIR, task.solution));
+  const fixture = path.join(EXPERIMENT_DIR, 'fixtures', task.fixture);
+  const steps = script(task, solution, fixture, '/work/p', ['experiment/verify-changes-pointer'], '/lab/rules/verify-changes.md');
+  assert.deepEqual(steps[0]?.calls, [{ name: 'Read', input: { file_path: '/lab/rules/verify-changes.md' } }]);
+  assert.ok(steps.some((s) => s.calls?.some((c) => c.name === 'Bash' && c.input.command === 'npm test')));
+  const inline = script(task, solution, fixture, '/work/p', ['sonnet-5-5/verify-changes'], '/lab/rules/verify-changes.md');
+  assert.equal(inline.length, steps.length - 1);
+});
+
+test('the single-rule design runs Sonnet and Haiku on fix and bug in five arms, 30 times each, within a cap above its projection', () => {
   const plan = loadPlan();
   const design = plan.designs['single-rule'];
   assert.ok(design);
   const all = designCells(plan, design);
-  assert.equal(all.length, 2 * 2 * 4 * 30);
-  assert.deepEqual(all.slice(0, 8).map(cellKey), [
+  assert.equal(all.length, 2 * 2 * 5 * 30);
+  assert.deepEqual(all.slice(0, 10).map(cellKey), [
     'fix.sonnet.rules.1',
     'fix.sonnet.verify.1',
+    'fix.sonnet.pointer.1',
     'fix.sonnet.carry.1',
     'fix.sonnet.none.1',
     'fix.haiku.rules.1',
     'fix.haiku.verify.1',
+    'fix.haiku.pointer.1',
     'fix.haiku.carry.1',
     'fix.haiku.none.1',
   ]);
   const p = projection(plan, design);
-  assert.ok(Math.abs(p.expected - 11.64) < 0.01, String(p.expected));
-  assert.ok(p.expected < design.cap_usd && design.cap_usd < p.ceiling);
-  assert.equal(comparisons(design, []).length, 14);
+  assert.ok(Math.abs(p.expected - 14.55) < 0.01, String(p.expected));
+  assert.ok(p.expected <= 20 && p.expected < design.cap_usd && design.cap_usd < p.ceiling);
+  assert.equal(design.cap_usd, 25);
+  const cs = comparisons(design, []);
+  assert.equal(cs.length, 21);
+  assert.equal(cs.filter((c) => c.arms[0] === 'pointer' && c.arms[1] === 'verify').length, 7);
 });
 
 test('a comparison of two named arms reads the direction found where the source claims none, and compares cost per run', () => {

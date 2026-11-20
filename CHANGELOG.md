@@ -3,9 +3,10 @@
 ## Unreleased
 
 - The rule effect experiment (`experiments/rules`) can run an arm that delivers one preset rule alone: an arm with `only` in `plan.json` is the preset with every other rule that ships on for the model in `disable`, and the runner refuses a model whose preset lacks that rule before anything is spent.
-  The design `single-rule` (`--design single-rule`) runs Sonnet 5.5 and Haiku 5.5 on `fix` and `bug` with `verify-changes` alone, `carry-through` alone, both and neither, 30 runs per arm, so the tests and the cost the `rules` arm added on 2026-11-19 can be credited to each rule; its fourteen comparisons are fixed before it runs, and `npm run experiment -- estimate --design single-rule` projects $11.64 against a $20 cap.
+  An arm with `pointer` as well delivers that rule as one sentence naming a file that holds its text and saying to read it, through a user rule that `replaces` the preset rule, and each run of it records whether and when the session read the file.
+  The design `single-rule` (`--design single-rule`) runs Sonnet 5.5 and Haiku 5.5 on `fix` and `bug` with `verify-changes` alone, as a pointer, `carry-through` alone, both and neither, 30 runs per arm, so the tests and the cost the `rules` arm added on 2026-11-19 can be credited to each rule, and the pointer compared with the rule inline; its twenty-one comparisons are fixed before it runs, and `npm run experiment -- estimate --design single-rule` projects $14.55 against a $25 cap.
   A comparison of a design can now name its two arms, compare the cost per run, and leave the direction open where the rule's source claims none, in which case it is read as the direction found.
-  The summary shows every arm that delivered a rule against `none`, and for a design with more than two arms a table of each arm's tests and cost against `none`, as a part of the `rules` arm's difference.
+  The summary shows every arm that delivered a rule against `none`, and for a design with more than two arms a table of each arm's tests and cost against `none`, as a part of the `rules` arm's difference, and for a pointer arm a table of the reads of the rule file.
   The stub now runs the tests only when the session received a `verify-changes` rule, which it reads from noonsight's envelope, so it plays an arm of one rule as that rule alone.
 
 - `noonsight report` now reads the configuration with the project of the directory it runs for laid over it, as `noonsight check` and `noonsight models` do.

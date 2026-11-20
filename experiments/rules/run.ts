@@ -26,7 +26,7 @@ import { DEFAULT_PRESET, readPreset, type Preset } from '../../src/config/load.j
 import { PACKAGE_ROOT } from '../../src/config/paths.js';
 import { baseEnv, lab, preconditions } from '../../test/live/login.js';
 import { serveMessages } from '../delivery/stub.js';
-import { answerLine, answerScore, changedFiles, handsBack, prose, toolCalls, verification, type Prose } from './score.js';
+import { answerLine, answerScore, changedFiles, handsBack, prose, ruleFileRead, toolCalls, verification, type Prose, type RuleFileRead } from './score.js';
 import { script, solutionFiles, stubReply } from './stub.js';
 import { summarize } from './summary.js';
 
@@ -96,9 +96,10 @@ export interface Plan {
 
 /**
  * An arm: a noonsight model entry, such as `{ "use": "preset" }`, or the preset reduced to one rule
- * with `only`, the rule's name without its model prefix.
+ * with `only`, the rule's name without its model prefix, delivered inline or, with `pointer`, as a
+ * short rule that says to read a file holding its text (see armSetup).
  */
-export type Arm = Readonly<Record<string, unknown>> & { readonly only?: string };
+export type Arm = Readonly<Record<string, unknown>> & { readonly only?: string; readonly pointer?: boolean };
 
 export interface Cell {
   readonly task: string;
@@ -147,6 +148,8 @@ export interface Signals {
   readonly check_passed?: boolean;
   readonly suite_passed?: boolean;
   readonly report: Prose;
+  /** Pointer arm: whether and when the session read the file holding the rule's text. */
+  readonly pointer?: RuleFileRead;
 }
 
 export function loadPlan(file = path.join(EXPERIMENT_DIR, 'plan.json')): Plan {
@@ -158,22 +161,61 @@ export function experimentPreset(): Preset {
   return readPreset(DEFAULT_PRESET, { presetsDir: path.join(PACKAGE_ROOT, 'presets') });
 }
 
+/** What a model gets in an arm: its noonsight entry, and the rule files the entry names, beside the configuration. */
+export interface ArmSetup {
+  readonly entry: Record<string, unknown>;
+  /** File name, in the configuration's directory, to its text. */
+  readonly files: Readonly<Record<string, string>>;
+  /** For a pointer arm, the file that holds the rule's text, which the session is told to read. */
+  readonly ruleFile: string | null;
+}
+
+/** The id of the rule a pointer arm delivers in place of the preset rule it keeps. */
+export function pointerRuleId(only: string): string {
+  return `experiment/${only}-pointer`;
+}
+
+/** The short rule a pointer arm delivers: where the rule's text is, and to read it. */
+export function pointerText(ruleFile: string): string {
+  return `A working rule for code changes is in the file ${ruleFile}. Read that file before you change any code, and follow it.`;
+}
+
 /**
- * The noonsight entry a model gets in an arm. An arm with `only` is the preset with every other rule
- * that ships on for the model in `disable`, so it delivers that one rule wherever the preset would,
- * and nothing else; a model whose preset has no such rule cannot run in it.
+ * What a model gets in an arm. An arm with `only` is the preset with every other rule that ships on
+ * for the model in `disable`, so it delivers that one rule wherever the preset would, and nothing
+ * else; a model whose preset has no such rule cannot run in it. An arm that also has `pointer`
+ * delivers, in that rule's place, a short rule of the user's that names a file holding the rule's
+ * text and says to read it: noonsight's `replaces` keeps the rule's scopes, places and triggers, so
+ * only the delivered text differs from the arm of the rule alone. `dir` is the configuration's
+ * directory, where the rule's text is written.
  */
-export function armEntry(plan: Plan, arm: string, modelId: string, preset: Preset = experimentPreset()): Record<string, unknown> {
+export function armSetup(plan: Plan, arm: string, modelId: string, dir: string, preset: Preset = experimentPreset()): ArmSetup {
   const entry = plan.arms[arm];
   if (!entry) throw new Error(`unknown arm "${arm}"`);
-  const { only, ...rest } = entry;
-  if (only === undefined) return rest;
+  const { only, pointer, ...rest } = entry;
+  if (only === undefined) {
+    if (pointer) throw new Error(`the arm "${arm}" is a pointer arm, so it needs "only"`);
+    return { entry: rest, files: {}, ruleFile: null };
+  }
   const rules = preset.models.get(modelId) ?? [];
   const kept = rules.find((r) => r.id.slice(r.id.indexOf('/') + 1) === only);
   if (!kept) throw new Error(`the arm "${arm}" keeps the rule "${only}", which the preset does not have for ${modelId}`);
   if (!kept.enabled) throw new Error(`the arm "${arm}" keeps ${kept.id}, which ships off`);
   const disable = rules.filter((r) => r.enabled && r !== kept).map((r) => r.id);
-  return { ...rest, ...(disable.length ? { disable } : {}) };
+  const reduced = { ...rest, ...(disable.length ? { disable } : {}) };
+  if (!pointer) return { entry: reduced, files: {}, ruleFile: null };
+  const ruleFile = path.join(dir, `${only}.md`);
+  const short = `${only}-pointer.md`;
+  return {
+    entry: { ...reduced, add: [{ id: pointerRuleId(only), file: short, replaces: kept.id }] },
+    files: { [short]: `${pointerText(ruleFile)}\n`, [`${only}.md`]: `${kept.text.trim()}\n` },
+    ruleFile,
+  };
+}
+
+/** The noonsight entry a model gets in an arm, which does not depend on where its files go (see armSetup). */
+export function armEntry(plan: Plan, arm: string, modelId: string, preset: Preset = experimentPreset()): Record<string, unknown> {
+  return armSetup(plan, arm, modelId, '.', preset).entry;
 }
 
 /** Every cell, rep by rep, so that a run cut short by the cap still leaves balanced arms. */
@@ -257,8 +299,11 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   const model = plan.models[cell.model];
   const task = plan.tasks[cell.task];
   if (!model || !task) throw new Error(`unknown cell ${cellKey(cell)}`);
-  const arm = armEntry(plan, cell.arm, model.id);
-  const l = lab(`exp-${cellKey(cell)}`, { version: 1, models: { [model.id]: arm }, session: { unattended_when_env: [plan.unattended_env] } }, {});
+  const l = lab(`exp-${cellKey(cell)}`, { version: 1, models: { [model.id]: armEntry(plan, cell.arm, model.id) }, session: { unattended_when_env: [plan.unattended_env] } }, {});
+  // The rule files sit beside the lab's configuration, where noonsight reads them; a pointer arm's
+  // short rule names the file that holds the rule's text by its absolute path.
+  const setup = armSetup(plan, cell.arm, model.id, path.join(l.root, 'rules'));
+  for (const [file, text] of Object.entries(setup.files)) fs.writeFileSync(path.join(l.root, 'rules', file), text);
   const fixture = path.join(EXPERIMENT_DIR, 'fixtures', task.fixture);
   fs.cpSync(fixture, l.project, { recursive: true });
 
@@ -272,7 +317,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
     '--tools', TOOLS, '--allowedTools', ALLOWED,
   ];
   const solution = stub ? solutionFiles(path.join(EXPERIMENT_DIR, task.solution)) : {};
-  const api = stub ? await serveMessages((body) => stubReply(body, (rules) => script(task, solution, fixture, l.project, rules))) : null;
+  const api = stub ? await serveMessages((body) => stubReply(body, (rules) => script(task, solution, fixture, l.project, rules, setup.ruleFile))) : null;
   const env = { ...(api ? stubEnv(l.root, api.url) : baseEnv()), NOONSIGHT_SCOPE: task.scope, [plan.unattended_env]: '1' };
   const { status, stdout } = await spawnClaude(args, l.project, env).finally(() => api?.close());
   const stream = stdout
@@ -353,6 +398,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
       deliverable,
       handed_back: handedBack,
       ...verification(calls, l.project, task.report ? [task.report] : []),
+      ...(setup.ruleFile ? { pointer: ruleFileRead(calls, setup.ruleFile, l.project, task.report ? [task.report] : []) } : {}),
       extra_files: changed.filter((f) => !allowedChange(f, task.allowed_changes)),
       ...(task.expected ? { answer: { ...answerScore(named, task.expected), line: named !== null } } : {}),
       ...check,
