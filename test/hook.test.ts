@@ -438,7 +438,8 @@ test('a reported model outranks the launch settings, and so does the record of t
 // A conversation resumed in a new Claude Code process gets a SessionStart input that names no model,
 // and no PostModelSwitch. Claude Code runs it on the model its --model or ANTHROPIC_MODEL names, else on
 // the model of the conversation's last response since its last compaction, else on the model setting
-// (test/fixtures/hook-inputs/2.1.327/README.md, and on 2.1.328 test/live/lifecycle.test.ts).
+// (test/fixtures/hook-inputs/2.1.327/README.md, and on 2.1.328 test/live/lifecycle.test.ts), except
+// that the setting `haiku` outranks a last response from Haiku or Sonnet (docs/verification/claude-code.md).
 const resumeOf = (id: string, transcript?: string): string =>
   hookInput('session-start-resume-continue', { session_id: id, ...(transcript !== undefined ? { transcript_path: transcript } : {}) });
 
@@ -450,6 +451,8 @@ function conversation(...records: readonly Record<string, unknown>[]): string {
 }
 const turn = { type: 'user', isSidechain: false, message: { role: 'user', content: 'hello' } };
 const reply = (model: string, fields: Record<string, unknown> = {}) => ({ type: 'assistant', isSidechain: false, message: { model, role: 'assistant', content: [] }, ...fields });
+/** A conversation whose last response came now, after every hook that already ran: a request carried what they returned. */
+const answeredNow = (model: string): string => conversation(turn, reply(model, { timestamp: new Date().toISOString() }));
 const COMPACTED = { type: 'system', subtype: 'compact_boundary', isSidechain: false, content: 'Conversation compacted' };
 const SUMMARY = { type: 'user', isSidechain: false, isCompactSummary: true, message: { role: 'user', content: 'summary' } };
 
@@ -465,8 +468,8 @@ test('a resume started with --model gets that model\'s rules over the session re
   assert.match(resumed, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">\nThe session's model changed from claude-haiku-5-5 to claude-sonnet-5-5\./);
   assert.match(resumed, /<noonsight-rules model="claude-sonnet-5-5">[\s\S]*SONNET-GEN-3306/);
   assert.doesNotMatch(resumed, /HAIKU-GEN-9047/);
-  // The record now holds Sonnet's rules: the same resume again delivers nothing.
-  assert.equal(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf('cleared')).raw, '');
+  // The conversation answered since, so the resume's delivery arrived: the same resume again delivers nothing.
+  assert.equal(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf('cleared', answeredNow('claude-sonnet-5-5'))).raw, '');
   // ANTHROPIC_MODEL decides the same way; Opus is declared "none", so only the note goes.
   const onOpus = context(underClaude(h, ['--continue'], resumeOf('cleared'), { ANTHROPIC_MODEL: 'claude-opus-5-5' }));
   assert.match(onOpus, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-opus-5-5">[\s\S]*<\/noonsight-rules-change>$/);
@@ -508,38 +511,71 @@ test('a resume whose launch names no model, or one noonsight cannot pin down, ke
 
 test('a resume whose command line and ANTHROPIC_MODEL name no model runs on the conversation\'s last response since its last compaction, over the model setting', () => {
   const h = home();
-  // A /model in any session saves the choice as the model setting, here Haiku.
-  const haikuSetting = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'haiku' } }) };
-  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'ran' }));
-  // The conversation last answered on Sonnet, before or after a compaction: it resumes on Sonnet.
-  const answered = conversation(turn, reply('claude-sonnet-5-5'));
-  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', answered), haikuSetting).raw, '');
-  const answeredSince = conversation(turn, reply('claude-haiku-5-5'), COMPACTED, SUMMARY, turn, reply('claude-sonnet-5-5'));
-  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', answeredSince), haikuSetting).raw, '');
+  // A /model in any session saves the choice as the model setting, here Sonnet.
+  const sonnetSetting = { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'sonnet' } }) };
+  h.hook('session-start', start('claude-haiku-5-5', { session_id: 'ran' }));
+  // The conversation last answered on Haiku, before or after a compaction: it resumes on Haiku.
+  const answered = conversation(turn, reply('claude-haiku-5-5'));
+  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', answered), sonnetSetting).raw, '');
+  const answeredSince = conversation(turn, reply('claude-sonnet-5-5'), COMPACTED, SUMMARY, turn, reply('claude-haiku-5-5'));
+  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', answeredSince), sonnetSetting).raw, '');
   // A label noonsight cannot pin down outranks the setting, and the conversation decides.
-  assert.equal(underClaude(h, ['--continue', '--model', 'opusplan'], resumeOf('ran', answered), haikuSetting).raw, '');
+  assert.equal(underClaude(h, ['--continue', '--model', 'opusplan'], resumeOf('ran', answered), sonnetSetting).raw, '');
   // No response since the last compaction: the model setting decides.
-  const compacted = conversation(turn, reply('claude-sonnet-5-5'), COMPACTED, SUMMARY);
+  const compacted = conversation(turn, reply('claude-haiku-5-5'), COMPACTED, SUMMARY);
   assert.match(
-    context(underClaude(h, ['--continue'], resumeOf('ran', compacted), haikuSetting)),
-    /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">[\s\S]*HAIKU-GEN-9047/,
+    context(underClaude(h, ['--continue'], resumeOf('ran', compacted), sonnetSetting)),
+    /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">[\s\S]*SONNET-GEN-3306/,
   );
-  // Nor a setting: the session's record.
-  assert.equal(underClaude(h, ['--continue'], resumeOf('ran', compacted)).raw, '');
+  // Nor a setting: the session's record. Nothing has answered since the resume that delivered Sonnet's
+  // rules, so they may never have arrived, and go again.
+  assert.match(context(underClaude(h, ['--continue'], resumeOf('ran', compacted))), /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">[\s\S]*SONNET-GEN-3306/);
   // --model and ANTHROPIC_MODEL outrank the conversation, as the resume fix for an explicit --model keeps.
-  assert.match(context(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf('ran', answered), haikuSetting)), /SONNET-GEN-3306/);
-  assert.match(context(underClaude(h, ['--continue'], resumeOf('ran', answered), { ANTHROPIC_MODEL: 'claude-haiku-5-5' })), /HAIKU-GEN-9047/);
+  assert.match(context(underClaude(h, ['--continue', '--model', 'haiku'], resumeOf('ran', answered), sonnetSetting)), /HAIKU-GEN-9047/);
+  assert.match(context(underClaude(h, ['--continue'], resumeOf('ran', answered), { ANTHROPIC_MODEL: 'claude-sonnet-5-5' })), /SONNET-GEN-3306/);
   assert.deepEqual(
     h.log().map((l) => [l.model, l.model_source, l.model_from ?? null, l.model_unresolved ?? null, l.from_model ?? null, l.delivered]),
     [
-      ['claude-sonnet-5-5', 'hook-input', null, null, null, 'rules'],
-      ['claude-sonnet-5-5', 'session-transcript', null, null, null, 'already-delivered'],
-      ['claude-sonnet-5-5', 'session-transcript', null, null, null, 'already-delivered'],
-      ['claude-sonnet-5-5', 'session-transcript', '--model', 'opusplan', null, 'already-delivered'],
-      ['claude-haiku-5-5', 'settings', haikuSetting.CLAUDE_CONFIG_DIR + '/settings.json', null, 'claude-sonnet-5-5', 'rules+note'],
-      ['claude-haiku-5-5', 'session-record', null, null, null, 'already-delivered'],
-      ['claude-sonnet-5-5', 'claude-args', '--model', null, 'claude-haiku-5-5', 'rules+note'],
-      ['claude-haiku-5-5', 'env', 'ANTHROPIC_MODEL', null, 'claude-sonnet-5-5', 'rules+note'],
+      ['claude-haiku-5-5', 'hook-input', null, null, null, 'rules'],
+      ['claude-haiku-5-5', 'session-transcript', null, null, null, 'already-delivered'],
+      ['claude-haiku-5-5', 'session-transcript', null, null, null, 'already-delivered'],
+      ['claude-haiku-5-5', 'session-transcript', '--model', 'opusplan', null, 'already-delivered'],
+      ['claude-sonnet-5-5', 'settings', sonnetSetting.CLAUDE_CONFIG_DIR + '/settings.json', null, 'claude-haiku-5-5', 'rules+note'],
+      ['claude-sonnet-5-5', 'session-record', null, null, null, 'rules+note'],
+      ['claude-haiku-5-5', 'claude-args', '--model', null, 'claude-sonnet-5-5', 'rules+note'],
+      ['claude-sonnet-5-5', 'env', 'ANTHROPIC_MODEL', null, 'claude-haiku-5-5', 'rules+note'],
+    ],
+  );
+});
+
+test('a resume under the model setting haiku runs on Haiku when the conversation last answered on Haiku or Sonnet, and on the conversation\'s model otherwise', () => {
+  const h = home();
+  const setting = (model: string) => ({ CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model } }) });
+  // Sonnet, a turn, /model haiku, exit, `claude --continue`: Claude Code runs Haiku, so Haiku's rules
+  // go, with a note retiring Sonnet's (F4).
+  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'f4' }));
+  const resumed = context(underClaude(h, ['--continue'], resumeOf('f4', conversation(turn, reply('claude-sonnet-5-5'))), setting('haiku')));
+  assert.match(resumed, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">[\s\S]*<noonsight-rules model="claude-haiku-5-5">[\s\S]*HAIKU-GEN-9047/);
+  assert.doesNotMatch(resumed, /SONNET-GEN-3306/);
+  // Once Haiku has answered, the same resume runs on Haiku again and finds its rules.
+  assert.equal(underClaude(h, ['--continue'], resumeOf('f4', answeredNow('claude-haiku-5-5')), setting('haiku')).raw, '');
+  // Any other setting, opusplan and a capitalized Haiku included, leaves the conversation's model.
+  for (const other of ['opusplan', 'Haiku', 'opus'])
+    assert.equal(underClaude(h, ['--continue'], resumeOf('f4', answeredNow('claude-haiku-5-5')), setting(other)).raw, '');
+  h.hook('session-start', start('claude-opus-5-5', { session_id: 'opus' }));
+  // Opus's last response keeps Opus under haiku too.
+  assert.equal(underClaude(h, ['--continue'], resumeOf('opus', conversation(turn, reply('claude-opus-5-5'))), setting('haiku')).raw, '');
+  assert.deepEqual(
+    h.log().map((l) => [l.session_id, l.model, l.model_source, l.from_model ?? null, l.delivered]),
+    [
+      ['f4', 'claude-sonnet-5-5', 'hook-input', null, 'rules'],
+      ['f4', 'claude-haiku-5-5', 'settings', 'claude-sonnet-5-5', 'rules+note'],
+      ['f4', 'claude-haiku-5-5', 'settings', null, 'already-delivered'],
+      ['f4', 'claude-haiku-5-5', 'session-transcript', null, 'already-delivered'],
+      ['f4', 'claude-haiku-5-5', 'session-transcript', null, 'already-delivered'],
+      ['f4', 'claude-haiku-5-5', 'session-transcript', null, 'already-delivered'],
+      ['opus', 'claude-opus-5-5', 'hook-input', null, 'nothing'],
+      ['opus', 'claude-opus-5-5', 'session-transcript', null, 'already-delivered'],
     ],
   );
 });
@@ -584,8 +620,8 @@ test('a /model delivery is unconfirmed: a switch right after it, or a resume, de
   const again = context(underClaude(exited, ['--continue', '--model', 'haiku'], resumeOf('exited')));
   assert.match(again, /^<noonsight-rules-change from="claude-fable-5-2" to="claude-haiku-5-5">\nThis session runs on claude-haiku-5-5\. The working rules noonsight delivered earlier in this conversation for claude-fable-5-2 no longer apply\./);
   assert.match(again, /<noonsight-rules model="claude-haiku-5-5">[^]*HAIKU-WORD/);
-  // A session start's delivery is part of the conversation: the next resume finds it.
-  assert.equal(underClaude(exited, ['--continue', '--model', 'haiku'], resumeOf('exited')).raw, '');
+  // Haiku answered after the resume, so its delivery arrived: the next resume finds it.
+  assert.equal(underClaude(exited, ['--continue', '--model', 'haiku'], resumeOf('exited', answeredNow('claude-haiku-5-5'))).raw, '');
   assert.deepEqual(
     exited.log().map((l) => [l.event, l.model, l.delivered]),
     [
@@ -609,6 +645,48 @@ test('a /model delivery is unconfirmed: a switch right after it, or a resume, de
   const last = context(underClaude(many, ['--continue', '--model', 'haiku'], resumeOf('many')));
   assert.match(last, /^<noonsight-rules-change from="claude-fable-5-2 claude-sonnet-5-5" to="claude-haiku-5-5">\n/);
   assert.match(last, /<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-haiku-5-5">[^]*HAIKU-WORD/);
+});
+
+test('a resume\'s delivery is unconfirmed until the conversation answers: a resume right after it retires every model it may hold', () => {
+  const custom = (word: string) => ({ use: 'custom', add: [{ id: `user/${word}`, file: `${word}.md` }] });
+  const dir = tempTree({
+    'noonsight.json': { version: 1, models: { 'claude-haiku-5-5': custom('haiku'), 'claude-sonnet-5-5': custom('sonnet'), 'claude-fable-5-2': custom('fable') } },
+    'haiku.md': 'HAIKU-WORD',
+    'sonnet.md': 'SONNET-WORD',
+    'fable.md': 'FABLE-WORD',
+  });
+  const h = home(path.join(dir, 'noonsight.json'));
+  // Sonnet, a turn, `claude --continue --model fable`, exit before any request, `claude --continue
+  // --model haiku`, a turn: the first resume's return never reached a request, so the conversation still
+  // holds Sonnet's rules with nothing retiring them, and the second resume's note must name Sonnet too (F3).
+  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'f3' }));
+  const answered = conversation(turn, reply('claude-sonnet-5-5', { timestamp: new Date().toISOString() }));
+  const first = context(underClaude(h, ['--continue', '--model', 'fable'], resumeOf('f3', answered)));
+  assert.match(first, /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-fable-5-2">[\s\S]*FABLE-WORD/);
+  const second = context(underClaude(h, ['--continue', '--model', 'haiku'], resumeOf('f3', answered)));
+  assert.match(second, /^<noonsight-rules-change from="claude-sonnet-5-5 claude-fable-5-2" to="claude-haiku-5-5">\n/);
+  assert.match(second, /for claude-sonnet-5-5 and claude-fable-5-2 no longer apply\.\n<\/noonsight-rules-change>\n\n<noonsight-rules model="claude-haiku-5-5">[^]*HAIKU-WORD/);
+  // The same resume once more, still with no response since: Haiku's rules may not have arrived either.
+  assert.match(context(underClaude(h, ['--continue', '--model', 'haiku'], resumeOf('f3', answered))), /HAIKU-WORD/);
+  // Haiku answered: the delivery arrived, its note retired the others, and nothing goes again.
+  assert.equal(underClaude(h, ['--continue', '--model', 'haiku'], resumeOf('f3', answeredNow('claude-haiku-5-5'))).raw, '');
+  // A response the transcript does not date confirms nothing.
+  const resumedOnFable = context(underClaude(h, ['--continue', '--model', 'fable'], resumeOf('f3', answeredNow('claude-haiku-5-5'))));
+  assert.match(resumedOnFable, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-fable-5-2">/);
+  const undated = conversation(turn, reply('claude-fable-5-2'));
+  assert.match(context(underClaude(h, ['--continue', '--model', 'fable'], resumeOf('f3', undated))), /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-fable-5-2">[\s\S]*FABLE-WORD/);
+  assert.deepEqual(
+    h.log().map((l) => [l.model, l.from_model ?? null, l.delivered]),
+    [
+      ['claude-sonnet-5-5', null, 'rules'],
+      ['claude-fable-5-2', 'claude-sonnet-5-5', 'rules+note'],
+      ['claude-haiku-5-5', 'claude-fable-5-2', 'rules+note'],
+      ['claude-haiku-5-5', null, 'rules+note'],
+      ['claude-haiku-5-5', null, 'already-delivered'],
+      ['claude-fable-5-2', 'claude-haiku-5-5', 'rules+note'],
+      ['claude-fable-5-2', null, 'rules+note'],
+    ],
+  );
 });
 
 test('a note that names more retired models than fit its room retires every model but the session\'s own', () => {

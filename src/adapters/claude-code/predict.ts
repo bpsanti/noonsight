@@ -261,26 +261,38 @@ const MAX_SCAN_BYTES = 64 * 1024 * 1024;
 
 /** The model of the last assistant message in a transcript; for the session, its own messages only. */
 export function transcriptModel(file: string | null, ownOnly: boolean): string | null {
-  return lastResponseModel(file, ownOnly, false);
+  return lastResponse(file, ownOnly, false)?.model ?? null;
+}
+
+/** A response in a transcript: the model that wrote it, and when Claude Code wrote it, when it says. */
+export interface Response {
+  readonly model: string;
+  /** Milliseconds since the epoch, or null when the record has no readable timestamp. */
+  readonly at: number | null;
 }
 
 /**
- * The model of the conversation's last response since its last compaction, its own messages only:
- * the model Claude Code resumes a conversation on when nothing it was started with names one. Null
- * when the conversation has no response since, or the transcript cannot be read.
+ * The conversation's last response since its last compaction, its own messages only: its model is
+ * the one Claude Code resumes a conversation on when nothing it was started with names one. Null when
+ * the conversation has no response since, or the transcript cannot be read.
  */
-export function conversationModel(file: string | null): string | null {
-  return lastResponseModel(file, true, true);
+export function conversationResponse(file: string | null): Response | null {
+  return lastResponse(file, true, true);
 }
 
-function lastResponseModel(file: string | null, ownOnly: boolean, sinceCompaction: boolean): string | null {
+/** The model of conversationResponse. */
+export function conversationModel(file: string | null): string | null {
+  return conversationResponse(file)?.model ?? null;
+}
+
+function lastResponse(file: string | null, ownOnly: boolean, sinceCompaction: boolean): Response | null {
   if (file === null) return null;
-  let found: string | null = null;
+  let found: Response | null = null;
   try {
     scanLinesBackward(file, (line) => {
       const boundary = sinceCompaction && line.includes('"compact_boundary"');
       if (!boundary && !line.includes('"assistant"')) return false;
-      let r: { type?: unknown; subtype?: unknown; isSidechain?: unknown; message?: { model?: unknown } };
+      let r: { type?: unknown; subtype?: unknown; isSidechain?: unknown; timestamp?: unknown; message?: { model?: unknown } };
       try {
         r = JSON.parse(line) as typeof r;
       } catch {
@@ -292,7 +304,8 @@ function lastResponseModel(file: string | null, ownOnly: boolean, sinceCompactio
       if (r.type !== 'assistant') return false;
       const model = typeof r.message?.model === 'string' ? normalizeModel(r.message.model) : '';
       if (!model || model === '<synthetic>') return false;
-      found = model;
+      const at = typeof r.timestamp === 'string' ? Date.parse(r.timestamp) : NaN;
+      found = { model, at: Number.isNaN(at) ? null : at };
       return true;
     });
   } catch {
