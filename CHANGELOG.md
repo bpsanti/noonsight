@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The README is rewritten around what noonsight guarantees, the delivery of each model's rules, with the limits of that claim, the path to a first delivered rule, and what the rules were measured to change; the long guidance moves to `docs/usage.md`: where a rule should live, how to write one, what it costs, the machine's and a repository's setup, and when not to use noonsight.
+  Every measured number in the README, `docs/usage.md` and `docs/sources.md` links to an entry of `docs/evidence.md`, which names its raw result file, how the number is computed from it, its date and its Claude Code version; `npm test` computes each one again from the file and fails on a number no entry gives (`test/evidence.test.ts`).
+  `docs/sources.md` quotes Anthropic's own documents for every claim about Claude Code or the models, with the retrieval date and what the measurements confirm, refine or contradict; `NOONSIGHT_LIVE_SOURCES=1 npm run test:live` checks each excerpt against the live page (`test/live/sources.test.ts`).
+  `npm test` also runs the README's shell commands in a sandbox account and plays the session it shows (`test/readme.test.ts`), and fails when a command, an option, a configuration key, a `NOONSIGHT_` variable, a hook event, a trigger, a place or a preset rule is not documented, or when a relative link of the README or of `docs/` misses its file or its heading (`test/docs-coverage.test.ts`).
+  The coverage of a `CLAUDE.md` in the delivery benchmark's results of 2026-11-20 reads 87.4% there; computed from its counts, 566 of 648, it is 87.3%, which the evidence map gives.
+  The classifier's agreement with hand labels moves from the README to `docs/configuration.md`, since the answers of its two runs were not committed.
+  `noonsight hook`'s usage now lists `file-edit`, the argument of the Edit and Write hook.
+
 - The rule effect experiment (`experiments/rules`) has two harder long tasks for the rules against stopping early, since Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without them.
   `codes` moves 36 form validators from `true` and `false` to errors with the code of the failing check, from a table of 79, and ends its document with a version bump and a changelog section the prompt does not name; `triage` works through 13 tickets, three of them decisions left open between people who disagree, one asking for a plan before any code, two with work found only along the way, a parked one and a duplicate, and a rule for closing tickets at the end of the file.
   Each part has its own test in the hidden check, and the parts that leave a choice open accept every choice that does what the ticket asks, which `npm test` checks.

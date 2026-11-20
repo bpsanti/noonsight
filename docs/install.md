@@ -263,6 +263,7 @@ They call `noonsight-hook`, a small shell script that runs the Node.js and the c
 `PostModelSwitch` runs it with `model-switch`, `SubagentStart`, with no matcher, with `subagent-start`, and `PostToolUse` twice, in two matcher groups: with the same matcher as `PreToolUse`, with `agent-result`, and with the matcher `Edit|Write`, with `file-edit`.
 An install made before noonsight used `SubagentStart` lacks that entry, so its subagents get no rules, and one made before triggers lacks the `Edit|Write` entry, so its sessions never reveal `code-edit` ([hooks.md](hooks.md#posttooluse-on-edit-and-write-the-triggers)); `noonsight check` reports either, and running `noonsight install` again adds them.
 
+The pointer runs `noonsight hook --install <account|managed> <event>` with that argument (`--install` names the install that ran it, which the decision log records as `install`), the hook adapter, which reads the hook input on stdin, prints at most one JSON object and always exits 0; it is not meant to be run by hand, and unlike every other command it prints no usage, since Claude Code would show it as a hook error.
 So the hook does not depend on the `PATH` of whatever started Claude Code, and installing a new copy of noonsight rewrites only the pointer, never a settings file.
 If the copy it points at is removed, the pointer exits quietly and `noonsight check` reports it.
 
