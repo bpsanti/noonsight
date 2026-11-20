@@ -1,0 +1,34 @@
+{
+ "session": "on-s1-0230",
+ "target": {
+  "class": "missing-own",
+  "kind": "main"
+ },
+ "originalSteps": 10,
+ "minimalSteps": 4,
+ "runs": 11,
+ "seconds": 118,
+ "original": "start(sonnet, scope=none, unattended) > turn > /model haiku > resume > edit(code) > /clear > spawn(Explore:haiku) > edit(code) > turn > spawn(Plan) > turn",
+ "minimal": "start(sonnet, scope=none, unattended) > turn > /model haiku > resume > turn",
+ "spec": {
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "model",
+    "to": "haiku"
+   },
+   {
+    "k": "resume",
+    "model": null
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

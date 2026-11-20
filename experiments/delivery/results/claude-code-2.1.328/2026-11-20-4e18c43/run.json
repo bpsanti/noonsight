@@ -1,0 +1,56 @@
+{
+ "claudeCode": "2.1.328",
+ "commit": "4e18c43",
+ "preset": "1.3.1",
+ "node": "v26.13.0",
+ "platform": "darwin-arm64",
+ "commands": [
+  {
+   "command": "all",
+   "args": {
+    "concurrency": "2"
+   },
+   "commit": "4e18c43",
+   "at": "2026-11-20T16:02:01.620Z",
+   "seconds": 6193
+  },
+  {
+   "command": "compare",
+   "args": {
+    "design": "after-f1-f2"
+   },
+   "commit": "4e18c43",
+   "at": "2026-11-20T17:55:50.089Z",
+   "seconds": 1
+  },
+  {
+   "command": "shrink",
+   "args": {
+    "id": "on-s1-0230",
+    "concurrency": "2"
+   },
+   "commit": "4e18c43",
+   "at": "2026-11-20T17:55:46.142Z",
+   "seconds": 118
+  },
+  {
+   "command": "shrink",
+   "args": {
+    "id": "on-s1-0205",
+    "concurrency": "2"
+   },
+   "commit": "4e18c43",
+   "at": "2026-11-20T17:57:44.409Z",
+   "seconds": 242
+  },
+  {
+   "command": "corpus",
+   "args": {
+    "concurrency": "2"
+   },
+   "commit": "1b84a31",
+   "at": "2026-11-20T18:03:37.687Z",
+   "seconds": 107
+  }
+ ]
+}

@@ -1,0 +1,396 @@
+{
+ "design": "after-f1-f2",
+ "before": "claude-code-2.1.328/2026-11-19-467d465",
+ "comparisons": [
+  {
+   "id": "P1",
+   "primary": true,
+   "question": "Fewer sessions under `on` break the invariant in a way nothing documented explains",
+   "measure": "robustness.sessionsFailed",
+   "share": false,
+   "expect": "lower",
+   "a": 26,
+   "b": 3,
+   "pairs": {
+    "sessions": 296,
+    "both": 3,
+    "onlyA": 23,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0030",
+     "s1-0045",
+     "s1-0058",
+     "s1-0059",
+     "s1-0083"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 2.3841857910156245e-7,
+   "adjustedP": 4.768371582031249e-7,
+   "verdict": "supported"
+  },
+  {
+   "id": "P2",
+   "primary": true,
+   "question": "Coverage under `on` is higher",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.9939,
+   "b": 0.9947,
+   "pairs": {
+    "sessions": 296,
+    "both": 2,
+    "onlyA": 6,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0045",
+     "s1-0099",
+     "s1-0119",
+     "s1-0144",
+     "s1-0145"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 0.031250000000000014,
+   "adjustedP": 0.031250000000000014,
+   "verdict": "supported"
+  },
+  {
+   "id": "P3",
+   "primary": true,
+   "question": "On the same 60 sequences, coverage is higher under `on` than under `claudemd`",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.8735,
+   "b": 1,
+   "pairs": {
+    "sessions": 60,
+    "both": 0,
+    "onlyA": 42,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0000",
+     "s1-0001",
+     "s1-0002",
+     "s1-0004",
+     "s1-0005"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 4.5474735088646407e-13,
+   "adjustedP": 2.27373675443232e-12,
+   "verdict": "supported"
+  },
+  {
+   "id": "P4",
+   "primary": true,
+   "question": "On the same 60 sequences, coverage is higher under `on` than under `rules`",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.7088,
+   "b": 1,
+   "pairs": {
+    "sessions": 60,
+    "both": 0,
+    "onlyA": 47,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0000",
+     "s1-0001",
+     "s1-0002",
+     "s1-0004",
+     "s1-0005"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 1.421085471520197e-14,
+   "adjustedP": 8.526512829121182e-14,
+   "verdict": "supported"
+  },
+  {
+   "id": "P5",
+   "primary": true,
+   "question": "On the same 60 sequences, coverage is higher under `on` than under `skills`",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0,
+   "b": 1,
+   "pairs": {
+    "sessions": 60,
+    "both": 0,
+    "onlyA": 58,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0000",
+     "s1-0001",
+     "s1-0002",
+     "s1-0004",
+     "s1-0005"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 6.9388939039072176e-18,
+   "adjustedP": 5.551115123125774e-17,
+   "verdict": "supported"
+  },
+  {
+   "id": "P6",
+   "primary": true,
+   "question": "On the same 60 sequences, subagent coverage is higher under `on` than under `claudemd`",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.3223,
+   "b": 1,
+   "pairs": {
+    "sessions": 60,
+    "both": 0,
+    "onlyA": 42,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0000",
+     "s1-0001",
+     "s1-0002",
+     "s1-0004",
+     "s1-0005"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 4.5474735088646407e-13,
+   "adjustedP": 2.27373675443232e-12,
+   "verdict": "supported"
+  },
+  {
+   "id": "P7",
+   "primary": true,
+   "question": "On the same 60 sequences, subagent coverage is higher under `on` than under `rules`",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.3223,
+   "b": 1,
+   "pairs": {
+    "sessions": 60,
+    "both": 0,
+    "onlyA": 42,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0000",
+     "s1-0001",
+     "s1-0002",
+     "s1-0004",
+     "s1-0005"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 4.5474735088646407e-13,
+   "adjustedP": 2.27373675443232e-12,
+   "verdict": "supported"
+  },
+  {
+   "id": "P8",
+   "primary": true,
+   "question": "On the same 60 sequences, subagent coverage is higher under `on` than under `skills`",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0,
+   "b": 1,
+   "pairs": {
+    "sessions": 60,
+    "both": 0,
+    "onlyA": 49,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0000",
+     "s1-0001",
+     "s1-0002",
+     "s1-0004",
+     "s1-0005"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 3.552713678800505e-15,
+   "adjustedP": 2.4868995751603535e-14,
+   "verdict": "supported"
+  },
+  {
+   "id": "C1",
+   "primary": false,
+   "question": "`claudemd` is unchanged: noonsight delivers nothing under a native arm, so its fixes cannot move it",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0.8717,
+   "b": 0.8735,
+   "pairs": {
+    "sessions": 60,
+    "both": 42,
+    "onlyA": 0,
+    "onlyB": 0,
+    "onlyAExamples": [],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "C2",
+   "primary": false,
+   "question": "`rules` is unchanged",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0.7055,
+   "b": 0.7088,
+   "pairs": {
+    "sessions": 60,
+    "both": 46,
+    "onlyA": 0,
+    "onlyB": 1,
+    "onlyAExamples": [],
+    "onlyBExamples": [
+     "s1-0000"
+    ]
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "C3",
+   "primary": false,
+   "question": "`skills` is unchanged",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0,
+   "b": 0,
+   "pairs": {
+    "sessions": 60,
+    "both": 58,
+    "onlyA": 0,
+    "onlyB": 0,
+    "onlyAExamples": [],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "S1",
+   "primary": false,
+   "question": "Under `on`, coverage in the sessions with two quiet steps in a row is higher",
+   "measure": "robustness.byQuietPair.two quiet steps in a row.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.9895,
+   "b": 0.991,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "S2",
+   "primary": false,
+   "question": "Under `on`, fewer requests hold another model's rule with no note",
+   "measure": "robustness.requestsWithViolation.foreign-unretired",
+   "share": false,
+   "expect": "lower",
+   "a": 80,
+   "b": 22,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "S3",
+   "primary": false,
+   "question": "Under `on`, subagent coverage is no lower",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "not-lower",
+   "a": 0.9969,
+   "b": 0.9985,
+   "pairs": {
+    "sessions": 296,
+    "both": 0,
+    "onlyA": 1,
+    "onlyB": 1,
+    "onlyAExamples": [
+     "s1-0174"
+    ],
+    "onlyBExamples": [
+     "s1-0230"
+    ]
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "S4",
+   "primary": false,
+   "question": "The decision log gives the coverage the stub saw under `on`",
+   "measure": "coverage.log against coverage.stub",
+   "share": true,
+   "expect": "same",
+   "a": 1,
+   "b": 0.9937,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "R1",
+   "primary": false,
+   "question": "Under `on`, the own share",
+   "measure": "precision.ownShare",
+   "share": true,
+   "expect": null,
+   "a": 0.7839,
+   "b": 0.7879,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "reported"
+  },
+  {
+   "id": "R2",
+   "primary": false,
+   "question": "Under `on`, the right share",
+   "measure": "precision.rightShare",
+   "share": true,
+   "expect": null,
+   "a": 0.5254,
+   "b": 0.5139,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "reported"
+  },
+  {
+   "id": "R3",
+   "primary": false,
+   "question": "Under `on`, the characters added per request",
+   "measure": "cost.addedCharsPerAgentRequest",
+   "share": false,
+   "expect": null,
+   "a": 1132,
+   "b": 1154,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "reported"
+  }
+ ]
+}

@@ -1,0 +1,189 @@
+[
+ {
+  "name": "clear",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 8
+ },
+ {
+  "name": "code-edit-trigger",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 4,
+  "seconds": 7
+ },
+ {
+  "name": "compact",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 7
+ },
+ {
+  "name": "f1-switch-then-exit",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 14
+ },
+ {
+  "name": "f1-switches-and-resume",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 3,
+  "seconds": 19
+ },
+ {
+  "name": "f1-two-switches",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 1,
+  "seconds": 8
+ },
+ {
+  "name": "f2-model-setting",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 10
+ },
+ {
+  "name": "f2-subagent-after-resume",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 5,
+  "seconds": 15
+ },
+ {
+  "name": "f2-subagent-after-switch",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 4,
+  "seconds": 15
+ },
+ {
+  "name": "f3-two-resumes",
+  "expect": {
+   "failure": "F3",
+   "shows": [
+    "foreign-unretired/main"
+   ]
+  },
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main"
+  ],
+  "due": 2,
+  "seconds": 14
+ },
+ {
+  "name": "f4-resume-after-switch-from-sonnet",
+  "expect": {
+   "failure": "F4",
+   "shows": [
+    "foreign-unretired/main",
+    "missing-own/main"
+   ]
+  },
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main",
+   "missing-own/main"
+  ],
+  "due": 2,
+  "seconds": 14
+ },
+ {
+  "name": "limit-default-model-after-compact",
+  "expect": {
+   "failure": "default-model",
+   "shows": [
+    "foreign-unretired/main",
+    "missing-own/main"
+   ]
+  },
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main",
+   "missing-own/main"
+  ],
+  "due": 2,
+  "seconds": 12
+ },
+ {
+  "name": "parallel-subagents",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 7,
+  "seconds": 8
+ },
+ {
+  "name": "probe-session",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 16,
+  "seconds": 22
+ },
+ {
+  "name": "resume-with-env",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 10
+ },
+ {
+  "name": "resume-with-model",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 10
+ },
+ {
+  "name": "resume",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 2,
+  "seconds": 10
+ },
+ {
+  "name": "switch-model",
+  "expect": "pass",
+  "outcome": "as-expected",
+  "harness": "ok",
+  "shows": [],
+  "due": 1,
+  "seconds": 6
+ }
+]

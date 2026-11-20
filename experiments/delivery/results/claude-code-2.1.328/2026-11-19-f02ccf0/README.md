@@ -1,7 +1,7 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-19, after the fixes of F1 and F2
 
 The corpus and the self-check on noonsight with the fixes of F1 and F2 (#46), at commit `f02ccf0`, on Claude Code 2.1.328 and the `claude` preset 1.3.1.
-The fuzz level and the native arms on this build are not run here; [the earlier folder](../2026-11-19-467d465/README.md) has them, measured before the fixes.
+The fuzz level and the native arms on this build are not run here; [the earlier folder](../2026-11-19-467d465/README.md) has them, measured before the fixes, and [the next folder](../2026-11-20-4e18c43/README.md) after them.
 No request reached Anthropic and no token was spent.
 
 ## Corpus
