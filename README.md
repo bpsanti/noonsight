@@ -30,7 +30,8 @@ On the same first 60 sequences, the native ways to give a model rules covered fe
 | `.claude/rules`, one file per model | [70.9% (460 of 649)](docs/evidence.md#d7) | [32.2% (39 of 121)](docs/evidence.md#d10) |
 | A skill per model | [0% (0 of 650)](docs/evidence.md#d8) | [0 of 121](docs/evidence.md#d11) |
 
-A `CLAUDE.md` never reaches the built-in Explore and Plan subagents, which Claude Code's documentation confirms ([S4](docs/sources.md#s4)), and it gives every model the other models' rules too: of the rule text in a request, 78.8%, 31.6% and 27.1% was written for the request's model under noonsight, a `CLAUDE.md` and `.claude/rules` ([D12](docs/evidence.md#d12)).
+A `CLAUDE.md` reached every request of the session's own conversation, through `/model`, `/compact`, `/clear` and resumes: 100% (527 of 527) ([D17](docs/evidence.md#d17)).
+What it missed were subagents: it never reaches the built-in Explore and Plan subagents, which Claude Code's documentation confirms ([S4](docs/sources.md#s4)), and it gives every model the other models' rules too: of the rule text in a request, 78.8%, 31.6% and 27.1% was written for the request's model under noonsight, a `CLAUDE.md` and `.claude/rules` ([D12](docs/evidence.md#d12)).
 A skill guarantees only its description until the model decides to open it ([S5](docs/sources.md#s5)).
 
 **What it does not guarantee.**
@@ -89,10 +90,9 @@ The report lists each rule with how often it was delivered, to which models, sco
 ## What the rules change
 
 Delivery is what noonsight guarantees; what a rule then changes depends on the rule, the model and the task.
-The rule effect experiment runs the same task with and without a model's preset rules ([experiments/rules](experiments/rules/README.md)):
+The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without ([experiments/rules](experiments/rules/README.md)):
 
-- With their preset rules, Sonnet 5.5 and Haiku 5.5 ran the tests after a precisely described one-file fix in 30 of 30 against 0 of 30, and 27 of 30 against 0 of 30, runs with the rules and without ([R1](docs/evidence.md#r1)).
-- The tests came from one of those rules: delivered alone, `verify-changes` gave 29 of 30 and 27 of 30, and `carry-through` gave 0 of 30 and 0 of 30 ([R3](docs/evidence.md#r3)).
+- One rule, `verify-changes` delivered alone, made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix in 29 of 30 and 27 of 30 runs, where `carry-through` delivered alone did it in 0 of 30 and 0 of 30 ([R3](docs/evidence.md#r3)); without any rule, each model ran them in 0 of 30 runs ([R1](docs/evidence.md#r1)).
 - That extra work has a price: on Sonnet's fix, a run cost $0.0240 without rules and $0.0505 with `verify-changes` alone ([R6](docs/evidence.md#r6)).
 - Delivered as one sentence pointing to a file with its text, `verify-changes` was read in 120 of 120 runs and did as well as the rule inline ([R4](docs/evidence.md#r4)).
 - On a 13-ticket backlog with an open decision, `sonnet-5-5/carry-through` raised the runs that did every part from 9 of 40 to 32 of 40 ([R10](docs/evidence.md#r10)); Haiku's `carry-through` showed nothing there ([R11](docs/evidence.md#r11)).
