@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The rule effect experiment (`experiments/rules`) has two harder long tasks for the rules against stopping early, since Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without them.
+  `codes` moves 36 form validators from `true` and `false` to errors with the code of the failing check, from a table of 79, and ends its document with a version bump and a changelog section the prompt does not name; `triage` works through 13 tickets, three of them decisions left open between people who disagree, one asking for a plan before any code, two with work found only along the way, a parked one and a duplicate, and a rule for closing tickets at the end of the file.
+  Each part has its own test in the hidden check, and the parts that leave a choice open accept every choice that does what the ticket asks, which `npm test` checks.
+  The design `harder` (`--design harder`) tests `sonnet-5-5/carry-through` and `haiku-5-5/carry-through` on them as the design `long` does, with its pilot, gate, arms, effort and caps; `npm run experiment -- estimate --design harder` projects $85.85 if every cell enters, against caps of $10 for the pilot and $110 for the design.
+  `run --token-file <file>` gives every session the OAuth token in a file only its owner can read, so the runs spend from that account; the token is written nowhere.
+
 - The rule effect experiment (`experiments/rules`) can run an arm that delivers one preset rule alone: an arm with `only` in `plan.json` is the preset with every other rule that ships on for the model in `disable`, and the runner refuses a model whose preset lacks that rule before anything is spent.
   An arm with `pointer` as well delivers that rule as one sentence naming a file that holds its text and saying to read it, through a user rule that `replaces` the preset rule, and each run of it records whether and when the session read the file.
   The design `single-rule` (`--design single-rule`) runs Sonnet 5.5 and Haiku 5.5 on `fix` and `bug` with `verify-changes` alone, as a pointer, `carry-through` alone, both and neither, 30 runs per arm, so the tests and the cost the `rules` arm added on 2026-11-19 can be credited to each rule, and the pointer compared with the rule inline; its twenty-one comparisons are fixed before it runs, and `npm run experiment -- estimate --design single-rule` projects $14.55 against a $25 cap.

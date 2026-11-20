@@ -1,0 +1,12 @@
+# The pantry's stock: name;category;qty;unit;expires
+apples;produce;12;kg;2027-01-14
+carrots;produce;800;g;2027-01-12
+milk;dairy;6;l;2027-01-15
+yogurt;dairy;24;pcs;2027-01-11
+bread;bakery;10;pcs;2027-01-10
+beans;canned;30;pcs;2027-09-01
+tomatoes;canned;18;pcs;2027-06-30
+rice;dry;25;kg;
+pasta;dry;14;kg;2028-02-01
+peas;frozen;5;kg;2027-08-01
+soap;hygiene;40;pcs;
