@@ -257,3 +257,4 @@ A results directory holds stub runs or real ones, never both, and the summary of
 
 `results/` holds the result of each run of the experiment that was written up, with its date: `runs.jsonl`, the generated `summary.md`, and a reading of the data.
 [results/2026-11-19](results/2026-11-19/README.md) is the first run of the design `expanded`.
+[results/2026-11-20](results/2026-11-20/README.md) is the first run of the design `single-rule`.

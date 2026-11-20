@@ -109,6 +109,12 @@ On 2026-11-19, with Claude Code 2.1.328, 540 runs tested those three rules again
 - The verify rules made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix (30 of 30 and 27 of 30, against 0 of 30 each), and Sonnet after a bug fix (30 of 30 against 15 of 30); where the models already ran the tests without them, on a feature for both and on the bug for Haiku, they changed nothing.
 - Every run passed its hidden check, with or without rules, and the preset was left unchanged.
 
+On 2026-11-20, with Claude Code 2.1.329, 600 runs split Sonnet 5.5's and Haiku 5.5's rules arm, on the fix and the bug, for $13.41 against a $25 cap ([results](experiments/rules/results/2026-11-20/README.md)):
+
+- The tests after the fix came from `verify-changes` alone (29 of 30 for Sonnet and 27 of 30 for Haiku, against none with `carry-through` alone or without rules); on Sonnet's bug, either rule alone gave 30 of 30, against 11 of 30 without rules.
+- `verify-changes` carried most of the rules' cost where it changed what the model did, and `carry-through` cost almost nothing where it changed nothing.
+- `verify-changes` delivered as one sentence pointing to a file holding its text was read at the first tool call in all 120 runs and gave the same tests as the rule inline.
+
 `experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
 
 `experiments/delivery/` measures whether each model's rules reach every request it receives, and only those rules, through `/model`, compaction, `/clear`, resumes, subagents and file edits, for noonsight and for a `CLAUDE.md`, `.claude/rules` and a skill per model; it runs real Claude Code sessions against a local stand-in for the API, so it spends no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).

@@ -8,6 +8,7 @@
   A comparison of a design can now name its two arms, compare the cost per run, and leave the direction open where the rule's source claims none, in which case it is read as the direction found.
   The summary shows every arm that delivered a rule against `none`, and for a design with more than two arms a table of each arm's tests and cost against `none`, as a part of the `rules` arm's difference, and for a pointer arm a table of the reads of the rule file.
   The stub now runs the tests only when the session received a `verify-changes` rule, which it reads from noonsight's envelope, so it plays an arm of one rule as that rule alone.
+  `experiments/rules/results/2026-11-20/README.md` records its first run: 600 runs for $13.41, nine of the twenty-one comparisons supporting the rule's source and none against one; the tests after a precise fix came from `verify-changes` alone, `carry-through` also added them on Sonnet's bug, the pointer was read in every run and matched the rule inline, and the preset is unchanged.
 
 - `noonsight report` now reads the configuration with the project of the directory it runs for laid over it, as `noonsight check` and `noonsight models` do.
   It read the machine's configuration alone, so a trusted project's rules were counted from the decision log but had no `text` length, and a project rule on for a model that never received it was left out of the rules never delivered, so a project rule that stopped reaching a model went unnoticed.
