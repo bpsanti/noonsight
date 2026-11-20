@@ -1,0 +1,29 @@
+{
+  "name": "f3-two-resumes",
+  "about": "Two resumes with --model and no request between them. Claude Code never sends what the first resume's hook returned, so the second resume's note must retire the starting model's rules too; it names only the first resume's model, and Haiku reads Sonnet's rules with nothing retiring them (F3, open).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "fable"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": {
+    "failure": "F3",
+    "shows": [
+      "foreign-unretired/main"
+    ]
+  }
+}
