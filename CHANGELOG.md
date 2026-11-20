@@ -8,6 +8,7 @@
   `npm test` also runs the README's shell commands in a sandbox account and plays the session it shows (`test/readme.test.ts`), and fails when a command, an option, a configuration key, a `NOONSIGHT_` variable, a hook event, a trigger, a place or a preset rule is not documented, or when a relative link of the README or of `docs/` misses its file or its heading (`test/docs-coverage.test.ts`).
   The coverage of a `CLAUDE.md` in the delivery benchmark's results of 2026-11-20 reads 87.4% there; computed from its counts, 566 of 648, it is 87.3%, which the evidence map gives.
   The classifier's agreement with hand labels moves from the README to `docs/configuration.md`, since the answers of its two runs were not committed.
+  `docs/verification/first-delivery.md` records a fresh Claude Code session that, given only the README and an empty repository, installed noonsight from a clone, started a session that named the two rules it received, and confirmed their delivery with `noonsight report`.
   `noonsight hook`'s usage now lists `file-edit`, the argument of the Edit and Write hook.
 
 - The rule effect experiment (`experiments/rules`) has two harder long tasks for the rules against stopping early, since Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without them.
