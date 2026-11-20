@@ -7,11 +7,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { allowedChange, armEntry, armSetup, cellKey, experimentPreset, pointerText, cells, designCells, EXPERIMENT_DIR, loadPlan, projection, renderProjection, stubEnv, type RunRecord } from '../experiments/rules/run.js';
-import { answerLine, answerScore, changedFiles, handsBack, prose, ruleFileRead, toolCalls, verification } from '../experiments/rules/score.js';
+import { allowedChange, armEntry, armSetup, cellKey, experimentPreset, pointerText, cells, designCells, EXPERIMENT_DIR, loadPlan, pilotCells, projection, renderProjection, runSettings, stubEnv, type RunRecord } from '../experiments/rules/run.js';
+import { answerLine, answerScore, changedFiles, handsBack, partResults, prose, ruleFileRead, toolCalls, verification } from '../experiments/rules/score.js';
 import { fisher, holm, mannWhitney, mcnemar, wilson } from '../experiments/rules/stats.js';
 import { deliveredRules, RULES_MARKER, script, solutionFiles, STUB_REPORTS, stubReply } from '../experiments/rules/stub.js';
-import { comparisons, summarize } from '../experiments/rules/summary.js';
+import { comparisons, gate, summarize, summarizePilot } from '../experiments/rules/summary.js';
 import { loadConfig } from '../src/config/load.js';
 import { PACKAGE_ROOT } from '../src/config/paths.js';
 import { resolve } from '../src/core/resolve.js';
@@ -153,10 +153,16 @@ function project(fixture: string, solution?: string): string {
   return dir;
 }
 
-/** Whether `node --test` passes in a directory; without this runner's own context, which would make the child report to it instead of failing. */
-function nodeTest(dir: string, files: string[] = []): boolean {
+/** Run `node --test` in a directory, with the TAP report; without this runner's own context, which would make the child report to it instead of failing. */
+function nodeTestRun(dir: string, files: string[] = []): { status: number | null; stdout: string } {
   const { NODE_TEST_CONTEXT: _, ...env } = process.env;
-  return spawnSync(process.execPath, ['--test', ...files], { cwd: dir, env, encoding: 'utf8', timeout: 60_000 }).status === 0;
+  const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...files], { cwd: dir, env, encoding: 'utf8', timeout: 60_000 });
+  return { status: r.status, stdout: r.stdout ?? '' };
+}
+
+/** Whether `node --test` passes in a directory. */
+function nodeTest(dir: string, files: string[] = []): boolean {
+  return nodeTestRun(dir, files).status === 0;
 }
 
 test('each task\'s hidden check fails on its fixture and passes on the reference solution, and the project\'s own suite passes on both', () => {
@@ -180,6 +186,14 @@ test('each task\'s hidden check fails on its fixture and passes on the reference
     const check = [path.join('check', path.basename(task.check))];
     assert.equal(nodeTest(before, check), false, `${name}: the hidden check passes before any change`);
     assert.ok(nodeTest(after, check), `${name}: the hidden check fails on the solution`);
+    if (task.parts !== undefined) {
+      // Every part needs its own work: none passes on the fixture, and the check names as many as the task declares.
+      const untouched = partResults(nodeTestRun(before, check).stdout);
+      const solved = partResults(nodeTestRun(after, check).stdout);
+      assert.equal(untouched.length, task.parts, `${name}: the check lists ${untouched.length} parts on the fixture`);
+      assert.deepEqual(untouched.filter((p) => p.ok).map((p) => p.name), [], `${name}: parts that pass before any change`);
+      assert.equal(solved.filter((p) => p.ok).length, task.parts, `${name}: parts that fail on the solution`);
+    }
   }
 });
 
@@ -393,19 +407,21 @@ test('a design\'s comparisons read each task apart, with Holm\'s adjustment over
   // 16 of 30 against 10 of 30 gives p near 0.19 before any adjustment: not shown.
   assert.equal(find('sonnet-5-5/verify-changes', 'bug', 'verified')?.reading, 'not shown');
   assert.equal(find('haiku-5-5/verify-changes', 'bug', 'verified')?.reading, 'opposite to the source');
-  // No runs at all: no p, not shown.
-  assert.equal(find('haiku-5-5/verify-changes', 'feature', 'verified')?.reading, 'not shown');
+  // No runs at all: not run, and left out of Holm's adjustment.
+  const unrun = find('haiku-5-5/verify-changes', 'feature', 'verified');
+  assert.equal(unrun?.reading, 'not run');
+  assert.ok(Number.isNaN(unrun?.holm));
   assert.equal(find('fable-5-2/low-context-report', 'question', 'words_per_sentence')?.reading, 'supports the source');
   assert.equal(find('fable-5-2/low-context-report', 'question', 'semicolons_per_1k_words')?.reading, 'supports the source');
   const tied = find('fable-5-2/low-context-report', 'feature', 'semicolons_per_1k_words');
   assert.equal(tied?.reading, 'supports the source');
   assert.match(tied?.with ?? '', /^mean 0\.0, median 0\.0 \(30 runs\)$/);
-  for (const c of cs) if (!Number.isNaN(c.p)) assert.ok(c.holm >= c.p);
+  for (const c of cs) if (!Number.isNaN(c.p) && c.reading !== 'not run') assert.ok(c.holm >= c.p);
 
   const decisions = path.join(tempTree({}), 'decisions.jsonl');
   fs.writeFileSync(decisions, '');
   const text = summarize(plan, runs, decisions, design);
-  assert.match(text, /## Pre-registered comparisons\n\nThe comparisons the design fixed before it ran, each task apart\. p is two-sided; Holm's adjustment runs over all 12/);
+  assert.match(text, /## Pre-registered comparisons\n\nThe comparisons the design fixed before it ran, each task apart\. p is two-sided; Holm's adjustment runs over the 7 that ran \(5 of the 12 have no run in one of their arms, so they are not run\)/);
   assert.match(text, /\| `sonnet-5-5\/verify-changes` \| fix \| rules against none \| Tests after the last edit \(higher claimed\) \| 30 of 30 \(89-100%\) \| 3 of 30 \(3-26%\) \| < 0\.001 \| < 0\.001 \| supports the source \|/);
   assert.match(text, /## Cost against the projection/);
   assert.match(text, /\| sonnet \| fix \| 60 \| \$0\.032 \| \$0\.050 \| \$3\.00 \|/);
@@ -568,4 +584,171 @@ test('a comparison of two named arms reads the direction found where the source 
   assert.match(text, /\| sonnet \| fix \| verify \| sonnet-5-5\/verify-changes \| 30 \| 30 of 30 \(89-100%\) \| \+100 points \| 100% \| \$0\.0316 \| \+\$0\.0100 \| 83% \| 4\.0 \|/);
   assert.match(text, /\| sonnet \| fix \| none \| none \| 30 \| 0 of 30 \(0-11%\) \|  \|  \| \$0\.0216 \|  \|  \| 4\.0 \|/);
   assert.match(text, /\| sonnet \| fix \| rules \| sonnet-5-5\/carry-through, sonnet-5-5\/verify-changes \| 30 \| 30 of 30 \(89-100%\) \| \+100 points \|  \| \$0\.033\d \| \+\$0\.0120 \|  \| 4\.0 \|/);
+});
+
+test('partResults reads the top-level parts of a TAP report, and nothing else', () => {
+  const tap = ['TAP version 13', '# Subtest: part a: one', 'ok 1 - part a: one', '    ok 1 - part inner: a subtest', 'not ok 2 - part ORCH-12: two', 'ok 3 - not a part', 'not ok 4 - part changelog: three', '1..4'].join('\n');
+  assert.deepEqual(partResults(tap), [
+    { name: 'a', ok: true },
+    { name: 'ORCH-12', ok: false },
+    { name: 'changelog', ok: false },
+  ]);
+  assert.deepEqual(partResults(''), []);
+});
+
+test('a long task\'s parts are independent: one part\'s change passes that part alone', () => {
+  const plan = loadPlan();
+  const only = (taskName: string, files: string[]): string[] => {
+    const task = plan.tasks[taskName];
+    assert.ok(task?.check);
+    const dir = project(task.fixture);
+    for (const f of files) fs.copyFileSync(path.join(EXPERIMENT_DIR, task.solution, f), path.join(dir, f));
+    fs.mkdirSync(path.join(dir, 'check'));
+    fs.copyFileSync(path.join(EXPERIMENT_DIR, task.check), path.join(dir, 'check', path.basename(task.check)));
+    return partResults(nodeTestRun(dir, [path.join('check', path.basename(task.check))]).stdout)
+      .filter((p) => p.ok)
+      .map((p) => p.name);
+  };
+  assert.deepEqual(only('migrate', ['src/reports/fx.js']), ['fx']);
+  assert.deepEqual(only('migrate', ['CHANGELOG.md']), ['changelog']);
+  assert.deepEqual(only('backlog', ['src/dates.js']), ['ORCH-11']);
+  assert.deepEqual(only('backlog', ['src/parse.js']), ['ORCH-12', 'ORCH-14']);
+});
+
+test('a design sets the effort, budget and time limit of its models', () => {
+  const plan = loadPlan();
+  const long = plan.designs.long;
+  assert.ok(long);
+  assert.deepEqual(runSettings(plan, long, 'sonnet'), { effort: 'low', budget_usd: 2.5, timeout_ms: 40 * 60 * 1000 });
+  // A model the design sets nothing for runs at the plan's effort and budget, within the design's time limit.
+  assert.deepEqual(runSettings(plan, long, 'opus'), { effort: plan.effort, budget_usd: plan.models.opus?.budget_usd, timeout_ms: 40 * 60 * 1000 });
+  assert.deepEqual(runSettings(plan, undefined, 'sonnet'), { effort: plan.effort, budget_usd: plan.models.sonnet?.budget_usd, timeout_ms: 15 * 60 * 1000 });
+
+});
+
+test('the long design runs Sonnet and Haiku on two long tasks, 40 times per arm, after a pilot of the arm without rules, within caps above its projection', () => {
+  const plan = loadPlan();
+  const design = plan.designs.long;
+  assert.ok(design?.pilot);
+  const all = designCells(plan, design);
+  assert.equal(all.length, 2 * 2 * 2 * 40);
+  assert.deepEqual(Object.keys(design.cells), ['sonnet', 'haiku']);
+  for (const [model, tasks] of Object.entries(design.cells)) for (const task of tasks) assert.ok(plan.tasks[task]?.parts, `${model} on ${task} is not a long task`);
+  const pilot = pilotCells(plan, design);
+  assert.equal(pilot.length, 2 * 2 * 5);
+  assert.ok(pilot.every((c) => c.arm === 'none'));
+  // Every primary comparison of the design reads the completion of a long task, the carry-through rule alone against no rule.
+  assert.deepEqual(design.arms, ['carry', 'none']);
+  for (const p of design.primary) {
+    assert.equal(p.signal, 'completed');
+    assert.deepEqual([p.arm, p.against], ['carry', 'none']);
+    assert.equal(p.rule, `${p.model}-5-5/carry-through`);
+  }
+
+  const p = projection(plan, design);
+  assert.ok(Math.abs(p.expected - 74.4) < 0.01, String(p.expected));
+  assert.ok(p.expected < design.cap_usd && design.cap_usd < p.ceiling);
+  const q = projection(plan, design, design.pilot.reps, [design.pilot.arm]);
+  assert.ok(Math.abs(q.expected - 4.65) < 0.01, String(q.expected));
+  assert.ok(q.expected < design.pilot.cap_usd);
+  const text = renderProjection(plan, design);
+  assert.match(text, /Expected in total: \$74\.40, at list price as Claude Code reports it\. The cap is \$110\.00/);
+  assert.match(text, /Before it, the pilot runs 20 times: 5 runs of the arm none per model and task, expected \$4\.65, within a cap of \$10\.00\./);
+  assert.match(text, /Expected for the pilot and the design together: \$79\.05; the two caps together: \$120\.00\./);
+});
+
+test('the stub stops a long task halfway without a rule against early stopping and hands the rest back, and does every part with one', () => {
+  const plan = loadPlan();
+  const task = plan.tasks.migrate;
+  assert.ok(task);
+  const fixture = path.join(EXPERIMENT_DIR, 'fixtures', task.fixture);
+  const solution = solutionFiles(path.join(EXPERIMENT_DIR, task.solution));
+  assert.equal(Object.keys(solution).length, 19);
+  const without = script(task, solution, fixture, '/work/p', []);
+  assert.equal(without[1]?.calls?.length, 9);
+  assert.equal(without.at(-1)?.text, STUB_REPORTS.stopped);
+  assert.ok(handsBack(STUB_REPORTS.stopped));
+  // A verify rule alone does not keep the script going; carry-through or Opus's unattended-run does.
+  assert.equal(script(task, solution, fixture, '/work/p', ['haiku-5-5/verify-changes']).at(-1)?.text, STUB_REPORTS.stopped);
+  const carry = script(task, solution, fixture, '/work/p', ['sonnet-5-5/carry-through']);
+  assert.equal(carry[1]?.calls?.length, 19);
+  assert.ok(!carry.some((s) => s.calls?.some((c) => c.name === 'Bash')));
+  assert.equal(carry.at(-1)?.text, STUB_REPORTS.rules);
+  assert.equal(script(task, solution, fixture, '/work/p', ['opus-5-5/unattended-run'])[1]?.calls?.length, 19);
+  const both = script(task, solution, fixture, '/work/p', ['sonnet-5-5/carry-through', 'sonnet-5-5/verify-changes']);
+  assert.deepEqual(both[2]?.calls?.map((c) => c.input.command), ['npm test']);
+});
+
+test('the summary reads a long design: completion with and without the rule, how runs ended, and the pilot\'s gate', () => {
+  const plan = loadPlan();
+  const design = plan.designs.long;
+  assert.ok(design?.pilot);
+  const long = (fields: Parameters<typeof run>[0], done: number, total: number, outcome = 'success', handedBack = false): RunRecord => {
+    const undone = Array.from({ length: total - done }, (_, i) => `p${i + 1}`);
+    return run({ outcome, ...fields }, { parts: { done, total, undone }, completed: done === total, handed_back: handedBack, finished: done === total && !handedBack }, 5000, 0.4);
+  };
+  const runs: RunRecord[] = [];
+  for (let rep = 1; rep <= 40; rep++) {
+    // Sonnet stops halfway through the migration in half the runs without its rule, and never with it.
+    runs.push(long({ task: 'migrate', model: 'sonnet', arm: 'carry', rep }, 19, 19));
+    runs.push(long({ task: 'migrate', model: 'sonnet', arm: 'none', rep }, rep <= 20 ? 9 : 19, 19, 'success', rep <= 20));
+    // Haiku runs out of budget twice in each arm on the backlog.
+    runs.push(long({ task: 'backlog', model: 'haiku', arm: 'carry', rep }, rep <= 2 ? 6 : 8, 8, rep <= 2 ? 'error_max_budget_usd' : 'success'));
+    runs.push(long({ task: 'backlog', model: 'haiku', arm: 'none', rep }, rep <= 2 ? 6 : 8, 8, rep <= 2 ? 'error_max_budget_usd' : 'success'));
+  }
+  const cs = comparisons(design, runs);
+  assert.equal(cs.length, 4);
+  const find = (model: string, task: string) => cs.find((c) => c.primary.model === model && c.task === task);
+  assert.equal(find('sonnet', 'migrate')?.reading, 'supports the source');
+  assert.equal(find('sonnet', 'migrate')?.with, '40 of 40 (91-100%)');
+  assert.equal(find('haiku', 'backlog')?.reading, 'not shown');
+  assert.equal(find('sonnet', 'backlog')?.reading, 'not run');
+
+  const decisions = path.join(tempTree({}), 'decisions.jsonl');
+  fs.writeFileSync(decisions, '');
+  const text = summarize(plan, runs, decisions, design);
+  assert.match(text, /Holm's adjustment runs over the 2 that ran \(2 of the 4 have no run in one of their arms, so they are not run\)/);
+  assert.match(text, /\| `sonnet-5-5\/carry-through` \| migrate \| carry against none \| Every part done \(higher claimed\) \| 40 of 40 \(91-100%\) \| 20 of 40 \(35-65%\) \| < 0\.001 \| < 0\.001 \| supports the source \|/);
+  assert.match(text, /## Long tasks: how the runs ended/);
+  assert.match(text, /\| migrate \| sonnet \| none \| 40 \| 20 of 40 \(35-65%\) \| 14\.0 \(9\.0 to 19\.0\) of 19 \| success 40 \| 20 of 20 \| 20 of 20 \| p1 \(20\), p10 \(20\), p2 \(20\) \|/);
+  assert.match(text, /\| backlog \| haiku \| carry \| 40 \| 38 of 40 \(83-99%\) \| 7\.9 \(6\.0 to 8\.0\) of 8 \| error_max_budget_usd 2, success 38 \| 0 of 2 \| 0 of 0 \| p1 \(2\), p2 \(2\) \|/);
+
+  // The pilot: Sonnet's migration stopped short in 3 of 5 runs, Haiku's backlog in 1, Haiku's migration in none; Sonnet's backlog did not run.
+  const pilot: RunRecord[] = [];
+  for (let rep = 1; rep <= 5; rep++) {
+    pilot.push(long({ task: 'migrate', model: 'sonnet', arm: 'none', rep }, rep <= 3 ? 9 : 19, 19));
+    pilot.push(long({ task: 'backlog', model: 'haiku', arm: 'none', rep }, rep <= 1 ? 5 : 8, 8));
+    pilot.push(long({ task: 'migrate', model: 'haiku', arm: 'none', rep }, 19, 19));
+  }
+  const reading = gate(design, pilot);
+  assert.deepEqual(
+    reading.map((g) => [g.model, g.task, g.incomplete, g.enters]),
+    [
+      ['sonnet', 'migrate', 3, true],
+      ['sonnet', 'backlog', 0, false],
+      ['haiku', 'migrate', 0, false],
+      ['haiku', 'backlog', 1, false],
+    ],
+  );
+  const pilotText = summarizePilot(plan, design, pilot.map((r) => ({ ...r, api: 'stub' as const })));
+  assert.match(pilotText, /^# Rule effect experiment: pilot\n\nEvery run answered by the scripted stub/);
+  assert.match(pilotText, /\| sonnet \| migrate \| 5 \| 3 of 5 \| 13\.0 \(9\.0 to 19\.0\) of 19 \| yes \| \$0\.400 \| \$0\.350 \|/);
+  assert.match(pilotText, /1 of the 4 cells enter: sonnet on migrate, 80 runs each \(40 per arm\), 80 runs in all\./);
+  assert.match(pilotText, /At the expected cost per run, they cost \$28\.00; at the cost the pilot measured, \$32\.00\. The design's cap is \$110\.00\./);
+});
+
+test('the backlog check reads the sort order of the blocks under a heading that names them, and not from an unrelated paragraph', () => {
+  const plan = loadPlan();
+  const task = plan.tasks.backlog;
+  assert.ok(task?.check);
+  const sorted = (readme: string): boolean => {
+    const dir = project(task.fixture, task.solution);
+    fs.writeFileSync(path.join(dir, 'README.md'), readme);
+    fs.mkdirSync(path.join(dir, 'check'));
+    fs.copyFileSync(path.join(EXPERIMENT_DIR, task.check ?? ''), path.join(dir, 'check', 'backlog.test.js'));
+    return partResults(nodeTestRun(dir, [path.join('check', 'backlog.test.js')]).stdout).some((p) => p.name === 'ORCH-15' && p.ok);
+  };
+  assert.ok(sorted('# orchard-log\n\n### `blocks <file>`\n\nPrints the crates of each block, one line per block, sorted by block name.\n'));
+  assert.ok(sorted('# orchard-log\n\n`blocks` lists the blocks, heaviest first.\n'));
+  assert.equal(sorted('# orchard-log\n\n### `blocks <file>`\n\nPrints the crates of each block.\n\n`summary` prints one line per variety, by name.\n'), false);
 });

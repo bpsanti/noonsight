@@ -9,9 +9,9 @@
 // never runs in CI. With --stub, every request goes instead to a scripted stand-in on this machine
 // (stub.ts), which sends nothing to Anthropic and spends nothing:
 //
-//   npm run experiment -- run [--design expanded] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--stub] [--out <dir>]
+//   npm run experiment -- run [--design expanded [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--stub] [--out <dir>]
 //   npm run experiment -- estimate [--design expanded] [--reps 30]
-//   npm run experiment -- summarize <dir> [--design expanded] [--to <dir>]
+//   npm run experiment -- summarize <dir> [--design expanded [--pilot]] [--to <dir>]
 //
 // Each run gets the lab of the live tests (test/live/login.ts): a temporary noonsight home and
 // configuration, the hook entries in a --settings file, and none of the person's own settings files,
@@ -26,9 +26,9 @@ import { DEFAULT_PRESET, readPreset, type Preset } from '../../src/config/load.j
 import { PACKAGE_ROOT } from '../../src/config/paths.js';
 import { baseEnv, lab, preconditions } from '../../test/live/login.js';
 import { serveMessages } from '../delivery/stub.js';
-import { answerLine, answerScore, changedFiles, handsBack, prose, ruleFileRead, toolCalls, verification, type Prose, type RuleFileRead } from './score.js';
+import { answerLine, answerScore, changedFiles, handsBack, partResults, prose, ruleFileRead, toolCalls, verification, type Prose, type RuleFileRead } from './score.js';
 import { script, solutionFiles, stubReply } from './stub.js';
-import { summarize } from './summary.js';
+import { gate, summarize, summarizePilot } from './summary.js';
 
 export const EXPERIMENT_DIR = path.join(PACKAGE_ROOT, 'experiments', 'rules');
 
@@ -43,6 +43,8 @@ export interface Task {
   readonly expected?: readonly string[];
   /** The hidden check, copied into the project only after the run. */
   readonly check?: string;
+  /** A long task's number of parts: its hidden check has one top-level test per part, named `part <name>`, and the run records which pass. */
+  readonly parts?: number;
   /** The files the task asks to change, where `*` stands for any characters; any other change counts as an extra file. */
   readonly allowed_changes: readonly string[];
   /** A reference solution: the files a correct run leaves, relative to the project. The stub plays it, and the tests check it passes the hidden check. */
@@ -61,13 +63,34 @@ export interface Design {
   readonly expected_usd: Readonly<Record<string, Readonly<Record<string, number>>>>;
   /** The comparisons the design is run to test, fixed before it runs. */
   readonly primary: readonly Primary[];
+  /** Model to effort, for the models that do not run at the plan's effort. */
+  readonly effort?: Readonly<Record<string, string>>;
+  /** Model to the budget of one run, in US dollars, for the models whose runs need another budget than the plan's. */
+  readonly budget_usd?: Readonly<Record<string, number>>;
+  /** The time limit of one run, in minutes; 15 when not given. */
+  readonly timeout_min?: number;
+  /** Runs of one arm made before the design, in a results directory of their own, that decide which cells the design runs. */
+  readonly pilot?: Pilot;
+}
+
+/**
+ * A pilot of a design: `reps` runs of `arm` in each cell, kept apart from the design's own runs. A cell
+ * enters the design only when at least `min_incomplete` of its pilot runs left a part of the task
+ * undone, since the rules it tests can only show where runs without them stop short.
+ */
+export interface Pilot {
+  readonly reps: number;
+  readonly arm: string;
+  readonly min_incomplete: number;
+  /** The pilot's own cap, apart from the design's: the pilot spends in its own results directory. */
+  readonly cap_usd: number;
 }
 
 export interface Primary {
   readonly rule: string;
   readonly model: string;
   readonly tasks: readonly string[];
-  readonly signal: 'verified' | 'words_per_sentence' | 'semicolons_per_1k_words' | 'cost_usd';
+  readonly signal: 'verified' | 'completed' | 'words_per_sentence' | 'semicolons_per_1k_words' | 'cost_usd';
   /** The arm with the rule; `rules` unless named. */
   readonly arm?: string;
   /** The arm it is compared with; `none` unless named. */
@@ -88,6 +111,8 @@ export interface Plan {
   readonly default_arms: readonly string[];
   /** Arm to the noonsight entry each model gets in it; `only` makes it the preset with that one rule (see armEntry). */
   readonly arms: Readonly<Record<string, Arm>>;
+  /** The tasks a run without a design covers unless --tasks names others. */
+  readonly default_tasks: readonly string[];
   readonly tasks: Readonly<Record<string, Task>>;
   readonly designs: Readonly<Record<string, Design>>;
   /** Rule id to the signals that stand for the effect its source claims. */
@@ -144,9 +169,13 @@ export interface Signals {
   readonly extra_files: readonly string[];
   /** Question task: the jobs named, scored against the expected ones. */
   readonly answer?: { readonly found: number; readonly expected: number; readonly wrong: number; readonly line: boolean };
-  /** Fix task: the hidden check and the project's own tests, run after the session ended. */
+  /** A task with a hidden check: whether it passes, and whether the project's own tests do, run after the session ended. */
   readonly check_passed?: boolean;
   readonly suite_passed?: boolean;
+  /** A long task: how many of its parts the hidden check passes, and the names of those it does not. */
+  readonly parts?: { readonly done: number; readonly total: number; readonly undone: readonly string[] };
+  /** A long task: every part done. */
+  readonly completed?: boolean;
   readonly report: Prose;
   /** Pointer arm: whether and when the session read the file holding the rule's text. */
   readonly pointer?: RuleFileRead;
@@ -240,17 +269,48 @@ export function allowedChange(file: string, patterns: readonly string[]): boolea
   return patterns.some((p) => new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(file));
 }
 
-/** The cost a design is expected to spend at `reps` repetitions, per model and task, and the most its runs' budgets allow. */
-export function projection(plan: Plan, design: Design, reps = design.reps): { rows: { model: string; task: string; runs: number; per_run: number; expected: number; ceiling: number }[]; expected: number; ceiling: number } {
+/** The cost a design is expected to spend at `reps` repetitions of `arms`, per model and task, and the most its runs' budgets allow. */
+export function projection(
+  plan: Plan,
+  design: Design,
+  reps = design.reps,
+  arms: readonly string[] = design.arms,
+): { rows: { model: string; task: string; runs: number; per_run: number; expected: number; ceiling: number }[]; expected: number; ceiling: number } {
   const rows = Object.entries(design.cells).flatMap(([model, tasks]) =>
     tasks.map((task) => {
-      const runs = reps * design.arms.length;
+      const runs = reps * arms.length;
       const perRun = design.expected_usd[model]?.[task];
       if (perRun === undefined) throw new Error(`the design has no expected cost for ${model} on ${task}`);
-      return { model, task, runs, per_run: perRun, expected: runs * perRun, ceiling: runs * (plan.models[model]?.budget_usd ?? 0) };
+      return { model, task, runs, per_run: perRun, expected: runs * perRun, ceiling: runs * runSettings(plan, design, model).budget_usd };
     }),
   );
   return { rows, expected: rows.reduce((s, r) => s + r.expected, 0), ceiling: rows.reduce((s, r) => s + r.ceiling, 0) };
+}
+
+/** How one model's runs are made: at what effort, within what budget and time limit. */
+export interface RunSettings {
+  readonly effort: string;
+  readonly budget_usd: number;
+  readonly timeout_ms: number;
+}
+
+const DEFAULT_TIMEOUT_MIN = 15;
+
+/** The settings of a model's runs: the design's where it sets them, else the plan's. */
+export function runSettings(plan: Plan, design: Design | undefined, model: string): RunSettings {
+  const m = plan.models[model];
+  if (!m) throw new Error(`unknown model ${model}`);
+  return {
+    effort: design?.effort?.[model] ?? plan.effort,
+    budget_usd: design?.budget_usd?.[model] ?? m.budget_usd,
+    timeout_ms: (design?.timeout_min ?? DEFAULT_TIMEOUT_MIN) * 60 * 1000,
+  };
+}
+
+/** The cells of a design's pilot: its arm only, rep by rep. */
+export function pilotCells(plan: Plan, design: Design): Cell[] {
+  if (!design.pilot) throw new Error('the design has no pilot');
+  return matrixCells(design.cells, Object.keys(plan.tasks), [design.pilot.arm], design.pilot.reps);
 }
 
 export function cellKey(c: Cell): string {
@@ -259,7 +319,6 @@ export function cellKey(c: Cell): string {
 
 const TOOLS = 'Bash,Read,Grep,Glob,Edit,Write';
 const ALLOWED = 'Read,Grep,Glob,Edit,Write,Bash(npm test),Bash(npm test:*),Bash(npm run test:*),Bash(node:*),Bash(ls:*),Bash(cat:*)';
-const RUN_TIMEOUT_MS = 15 * 60 * 1000;
 
 /** A run that ended but cannot be recorded; it still spent its cost, null when Claude Code reported none. */
 class RunFailed extends Error {
@@ -295,10 +354,11 @@ export function stubEnv(root: string, url: string): Record<string, string> {
 }
 
 /** One run of one cell: a fresh lab and project, one `claude -p` session, then the signals. */
-async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: string, stub: boolean): Promise<RunRecord> {
+async function runCell(plan: Plan, design: Design | undefined, cell: Cell, out: string, claudeVersion: string, stub: boolean): Promise<RunRecord> {
   const model = plan.models[cell.model];
   const task = plan.tasks[cell.task];
   if (!model || !task) throw new Error(`unknown cell ${cellKey(cell)}`);
+  const settings = runSettings(plan, design, cell.model);
   const l = lab(`exp-${cellKey(cell)}`, { version: 1, models: { [model.id]: armEntry(plan, cell.arm, model.id) }, session: { unattended_when_env: [plan.unattended_env] } }, {});
   // The rule files sit beside the lab's configuration, where noonsight reads them; a pointer arm's
   // short rule names the file that holds the rule's text by its absolute path.
@@ -311,7 +371,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   const args = [
     '-p', task.prompt,
     '--output-format', 'stream-json', '--verbose',
-    '--model', model.id, '--effort', plan.effort, '--max-budget-usd', String(model.budget_usd),
+    '--model', model.id, '--effort', settings.effort, '--max-budget-usd', String(settings.budget_usd),
     '--permission-mode', 'default', '--setting-sources', 'project,local', '--settings', l.settings,
     '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence',
     '--tools', TOOLS, '--allowedTools', ALLOWED,
@@ -319,7 +379,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   const solution = stub ? solutionFiles(path.join(EXPERIMENT_DIR, task.solution)) : {};
   const api = stub ? await serveMessages((body) => stubReply(body, (rules) => script(task, solution, fixture, l.project, rules, setup.ruleFile))) : null;
   const env = { ...(api ? stubEnv(l.root, api.url) : baseEnv()), NOONSIGHT_SCOPE: task.scope, [plan.unattended_env]: '1' };
-  const { status, stdout } = await spawnClaude(args, l.project, env).finally(() => api?.close());
+  const { status, stdout } = await spawnClaude(args, l.project, env, settings.timeout_ms).finally(() => api?.close());
   const stream = stdout
     .split('\n')
     .filter((line) => line.startsWith('{'))
@@ -355,15 +415,24 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
   const deliverable = task.report ? reportText !== null && reportText.trim() !== '' : changed.some((f) => allowedChange(f, task.allowed_changes));
   const ok = result.subtype === 'success' && !result.is_error;
 
-  let check: { check_passed?: boolean; suite_passed?: boolean } = {};
+  let check: Pick<Signals, 'check_passed' | 'suite_passed' | 'parts' | 'completed'> = {};
   if (task.check) {
     fs.writeFileSync(path.join(dir, 'changes.diff'), diff(fixture, l.project));
-    const node = (files: string[]): boolean => spawnSync(process.execPath, ['--test', ...files], { cwd: l.project, encoding: 'utf8', timeout: 60_000 }).status === 0;
-    const suitePassed = node([]);
+    const node = (files: string[]) => spawnSync(process.execPath, ['--test', '--test-reporter=tap', ...files], { cwd: l.project, encoding: 'utf8', timeout: 60_000 });
+    const suitePassed = node([]).status === 0;
     const hidden = path.join(l.project, 'check');
     fs.mkdirSync(hidden, { recursive: true });
     fs.copyFileSync(path.join(EXPERIMENT_DIR, task.check), path.join(hidden, path.basename(task.check)));
-    check = { check_passed: node([path.join('check', path.basename(task.check))]), suite_passed: suitePassed };
+    const r = node([path.join('check', path.basename(task.check))]);
+    check = { check_passed: r.status === 0, suite_passed: suitePassed };
+    if (task.parts !== undefined) {
+      fs.writeFileSync(path.join(dir, 'check.tap'), r.stdout ?? '');
+      // A part the report does not list, because the check could not run, counts as undone.
+      const results = partResults(r.stdout ?? '');
+      const done = results.filter((p) => p.ok).length;
+      const undone = results.filter((p) => !p.ok).map((p) => p.name);
+      check = { ...check, parts: { done, total: task.parts, undone }, completed: r.status === 0 && done === task.parts };
+    }
   }
 
   const session = log.find((d) => d.event === 'session-start') ?? {};
@@ -372,7 +441,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
     ...cell,
     api: stub ? 'stub' : 'anthropic',
     model_id: model.id,
-    effort: plan.effort,
+    effort: settings.effort,
     claude_code: claudeVersion,
     started,
     scope: task.scope,
@@ -434,13 +503,13 @@ function diff(before: string, after: string): string {
   return (r.stdout ?? '').split(before).join('a').split(after).join('b');
 }
 
-function spawnClaude(args: readonly string[], cwd: string, env: Record<string, string>): Promise<{ status: number | null; stdout: string }> {
+function spawnClaude(args: readonly string[], cwd: string, env: Record<string, string>, timeoutMs: number): Promise<{ status: number | null; stdout: string }> {
   return new Promise((resolve) => {
     const child = spawn('claude', [...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d));
     child.stderr.resume();
-    const timer = setTimeout(() => child.kill('SIGTERM'), RUN_TIMEOUT_MS);
+    const timer = setTimeout(() => child.kill('SIGTERM'), timeoutMs);
     child.on('close', (status) => {
       clearTimeout(timer);
       resolve({ status, stdout });
@@ -463,6 +532,8 @@ interface RunOptions {
   readonly concurrency: number;
   readonly out: string;
   readonly stub: boolean;
+  /** The design the cells come from, whose effort, budgets, time limit and arms they run with. */
+  readonly design: Design | undefined;
 }
 
 /**
@@ -484,8 +555,9 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
   const other = previous.find((r) => (r.api ?? 'anthropic') !== api);
   if (other) throw new Error(`${o.out} already holds runs against the ${other.api ?? 'anthropic'} API; use another --out for runs against the ${api} one`);
   const done = new Set(previous.map(cellKey));
+  const budgetOf = (model: string): number => runSettings(plan, o.design, model).budget_usd;
   // A run with no result event reported no cost, so the cap counts its whole budget.
-  const charged = (r: Pick<RunRecord, 'model' | 'outcome' | 'cost_usd'>): number => (r.outcome === 'no-result' ? (plan.models[r.model]?.budget_usd ?? 0) : r.cost_usd);
+  const charged = (r: Pick<RunRecord, 'model' | 'outcome' | 'cost_usd'>): number => (r.outcome === 'no-result' ? budgetOf(r.model) : r.cost_usd);
   let spent = readRuns(o.out).reduce((s, r) => s + charged(r), 0);
   const queue = o.cells.filter((c) => !done.has(cellKey(c)));
   let reserved = 0;
@@ -501,7 +573,7 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
     for (;;) {
       const cell = queue.shift();
       if (!cell) return;
-      const budget = plan.models[cell.model]?.budget_usd ?? 0;
+      const budget = budgetOf(cell.model);
       if (spent + reserved + budget > o.cap) {
         // It may fit once the runs in flight end and their unspent budget is released.
         if (reserved > 0) {
@@ -518,7 +590,7 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
       reserved += budget;
       log(`start ${cellKey(cell)}`);
       try {
-        const record = await runCell(plan, cell, o.out, version, o.stub);
+        const record = await runCell(plan, o.design, cell, o.out, version, o.stub);
         spent += charged(record);
         fs.appendFileSync(path.join(o.out, 'runs.jsonl'), `${JSON.stringify(record)}\n`);
         log(`done  ${cellKey(cell)}: ${record.outcome}, $${record.cost_usd.toFixed(3)}, ${record.tokens.output} output tokens, finished=${record.signals.finished}; spent $${spent.toFixed(2)}`);
@@ -539,7 +611,7 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
 }
 
 /** The options that take no value. */
-const SWITCHES = new Set(['stub']);
+const SWITCHES = new Set(['stub', 'pilot']);
 
 function list(value: string | undefined, all: readonly string[], what: string): string[] {
   if (value === undefined) return [...all];
@@ -562,20 +634,28 @@ async function main(argv: readonly string[]): Promise<number> {
   const designName = opts.get('design');
   const design = designName === undefined ? undefined : plan.designs[designName];
   if (designName !== undefined && !design) throw new Error(`unknown design "${designName}"; known: ${Object.keys(plan.designs).join(', ')}`);
+  const pilot = opts.has('pilot');
+  if (pilot && !design?.pilot) throw new Error('--pilot needs a --design that has a pilot');
   if (command === 'run') {
     const day = new Date().toISOString().slice(0, 10);
     const stub = opts.has('stub');
     const reps = Number(opts.get('reps') ?? design?.reps ?? plan.reps);
-    // A design fixes its matrix; --models, --tasks and --arms narrow it.
+    // A design fixes its matrix; --models, --tasks and --arms narrow it, and its pilot's reading (--gate) leaves out the cells that did not enter.
     const models = opts.has('models') ? list(opts.get('models'), Object.keys(plan.models), 'model') : design ? Object.keys(design.cells) : [...plan.default_models];
-    const tasks = list(opts.get('tasks'), Object.keys(plan.tasks), 'task');
+    const tasks = opts.has('tasks') ? list(opts.get('tasks'), Object.keys(plan.tasks), 'task') : design ? Object.keys(plan.tasks) : [...plan.default_tasks];
     const arms = opts.has('arms') ? list(opts.get('arms'), design ? design.arms : Object.keys(plan.arms), 'arm') : design ? [...design.arms] : [...plan.default_arms];
+    const gateDir = opts.get('gate');
+    if (gateDir !== undefined && (!design?.pilot || pilot)) throw new Error('--gate needs a --design that has a pilot, and reads the pilot of a run of the design itself');
+    const entering = gateDir === undefined || !design ? null : gate(design, readRuns(path.resolve(gateDir))).filter((g) => g.enters);
+    if (entering) process.stdout.write(`The pilot in ${gateDir} lets in ${entering.length ? entering.map((g) => `${g.model} on ${g.task}`).join(', ') : 'no cell'}.\n`);
+    const matrix = design ? (pilot ? pilotCells(plan, design) : designCells(plan, design, reps)) : cells(plan, models, tasks, arms, reps);
     await runAll(plan, {
-      cells: design ? designCells(plan, design, reps).filter((c) => models.includes(c.model) && tasks.includes(c.task) && arms.includes(c.arm)) : cells(plan, models, tasks, arms, reps),
-      cap: Number(opts.get('cap-usd') ?? design?.cap_usd ?? plan.cap_usd),
+      cells: matrix.filter((c) => models.includes(c.model) && tasks.includes(c.task) && (pilot || arms.includes(c.arm)) && (!entering || entering.some((g) => g.model === c.model && g.task === c.task))),
+      cap: Number(opts.get('cap-usd') ?? (pilot ? design?.pilot?.cap_usd : design?.cap_usd) ?? plan.cap_usd),
       concurrency: Number(opts.get('concurrency') ?? 3),
-      out: path.resolve(opts.get('out') ?? path.join(os.tmpdir(), `noonsight-experiment-${stub ? 'stub-' : ''}${day}`)),
+      out: path.resolve(opts.get('out') ?? path.join(os.tmpdir(), `noonsight-experiment-${stub ? 'stub-' : ''}${pilot ? 'pilot-' : ''}${day}`)),
       stub,
+      design,
     });
     return 0;
   }
@@ -587,7 +667,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   if (command === 'summarize' && positional[0]) {
     const out = path.resolve(positional[0]);
-    const text = summarize(plan, readRuns(out), path.join(out, 'decisions.jsonl'), design);
+    const text = pilot && design ? summarizePilot(plan, design, readRuns(out)) : summarize(plan, readRuns(out), path.join(out, 'decisions.jsonl'), design);
     fs.writeFileSync(path.join(out, 'summary.md'), text);
     const to = opts.get('to');
     if (to) {
@@ -599,7 +679,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   process.stderr.write(
-    'usage: run [--design <name>] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps N] [--cap-usd N] [--concurrency N] [--stub] [--out <dir>]\n       estimate [--design <name>] [--reps N]\n       summarize <dir> [--design <name>] [--to <dir>]\n',
+    'usage: run [--design <name> [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps N] [--cap-usd N] [--concurrency N] [--stub] [--out <dir>]\n       estimate [--design <name>] [--reps N]\n       summarize <dir> [--design <name> [--pilot]] [--to <dir>]\n',
   );
   return 2;
 }
@@ -622,6 +702,15 @@ export function renderProjection(plan: Plan, design: Design, reps = design.reps)
   });
   lines.push('', '| Model | Runs | Expected |', '| --- | --- | --- |', ...byModel, '');
   lines.push(`Expected in total: ${usd(p.expected)}, at list price as Claude Code reports it. The cap is ${usd(design.cap_usd)}; the runs stop before passing it, leaving whole repetitions.`, '');
+  if (design.pilot) {
+    const q = projection(plan, design, design.pilot.reps, [design.pilot.arm]);
+    lines.push(
+      `Before it, the pilot runs ${q.rows.reduce((s, r) => s + r.runs, 0)} times: ${design.pilot.reps} runs of the arm ${design.pilot.arm} per model and task, expected ${usd(q.expected)}, within a cap of ${usd(design.pilot.cap_usd)}.`,
+      `A cell enters the design only when at least ${design.pilot.min_incomplete} of its pilot runs left a part undone; each cell it keeps out lowers the design's expectation.`,
+      `Expected for the pilot and the design together: ${usd(q.expected + p.expected)}; the two caps together: ${usd(design.pilot.cap_usd + design.cap_usd)}.`,
+      '',
+    );
+  }
   return `${lines.join('\n')}\n`;
 }
 

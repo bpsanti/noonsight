@@ -51,6 +51,7 @@ const BINARY: Readonly<Record<string, (r: RunRecord) => boolean | undefined>> = 
   finished: (r) => r.signals.finished,
   verified: (r) => (r.signals.edited ? r.signals.verified : undefined),
   extra_files: (r) => r.signals.extra_files.length > 0,
+  completed: (r) => r.signals.completed,
 };
 
 const PROSE = new Set(['words_per_sentence', 'semicolons_per_1k_words', 'parentheses_per_1k_words']);
@@ -90,6 +91,7 @@ const SIGNAL_NAMES: Readonly<Record<string, string>> = {
   finished: 'Runs finished (deliverable present, work not handed back)',
   verified: 'Runs that ran the tests after their last edit, of those that edited code',
   extra_files: 'Runs that changed files beyond the ones asked',
+  completed: 'Runs that did every part of a long task',
   words_per_sentence: 'Words per sentence in the report',
   semicolons_per_1k_words: 'Semicolons per 1,000 words in the report',
   parentheses_per_1k_words: 'Parentheses per 1,000 words in the report',
@@ -152,7 +154,11 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
       share(g, (r) => r.signals.handed_back),
       share(g, (r) => (r.signals.edited ? r.signals.verified : undefined)),
       share(g, (r) => r.signals.extra_files.length > 0),
-      g[0]?.signals.answer ? `${spread(g.map((r) => r.signals.answer?.found ?? 0), 1)} of ${g[0].signals.answer.expected}, ${spread(g.map((r) => r.signals.answer?.wrong ?? 0), 1)} wrong` : share(g, (r) => r.signals.check_passed),
+      g[0]?.signals.answer
+        ? `${spread(g.map((r) => r.signals.answer?.found ?? 0), 1)} of ${g[0].signals.answer.expected}, ${spread(g.map((r) => r.signals.answer?.wrong ?? 0), 1)} wrong`
+        : g[0]?.signals.parts
+          ? `${share(g, (r) => r.signals.completed)} every part; parts ${spread(g.map((r) => r.signals.parts?.done ?? 0), 1)} of ${g[0].signals.parts.total}`
+          : share(g, (r) => r.signals.check_passed),
       spread(g.map((r) => r.signals.report.words_per_sentence), 1),
       spread(g.map((r) => r.signals.report.semicolons_per_1k_words), 1),
       spread(g.map((r) => r.tokens.output)),
@@ -166,7 +172,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
       rows,
     ),
     '',
-    'Numbers are the mean with the range in parentheses. "Correct" is, for the question, the jobs named that ignore a control, of the three that do, and the jobs named wrongly; for the fix, the runs whose change passes the hidden check. Input tokens include the cached ones.',
+    'Numbers are the mean with the range in parentheses. "Correct" is, for the question, the jobs named that ignore a control, of the three that do, and the jobs named wrongly; for a task with a hidden check, the runs whose change passes it; for a long task, the runs that did every part, and the parts done. Input tokens include the cached ones.',
     '',
   );
 
@@ -198,7 +204,137 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
     }
     lines.push(table(['Task', 'Model', 'Arm', 'Signal', 'With the rule', 'Without (arm none)', 'p'], rowsRule), '');
   }
+  if (runs.some((r) => r.signals.parts)) lines.push(...longTasks(runs));
   if (design) lines.push(...preregistered(design, runs), ...(design.arms.length > 2 ? eachArm(design, runs) : []), ...pointerReads(runs), ...costAgainstProjection(design, runs));
+  return `${lines.join('\n')}\n`;
+}
+
+/** How the runs of the long tasks ended: every part done, or which parts were left and why the run stopped. */
+function longTasks(runs: readonly RunRecord[]): string[] {
+  const groups = new Map<string, RunRecord[]>();
+  for (const r of runs.filter((x) => x.signals.parts)) {
+    const key = `${r.task}\u0000${r.model}\u0000${r.arm}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  const rows: Row[] = [];
+  for (const [key, g] of [...groups].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const [task, model, arm] = key.split('\u0000') as [string, string, string];
+    const outcomes = new Map<string, number>();
+    for (const r of g) outcomes.set(r.outcome, (outcomes.get(r.outcome) ?? 0) + 1);
+    const incomplete = g.filter((r) => r.signals.completed !== true);
+    const onTheirOwn = incomplete.filter((r) => r.outcome === 'success');
+    const undone = new Map<string, number>();
+    for (const r of incomplete) for (const p of r.signals.parts?.undone ?? []) undone.set(p, (undone.get(p) ?? 0) + 1);
+    const top = [...undone].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 3);
+    rows.push([
+      task,
+      model,
+      arm,
+      String(g.length),
+      shareWithInterval(count(g, (r) => r.signals.completed)),
+      `${spread(g.map((r) => r.signals.parts?.done ?? 0), 1)} of ${g[0]?.signals.parts?.total ?? 'n/a'}`,
+      [...outcomes]
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([o, n]) => `${o} ${n}`)
+        .join(', '),
+      `${onTheirOwn.length} of ${incomplete.length}`,
+      `${onTheirOwn.filter((r) => r.signals.handed_back).length} of ${onTheirOwn.length}`,
+      top.length ? top.map(([p, n]) => `${p} (${n})`).join(', ') : 'none',
+    ]);
+  }
+  return [
+    '## Long tasks: how the runs ended',
+    '',
+    table(['Task', 'Model', 'Arm', 'Runs', 'Every part done', 'Parts done', 'Ended as', 'Incomplete runs that ended on their own', 'Of those, handed back', 'Parts most often left undone'], rows),
+    '',
+    'A run that ended on its own reported success; one stopped by its budget reports `error_max_budget_usd`, and one stopped at its time limit reports no result (`no-result`). Either kind counts as incomplete when a part is left undone.',
+    '',
+  ];
+}
+
+/** One cell of a design as its pilot left it: how many runs left a part undone, whether the cell enters the design, and what a run cost. */
+export interface GateRow {
+  readonly model: string;
+  readonly task: string;
+  readonly runs: number;
+  readonly incomplete: number;
+  readonly enters: boolean;
+  readonly cost_per_run: number;
+}
+
+/** The pilot's reading of each cell of a design: a cell enters when enough of its pilot runs left a part undone. */
+export function gate(design: Design, runs: readonly RunRecord[]): GateRow[] {
+  const pilot = design.pilot;
+  if (!pilot) throw new Error('the design has no pilot');
+  return Object.entries(design.cells).flatMap(([model, tasks]) =>
+    tasks.map((task) => {
+      const g = runs.filter((r) => r.model === model && r.task === task && r.arm === pilot.arm);
+      const incomplete = g.filter((r) => r.signals.completed !== true).length;
+      return { model, task, runs: g.length, incomplete, enters: g.length > 0 && incomplete >= pilot.min_incomplete, cost_per_run: g.length ? g.reduce((s, r) => s + r.cost_usd, 0) / g.length : NaN };
+    }),
+  );
+}
+
+/**
+ * The reading of a design's pilot: for each cell, how many pilot runs left a part undone and whether
+ * the cell enters the design, then what the design would cost for the cells that enter, at the
+ * expected cost per run and at the cost the pilot measured.
+ */
+export function summarizePilot(plan: Plan, design: Design, runs: readonly RunRecord[]): string {
+  const pilot = design.pilot;
+  if (!pilot) throw new Error('the design has no pilot');
+  const usd = (n: number, digits = 2): string => (Number.isNaN(n) ? 'n/a' : `$${n.toFixed(digits)}`);
+  const lines: string[] = ['# Rule effect experiment: pilot', ''];
+  const stubbed = runs.filter((r) => r.api === 'stub').length;
+  if (stubbed)
+    lines.push(
+      `${stubbed === runs.length ? 'Every run' : `${stubbed} of the ${runs.length} runs`} answered by the scripted stub (\`stub.ts\`), not by a model: these numbers, the cost included, check the harness and say nothing about any model or rule.`,
+      '',
+    );
+  const versions = [...new Set(runs.map((r) => r.claude_code))].join(', ');
+  lines.push(
+    `${runs.length} runs of the arm ${pilot.arm}, Claude Code ${versions || 'n/a'}; ${usd(runs.reduce((s, r) => s + r.cost_usd, 0))} spent, as Claude Code reports cost.`,
+    `A cell enters the design when at least ${pilot.min_incomplete} of its ${pilot.reps} pilot runs left a part undone.`,
+    '',
+  );
+  const rows = gate(design, runs);
+  lines.push(
+    table(
+      ['Model', 'Task', 'Pilot runs', 'Left a part undone', 'Parts done', 'Enters the design', 'Cost per run, measured', 'Cost per run, expected'],
+      rows.map((g) => {
+        const cell = runs.filter((r) => r.model === g.model && r.task === g.task && r.arm === pilot.arm);
+        return [
+          g.model,
+          g.task,
+          String(g.runs),
+          `${g.incomplete} of ${g.runs}`,
+          `${spread(cell.map((r) => r.signals.parts?.done ?? 0), 1)} of ${cell[0]?.signals.parts?.total ?? 'n/a'}`,
+          g.enters ? 'yes' : 'no',
+          usd(g.cost_per_run, 3),
+          usd(design.expected_usd[g.model]?.[g.task] ?? NaN, 3),
+        ];
+      }),
+    ),
+    '',
+  );
+  const entering = rows.filter((g) => g.enters);
+  const perCell = design.reps * design.arms.length;
+  const expected = entering.reduce((s, g) => s + perCell * (design.expected_usd[g.model]?.[g.task] ?? NaN), 0);
+  const measured = entering.reduce((s, g) => s + perCell * g.cost_per_run, 0);
+  lines.push(
+    '## The design after the pilot',
+    '',
+    entering.length
+      ? `${entering.length} of the ${rows.length} cells enter: ${entering.map((g) => `${g.model} on ${g.task}`).join(', ')}, ${perCell} runs each (${design.reps} per arm), ${entering.length * perCell} runs in all.`
+      : 'No cell enters, so the design does not run.',
+    '',
+  );
+  if (entering.length)
+    lines.push(
+      `At the expected cost per run, they cost ${usd(expected)}; at the cost the pilot measured, ${usd(measured)}. The design's cap is ${usd(design.cap_usd)}${measured > design.cap_usd ? ', below the measured projection, so the runs would stop before the last repetitions' : ''}.`,
+      `The runs of the arm with the rules can cost more than the pilot's, which ran without them.`,
+      '',
+    );
   return `${lines.join('\n')}\n`;
 }
 
@@ -216,12 +352,13 @@ export interface Comparison {
   readonly holm: number;
   /**
    * After Holm's adjustment: whether the runs show the difference the rule's source claims, or, where
-   * the source claims no direction, which way the arm with the rule goes.
+   * the source claims no direction, which way the arm with the rule goes. A comparison whose cell has
+   * no run in one of its arms, such as one a pilot kept out, is not run and stays out of the adjustment.
    */
-  readonly reading: 'supports the source' | 'not shown' | 'opposite to the source' | 'higher' | 'lower';
+  readonly reading: 'supports the source' | 'not shown' | 'opposite to the source' | 'higher' | 'lower' | 'not run';
 }
 
-/** The pre-registered comparisons of a design, each task apart, with Holm's adjustment over all of them. */
+/** The pre-registered comparisons of a design, each task apart, with Holm's adjustment over all of those that ran. */
 export function comparisons(design: Design, runs: readonly RunRecord[]): Comparison[] {
   const raw = design.primary.flatMap((primary) =>
     primary.tasks.map((task) => {
@@ -230,9 +367,10 @@ export function comparisons(design: Design, runs: readonly RunRecord[]): Compari
       const off = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === arms[1]);
       let up: boolean | null;
       let shown: [string, string];
-      if (primary.signal === 'verified') {
-        const a = count(on, BINARY.verified as (r: RunRecord) => boolean | undefined);
-        const b = count(off, BINARY.verified as (r: RunRecord) => boolean | undefined);
+      const binary = BINARY[primary.signal];
+      if (binary) {
+        const a = count(on, binary);
+        const b = count(off, binary);
         up = a.n && b.n && a.k / a.n !== b.k / b.n ? a.k / a.n > b.k / b.n : null;
         shown = [shareWithInterval(a), shareWithInterval(b)];
       } else {
@@ -247,12 +385,14 @@ export function comparisons(design: Design, runs: readonly RunRecord[]): Compari
         const describe = (vs: number[]): string => (vs.length ? `mean ${f(mean(vs))}, median ${f(median(vs))} (${vs.length} run${vs.length === 1 ? '' : 's'})` : 'n/a');
         shown = [describe(xs), describe(ys)];
       }
-      return { primary, task, arms, with: shown[0], without: shown[1], p: compare(primary.signal, on, off), up };
+      return { primary, task, arms, with: shown[0], without: shown[1], p: compare(primary.signal, on, off), up, ran: on.length > 0 && off.length > 0 };
     }),
   );
-  const adjusted = holm(raw.map((c) => (Number.isNaN(c.p) ? 1 : c.p)));
-  return raw.map(({ up, ...c }, i) => {
-    const h = adjusted[i] ?? 1;
+  const ran = raw.filter((c) => c.ran);
+  const adjusted = holm(ran.map((c) => (Number.isNaN(c.p) ? 1 : c.p)));
+  return raw.map(({ up, ran: hasRuns, ...c }) => {
+    if (!hasRuns) return { ...c, holm: NaN, reading: 'not run' as const };
+    const h = adjusted[ran.findIndex((x) => x.primary === c.primary && x.task === c.task)] ?? 1;
     let reading: Comparison['reading'];
     if (h >= ALPHA || up === null) reading = 'not shown';
     else if (c.primary.direction === undefined) reading = up ? 'higher' : 'lower';
@@ -263,6 +403,7 @@ export function comparisons(design: Design, runs: readonly RunRecord[]): Compari
 
 const PRIMARY_SIGNAL: Readonly<Record<Primary['signal'], string>> = {
   verified: 'Tests after the last edit',
+  completed: 'Every part done',
   words_per_sentence: 'Words per sentence',
   semicolons_per_1k_words: 'Semicolons per 1,000 words',
   cost_usd: 'Cost per run',
@@ -270,10 +411,12 @@ const PRIMARY_SIGNAL: Readonly<Record<Primary['signal'], string>> = {
 
 function preregistered(design: Design, runs: readonly RunRecord[]): string[] {
   const cs = comparisons(design, runs);
+  const ran = cs.filter((c) => c.reading !== 'not run').length;
+  const family = ran === cs.length ? `all ${cs.length}` : `the ${ran} that ran (${cs.length - ran} of the ${cs.length} have no run in one of their arms, so they are not run)`;
   return [
     '## Pre-registered comparisons',
     '',
-    `The comparisons the design fixed before it ran, each task apart. p is two-sided; Holm's adjustment runs over all ${cs.length}, and a comparison supports the rule's source when its adjusted p is below ${ALPHA} and the difference goes the way the source claims. Where the source claims no direction, the reading is the direction found, or "not shown".`,
+    `The comparisons the design fixed before it ran, each task apart. p is two-sided; Holm's adjustment runs over ${family}, and a comparison supports the rule's source when its adjusted p is below ${ALPHA} and the difference goes the way the source claims. Where the source claims no direction, the reading is the direction found, or "not shown".`,
     '',
     table(
       ['Rule', 'Task', 'Arms', 'Signal', 'With the rule', 'Without', 'p', 'Holm p', 'Reading'],

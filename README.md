@@ -115,6 +115,9 @@ On 2026-11-20, with Claude Code 2.1.329, 600 runs split Sonnet 5.5's and Haiku 5
 - `verify-changes` carried most of the rules' cost where it changed what the model did, and `carry-through` cost almost nothing where it changed nothing.
 - `verify-changes` delivered as one sentence pointing to a file holding its text was read at the first tool call in all 120 runs and gave the same tests as the rule inline.
 
+On 2026-11-20, a pilot of 20 runs looked for early stops on two long tasks, an 18-module migration and an 8-ticket backlog, at low effort and without the rules, for $2.52 ([results](experiments/rules/results/2026-11-20-long/README.md)).
+Sonnet 5.5 and Haiku 5.5 did every part in every run, so the carry-through rules had nothing to change there, the comparisons fixed for them did not run, and those rules are still not measured.
+
 `experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
 
 `experiments/delivery/` measures whether each model's rules reach every request it receives, and only those rules, through `/model`, compaction, `/clear`, resumes, subagents and file edits, for noonsight and for a `CLAUDE.md`, `.claude/rules` and a skill per model; it runs real Claude Code sessions against a local stand-in for the API, so it spends no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).

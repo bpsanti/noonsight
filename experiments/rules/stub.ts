@@ -10,7 +10,9 @@
 // verify rule as a pointer to its text, it reads that file first. So a stub
 // run exercises every path a real run takes, and the summary must show the difference the script
 // builds in: tests after the last edit only with a verify rule, and a denser report without any rule.
-// Its numbers say nothing about any model.
+// On a long task (one with parts), the script also stops halfway and hands the rest back unless
+// the session received a rule against early stopping, so every part is done only with one. Its
+// numbers say nothing about any model.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,6 +33,9 @@ export function deliveredRules(body: Body): string[] {
 /** Whether the rules delivered include a verify rule, the one whose source claims the tests, inline or as a pointer to its text. */
 const verifies = (rules: readonly string[]): boolean => rules.some((id) => id.endsWith('/verify-changes') || id.endsWith('/verify-changes-pointer'));
 
+/** Whether the rules delivered include one against early stopping: a carry-through rule, or Opus's unattended-run. */
+const carries = (rules: readonly string[]): boolean => rules.some((id) => id.endsWith('/carry-through') || id === 'opus-5-5/unattended-run');
+
 /** Whether the rules delivered include a pointer rule, which says to read the file holding a rule's text. */
 const points = (rules: readonly string[]): boolean => rules.some((id) => id.endsWith('-pointer'));
 
@@ -38,6 +43,8 @@ const points = (rules: readonly string[]): boolean => rules.some((id) => id.ends
 export const STUB_REPORTS = {
   rules: 'I changed the files the task names. The project tests pass after the change.',
   none: 'I changed the files the task names (and nothing else); the change follows the existing code; I did not run anything after it.',
+  /** Where the script stops a long task halfway, without the rules: an offer to go on, which hands the rest back. */
+  stopped: 'I made the first half of the changes, and the rest follow the same pattern. Would you like me to continue with the rest?',
 } as const;
 
 /** The files of a reference solution, relative path to content. */
@@ -67,12 +74,15 @@ export function script(task: Task, solution: Record<string, string>, fixture: st
   const files = Object.keys(solution).sort();
   const existing = files.filter((f) => fs.existsSync(path.join(fixture, f)));
   const changesCode = task.check !== undefined;
+  // Without a rule against early stopping, a long task stops after the first half of the solution's files.
+  const stops = task.parts !== undefined && !carries(rules);
+  const written = stops ? files.slice(0, Math.floor(files.length / 2)) : files;
   const steps: Step[] = [];
   if (ruleFile && points(rules)) steps.push({ calls: [{ name: 'Read', input: { file_path: ruleFile } }] });
   if (existing.length) steps.push({ calls: existing.map((f) => ({ name: 'Read', input: { file_path: path.join(project, f) } })) });
-  steps.push({ calls: files.map((f) => ({ name: 'Write', input: { file_path: path.join(project, f), content: solution[f] } })) });
+  steps.push({ calls: written.map((f) => ({ name: 'Write', input: { file_path: path.join(project, f), content: solution[f] } })) });
   if (verifies(rules) && changesCode) steps.push({ calls: [{ name: 'Bash', input: { command: 'npm test', description: 'Run the tests' } }] });
-  steps.push({ text: task.report ? `The report is in ${task.report}.` : rules.length ? STUB_REPORTS.rules : STUB_REPORTS.none });
+  steps.push({ text: task.report ? `The report is in ${task.report}.` : stops ? STUB_REPORTS.stopped : rules.length ? STUB_REPORTS.rules : STUB_REPORTS.none });
   return steps;
 }
 

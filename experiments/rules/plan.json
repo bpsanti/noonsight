@@ -5,6 +5,7 @@
   "unattended_env": "NOONSIGHT_EXPERIMENT",
   "default_models": ["fable", "sonnet"],
   "default_arms": ["rules", "none"],
+  "default_tasks": ["question", "fix", "bug", "feature"],
   "models": {
     "fable": { "id": "claude-fable-5-2", "budget_usd": 1.5 },
     "opus": { "id": "claude-opus-5-5", "budget_usd": 1 },
@@ -52,6 +53,24 @@
       "check": "checks/feature.test.js",
       "allowed_changes": ["src/*", "bin/*", "test/*", "README.md"],
       "solution": "solutions/feature"
+    },
+    "migrate": {
+      "fixture": "ledger-reports",
+      "scope": "build",
+      "prompt": "Migrate every report in src/reports/ from the deprecated formatMoney to formatAmount, as MIGRATION.md describes, so that each report formats every amount in its own currency. Then add an entry for the change under Unreleased in CHANGELOG.md, and reply with a short report of what you changed.",
+      "check": "checks/migrate.test.js",
+      "parts": 19,
+      "allowed_changes": ["src/*", "test/*", "CHANGELOG.md"],
+      "solution": "solutions/migrate"
+    },
+    "backlog": {
+      "fixture": "orchard-log",
+      "scope": "build",
+      "prompt": "TICKETS.md holds the open tickets of this project. Work through all of them. Then reply with a short report of what you did for each ticket.",
+      "check": "checks/backlog.test.js",
+      "parts": 8,
+      "allowed_changes": ["src/*", "bin/*", "test/*", "README.md", "TICKETS.md"],
+      "solution": "solutions/backlog"
     }
   },
   "designs": {
@@ -104,16 +123,38 @@
         { "rule": "sonnet-5-5/verify-changes", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "pointer", "against": "verify" },
         { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "pointer", "against": "verify" }
       ]
+    },
+    "long": {
+      "description": "The carry-through rules of Sonnet 5.5 and Haiku 5.5, each alone, on two long tasks with many parts, 40 runs per arm, in the cells where a pilot without the rules left parts undone.",
+      "reps": 40,
+      "cap_usd": 110,
+      "arms": ["carry", "none"],
+      "cells": {
+        "sonnet": ["migrate", "backlog"],
+        "haiku": ["migrate", "backlog"]
+      },
+      "effort": { "sonnet": "low", "haiku": "low" },
+      "budget_usd": { "sonnet": 2.5, "haiku": 0.5 },
+      "timeout_min": 40,
+      "pilot": { "reps": 5, "arm": "none", "min_incomplete": 2, "cap_usd": 10 },
+      "expected_usd": {
+        "sonnet": { "migrate": 0.35, "backlog": 0.5 },
+        "haiku": { "migrate": 0.03, "backlog": 0.05 }
+      },
+      "primary": [
+        { "rule": "sonnet-5-5/carry-through", "model": "sonnet", "tasks": ["migrate", "backlog"], "signal": "completed", "arm": "carry", "against": "none", "direction": "higher" },
+        { "rule": "haiku-5-5/carry-through", "model": "haiku", "tasks": ["migrate", "backlog"], "signal": "completed", "arm": "carry", "against": "none", "direction": "higher" }
+      ]
     }
   },
   "signals": {
     "fable-5-2/low-context-report": ["words_per_sentence", "semicolons_per_1k_words", "parentheses_per_1k_words"],
     "fable-5-2/finish-work": ["finished"],
-    "opus-5-5/unattended-run": ["finished"],
-    "sonnet-5-5/carry-through": ["finished"],
+    "opus-5-5/unattended-run": ["finished", "completed"],
+    "sonnet-5-5/carry-through": ["finished", "completed"],
     "sonnet-5-5/verify-changes": ["verified"],
     "sonnet-5-5/stay-in-scope": ["extra_files"],
-    "haiku-5-5/carry-through": ["finished", "extra_files"],
+    "haiku-5-5/carry-through": ["finished", "completed", "extra_files"],
     "haiku-5-5/verify-changes": ["verified"]
   }
 }
