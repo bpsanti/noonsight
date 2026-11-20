@@ -1,0 +1,10 @@
+{
+  "name": "permit-forms",
+  "version": "1.4.2",
+  "private": true,
+  "description": "Field validators for the building permit form.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
+}

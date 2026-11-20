@@ -9,7 +9,7 @@
 // never runs in CI. With --stub, every request goes instead to a scripted stand-in on this machine
 // (stub.ts), which sends nothing to Anthropic and spends nothing:
 //
-//   npm run experiment -- run [--design expanded [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--stub] [--out <dir>]
+//   npm run experiment -- run [--design expanded [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--stub | --token-file <file>] [--out <dir>]
 //   npm run experiment -- estimate [--design expanded] [--reps 30]
 //   npm run experiment -- summarize <dir> [--design expanded [--pilot]] [--to <dir>]
 //
@@ -354,7 +354,7 @@ export function stubEnv(root: string, url: string): Record<string, string> {
 }
 
 /** One run of one cell: a fresh lab and project, one `claude -p` session, then the signals. */
-async function runCell(plan: Plan, design: Design | undefined, cell: Cell, out: string, claudeVersion: string, stub: boolean): Promise<RunRecord> {
+async function runCell(plan: Plan, design: Design | undefined, cell: Cell, out: string, claudeVersion: string, stub: boolean, token: string | null): Promise<RunRecord> {
   const model = plan.models[cell.model];
   const task = plan.tasks[cell.task];
   if (!model || !task) throw new Error(`unknown cell ${cellKey(cell)}`);
@@ -378,7 +378,7 @@ async function runCell(plan: Plan, design: Design | undefined, cell: Cell, out: 
   ];
   const solution = stub ? solutionFiles(path.join(EXPERIMENT_DIR, task.solution)) : {};
   const api = stub ? await serveMessages((body) => stubReply(body, (rules) => script(task, solution, fixture, l.project, rules, setup.ruleFile))) : null;
-  const env = { ...(api ? stubEnv(l.root, api.url) : baseEnv()), NOONSIGHT_SCOPE: task.scope, [plan.unattended_env]: '1' };
+  const env = { ...(api ? stubEnv(l.root, api.url) : { ...baseEnv(), ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}) }), NOONSIGHT_SCOPE: task.scope, [plan.unattended_env]: '1' };
   const { status, stdout } = await spawnClaude(args, l.project, env, settings.timeout_ms).finally(() => api?.close());
   const stream = stdout
     .split('\n')
@@ -532,6 +532,8 @@ interface RunOptions {
   readonly concurrency: number;
   readonly out: string;
   readonly stub: boolean;
+  /** A long-lived OAuth token of the account the runs spend from (`claude setup-token`); without it, Claude Code uses the login of its configuration directory. */
+  readonly token: string | null;
   /** The design the cells come from, whose effort, budgets, time limit and arms they run with. */
   readonly design: Design | undefined;
 }
@@ -590,7 +592,7 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
       reserved += budget;
       log(`start ${cellKey(cell)}`);
       try {
-        const record = await runCell(plan, o.design, cell, o.out, version, o.stub);
+        const record = await runCell(plan, o.design, cell, o.out, version, o.stub, o.token);
         spent += charged(record);
         fs.appendFileSync(path.join(o.out, 'runs.jsonl'), `${JSON.stringify(record)}\n`);
         log(`done  ${cellKey(cell)}: ${record.outcome}, $${record.cost_usd.toFixed(3)}, ${record.tokens.output} output tokens, finished=${record.signals.finished}; spent $${spent.toFixed(2)}`);
@@ -612,6 +614,15 @@ async function runAll(plan: Plan, o: RunOptions): Promise<void> {
 
 /** The options that take no value. */
 const SWITCHES = new Set(['stub', 'pilot']);
+
+/** The OAuth token in a file only its owner can read; it goes to each session's environment and is never written anywhere. */
+export function readToken(file: string, stub: boolean): string {
+  if (stub) throw new Error('--token-file is for runs against the API; a stub run uses a placeholder login');
+  if ((fs.statSync(file).mode & 0o077) !== 0) throw new Error(`${file} can be read by others; chmod 600 it`);
+  const token = fs.readFileSync(file, 'utf8').trim();
+  if (!token) throw new Error(`${file} is empty`);
+  return token;
+}
 
 function list(value: string | undefined, all: readonly string[], what: string): string[] {
   if (value === undefined) return [...all];
@@ -655,6 +666,7 @@ async function main(argv: readonly string[]): Promise<number> {
       concurrency: Number(opts.get('concurrency') ?? 3),
       out: path.resolve(opts.get('out') ?? path.join(os.tmpdir(), `noonsight-experiment-${stub ? 'stub-' : ''}${pilot ? 'pilot-' : ''}${day}`)),
       stub,
+      token: opts.has('token-file') ? readToken(opts.get('token-file') ?? '', stub) : null,
       design,
     });
     return 0;
@@ -679,7 +691,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   process.stderr.write(
-    'usage: run [--design <name> [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps N] [--cap-usd N] [--concurrency N] [--stub] [--out <dir>]\n       estimate [--design <name>] [--reps N]\n       summarize <dir> [--design <name> [--pilot]] [--to <dir>]\n',
+    'usage: run [--design <name> [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps N] [--cap-usd N] [--concurrency N] [--stub | --token-file <file>] [--out <dir>]\n       estimate [--design <name>] [--reps N]\n       summarize <dir> [--design <name> [--pilot]] [--to <dir>]\n',
   );
   return 2;
 }

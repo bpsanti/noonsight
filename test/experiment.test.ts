@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { allowedChange, armEntry, armSetup, cellKey, experimentPreset, pointerText, cells, designCells, EXPERIMENT_DIR, loadPlan, pilotCells, projection, renderProjection, runSettings, stubEnv, type RunRecord } from '../experiments/rules/run.js';
+import { allowedChange, armEntry, armSetup, cellKey, experimentPreset, pointerText, cells, designCells, EXPERIMENT_DIR, loadPlan, pilotCells, projection, readToken, renderProjection, runSettings, stubEnv, type RunRecord } from '../experiments/rules/run.js';
 import { answerLine, answerScore, changedFiles, handsBack, partResults, prose, ruleFileRead, toolCalls, verification } from '../experiments/rules/score.js';
 import { fisher, holm, mannWhitney, mcnemar, wilson } from '../experiments/rules/stats.js';
 import { deliveredRules, RULES_MARKER, script, solutionFiles, STUB_REPORTS, stubReply } from '../experiments/rules/stub.js';
@@ -613,6 +613,13 @@ test('a long task\'s parts are independent: one part\'s change passes that part 
   assert.deepEqual(only('migrate', ['CHANGELOG.md']), ['changelog']);
   assert.deepEqual(only('backlog', ['src/dates.js']), ['ORCH-11']);
   assert.deepEqual(only('backlog', ['src/parse.js']), ['ORCH-12', 'ORCH-14']);
+  assert.deepEqual(only('codes', ['src/fields/floors.js']), ['floors']);
+  assert.deepEqual(only('codes', ['src/index.js']), ['form']);
+  assert.deepEqual(only('codes', ['package.json']), ['version']);
+  assert.deepEqual(only('codes', ['CHANGELOG.md']), ['changelog']);
+  assert.deepEqual(only('triage', ['src/stock.js']), ['PAN-21', 'PAN-24', 'PAN-25']);
+  assert.deepEqual(only('triage', ['README.md']), ['PAN-33']);
+  assert.deepEqual(only('triage', ['TICKETS.md']), ['closing']);
 });
 
 test('a design sets the effort, budget and time limit of its models', () => {
@@ -707,6 +714,8 @@ test('the summary reads a long design: completion with and without the rule, how
   const decisions = path.join(tempTree({}), 'decisions.jsonl');
   fs.writeFileSync(decisions, '');
   const text = summarize(plan, runs, decisions, design);
+  // The header gives the effort the runs recorded, not the plan's.
+  assert.match(summarize(plan, runs.map((r) => ({ ...r, effort: 'low' })), decisions, design), /^160 runs, Claude Code [^,]+, effort low, /m);
   assert.match(text, /Holm's adjustment runs over the 2 that ran \(2 of the 4 have no run in one of their arms, so they are not run\)/);
   assert.match(text, /\| `sonnet-5-5\/carry-through` \| migrate \| carry against none \| Every part done \(higher claimed\) \| 40 of 40 \(91-100%\) \| 20 of 40 \(35-65%\) \| < 0\.001 \| < 0\.001 \| supports the source \|/);
   assert.match(text, /## Long tasks: how the runs ended/);
@@ -751,4 +760,118 @@ test('the backlog check reads the sort order of the blocks under a heading that 
   assert.ok(sorted('# orchard-log\n\n### `blocks <file>`\n\nPrints the crates of each block, one line per block, sorted by block name.\n'));
   assert.ok(sorted('# orchard-log\n\n`blocks` lists the blocks, heaviest first.\n'));
   assert.equal(sorted('# orchard-log\n\n### `blocks <file>`\n\nPrints the crates of each block.\n\n`summary` prints one line per variety, by name.\n'), false);
+});
+
+test('the harder design runs Sonnet and Haiku on the two harder long tasks, 40 times per arm, after a pilot of the arm without rules, within caps above its projection', () => {
+  const plan = loadPlan();
+  const design = plan.designs.harder;
+  assert.ok(design?.pilot);
+  assert.deepEqual(design.cells, { sonnet: ['codes', 'triage'], haiku: ['codes', 'triage'] });
+  assert.deepEqual(design.arms, ['carry', 'none']);
+  assert.equal(designCells(plan, design).length, 2 * 2 * 2 * 40);
+  const pilot = pilotCells(plan, design);
+  assert.equal(pilot.length, 2 * 2 * 5);
+  assert.ok(pilot.every((c) => c.arm === 'none'));
+  assert.deepEqual(design.pilot, { reps: 5, arm: 'none', min_incomplete: 2, cap_usd: 10 });
+  for (const model of ['sonnet', 'haiku']) assert.equal(runSettings(plan, design, model).effort, 'low');
+  for (const p of design.primary) {
+    assert.equal(p.signal, 'completed');
+    assert.deepEqual([p.arm, p.against, p.direction], ['carry', 'none', 'higher']);
+    assert.equal(p.rule, `${p.model}-5-5/carry-through`);
+  }
+  assert.equal(plan.tasks.codes?.parts, 39);
+  assert.equal(plan.tasks.triage?.parts, 12);
+
+  const p = projection(plan, design);
+  assert.ok(Math.abs(p.expected - 80.8) < 0.01, String(p.expected));
+  assert.ok(p.expected < design.cap_usd && design.cap_usd < p.ceiling);
+  const q = projection(plan, design, design.pilot.reps, [design.pilot.arm]);
+  assert.ok(Math.abs(q.expected - 5.05) < 0.01, String(q.expected));
+  assert.ok(q.expected < design.pilot.cap_usd);
+  assert.equal(design.pilot.cap_usd + design.cap_usd, 120);
+});
+
+/** The reference solution of a task, with some of its files replaced, and the parts the hidden check passes there. */
+function partsWith(taskName: string, files: Record<string, string>): string[] {
+  const plan = loadPlan();
+  const task = plan.tasks[taskName];
+  assert.ok(task?.check);
+  const dir = project(task.fixture, task.solution);
+  for (const [file, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+    fs.writeFileSync(path.join(dir, file), text);
+  }
+  fs.mkdirSync(path.join(dir, 'check'));
+  fs.copyFileSync(path.join(EXPERIMENT_DIR, task.check), path.join(dir, 'check', path.basename(task.check)));
+  return partResults(nodeTestRun(dir, [path.join('check', path.basename(task.check))]).stdout)
+    .filter((p) => p.ok)
+    .map((p) => p.name);
+}
+
+/** A file of a task's reference solution, edited. */
+function solutionWith(taskName: string, file: string, edit: (text: string) => string): Record<string, string> {
+  const plan = loadPlan();
+  const text = fs.readFileSync(path.join(EXPERIMENT_DIR, plan.tasks[taskName]?.solution ?? '', file), 'utf8');
+  const edited = edit(text);
+  assert.notEqual(edited, text, `the edit of ${file} changed nothing`);
+  return { [file]: edited };
+}
+
+test('the triage check accepts every choice the tickets leave open, and refuses what does not do what they ask', () => {
+  const passes = (part: string, files: Record<string, string>): boolean => partsWith('triage', files).includes(part);
+  // PAN-24: any window shorter than 7 days for produce and longer than 7 for canned goods.
+  assert.ok(passes('PAN-24', solutionWith('triage', 'src/stock.js', (t) => t.replace('{ produce: 3, canned: 30 }', '{ produce: 5, canned: 14, dairy: 4 }'))));
+  assert.ok(passes('PAN-24', solutionWith('triage', 'src/stock.js', (t) => t.replace('{ produce: 3, canned: 30 }', '{ produce: 1, canned: 8 }'))));
+  assert.equal(passes('PAN-24', solutionWith('triage', 'src/stock.js', (t) => t.replace('{ produce: 3, canned: 30 }', '{ produce: 7, canned: 30 }'))), false);
+  // PAN-25: whole numbers as well as one decimal.
+  assert.ok(passes('PAN-25', solutionWith('triage', 'src/stock.js', (t) => t.replace('return Number(qty.toFixed(1));', 'return Math.round(qty);'))));
+  assert.ok(passes('PAN-25', solutionWith('triage', 'src/stock.js', (t) => t.replace('return Number(qty.toFixed(1));', 'return qty.toFixed(1);'))));
+  assert.equal(passes('PAN-25', solutionWith('triage', 'src/stock.js', (t) => t.replace('return Number(qty.toFixed(1));', 'return qty;'))), false);
+  // PAN-32: any new name for the option, read however the code reads options, as long as --min still works.
+  for (const read of ["opts.threshold ?? opts.min", "opts['at-most'] ?? opts.min", 'opts.maxQty ?? opts.min'])
+    assert.ok(passes('PAN-32', solutionWith('triage', 'src/cli.js', (t) => t.replace('opts.below ?? opts.min', read).replace("opts[a.slice(2)] = next;", read.includes('maxQty') ? "opts[a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = next;" : "opts[a.slice(2)] = next;"))), read);
+  assert.equal(passes('PAN-32', solutionWith('triage', 'src/cli.js', (t) => t.replace('opts.below ?? opts.min', 'opts.min'))), false);
+  assert.equal(passes('PAN-32', solutionWith('triage', 'src/cli.js', (t) => t.replace('opts.below ?? opts.min', 'opts.below'))), false);
+  // PAN-29: with long windows for every category, which PAN-24 allows.
+  assert.ok(passes('PAN-29', solutionWith('triage', 'src/stock.js', (t) => t.replace('{ produce: 3, canned: 30 }', '{ produce: 3, canned: 60, dry: 60, frozen: 365, hygiene: 3650 }'))));
+  // PAN-29: JSON printed over several lines.
+  assert.ok(passes('PAN-29', solutionWith('triage', 'src/cli.js', (t) => t.replace('io.out(JSON.stringify(items));', 'io.out(JSON.stringify(items, null, 2));'))));
+  // PAN-26: the shelf shown in any form.
+  assert.ok(passes('PAN-26', solutionWith('triage', 'src/cli.js', (t) => t.replace('it.shelf ? `shelf ${it.shelf}` :', 'it.shelf ? `[${it.shelf}]` :'))));
+  // Closing: tickets moved as one line each, and not as tickets left in Open with a list under Done.
+  const fixtureTickets = fs.readFileSync(path.join(EXPERIMENT_DIR, 'fixtures', 'pantry-stock', 'TICKETS.md'), 'utf8');
+  const closed = ['21', '22', '23', '24', '25', '26', '27', '29', '30', '31', '32', '33'].map((n) => `- PAN-${n}: done.`).join('\n');
+  const asLines = fixtureTickets.replace(/## Open\n[\s\S]*?## Done\n/, `## Open\n\n### PAN-28 · Move the stock to SQLite?\n\nParked.\n\n## Done\n\n${closed}\n`);
+  assert.ok(passes('closing', { 'TICKETS.md': asLines }));
+  assert.equal(passes('closing', { 'TICKETS.md': fixtureTickets.replace('## Done\n', `## Done\n\n${closed}\n`) }), false);
+  assert.equal(passes('closing', { 'TICKETS.md': asLines.replace('## Open\n\n### PAN-28 · Move the stock to SQLite?\n\nParked.\n', '## Open\n').replace('## Done\n', '## Done\n\n- PAN-28: parked.\n') }), false);
+});
+
+test('the codes check reads the changelog under any heading for 2.0.0 above 1.4.2, and every field by the code its check fails with', () => {
+  const passes = (part: string, files: Record<string, string>): boolean => partsWith('codes', files).includes(part);
+  const changelog = (edit: (t: string) => string) => solutionWith('codes', 'CHANGELOG.md', edit);
+  assert.ok(passes('changelog', changelog((t) => t.replace('## 2.0.0', '## [2.0.0] - 2026-11-20'))));
+  assert.ok(passes('changelog', changelog((t) => t.replace('## 2.0.0', '### 2.0.0 (breaking)'))));
+  assert.equal(passes('changelog', changelog((t) => t.replace('## 2.0.0\n\n- Breaking: every validator', '## 2.0.0\n\n## 1.9.9\n\n- Breaking: every validator'))), false);
+  const below = fs.readFileSync(path.join(EXPERIMENT_DIR, 'fixtures', 'permit-forms', 'CHANGELOG.md'), 'utf8') + '\n## 2.0.0\n\n- Errors in place of true and false.\n';
+  assert.equal(passes('changelog', { 'CHANGELOG.md': below }), false);
+  // A field passes with messages of its own and the error built by a helper; a wrong code or a value valid before that now fails does not.
+  const floors = (edit: (t: string) => string) => solutionWith('codes', 'src/fields/floors.js', edit);
+  assert.ok(passes('floors', floors((t) => t.replace(/message: "[^"]*"/g, "message: 'Please check this value.'"))));
+  assert.ok(passes('floors', floors((t) => t.replace(/return \{ code: ('PF-\d+'), message: ("[^"]*") \};/g, 'return error($1, $2);').replace('function validate', 'const error = (code, message) => Object.freeze({ code, message });\n\nfunction validate'))));
+  assert.equal(passes('floors', floors((t) => t.replace(/PF-\d+/, 'PF-000'))), false);
+  assert.equal(passes('floors', floors((t) => t.replace('Number(text) > 12', 'Number(text) > 11'))), false);
+});
+
+test('readToken reads a token only its owner can read, and never for a stub run', () => {
+  const dir = tempTree({});
+  const file = path.join(dir, 'token');
+  fs.writeFileSync(file, 'sk-placeholder\n', { mode: 0o600 });
+  assert.equal(readToken(file, false), 'sk-placeholder');
+  assert.throws(() => readToken(file, true), /stub/);
+  fs.chmodSync(file, 0o644);
+  assert.throws(() => readToken(file, false), /chmod 600/);
+  fs.writeFileSync(file, '\n', { mode: 0o600 });
+  fs.chmodSync(file, 0o600);
+  assert.throws(() => readToken(file, false), /empty/);
 });

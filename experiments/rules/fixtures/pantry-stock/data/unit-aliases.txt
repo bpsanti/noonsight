@@ -1,0 +1,12 @@
+# Other ways the donation sheets write the units: alias=unit
+kilo=kg
+kilos=kg
+kgs=kg
+gr=g
+grams=g
+litre=l
+liter=l
+ltr=l
+pc=pcs
+piece=pcs
+pieces=pcs

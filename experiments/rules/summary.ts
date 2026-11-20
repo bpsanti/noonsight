@@ -103,6 +103,8 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
   const spent = runs.reduce((s, r) => s + r.cost_usd, 0);
   const days = [...new Set(runs.map((r) => r.started.slice(0, 10)))].sort();
   const stubbed = runs.filter((r) => r.api === 'stub').length;
+  // The effort the runs recorded, which a design can set apart from the plan's.
+  const efforts = [...new Set(runs.map((r) => r.effort))].sort().join(' and ') || plan.effort;
   lines.push('# Rule effect experiment: summary', '');
   if (stubbed)
     lines.push(
@@ -110,7 +112,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
       '',
     );
   lines.push(
-    `${runs.length} runs, Claude Code ${versions || 'n/a'}, effort ${plan.effort}, ${days.length ? (days.length > 1 ? `${days[0]} to ${days.at(-1)}` : days[0]) : 'n/a'}; $${spent.toFixed(2)} spent in total, as Claude Code reports cost.`,
+    `${runs.length} runs, Claude Code ${versions || 'n/a'}, effort ${efforts}, ${days.length ? (days.length > 1 ? `${days[0]} to ${days.at(-1)}` : days[0]) : 'n/a'}; $${spent.toFixed(2)} spent in total, as Claude Code reports cost.`,
     'A share comes with its Wilson 95% interval, and p is two-sided: Fisher\'s exact test for a share, the Mann-Whitney U test for a measure. With few runs per arm, a difference is a direction to look at again, not a measured effect.',
     '',
   );

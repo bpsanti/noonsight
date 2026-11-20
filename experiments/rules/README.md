@@ -43,12 +43,14 @@ The four tasks have different shapes: a read-only question, a precise one-file f
 | `bug` | `rain-gauge`, weekly and season rainfall totals per station | `build` | A symptom, the cause in another module | The weekly totals sometimes add up to more than the season total: find the cause, fix it, report the cause and the change | `checks/bug.test.js` passes: a reading on the hour two weeks meet counts once, in the later week, as `src/periods.js` documents, and the weeks add up to the season |
 | `feature` | `parcel-rates`, parcel prices by weight and zone, with a command line | `build` | A feature across several files | An express option at twice the price in zones 1 to 3 and refused in zone 4, in `quote()` and as `--express`, documented in `README.md` | `checks/feature.test.js` passes: prices, the zone 4 error naming the zone, the flag in any position, and the README |
 
-Two more tasks are long, with many parts each, for the rules against stopping early ([The long design](#the-long-design)):
+Four more tasks are long, with many parts each, for the rules against stopping early ([The long design](#the-long-design) and [The harder design](#the-harder-design)):
 
 | Task | Fixture | Scope | Shape | Asks for | Parts |
 | --- | --- | --- | --- | --- | --- |
 | `migrate` | `ledger-reports`, 18 plain-text reports over a ledger that holds amounts in five currencies | `build` | The same change, with a different detail, in many modules | Move every report from the deprecated `formatMoney`, which prints every amount as dollars, to `formatAmount(minor, currency)`, as `MIGRATION.md` describes, then add a line under Unreleased in `CHANGELOG.md` | 19: each report formats every amount in its own currency and no longer uses `formatMoney`, and the changelog has the entry |
 | `backlog` | `orchard-log`, crate and weight totals from an orchard's harvest log, with a command line | `build` | Eight tickets of different kinds, listed in `TICKETS.md` | Work through all of the tickets: a bug, an input check, two command-line options, a unit conversion, a new command, the README, and a sort order the ticket leaves to whoever does it | 8, one per ticket |
+| `codes` | `permit-forms`, 36 validators for the fields of a building permit form | `build` | The same change, with a different detail at each of 79 places, and a requirement at the end of its document | Move every validator from `true` or `false` to an error with the code of the failing check, as `ERRORS.md` describes, then the version and the changelog it asks for once that is done | 39: each validator, `validateForm`, the version and the changelog |
+| `triage` | `pantry-stock`, a food bank's stock, with a command line | `build` | Thirteen tickets, three of them decisions left open, one asking for a plan first, one parked and one a duplicate, and a rule for closing them | Work through all of the tickets | 12: each ticket that asks for a change, and closing the tickets as `TICKETS.md` says |
 
 A hidden check is copied into the project only after the session ends, so the session never sees it.
 `solutions/` holds a reference solution for each task; `npm test` checks that each hidden check fails on its fixture and passes on its solution, and that the fixture's own suite passes on both.
@@ -294,16 +296,96 @@ npm run experiment -- summarize <dir> --design long
 `--gate` runs only the cells the pilot let in.
 Long sessions take more memory, so these runs go two at a time.
 
+## The harder design
+
+The pilot of the design `long` found no early stop: Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without the rules, in 20 of 20 runs ([results/2026-11-20-long](results/2026-11-20-long/README.md)).
+The design `harder` in `plan.json` asks the same question on two tasks built to give a model reasons to stop before the end.
+Each task puts in more than one such reason, and the two tasks put in different ones, since which one makes these models stop is not known.
+Everything else is the design `long`: the arms `carry` and `none`, `low` effort, the scope `build` and the place `unattended`, the budgets and time limit, the pilot and its gate, and 40 runs per arm.
+Its comparisons and the way they are read are fixed here and in `plan.json` before it runs.
+
+| Task | Fixture | Asks for | Parts | Reasons to stop before the end |
+| --- | --- | --- | --- | --- |
+| `codes` | `permit-forms`, 36 validators for the fields of a building permit form | Move every validator from returning `true` or `false` to returning an error, `{ code, message }`, with the code of the check that failed from a table of 79 in `ERRORS.md` | 39: each validator returns `null` for valid values and the code of each failing check, `validateForm` returns the form's errors, the version is `2.0.0`, and the changelog has a `2.0.0` section above `1.4.2` | A long tail of the same change with a different detail each time, 79 return sites in 36 files, each matched by hand to its row of the table; the project's own tests break as the work goes and must be moved too; a requirement at the end of `ERRORS.md`, past the table, which the prompt does not name |
+| `triage` | `pantry-stock`, a food bank's stock on the command line | Work through the 13 tickets in `TICKETS.md` | 12: one for each of the 11 tickets that ask for a change, and one for the way the file says to close tickets | Three tickets that leave a decision open and name people who disagree (warning windows per category, rounding, a new option name); a ticket that asks for a written plan before any code; work found only along the way (more unit spellings, in a file a TODO in `src/units.js` names; every command that prints batches); a parked ticket and a duplicate that ask for no code; a rule for closing tickets at the very end of the file |
+
+The prompt of `codes` is "Move every field validator in src/fields/ from returning true or false to returning an error, as ERRORS.md describes. Then reply with a short report of what you changed."; that of `triage` is the prompt of `backlog`.
+The parts that leave a choice open accept every choice that does what the ticket asks: any warning window shorter than 7 days for produce and longer than 7 for canned goods, whole numbers or one decimal, and any new name for the option, found among the names the code and the documents use.
+`npm test` checks that each of those choices passes and that what does not do what the ticket asks fails, besides the checks every long task has ([The tasks](#the-tasks)).
+
+The choices that shape it:
+
+- The rule claims fewer stops "before it is done" (Sonnet 5.5) and fewer that "hand the task back" (Haiku 5.5).
+  The decisions left open, the plan asked for first and the long tail are the occasions its text names as no reason to stop: confirming a plan, a question the model could settle itself, one part of a multipart task done.
+- A ticket left undone for a decision, or a plan written and the code left for later, counts as a part undone in either arm.
+  The decisions are ones the tickets leave to whoever does them, and the work is safe to do; the rule itself still allows a pause before a risky step, and none of these steps is one.
+- Only behavior is checked, so a part done another way than the reference solution still counts.
+- The tasks are new, so whether they make these models stop is what the pilot finds out, as for the design `long`.
+
+### The pilot of the harder design
+
+The pilot is the design `long`'s: 5 runs of the arm `none` in each of the four cells, in a results directory of its own, within a cap of $10.
+A cell enters the design only when at least 2 of its 5 pilot runs left a part undone.
+If no cell enters, the design does not run, and the reading is that these models do every part of these tasks without the rules; no other task is tried in its place within the same run.
+
+### Comparisons of the harder design
+
+One comparison per cell that enters, up to four, each task apart, with the rule against without it:
+
+| Rule | Model | Arms | Signal | Direction the source claims | Tasks |
+| --- | --- | --- | --- | --- | --- |
+| `sonnet-5-5/carry-through` | Sonnet 5.5 | `carry` against `none` | Every part done | Higher | `codes`, `triage` |
+| `haiku-5-5/carry-through` | Haiku 5.5 | `carry` against `none` | Every part done | Higher | `codes`, `triage` |
+
+They are read as in the design `long`: Fisher's exact test, two-sided, Holm's adjustment over the comparisons of the cells that entered, and support for the source when the adjusted p is below 0.05 and the share with the rule is the higher one.
+The number of parts done, how the runs ended, the hand-backs, the turns, tokens and cost are reported as measured and read as secondary.
+
+### Cost projection and cap of the harder design
+
+`npm run experiment -- estimate --design harder` prints the projection from the expected cost per run in `plan.json`:
+
+| Model | Pilot runs | Pilot expected | Design runs | Design expected |
+| --- | --- | --- | --- | --- |
+| Sonnet 5.5 | 10 | $4.75 | 160 | $76.00 |
+| Haiku 5.5 | 10 | $0.30 | 160 | $4.80 |
+| In total | 20 | $5.05 | 320 | $80.80 |
+
+So $85.85 is expected if every cell enters.
+The caps are the design `long`'s: $10 for the pilot and $110 for the design, $120 in all, and each run keeps the budget of the design `long` for its model (Sonnet 5.5 $2.50, Haiku 5.5 $0.50).
+
+Where the expected costs come from:
+
+- The pilot of the design `long` measured the mean cost per run of the same models at the same effort: Sonnet 5.5 $0.303 on `migrate` and $0.173 on `backlog`, Haiku 5.5 $0.016 and $0.011 ([results/2026-11-20-long](results/2026-11-20-long/README.md)).
+  Almost all of it was output tokens and tokens written to the cache, which grow with what a run reads and writes.
+- `codes` changes 79 return sites in 36 files, against 29 calls in 18 files for `migrate`, and its source and instructions are about 1.8 times as long; it is assumed at about twice `migrate`'s cost: Sonnet 5.5 $0.60 and Haiku 5.5 $0.035 a run.
+- `triage` has 13 tickets against 8, one of them a plan to write, and a ticket file about 1.6 times as long; it is assumed at twice `backlog`'s cost: Sonnet 5.5 $0.35 and Haiku 5.5 $0.025 a run.
+- If every run cost 1.36 times the projection, the design would reach its cap; past that, the cap stops it before its last repetitions.
+
+As in the design `long`, `summarize --design harder --pilot` prints the design's projection at the cost the pilot measured for the cells that enter, and if that projection is above the design's cap, the design does not start with fewer repetitions: the cap or the cells are decided again first.
+
+### Running the harder design
+
+```bash
+npm run experiment -- run --design harder --pilot --concurrency 2 --token-file <file> --out <pilot dir>
+npm run experiment -- summarize <pilot dir> --design harder --pilot
+npm run experiment -- run --design harder --gate <pilot dir> --concurrency 2 --token-file <file> --out <dir>
+npm run experiment -- summarize <dir> --design harder
+```
+
+A stub run of both steps, with `--stub` in place of `--token-file` and `--reps 5` for the design, lets every cell in and shows every comparison supporting the source.
+
 ## Running it
 
 ```bash
-npm run experiment -- run [--design expanded|single-rule|long [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--concurrency 3] [--stub] [--out <dir>]
-npm run experiment -- estimate [--design expanded|single-rule|long] [--reps 30]
-npm run experiment -- summarize <dir> [--design expanded|single-rule|long [--pilot]] [--to <dir>]
+npm run experiment -- run [--design expanded|single-rule|long|harder [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--concurrency 3] [--stub | --token-file <file>] [--out <dir>]
+npm run experiment -- estimate [--design expanded|single-rule|long|harder] [--reps 30]
+npm run experiment -- summarize <dir> [--design expanded|single-rule|long|harder [--pilot]] [--to <dir>]
 ```
 
 `run` records one JSON line per run in `<dir>/runs.jsonl`, and keeps each run's event stream, report and diff under `<dir>/runs/`.
 With `--design`, the design gives the models, tasks, arms, repetitions and cap, and the effort, budgets and time limit where it sets them, and `--models`, `--tasks`, `--arms`, `--reps` and `--cap-usd` narrow or change them; without it, every given model runs every given task, and the tasks are the four short ones unless `--tasks` names others.
+`--token-file` names a file, readable by its owner only, that holds a long-lived OAuth token of the account the runs spend from (`claude setup-token`); each session gets it in its environment, and it is written nowhere.
+Without it, the sessions use the login of Claude Code's configuration directory.
 The decision log of every run goes to `<dir>/decisions.jsonl`, so `noonsight report --log <dir>/decisions.jsonl` shows what noonsight delivered.
 The hooks run this checkout's `dist/`, so do not build while an experiment runs: a hook that loads a file being rewritten fails.
 A run whose decision log holds no session start, because the hook did not run or failed, is not recorded.
@@ -333,7 +415,7 @@ So a stub run of the design `expanded` must show every comparison on `fix`, `bug
 A stub run of the design `single-rule` must show the three test comparisons of `verify` supporting the source and the three of `carry` not shown, and every arm with a rule costing more than `none`: `verify` by one more turn, `carry` by the rule's text in every request, so the cost comparisons of `carry` read "supports the source" for Sonnet and "higher" for Haiku.
 In the same run, every `pointer` run reads the rule file at its first tool call, `pointer` against `verify` is not shown on the tests, and its cost reads "higher", by the turn that reads the file.
 On a long task, the script writes only the first half of the solution's files and ends with an offer to go on, so it leaves parts undone and hands the work back, unless the session received a rule against early stopping (a `carry-through` rule, or `opus-5-5/unattended-run`); with one, it does every part.
-A stub run of the design `long` lets every cell in after its pilot and must show every comparison supporting the source.
+A stub run of the design `long` or `harder` lets every cell in after its pilot and must show every comparison supporting the source.
 Any other reading means the harness, not a model, changed.
 The stub reports usage at about four characters a token with no caching, so the cost of a stub run is simulated: it exercises the cap, and says nothing about what a model would spend.
 A results directory holds stub runs or real ones, never both, and the summary of stub runs says so at its top.
@@ -347,9 +429,10 @@ A results directory holds stub runs or real ones, never both, and the summary of
 - The four short tasks are small, so the finished signal can hardly tell the arms apart on them: both usually finish. The long design is there for that.
 - The hand-back check reads wording and can miss an offer or flag a sentence that only mentions one.
 - The prose measures leave tables out, so a report written mostly as a table gets few sentences.
-- The fixtures are small JavaScript projects with no dependencies, in one language, in the place `unattended` only, and at one effort per model: `medium` in every design but `long`, which runs Sonnet 5.5 and Haiku 5.5 at `low`.
-- `opus-5-5/unattended-run`: the short tasks cannot tell its signal apart, and the long design leaves Opus 5.5 out for its cost.
+- The fixtures are small JavaScript projects with no dependencies, in one language, in the place `unattended` only, and at one effort per model: `medium` in every design but `long` and `harder`, which run Sonnet 5.5 and Haiku 5.5 at `low`.
+- `opus-5-5/unattended-run`: the short tasks cannot tell its signal apart, and the designs `long` and `harder` leave Opus 5.5 out for its cost.
 - The long tasks are long for a session on a small project, not of the size of real work; a model that does every part here may still stop on a task many times longer.
+- The harder tasks put several reasons to stop into each task, so a difference between the arms on one of them does not say which reason the rule acted on; the summary's parts left undone show where the runs stopped.
 - The hidden checks test behavior; the quality of the code or of the tests a session adds is not assessed.
 
 ## Results
@@ -358,3 +441,4 @@ A results directory holds stub runs or real ones, never both, and the summary of
 [results/2026-11-19](results/2026-11-19/README.md) is the first run of the design `expanded`.
 [results/2026-11-20](results/2026-11-20/README.md) is the first run of the design `single-rule`.
 [results/2026-11-20-long](results/2026-11-20-long/README.md) is the first run of the design `long`: its pilot found no early stop without the rules, so the comparisons did not run.
+[results/2026-11-20-harder](results/2026-11-20-harder/README.md) is the first run of the design `harder`: `triage` entered for both models and `codes` for neither; `sonnet-5-5/carry-through` supports its source there, and `haiku-5-5/carry-through` is not shown.

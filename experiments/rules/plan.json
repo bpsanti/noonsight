@@ -71,6 +71,24 @@
       "parts": 8,
       "allowed_changes": ["src/*", "bin/*", "test/*", "README.md", "TICKETS.md"],
       "solution": "solutions/backlog"
+    },
+    "codes": {
+      "fixture": "permit-forms",
+      "scope": "build",
+      "prompt": "Move every field validator in src/fields/ from returning true or false to returning an error, as ERRORS.md describes. Then reply with a short report of what you changed.",
+      "check": "checks/codes.test.js",
+      "parts": 39,
+      "allowed_changes": ["src/*", "test/*", "CHANGELOG.md", "package.json"],
+      "solution": "solutions/codes"
+    },
+    "triage": {
+      "fixture": "pantry-stock",
+      "scope": "build",
+      "prompt": "TICKETS.md holds the open tickets of this project. Work through all of them. Then reply with a short report of what you did for each ticket.",
+      "check": "checks/triage.test.js",
+      "parts": 12,
+      "allowed_changes": ["src/*", "bin/*", "test/*", "docs/*", "README.md", "TICKETS.md"],
+      "solution": "solutions/triage"
     }
   },
   "designs": {
@@ -144,6 +162,28 @@
       "primary": [
         { "rule": "sonnet-5-5/carry-through", "model": "sonnet", "tasks": ["migrate", "backlog"], "signal": "completed", "arm": "carry", "against": "none", "direction": "higher" },
         { "rule": "haiku-5-5/carry-through", "model": "haiku", "tasks": ["migrate", "backlog"], "signal": "completed", "arm": "carry", "against": "none", "direction": "higher" }
+      ]
+    },
+    "harder": {
+      "description": "The carry-through rules of Sonnet 5.5 and Haiku 5.5, each alone, on two long tasks built to give a model reasons to stop before the end, 40 runs per arm, in the cells where a pilot without the rules left parts undone.",
+      "reps": 40,
+      "cap_usd": 110,
+      "arms": ["carry", "none"],
+      "cells": {
+        "sonnet": ["codes", "triage"],
+        "haiku": ["codes", "triage"]
+      },
+      "effort": { "sonnet": "low", "haiku": "low" },
+      "budget_usd": { "sonnet": 2.5, "haiku": 0.5 },
+      "timeout_min": 40,
+      "pilot": { "reps": 5, "arm": "none", "min_incomplete": 2, "cap_usd": 10 },
+      "expected_usd": {
+        "sonnet": { "codes": 0.6, "triage": 0.35 },
+        "haiku": { "codes": 0.035, "triage": 0.025 }
+      },
+      "primary": [
+        { "rule": "sonnet-5-5/carry-through", "model": "sonnet", "tasks": ["codes", "triage"], "signal": "completed", "arm": "carry", "against": "none", "direction": "higher" },
+        { "rule": "haiku-5-5/carry-through", "model": "haiku", "tasks": ["codes", "triage"], "signal": "completed", "arm": "carry", "against": "none", "direction": "higher" }
       ]
     }
   },

@@ -1,0 +1,13 @@
+{
+  "name": "pantry-stock",
+  "version": "0.6.0",
+  "private": true,
+  "description": "The stock of a food bank's pantry, from a plain-text stock file, on the command line.",
+  "license": "MIT",
+  "bin": {
+    "pantry": "bin/pantry.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

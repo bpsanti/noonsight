@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The rule effect experiment (`experiments/rules`) has two harder long tasks for the rules against stopping early, since Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without them.
+  `codes` moves 36 form validators from `true` and `false` to errors with the code of the failing check, from a table of 79, and ends its document with a version bump and a changelog section the prompt does not name; `triage` works through 13 tickets, three of them decisions left open between people who disagree, one asking for a plan before any code, two with work found only along the way, a parked one and a duplicate, and a rule for closing tickets at the end of the file.
+  Each part has its own test in the hidden check, and the parts that leave a choice open accept every choice that does what the ticket asks, which `npm test` checks.
+  The design `harder` (`--design harder`) tests `sonnet-5-5/carry-through` and `haiku-5-5/carry-through` on them as the design `long` does, with its pilot, gate, arms, effort and caps; `npm run experiment -- estimate --design harder` projects $85.85 if every cell enters, against caps of $10 for the pilot and $110 for the design.
+  `run --token-file <file>` gives every session the OAuth token in a file only its owner can read, so the runs spend from that account; the token is written nowhere.
+  The summary's header now gives the effort the runs recorded, where it gave the plan's default, which a design can override.
+  `experiments/rules/results/2026-11-20-harder/README.md` records its first run, 180 runs for $27.18: `triage` entered for both models and `codes` for neither, where both models scripted the repeated edits; `sonnet-5-5/carry-through` supports its source on `triage`, 32 of 40 runs doing every part against 9 of 40, by settling a decision the ticket leaves open instead of handing it back, at no measurable cost, and `haiku-5-5/carry-through` is not shown (6 of 40 against 2 of 40); the preset is unchanged.
+
 - A resume's delivery is no longer taken as received until the conversation answers.
   What `SessionStart` returns at a resume or a fork reaches the conversation with the process's next request only, like a `/model` switch's, so a session ended before that request loses it; the hook recorded it as delivered all the same.
   So in a session started on Sonnet, after `claude --continue --model fable`, the end of the session with no request, and `claude --continue --model haiku`, the second resume's note retired Fable's rules only, and Haiku read Sonnet's rules with nothing saying they no longer applied.
