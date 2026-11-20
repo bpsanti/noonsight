@@ -105,14 +105,16 @@ A real model may open the skill; whether it does on the right model, every time,
 
 > Write the text as factual statements rather than imperative system instructions.
 
+> Text framed as out-of-band system commands can trigger Claude's prompt-injection defenses, which causes Claude to surface the text to you instead of treating it as context.
+
 > For instructions that never change, prefer CLAUDE.md. It loads without running a script and is the standard place for static project conventions.
 
 **Our data: refines it.**
 The first excerpt is the use noonsight makes of `PostModelSwitch`.
 The second and third are the cause of F1: a switch's text that never reached a request was still taken as delivered, and a later note did not retire the rules the conversation still held.
 Before noonsight treated such a delivery as unconfirmed, 26 of 296 sessions broke the invariant; after, 3 of 300 ([D4](evidence.md#d4), [D1](evidence.md#d1)).
-The same holds at a resume (F3), which the documentation does not say.
-noonsight writes its envelope as facts, as the fourth excerpt asks, and [docs/usage.md](usage.md#choosing-where-a-rule-lives) follows the fifth for rules that are the same for every model.
+The same holds at a resume (F3): what `SessionStart` returns there also reaches the conversation with the process's next request only, so a resume ended before any request loses it.
+noonsight writes its envelope as facts, as the fourth and fifth excerpts ask, and [docs/usage.md](usage.md#choosing-where-a-rule-lives) follows the sixth for rules that are the same for every model.
 
 ### S7
 
