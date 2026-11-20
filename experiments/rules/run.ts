@@ -1,14 +1,15 @@
 // The live experiment that measures what the preset's rules change when noonsight delivers them. It
-// runs the same small task on each target model twice over: once with the model's preset rules,
-// delivered by noonsight's SessionStart hook, and once with the model declared "use": "none", so the
-// same hook runs and delivers nothing. It records the outcome signals each rule's source claims and
-// the tokens and cost Claude Code reports, one JSON line per run. README.md describes the design.
+// runs the same small task on each target model in several arms: with the model's preset rules,
+// delivered by noonsight's SessionStart hook; with the model declared "use": "none", so the same hook
+// runs and delivers nothing; and, for some designs, with one preset rule alone. It records the
+// outcome signals each rule's source claims and the tokens and cost Claude Code reports, one JSON
+// line per run. README.md describes the design.
 //
 // It sends prompts to the models from the login of the person running it, so it spends usage. It
 // never runs in CI. With --stub, every request goes instead to a scripted stand-in on this machine
 // (stub.ts), which sends nothing to Anthropic and spends nothing:
 //
-//   npm run experiment -- run [--design expanded] [--models fable,sonnet] [--tasks question,fix] [--reps 3] [--cap-usd 10] [--stub] [--out <dir>]
+//   npm run experiment -- run [--design expanded] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--stub] [--out <dir>]
 //   npm run experiment -- estimate [--design expanded] [--reps 30]
 //   npm run experiment -- summarize <dir> [--design expanded] [--to <dir>]
 //
@@ -21,10 +22,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_PRESET, readPreset, type Preset } from '../../src/config/load.js';
 import { PACKAGE_ROOT } from '../../src/config/paths.js';
 import { baseEnv, lab, preconditions } from '../../test/live/login.js';
 import { serveMessages } from '../delivery/stub.js';
-import { answerLine, answerScore, changedFiles, handsBack, prose, toolCalls, verification, type Prose } from './score.js';
+import { answerLine, answerScore, changedFiles, handsBack, prose, ruleFileRead, toolCalls, verification, type Prose, type RuleFileRead } from './score.js';
 import { script, solutionFiles, stubReply } from './stub.js';
 import { summarize } from './summary.js';
 
@@ -65,9 +67,13 @@ export interface Primary {
   readonly rule: string;
   readonly model: string;
   readonly tasks: readonly string[];
-  readonly signal: 'verified' | 'words_per_sentence' | 'semicolons_per_1k_words';
-  /** The direction the rule's source claims, with the rule against without it. */
-  readonly direction: 'higher' | 'lower';
+  readonly signal: 'verified' | 'words_per_sentence' | 'semicolons_per_1k_words' | 'cost_usd';
+  /** The arm with the rule; `rules` unless named. */
+  readonly arm?: string;
+  /** The arm it is compared with; `none` unless named. */
+  readonly against?: string;
+  /** The direction the rule's source claims, with the rule against without it; absent when the source claims none, so either direction is read as found. */
+  readonly direction?: 'higher' | 'lower';
 }
 
 export interface Plan {
@@ -78,12 +84,22 @@ export interface Plan {
   readonly models: Readonly<Record<string, { readonly id: string; readonly budget_usd: number }>>;
   /** The models a run covers unless --models names others. */
   readonly default_models: readonly string[];
-  readonly arms: Readonly<Record<string, Record<string, unknown>>>;
+  /** The arms a run covers unless --arms names others. */
+  readonly default_arms: readonly string[];
+  /** Arm to the noonsight entry each model gets in it; `only` makes it the preset with that one rule (see armEntry). */
+  readonly arms: Readonly<Record<string, Arm>>;
   readonly tasks: Readonly<Record<string, Task>>;
   readonly designs: Readonly<Record<string, Design>>;
   /** Rule id to the signals that stand for the effect its source claims. */
   readonly signals: Readonly<Record<string, readonly string[]>>;
 }
+
+/**
+ * An arm: a noonsight model entry, such as `{ "use": "preset" }`, or the preset reduced to one rule
+ * with `only`, the rule's name without its model prefix, delivered inline or, with `pointer`, as a
+ * short rule that says to read a file holding its text (see armSetup).
+ */
+export type Arm = Readonly<Record<string, unknown>> & { readonly only?: string; readonly pointer?: boolean };
 
 export interface Cell {
   readonly task: string;
@@ -132,10 +148,74 @@ export interface Signals {
   readonly check_passed?: boolean;
   readonly suite_passed?: boolean;
   readonly report: Prose;
+  /** Pointer arm: whether and when the session read the file holding the rule's text. */
+  readonly pointer?: RuleFileRead;
 }
 
 export function loadPlan(file = path.join(EXPERIMENT_DIR, 'plan.json')): Plan {
   return JSON.parse(fs.readFileSync(file, 'utf8')) as Plan;
+}
+
+/** The preset the experiment delivers: the package's own, never one the environment points to. */
+export function experimentPreset(): Preset {
+  return readPreset(DEFAULT_PRESET, { presetsDir: path.join(PACKAGE_ROOT, 'presets') });
+}
+
+/** What a model gets in an arm: its noonsight entry, and the rule files the entry names, beside the configuration. */
+export interface ArmSetup {
+  readonly entry: Record<string, unknown>;
+  /** File name, in the configuration's directory, to its text. */
+  readonly files: Readonly<Record<string, string>>;
+  /** For a pointer arm, the file that holds the rule's text, which the session is told to read. */
+  readonly ruleFile: string | null;
+}
+
+/** The id of the rule a pointer arm delivers in place of the preset rule it keeps. */
+export function pointerRuleId(only: string): string {
+  return `experiment/${only}-pointer`;
+}
+
+/** The short rule a pointer arm delivers: where the rule's text is, and to read it. */
+export function pointerText(ruleFile: string): string {
+  return `A working rule for code changes is in the file ${ruleFile}. Read that file before you change any code, and follow it.`;
+}
+
+/**
+ * What a model gets in an arm. An arm with `only` is the preset with every other rule that ships on
+ * for the model in `disable`, so it delivers that one rule wherever the preset would, and nothing
+ * else; a model whose preset has no such rule cannot run in it. An arm that also has `pointer`
+ * delivers, in that rule's place, a short rule of the user's that names a file holding the rule's
+ * text and says to read it: noonsight's `replaces` keeps the rule's scopes, places and triggers, so
+ * only the delivered text differs from the arm of the rule alone. `dir` is the configuration's
+ * directory, where the rule's text is written.
+ */
+export function armSetup(plan: Plan, arm: string, modelId: string, dir: string, preset: Preset = experimentPreset()): ArmSetup {
+  const entry = plan.arms[arm];
+  if (!entry) throw new Error(`unknown arm "${arm}"`);
+  const { only, pointer, ...rest } = entry;
+  if (only === undefined) {
+    if (pointer) throw new Error(`the arm "${arm}" is a pointer arm, so it needs "only"`);
+    return { entry: rest, files: {}, ruleFile: null };
+  }
+  const rules = preset.models.get(modelId) ?? [];
+  const kept = rules.find((r) => r.id.slice(r.id.indexOf('/') + 1) === only);
+  if (!kept) throw new Error(`the arm "${arm}" keeps the rule "${only}", which the preset does not have for ${modelId}`);
+  if (!kept.enabled) throw new Error(`the arm "${arm}" keeps ${kept.id}, which ships off`);
+  const disable = rules.filter((r) => r.enabled && r !== kept).map((r) => r.id);
+  const reduced = { ...rest, ...(disable.length ? { disable } : {}) };
+  if (!pointer) return { entry: reduced, files: {}, ruleFile: null };
+  const ruleFile = path.join(dir, `${only}.md`);
+  const short = `${only}-pointer.md`;
+  return {
+    entry: { ...reduced, add: [{ id: pointerRuleId(only), file: short, replaces: kept.id }] },
+    files: { [short]: `${pointerText(ruleFile)}\n`, [`${only}.md`]: `${kept.text.trim()}\n` },
+    ruleFile,
+  };
+}
+
+/** The noonsight entry a model gets in an arm, which does not depend on where its files go (see armSetup). */
+export function armEntry(plan: Plan, arm: string, modelId: string, preset: Preset = experimentPreset()): Record<string, unknown> {
+  return armSetup(plan, arm, modelId, '.', preset).entry;
 }
 
 /** Every cell, rep by rep, so that a run cut short by the cap still leaves balanced arms. */
@@ -218,9 +298,12 @@ export function stubEnv(root: string, url: string): Record<string, string> {
 async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: string, stub: boolean): Promise<RunRecord> {
   const model = plan.models[cell.model];
   const task = plan.tasks[cell.task];
-  const arm = plan.arms[cell.arm];
-  if (!model || !task || !arm) throw new Error(`unknown cell ${cellKey(cell)}`);
-  const l = lab(`exp-${cellKey(cell)}`, { version: 1, models: { [model.id]: arm }, session: { unattended_when_env: [plan.unattended_env] } }, {});
+  if (!model || !task) throw new Error(`unknown cell ${cellKey(cell)}`);
+  const l = lab(`exp-${cellKey(cell)}`, { version: 1, models: { [model.id]: armEntry(plan, cell.arm, model.id) }, session: { unattended_when_env: [plan.unattended_env] } }, {});
+  // The rule files sit beside the lab's configuration, where noonsight reads them; a pointer arm's
+  // short rule names the file that holds the rule's text by its absolute path.
+  const setup = armSetup(plan, cell.arm, model.id, path.join(l.root, 'rules'));
+  for (const [file, text] of Object.entries(setup.files)) fs.writeFileSync(path.join(l.root, 'rules', file), text);
   const fixture = path.join(EXPERIMENT_DIR, 'fixtures', task.fixture);
   fs.cpSync(fixture, l.project, { recursive: true });
 
@@ -234,7 +317,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
     '--tools', TOOLS, '--allowedTools', ALLOWED,
   ];
   const solution = stub ? solutionFiles(path.join(EXPERIMENT_DIR, task.solution)) : {};
-  const api = stub ? await serveMessages((body) => stubReply(body, (rules) => script(task, solution, fixture, l.project, rules))) : null;
+  const api = stub ? await serveMessages((body) => stubReply(body, (rules) => script(task, solution, fixture, l.project, rules, setup.ruleFile))) : null;
   const env = { ...(api ? stubEnv(l.root, api.url) : baseEnv()), NOONSIGHT_SCOPE: task.scope, [plan.unattended_env]: '1' };
   const { status, stdout } = await spawnClaude(args, l.project, env).finally(() => api?.close());
   const stream = stdout
@@ -315,6 +398,7 @@ async function runCell(plan: Plan, cell: Cell, out: string, claudeVersion: strin
       deliverable,
       handed_back: handedBack,
       ...verification(calls, l.project, task.report ? [task.report] : []),
+      ...(setup.ruleFile ? { pointer: ruleFileRead(calls, setup.ruleFile, l.project, task.report ? [task.report] : []) } : {}),
       extra_files: changed.filter((f) => !allowedChange(f, task.allowed_changes)),
       ...(task.expected ? { answer: { ...answerScore(named, task.expected), line: named !== null } } : {}),
       ...check,
@@ -388,6 +472,9 @@ interface RunOptions {
  * The first run that cannot fit ends the queue, so a stopped experiment leaves whole repetitions.
  */
 async function runAll(plan: Plan, o: RunOptions): Promise<void> {
+  // Every arm resolves for every model it runs before anything is spent.
+  const preset = experimentPreset();
+  for (const c of o.cells) armEntry(plan, c.arm, plan.models[c.model]?.id ?? c.model, preset);
   if (!o.stub) preconditions();
   fs.mkdirSync(o.out, { recursive: true });
   const version = spawnSync('claude', ['--version'], { encoding: 'utf8', env: baseEnv() }).stdout.trim().split(' ')[0] ?? 'unknown';
@@ -482,7 +569,7 @@ async function main(argv: readonly string[]): Promise<number> {
     // A design fixes its matrix; --models, --tasks and --arms narrow it.
     const models = opts.has('models') ? list(opts.get('models'), Object.keys(plan.models), 'model') : design ? Object.keys(design.cells) : [...plan.default_models];
     const tasks = list(opts.get('tasks'), Object.keys(plan.tasks), 'task');
-    const arms = list(opts.get('arms'), design ? design.arms : Object.keys(plan.arms), 'arm');
+    const arms = opts.has('arms') ? list(opts.get('arms'), design ? design.arms : Object.keys(plan.arms), 'arm') : design ? [...design.arms] : [...plan.default_arms];
     await runAll(plan, {
       cells: design ? designCells(plan, design, reps).filter((c) => models.includes(c.model) && tasks.includes(c.task) && arms.includes(c.arm)) : cells(plan, models, tasks, arms, reps),
       cap: Number(opts.get('cap-usd') ?? design?.cap_usd ?? plan.cap_usd),
@@ -526,7 +613,8 @@ export function renderProjection(plan: Plan, design: Design, reps = design.reps)
     '',
     '| Model | Task | Runs | Expected per run | Expected | Ceiling (every run at its budget) |',
     '| --- | --- | --- | --- | --- | --- |',
-    ...p.rows.map((r) => `| ${r.model} | ${r.task} | ${r.runs} | ${usd(r.per_run, 3)} | ${usd(r.expected)} | ${usd(r.ceiling)} |`),
+    // Below a cent, three decimals would round Haiku's costs to a single digit.
+    ...p.rows.map((r) => `| ${r.model} | ${r.task} | ${r.runs} | ${usd(r.per_run, r.per_run < 0.01 ? 4 : 3)} | ${usd(r.expected)} | ${usd(r.ceiling)} |`),
   ];
   const byModel = Object.keys(design.cells).map((m) => {
     const rows = p.rows.filter((r) => r.model === m);
