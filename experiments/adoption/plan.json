@@ -1,0 +1,20 @@
+{
+  "about": "The adoption evaluation's fixed design (README.md). Change it only before a run, never to fit one.",
+  "models": {
+    "fable": "claude-fable-5-2",
+    "opus": "claude-opus-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "haiku": "claude-haiku-5-5"
+  },
+  "conditions": ["before", "after"],
+  "effort": "medium",
+  "tools": "Read,Grep,Glob",
+  "budget_usd": { "fable": 4, "opus": 2.5, "sonnet": 1.2, "haiku": 0.4 },
+  "timeout_ms": 900000,
+  "exclude": ["experiments/adoption"],
+  "reps": { "min": 3, "max": 5 },
+  "cap_usd": 20,
+  "concurrency": 2,
+  "judge": { "model": "claude-opus-5-5", "effort": "medium", "budget_usd": 0.6, "timeout_ms": 300000 },
+  "pass": { "grounded_after": 0.8, "grounded_after_per_model": 0.6 }
+}

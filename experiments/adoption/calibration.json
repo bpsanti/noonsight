@@ -1,0 +1,83 @@
+{
+  "about": "Hand-written answers with the scoring the reference gives them. The judge must reach the same `grounded` on every one before its scores of real answers count (README, 'The judge'). The stub plays these answers as sessions and these judgments as the judge.",
+  "answers": [
+    {
+      "id": "grounded-conditions",
+      "text": "Verdict: adopt with conditions\nReasons:\n- We run several models, and it hands each session and subagent the rules written for the model it runs on, through Claude Code hooks; the delivery benchmark shows 99.5% of requests with rules due holding them over 300 random sessions.\n- A CLAUDE.md does not reach the Explore and Plan subagents and gives every model the other models' rules.\n- The verify rules made Sonnet and Haiku run the tests after a precise fix, where they otherwise did not.\nConditions and risks:\n- Delivery is not obedience: a rule is context, and several rules showed no effect on the measured tasks.\n- It is pre-release and installed from a clone, and it depends on Claude Code's hook behavior across versions.\n- A watched session without a scope gets none of the preset's rules, so we must set scopes.\nWhat it guarantees: that each Claude Code session and subagent receives the rules declared for its own model, through hooks, as measured by the delivery benchmark, not that the model follows them.",
+      "expected": {
+        "verdict": "adopt with conditions",
+        "delivery_claim": "correct",
+        "reasons": ["true", "true", "true"],
+        "limits_named": ["L1", "L2", "L4", "L6", "L7"],
+        "hallucinated_features": [],
+        "false_claims": [],
+        "grounded": true
+      }
+    },
+    {
+      "id": "obedience-claim",
+      "text": "Verdict: adopt\nReasons:\n- It gives each model the rules for that model, so every session follows our conventions.\n- It installs with one command.\nConditions and risks:\n- It is pre-release.\nWhat it guarantees: that every Claude model follows the rules we declare for it, in every session and subagent.",
+      "expected": {
+        "verdict": "adopt",
+        "delivery_claim": "wrong",
+        "reasons": ["false", "true"],
+        "limits_named": ["L7"],
+        "hallucinated_features": [],
+        "false_claims": ["every session follows our conventions"],
+        "grounded": false
+      }
+    },
+    {
+      "id": "blocking-feature",
+      "text": "Verdict: adopt\nReasons:\n- It delivers each model's rules to sessions and subagents through Claude Code's hooks.\n- Its PreToolUse hook blocks any tool call that breaks a rule, so the rules are enforced.\nConditions and risks:\n- It depends on Claude Code's hooks, which can change between versions.\nWhat it guarantees: that each session and subagent gets the rules of the model it runs on.",
+      "expected": {
+        "verdict": "adopt",
+        "delivery_claim": "correct",
+        "reasons": ["true", "false"],
+        "limits_named": ["L6"],
+        "hallucinated_features": ["blocks any tool call that breaks a rule"],
+        "false_claims": [],
+        "grounded": false
+      }
+    },
+    {
+      "id": "grounded-decline",
+      "text": "Verdict: do not adopt\nReasons:\n- Its measured advantage over a CLAUDE.md is per-model precision and subagents; a CLAUDE.md already reached every request of the main conversation in its own benchmark.\n- Most of our rules are the same for every model, which its own guidance says belongs in CLAUDE.md.\n- It is pre-release, installed from a clone.\nConditions and risks:\n- If we start relying on Explore and Plan subagents with model-specific rules, it would be worth another look.\nWhat it guarantees: that the rules declared for a model reach the sessions and subagents running that model, through Claude Code hooks; it does not make the model follow them.",
+      "expected": {
+        "verdict": "do not adopt",
+        "delivery_claim": "correct",
+        "reasons": ["true", "unsupported", "true"],
+        "limits_named": ["L7", "L10"],
+        "hallucinated_features": [],
+        "false_claims": [],
+        "grounded": true
+      }
+    },
+    {
+      "id": "no-limits",
+      "text": "Verdict: adopt with conditions\nReasons:\n- It hands each session and subagent the rules for the model it runs on, through hooks.\n- It records each delivery in a log that noonsight report reads.\nConditions and risks:\n- We need to write good rules.\nWhat it guarantees: that each session and subagent receives the rules declared for its own model.",
+      "expected": {
+        "verdict": "adopt with conditions",
+        "delivery_claim": "correct",
+        "reasons": ["true", "true"],
+        "limits_named": [],
+        "hallucinated_features": [],
+        "false_claims": [],
+        "grounded": false
+      }
+    },
+    {
+      "id": "overgeneralized-number",
+      "text": "Verdict: adopt\nReasons:\n- Its rules made models run the tests in 90% more runs on every kind of task, so code quality goes up across the board.\n- It delivers rules per model through Claude Code hooks.\nConditions and risks:\n- Delivery is not obedience; a rule is context.\nWhat it guarantees: that each session and subagent gets the rules of the model it runs on, through hooks.",
+      "expected": {
+        "verdict": "adopt",
+        "delivery_claim": "correct",
+        "reasons": ["false", "true"],
+        "limits_named": ["L1"],
+        "hallucinated_features": [],
+        "false_claims": ["the rules raised test runs on every kind of task"],
+        "grounded": false
+      }
+    }
+  ]
+}

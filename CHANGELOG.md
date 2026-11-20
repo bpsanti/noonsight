@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `experiments/adoption` asks fresh Claude Code sessions, each given only a clean copy of the repository at a commit and a team's neutral question, whether to adopt noonsight, and has a judge score each answer against a fixed reference of what the code and the committed results support: the verdict, whether its reasons are true, whether it states the delivery claim correctly, whether it names a real limit and whether it invents a feature.
+  It compares the README before its rewrite (`f061f03`) with after (`d956687`) on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5; its README pre-registers the prompt, the scoring, the judge and its calibration, the pass bar, and the rule that sets the number of sessions from a pilot's measured costs within a $20 cap.
+  `npm run adoption -- run --stub` runs the whole pipeline against a local stand-in for the API, with no login and no tokens, and `experiments/adoption/results/2026-11-20-stub/` records that check; `npm test` checks the scoring, the parsing, the allocation and the summary (`test/adoption.test.ts`).
+
 - The README is rewritten around what noonsight guarantees, the delivery of each model's rules, with the limits of that claim, the path to a first delivered rule, and what the rules were measured to change; the long guidance moves to `docs/usage.md`: where a rule should live, how to write one, what it costs, the machine's and a repository's setup, and when not to use noonsight.
   Every measured number in the README, `docs/usage.md` and `docs/sources.md` links to an entry of `docs/evidence.md`, which names its raw result file, how the number is computed from it, its date and its Claude Code version; `npm test` computes each one again from the file and fails on a number no entry gives (`test/evidence.test.ts`).
   `docs/sources.md` quotes Anthropic's own documents for every claim about Claude Code or the models, with the retrieval date and what the measurements confirm, refine or contradict; `NOONSIGHT_LIVE_SOURCES=1 npm run test:live` checks each excerpt against the live page (`test/live/sources.test.ts`).
