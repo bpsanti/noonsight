@@ -1,13 +1,14 @@
 // The summary of an experiment: what the decision log says was delivered, the signals and the cost
 // of each task, model and arm, and for each rule the signals its source claims, with the rule and
-// without. Small samples only give a direction, so the summary gives counts and ranges and claims
-// no significance.
+// without. Counts come with their intervals and each comparison with a two-sided p; a design's
+// pre-registered comparisons are read with Holm's correction, and its cost against its projection.
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildReport, renderReport } from '../../src/commands/report.js';
-import type { Plan, RunRecord } from './run.js';
+import type { Design, Plan, Primary, RunRecord } from './run.js';
+import { fisher, formatP, holm, mannWhitney, median, wilson } from './stats.js';
 
 type Row = readonly string[];
 
@@ -33,27 +34,51 @@ function share(runs: readonly RunRecord[], test: (r: RunRecord) => boolean | und
   return known.length ? `${known.filter((r) => test(r)).length} of ${known.length}` : 'n/a';
 }
 
+/** Successes and tries among the runs where the signal applies. */
+function count(runs: readonly RunRecord[], test: (r: RunRecord) => boolean | undefined): { k: number; n: number } {
+  const known = runs.filter((r) => test(r) !== undefined);
+  return { k: known.filter((r) => test(r)).length, n: known.length };
+}
+
+/** A share with its Wilson 95 percent interval, such as "28 of 30 (79-98%)". */
+function shareWithInterval(c: { k: number; n: number }): string {
+  if (!c.n) return 'n/a';
+  const [lo, hi] = wilson(c.k, c.n);
+  return `${c.k} of ${c.n} (${Math.round(lo * 100)}-${Math.round(hi * 100)}%)`;
+}
+
+const BINARY: Readonly<Record<string, (r: RunRecord) => boolean | undefined>> = {
+  finished: (r) => r.signals.finished,
+  verified: (r) => (r.signals.edited ? r.signals.verified : undefined),
+  extra_files: (r) => r.signals.extra_files.length > 0,
+};
+
+const PROSE = new Set(['words_per_sentence', 'semicolons_per_1k_words', 'parentheses_per_1k_words']);
+
+/** The two-sided p of one signal between two groups of runs: Fisher's exact test for a share, Mann-Whitney U for a measure. */
+function compare(name: string, on: readonly RunRecord[], off: readonly RunRecord[]): number {
+  const test = BINARY[name];
+  if (test) {
+    const a = count(on, test);
+    const b = count(off, test);
+    return a.n && b.n ? fisher(a.k, a.n, b.k, b.n) : NaN;
+  }
+  if (PROSE.has(name)) return mannWhitney(prose(on, name), prose(off, name)).p;
+  return NaN;
+}
+
+function prose(runs: readonly RunRecord[], name: string): number[] {
+  return runs.map((r) => r.signals.report[name as 'words_per_sentence']);
+}
+
 const inputTokens = (r: RunRecord): number => r.tokens.input + r.tokens.cache_creation + r.tokens.cache_read;
 
 /** The value of one signal over a group of runs, as the per-rule table shows it. */
 function signal(name: string, runs: readonly RunRecord[]): string {
-  switch (name) {
-    case 'finished':
-      return share(runs, (r) => r.signals.finished);
-    case 'verified':
-      return share(runs, (r) => (r.signals.edited ? r.signals.verified : undefined));
-    case 'extra_files':
-      return share(runs, (r) => r.signals.extra_files.length > 0);
-    case 'words_per_sentence':
-    case 'semicolons_per_1k_words':
-    case 'parentheses_per_1k_words':
-      return spread(
-        runs.map((r) => r.signals.report[name]),
-        1,
-      );
-    default:
-      return 'n/a';
-  }
+  const test = BINARY[name];
+  if (test) return shareWithInterval(count(runs, test));
+  if (PROSE.has(name)) return spread(prose(runs, name), 1);
+  return 'n/a';
 }
 
 const SIGNAL_NAMES: Readonly<Record<string, string>> = {
@@ -65,14 +90,21 @@ const SIGNAL_NAMES: Readonly<Record<string, string>> = {
   parentheses_per_1k_words: 'Parentheses per 1,000 words in the report',
 };
 
-export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: string): string {
+export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: string, design?: Design): string {
   const lines: string[] = [];
   const versions = [...new Set(runs.map((r) => r.claude_code))].join(', ');
   const spent = runs.reduce((s, r) => s + r.cost_usd, 0);
+  const days = [...new Set(runs.map((r) => r.started.slice(0, 10)))].sort();
+  const stubbed = runs.filter((r) => r.api === 'stub').length;
   lines.push('# Rule effect experiment: summary', '');
+  if (stubbed)
+    lines.push(
+      `${stubbed === runs.length ? 'Every run' : `${stubbed} of the ${runs.length} runs`} answered by the scripted stub (\`stub.ts\`), not by a model: these numbers, the cost included, check the harness and say nothing about any model or rule.`,
+      '',
+    );
   lines.push(
-    `${runs.length} runs, Claude Code ${versions || 'n/a'}, effort ${plan.effort}, ${runs.length ? runs[0]?.started.slice(0, 10) : 'n/a'}; $${spent.toFixed(2)} spent in total, as Claude Code reports cost.`,
-    'With a few runs per arm, every difference below is a direction to look at again, not a measured effect.',
+    `${runs.length} runs, Claude Code ${versions || 'n/a'}, effort ${plan.effort}, ${days.length ? (days.length > 1 ? `${days[0]} to ${days.at(-1)}` : days[0]) : 'n/a'}; $${spent.toFixed(2)} spent in total, as Claude Code reports cost.`,
+    'A share comes with its Wilson 95% interval, and p is two-sided: Fisher\'s exact test for a share, the Mann-Whitney U test for a measure. With few runs per arm, a difference is a direction to look at again, not a measured effect.',
     '',
   );
 
@@ -115,7 +147,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
       share(g, (r) => r.signals.handed_back),
       share(g, (r) => (r.signals.edited ? r.signals.verified : undefined)),
       share(g, (r) => r.signals.extra_files.length > 0),
-      task === 'question' ? `${spread(g.map((r) => r.signals.answer?.found ?? 0), 1)} of ${g[0]?.signals.answer?.expected ?? '?'}, ${spread(g.map((r) => r.signals.answer?.wrong ?? 0), 1)} wrong` : share(g, (r) => r.signals.check_passed),
+      g[0]?.signals.answer ? `${spread(g.map((r) => r.signals.answer?.found ?? 0), 1)} of ${g[0].signals.answer.expected}, ${spread(g.map((r) => r.signals.answer?.wrong ?? 0), 1)} wrong` : share(g, (r) => r.signals.check_passed),
       spread(g.map((r) => r.signals.report.words_per_sentence), 1),
       spread(g.map((r) => r.signals.report.semicolons_per_1k_words), 1),
       spread(g.map((r) => r.tokens.output)),
@@ -149,17 +181,111 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
       const on = withRule.filter((r) => r.task === task && r.model === model);
       const off = runs.filter((r) => r.arm === 'none' && r.task === task && r.model === model);
       const others = [...new Set(on.flatMap((r) => r.noonsight.rules).filter((x) => x !== rule))];
-      for (const name of names) rowsRule.push([task, model, SIGNAL_NAMES[name] ?? name, signal(name, on), signal(name, off)]);
+      for (const name of names) rowsRule.push([task, model, SIGNAL_NAMES[name] ?? name, signal(name, on), signal(name, off), formatP(compare(name, on, off))]);
       const dOut = mean(on.map((r) => r.tokens.output)) - mean(off.map((r) => r.tokens.output));
       const dIn = mean(on.map(inputTokens)) - mean(off.map(inputTokens));
       const dCost = mean(on.map((r) => r.cost_usd)) - mean(off.map((r) => r.cost_usd));
-      rowsRule.push([task, model, 'Output tokens per run', spread(on.map((r) => r.tokens.output)), spread(off.map((r) => r.tokens.output))]);
-      rowsRule.push([task, model, 'Difference of the means', `${signed(dOut)} output, ${signed(dIn)} input tokens`, `${signedUsd(dCost)} per run`]);
-      if (others.length) rowsRule.push([task, model, 'Delivered in the same runs', others.join(', '), '']);
+      const pOut = mannWhitney(on.map((r) => r.tokens.output), off.map((r) => r.tokens.output)).p;
+      rowsRule.push([task, model, 'Output tokens per run', spread(on.map((r) => r.tokens.output)), spread(off.map((r) => r.tokens.output)), formatP(pOut)]);
+      rowsRule.push([task, model, 'Difference of the means', `${signed(dOut)} output, ${signed(dIn)} input tokens`, `${signedUsd(dCost)} per run`, '']);
+      if (others.length) rowsRule.push([task, model, 'Delivered in the same runs', others.join(', '), '', '']);
     }
-    lines.push(table(['Task', 'Model', 'Signal', 'With the rule', 'Without'], rowsRule), '');
+    lines.push(table(['Task', 'Model', 'Signal', 'With the rule', 'Without', 'p'], rowsRule), '');
   }
+  if (design) lines.push(...preregistered(design, runs), ...costAgainstProjection(design, runs));
   return `${lines.join('\n')}\n`;
+}
+
+/** Holm's adjustment runs over every comparison a design fixed, at this familywise level. */
+export const ALPHA = 0.05;
+
+export interface Comparison {
+  readonly primary: Primary;
+  readonly task: string;
+  readonly with: string;
+  readonly without: string;
+  readonly p: number;
+  readonly holm: number;
+  /** Whether the runs show the difference the rule's source claims, after Holm's adjustment. */
+  readonly reading: 'supports the source' | 'not shown' | 'opposite to the source';
+}
+
+/** The pre-registered comparisons of a design, each task apart, with Holm's adjustment over all of them. */
+export function comparisons(design: Design, runs: readonly RunRecord[]): Comparison[] {
+  const raw = design.primary.flatMap((primary) =>
+    primary.tasks.map((task) => {
+      const on = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === 'rules');
+      const off = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === 'none');
+      let up: boolean | null;
+      let shown: [string, string];
+      if (primary.signal === 'verified') {
+        const a = count(on, BINARY.verified as (r: RunRecord) => boolean | undefined);
+        const b = count(off, BINARY.verified as (r: RunRecord) => boolean | undefined);
+        up = a.n && b.n ? a.k / a.n > b.k / b.n : null;
+        shown = [shareWithInterval(a), shareWithInterval(b)];
+      } else {
+        const xs = prose(on, primary.signal);
+        const ys = prose(off, primary.signal);
+        // The direction is the test's own: U above half its range means the runs with the rule rank higher.
+        // Medians can tie (at 0 semicolons, say) while the ranks still differ.
+        const { u } = mannWhitney(xs, ys);
+        const middle = (xs.length * ys.length) / 2;
+        up = Number.isNaN(u) || u === middle ? null : u > middle;
+        const describe = (vs: number[]): string => (vs.length ? `mean ${mean(vs).toFixed(1)}, median ${median(vs).toFixed(1)} (${vs.length} run${vs.length === 1 ? '' : 's'})` : 'n/a');
+        shown = [describe(xs), describe(ys)];
+      }
+      return { primary, task, with: shown[0], without: shown[1], p: compare(primary.signal, on, off), up };
+    }),
+  );
+  const adjusted = holm(raw.map((c) => (Number.isNaN(c.p) ? 1 : c.p)));
+  return raw.map(({ up, ...c }, i) => {
+    const h = adjusted[i] ?? 1;
+    const claimed = c.primary.direction === 'higher';
+    const reading = h >= ALPHA || up === null ? 'not shown' : up === claimed ? 'supports the source' : 'opposite to the source';
+    return { ...c, holm: h, reading };
+  });
+}
+
+const PRIMARY_SIGNAL: Readonly<Record<Primary['signal'], string>> = {
+  verified: 'Tests after the last edit',
+  words_per_sentence: 'Words per sentence',
+  semicolons_per_1k_words: 'Semicolons per 1,000 words',
+};
+
+function preregistered(design: Design, runs: readonly RunRecord[]): string[] {
+  const cs = comparisons(design, runs);
+  return [
+    '## Pre-registered comparisons',
+    '',
+    `The comparisons the design fixed before it ran, each task apart. p is two-sided; Holm's adjustment runs over all ${cs.length}, and a comparison supports the rule's source when its adjusted p is below ${ALPHA} and the difference goes the way the source claims.`,
+    '',
+    table(
+      ['Rule', 'Task', 'Signal', 'With the rule', 'Without', 'p', 'Holm p', 'Reading'],
+      cs.map((c) => [`\`${c.primary.rule}\``, c.task, `${PRIMARY_SIGNAL[c.primary.signal]} (${c.primary.direction} claimed)`, c.with, c.without, formatP(c.p), formatP(c.holm), c.reading]),
+    ),
+    '',
+  ];
+}
+
+function costAgainstProjection(design: Design, runs: readonly RunRecord[]): string[] {
+  const rows: Row[] = [];
+  let expected = 0;
+  for (const [model, tasks] of Object.entries(design.cells))
+    for (const task of tasks) {
+      const g = runs.filter((r) => r.model === model && r.task === task);
+      const per = design.expected_usd[model]?.[task] ?? NaN;
+      expected += per * g.length;
+      rows.push([model, task, String(g.length), `$${per.toFixed(3)}`, g.length ? `$${mean(g.map((r) => r.cost_usd)).toFixed(3)}` : 'n/a', `$${g.reduce((s, r) => s + r.cost_usd, 0).toFixed(2)}`]);
+    }
+  const spent = runs.reduce((s, r) => s + r.cost_usd, 0);
+  return [
+    '## Cost against the projection',
+    '',
+    table(['Model', 'Task', 'Runs', 'Expected per run', 'Measured per run', 'Measured'], rows),
+    '',
+    `Measured: $${spent.toFixed(2)} for the recorded runs, against $${expected.toFixed(2)} expected for the same runs and a cap of $${design.cap_usd}.`,
+    '',
+  ];
 }
 
 function signed(n: number): string {
