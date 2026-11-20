@@ -1,0 +1,34 @@
+{
+ "session": "on-s1-0205",
+ "target": {
+  "class": "foreign-unretired",
+  "kind": "main"
+ },
+ "originalSteps": 12,
+ "minimalSteps": 4,
+ "runs": 21,
+ "seconds": 242,
+ "original": "start(sonnet, scope=none, unattended) > /model fable > spawn(Explore + Explore:sonnet) > /model sonnet > /clear > spawn(Explore:sonnet + general-purpose:sonnet + general-purpose:sonnet) > spawn(general-purpose + Explore:sonnet) > resume --model fable > resume --model haiku > turn > /model opus > spawn(Explore) > turn",
+ "minimal": "start(sonnet, scope=none, unattended) > turn > resume --model fable > resume --model haiku > turn",
+ "spec": {
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "resume",
+    "model": "fable"
+   },
+   {
+    "k": "resume",
+    "model": "haiku"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

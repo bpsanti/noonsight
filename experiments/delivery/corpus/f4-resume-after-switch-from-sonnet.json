@@ -1,0 +1,30 @@
+{
+  "name": "f4-resume-after-switch-from-sonnet",
+  "about": "A conversation that last answered on Sonnet, then /model haiku and a resume without --model: Claude Code 2.1.328 runs it on Haiku, the model setting, not on the model of its last response, while the hook reads the transcript and delivers Sonnet's rules with a note retiring Haiku's. Probed once each, the same sequence from Opus or Fable to Haiku, and from Haiku to Opus, Opus to Sonnet and Sonnet to Opus, resumed on the last response's model (F4, open).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": {
+    "failure": "F4",
+    "shows": [
+      "foreign-unretired/main",
+      "missing-own/main"
+    ]
+  }
+}

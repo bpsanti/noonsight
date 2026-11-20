@@ -1,0 +1,177 @@
+{
+ "about": "Pre-registered comparisons of the delivery benchmark: each design names the run it compares against, the command it runs, and its comparisons, fixed before it runs. `npm run delivery -- compare --design <name>` evaluates them.",
+ "designs": {
+  "after-f1-f2": {
+   "description": "The fuzz level and the native arms again, on noonsight with the fixes of F1 and F2, with the seed, sizes and Claude Code version of the run before the fixes.",
+   "claudeCode": "2.1.328",
+   "command": "all --concurrency 2",
+   "before": "claude-code-2.1.328/2026-11-19-467d465",
+   "alpha": 0.05,
+   "comparisons": [
+    {
+     "id": "P1",
+     "primary": true,
+     "question": "Fewer sessions under `on` break the invariant in a way nothing documented explains",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "robustness.sessionsFailed",
+     "expect": "lower",
+     "paired": "failed"
+    },
+    {
+     "id": "P2",
+     "primary": true,
+     "question": "Coverage under `on` is higher",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "P3",
+     "primary": true,
+     "question": "On the same 60 sequences, coverage is higher under `on` than under `claudemd`",
+     "a": { "folder": "after", "run": "claudemd-s1-n60" },
+     "b": { "folder": "after", "run": "on-s1-n300", "first": 60 },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "P4",
+     "primary": true,
+     "question": "On the same 60 sequences, coverage is higher under `on` than under `rules`",
+     "a": { "folder": "after", "run": "rules-s1-n60" },
+     "b": { "folder": "after", "run": "on-s1-n300", "first": 60 },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "P5",
+     "primary": true,
+     "question": "On the same 60 sequences, coverage is higher under `on` than under `skills`",
+     "a": { "folder": "after", "run": "skills-s1-n60" },
+     "b": { "folder": "after", "run": "on-s1-n300", "first": 60 },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "P6",
+     "primary": true,
+     "question": "On the same 60 sequences, subagent coverage is higher under `on` than under `claudemd`",
+     "a": { "folder": "after", "run": "claudemd-s1-n60" },
+     "b": { "folder": "after", "run": "on-s1-n300", "first": 60 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "higher",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "P7",
+     "primary": true,
+     "question": "On the same 60 sequences, subagent coverage is higher under `on` than under `rules`",
+     "a": { "folder": "after", "run": "rules-s1-n60" },
+     "b": { "folder": "after", "run": "on-s1-n300", "first": 60 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "higher",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "P8",
+     "primary": true,
+     "question": "On the same 60 sequences, subagent coverage is higher under `on` than under `skills`",
+     "a": { "folder": "after", "run": "skills-s1-n60" },
+     "b": { "folder": "after", "run": "on-s1-n300", "first": 60 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "higher",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "C1",
+     "question": "`claudemd` is unchanged: noonsight delivers nothing under a native arm, so its fixes cannot move it",
+     "a": { "folder": "before", "run": "claudemd-s1-n60" },
+     "b": { "folder": "after", "run": "claudemd-s1-n60" },
+     "measure": "coverage.coverage",
+     "expect": "same",
+     "paired": "uncovered"
+    },
+    {
+     "id": "C2",
+     "question": "`rules` is unchanged",
+     "a": { "folder": "before", "run": "rules-s1-n60" },
+     "b": { "folder": "after", "run": "rules-s1-n60" },
+     "measure": "coverage.coverage",
+     "expect": "same",
+     "paired": "uncovered"
+    },
+    {
+     "id": "C3",
+     "question": "`skills` is unchanged",
+     "a": { "folder": "before", "run": "skills-s1-n60" },
+     "b": { "folder": "after", "run": "skills-s1-n60" },
+     "measure": "coverage.coverage",
+     "expect": "same",
+     "paired": "uncovered"
+    },
+    {
+     "id": "S1",
+     "question": "Under `on`, coverage in the sessions with two quiet steps in a row is higher",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "robustness.byQuietPair.two quiet steps in a row.coverage",
+     "expect": "higher"
+    },
+    {
+     "id": "S2",
+     "question": "Under `on`, fewer requests hold another model's rule with no note",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "robustness.requestsWithViolation.foreign-unretired",
+     "expect": "lower"
+    },
+    {
+     "id": "S3",
+     "question": "Under `on`, subagent coverage is no lower",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "coverage.subagents.coverage",
+     "expect": "not-lower",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "S4",
+     "question": "The decision log gives the coverage the stub saw under `on`",
+     "a": { "folder": "after", "run": "on-s1-n300", "file": "agree", "measure": "coverage.log" },
+     "b": { "folder": "after", "run": "on-s1-n300", "file": "agree", "measure": "coverage.stub" },
+     "expect": "same"
+    },
+    {
+     "id": "R1",
+     "question": "Under `on`, the own share",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "precision.ownShare",
+     "expect": null
+    },
+    {
+     "id": "R2",
+     "question": "Under `on`, the right share",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "precision.rightShare",
+     "expect": null
+    },
+    {
+     "id": "R3",
+     "question": "Under `on`, the characters added per request",
+     "a": { "folder": "before", "run": "on-s1-n300" },
+     "b": { "folder": "after", "run": "on-s1-n300" },
+     "measure": "cost.addedCharsPerAgentRequest",
+     "expect": null
+    }
+   ]
+  }
+ }
+}
