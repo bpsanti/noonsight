@@ -50,7 +50,7 @@ The hook decides by how the session started (the `source` field):
 | --- | --- | --- |
 | `startup` | Delivers the rules | A new session |
 | `clear`, `compact` | Delivers them again | The earlier context, and the rules in it, are gone |
-| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery came from a `/model` switch; with a note that the rules of any other model the conversation may hold no longer apply | The restored conversation already holds them, except a switch's, which may never have reached it ([PostModelSwitch](#postmodelswitch)) |
+| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply | The restored conversation already holds them, except a switch's or a resume's that may never have reached it (below, and [PostModelSwitch](#postmodelswitch)) |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect noonsight exists to prevent |
 
 The model comes from the first of these that knows it:
@@ -69,12 +69,13 @@ At `resume` and `fork` without a `model` in the input, the order is another, the
 
 1. the `--model` argument of the Claude Code process;
 2. `ANTHROPIC_MODEL`;
-3. the model of the conversation's last response since its last compaction, read from the transcript the input names (`transcript_path`), the session's own messages only (`model_source: "session-transcript"`);
+3. the model of the conversation's last response since its last compaction, read from the transcript the input names (`transcript_path`), the session's own messages only (`model_source: "session-transcript"`), except under the `model` setting `haiku` when that response came from Haiku or Sonnet;
 4. the `model` setting;
 5. noonsight's record of the session.
 
 `claude --continue` and `claude --resume` start a new Claude Code process, which reports no model and fires no `PostModelSwitch`.
 It runs the conversation on the model its `--model` or `ANTHROPIC_MODEL` names, else on the model the conversation last answered on, else on its `model` setting, which `/model` in any session changes; a compaction with no response since leaves the conversation no model of its own ([recorded on Claude Code 2.1.327](../test/fixtures/hook-inputs/2.1.327/README.md) and [2.1.328](verification/claude-code.md)).
+One setting outranks the conversation: under `"model": "haiku"`, written exactly so, a conversation that last answered on Haiku or Sonnet runs on Haiku, while one that last answered on Opus or Fable keeps its model; `opusplan`, `Haiku` and every other setting leave the conversation its model ([recorded on 2.1.328](verification/claude-code.md)).
 A `--model` or `ANTHROPIC_MODEL` value noonsight cannot pin down outranks the setting, as in Claude Code, so the conversation, then the record, decides, and the log line records the value.
 With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides.
 After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
@@ -103,6 +104,12 @@ The session's task scope is the value of `NOONSIGHT_SCOPE` in the environment Cl
 Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, and `session` otherwise ([Scopes](configuration.md#scopes)).
 A resumed session gets the rules again when a change of scope or place changed which rules apply.
 The rules are resolved with the triggers the session has revealed ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)), which belong to its session id: after compaction the session gets the rules its triggers added again, with the others, and a resumed session that already holds them gets nothing again; after `/clear`, the new session has revealed none.
+
+What a resume or a fork returns reaches the conversation as a switch's does: with the process's next request only, so ending the session before one loses it ([recorded on Claude Code 2.1.328](verification/claude-code.md)).
+So the record of a resume that delivered keeps every model whose rules the conversation may hold, as after a switch, and the next resume delivers again, with a note that retires all of them.
+Unlike a switch, a resume runs before its process sends any request, so a response of the conversation after it shows that its delivery arrived: when the transcript holds one, from the session's own messages since the last compaction and later than the delivery, the next resume takes the delivery as received, and with it its note, and delivers again only what changed.
+A transcript that cannot be read, or a response with no time, confirms nothing.
+The deliveries of a startup, `/clear` and compaction are part of the conversation from its start, and a later resume finds them ([recorded on 2.1.328](verification/claude-code.md)).
 
 A session started by `noonsight run` already holds its rules in the system prompt.
 At `startup`, `clear` and `compact`, when the Claude Code process was started with the launcher's file and the file holds exactly the rules decided here, the hook delivers nothing and logs `delivered: "launcher"`.
@@ -133,7 +140,7 @@ When another `/model` or the end of the session comes before that request, the r
 So noonsight treats a switch's delivery as unconfirmed: the session's record keeps every model whose rules the conversation may hold without a note after them, and each later delivery says again that all of them no longer apply.
 The note then names each of them in its `from` attribute and in its text; when their names would not fit in the room kept for the note, it says that the rules of every model other than the new one no longer apply (`from="*"`).
 A resume after a switch delivers the rules again ([SessionStart](#sessionstart)), and so does a resume that Claude Code reports as a switch.
-A session start's delivery is part of the conversation from its start, so after one, the record keeps only the session's model.
+A startup's, `/clear`'s or compaction's delivery is part of the conversation from its start, and a resume's once the conversation has answered since, so after one, the record keeps only the session's model.
 Delivering twice costs a longer note or a repeated copy of the rules; a delivery lost without a word is the defect noonsight exists to prevent.
 
 A switch keeps the session's scope, place and triggers, so the new model also gets the rules the session's triggers add for it.

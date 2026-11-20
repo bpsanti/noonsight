@@ -31,7 +31,7 @@ import { sessionTriggers } from '../../state/triggers.js';
 import { launchFields, launchModel, readCommandLine, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
-import { conversationModel } from './predict.js';
+import { conversationResponse, type Response } from './predict.js';
 import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
 import { agentCall, agentResult, choiceFields, decisionFields, subagentStart } from './subagents.js';
@@ -140,10 +140,16 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       log(outcome.record);
       if (outcome.state)
         try {
-          // The conversation still holds what it held, and a /model delivery the edit cannot confirm stays unconfirmed.
+          // The conversation still holds what it held, and a delivery that may have been lost stays so.
           const before = readState(sessionState);
           const held = [...new Set([...heldModels(before), ...heldModels(outcome.state)])];
-          writeState(sessionState, { ...outcome.state, held, unconfirmed: before?.unconfirmed === true, at: ctx.now.toISOString() });
+          writeState(sessionState, {
+            ...outcome.state,
+            held,
+            ...(before?.unconfirmed !== undefined ? { unconfirmed: before.unconfirmed } : {}),
+            // A resume's delivery is confirmed by a response after it, so its time is kept.
+            at: before?.unconfirmed === 'resume' ? before.at : ctx.now.toISOString(),
+          });
         } catch {
           // Without the record, a later resume delivers again: the safe direction.
         }
@@ -157,6 +163,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
       triggers: sessionTriggers(state, str(input.session_id)),
     };
     const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
+    const response = once(() => conversationResponse(str(input.transcript_path)));
     const result =
       event === 'SessionStart'
         ? sessionStart(
@@ -167,7 +174,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
             readState(sessionState),
             readState(processState),
             (sources) => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }, sources),
-            () => conversationModel(str(input.transcript_path)),
+            response,
             () => launcherPrompt(ctx.env, commandLine),
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
@@ -235,7 +242,8 @@ interface Outcome {
  *   startup         deliver
  *   clear, compact  deliver again: the earlier context, and the rules in it, are gone
  *   resume, fork    deliver only when the model or the rules changed since this session's record, or
- *                   when its last delivery came from a /model switch, which may never have arrived
+ *                   when its last delivery may never have arrived: a /model switch's, or a resume's
+ *                   the conversation has not answered since
  *   anything else   deliver: delivering twice costs little, missing a delivery is the defect
  *
  * The model comes from the input. When Claude Code leaves it out, after /clear and compaction it comes
@@ -266,7 +274,7 @@ function sessionStart(
   session: DeliveryState | null,
   process: DeliveryState | null,
   readLaunch: (sources: LaunchSources) => LaunchModel,
-  readConversation: () => string | null,
+  readConversation: () => Response | null,
   readLauncher: () => LauncherPrompt | null,
 ): Outcome {
   const source = str(input.source);
@@ -276,7 +284,7 @@ function sessionStart(
   const chosen: ModelChoice = reported
     ? { model: reported, source: 'hook-input', launch: null }
     : resumed
-      ? resumedModel(recorded, readLaunch, readConversation)
+      ? resumedModel(recorded, readLaunch, () => readConversation()?.model ?? null)
       : recorded
         ? { model: recorded, source: session?.model ? 'session-record' : 'process-record', launch: null }
         : launchChoice(readLaunch('all'), null);
@@ -284,13 +292,14 @@ function sessionStart(
   const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  // A /model delivery may never have reached the conversation, so a resume after one delivers again.
-  const unconfirmed = resumed && session?.unconfirmed === true;
-  const repeat = resumed && session !== null && !unconfirmed && session.model === decision.model && session.sha256 === sha;
+  const record = resumed && session !== null ? confirmed(session, readConversation) : session;
+  // A delivery that may never have reached the conversation is made again.
+  const unconfirmed = resumed && record?.unconfirmed !== undefined;
+  const repeat = resumed && record !== null && !unconfirmed && record.model === decision.model && record.sha256 === sha;
   // A resumed conversation still holds the rules it held; those of another model no longer apply.
-  const kept = resumed ? heldModels(session) : [];
+  const kept = resumed ? heldModels(record) : [];
   const retired = repeat || decision.model === null ? [] : kept.filter((m) => m !== decision.model);
-  const changedFrom = resumed && session?.model && decision.model !== null && session.model !== decision.model ? session.model : null;
+  const changedFrom = resumed && record?.model && decision.model !== null && record.model !== decision.model ? record.model : null;
 
   const launcher = source === 'startup' || source === 'clear' || source === 'compact' ? readLauncher() : null;
   // The launcher's system prompt holds the rules for the session's scope; it never holds those a
@@ -318,10 +327,15 @@ function sessionStart(
           : []),
         ...undeclaredMessages(decision, file, launch),
       ];
-  // A session start's delivery reaches the conversation, so its note leaves only this model's rules
-  // standing: those it delivers or finds, or, when it has none now, those it held before.
+  // A session start's delivery, once it reaches the conversation, leaves only this model's rules
+  // standing: those it delivers or finds, or, when it has none now, those it held before. That of a
+  // startup, /clear or compaction is part of the conversation from its start; what a resume or a fork
+  // returns reaches it with the process's first request only, so until a response shows it arrived,
+  // the conversation may still hold every model's rules it held.
   const holds = decision.model !== null && (decision.status === 'matched' || kept.includes(decision.model));
-  const held = repeat ? kept : holds ? [decision.model as string] : [];
+  const own = holds ? [decision.model as string] : [];
+  const pending = resumed && parts.length > 0;
+  const held = repeat ? kept : pending ? [...new Set([...kept, ...own])] : own;
   return {
     record: {
       // Rules sent beside the launcher's are only those a trigger added, so the line names those.
@@ -337,8 +351,22 @@ function sessionStart(
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, unconfirmed: false },
+    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}) },
   };
+}
+
+/**
+ * A resumed conversation's record as the conversation stands. A resume's delivery goes with the first
+ * request its process sends, so when the conversation has answered since that delivery, it arrived,
+ * and its note left only the record's model's rules standing. Otherwise the record stands as written.
+ */
+function confirmed(session: DeliveryState, readConversation: () => Response | null): DeliveryState {
+  if (session.unconfirmed !== 'resume') return session;
+  const delivered = Date.parse(session.at);
+  const answered = readConversation()?.at ?? null;
+  if (answered === null || Number.isNaN(delivered) || answered <= delivered) return session;
+  const { unconfirmed: _, ...rest } = session;
+  return { ...rest, held: heldModels(session).filter((m) => m === session.model) };
 }
 
 /** The session's model, where it came from, and the launch setting read for it, for the log line. */
@@ -359,16 +387,30 @@ function launchChoice(launch: LaunchModel, fallback: { model: string; source: st
  * last response since its last compaction, else the model setting. A value noonsight cannot tell
  * which model it selects leaves the conversation to decide, and below the setting the session's record
  * does: Claude Code then runs its default model, which noonsight cannot tell either.
+ *
+ * One setting outranks the conversation: `haiku`, over a last response from Haiku or Sonnet
+ * (keepsHaikuSetting).
  */
 function resumedModel(recorded: string | null, readLaunch: (sources: LaunchSources) => LaunchModel, readConversation: () => string | null): ModelChoice {
   const explicit = readLaunch('explicit');
   if (explicit.kind === 'found') return launchChoice(explicit, null);
-  const conversation = readConversation();
-  if (conversation !== null) return { model: conversation, source: 'session-transcript', launch: explicit.kind === 'none' ? null : explicit };
   // An explicit value noonsight cannot pin down outranks the setting, as it does in Claude Code.
   const settings = explicit.kind === 'none' ? readLaunch('settings') : explicit;
+  const conversation = readConversation();
+  if (conversation !== null && !keepsHaikuSetting(settings, conversation))
+    return { model: conversation, source: 'session-transcript', launch: explicit.kind === 'none' ? null : explicit };
   if (settings.kind === 'found') return launchChoice(settings, null);
   return launchChoice(settings, recorded !== null ? { model: recorded, source: 'session-record' } : null);
+}
+
+/**
+ * Whether Claude Code resumes on the model setting rather than on the conversation's last response:
+ * it does when the setting is exactly `haiku` and that response came from Haiku or Sonnet. Under any
+ * other setting, `opusplan` and `Haiku` included, and under `haiku` after a response from Opus or
+ * Fable, the conversation keeps its own model (docs/hooks.md, "SessionStart").
+ */
+function keepsHaikuSetting(settings: LaunchModel, conversation: string): boolean {
+  return settings.kind === 'found' && settings.source === 'settings' && settings.alias === 'haiku' && (conversation.includes('haiku') || conversation.includes('sonnet'));
 }
 
 /**
@@ -384,7 +426,8 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
   const request = { scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const unconfirmed = session?.unconfirmed === true;
+  // A switch right after a delivery that may have been lost makes it again.
+  const unconfirmed = session?.unconfirmed !== undefined;
   const base = {
     ...decisionFields(decision),
     ...choiceFields(where.scope, where.place),
@@ -406,7 +449,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
       record: { ...base, delivered: 'already-delivered', warned: false },
       context: null,
       messages: [],
-      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, unconfirmed: false },
+      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held },
     };
 
   const retired = kept.filter((m) => m !== decision.model);
@@ -421,7 +464,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, unconfirmed: parts.length > 0 },
+    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(parts.length ? { unconfirmed: 'switch' as const } : {}) },
   };
 }
 

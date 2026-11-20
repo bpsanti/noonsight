@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- A resume's delivery is no longer taken as received until the conversation answers.
+  What `SessionStart` returns at a resume or a fork reaches the conversation with the process's next request only, like a `/model` switch's, so a session ended before that request loses it; the hook recorded it as delivered all the same.
+  So in a session started on Sonnet, after `claude --continue --model fable`, the end of the session with no request, and `claude --continue --model haiku`, the second resume's note retired Fable's rules only, and Haiku read Sonnet's rules with nothing saying they no longer applied.
+  The record of a resume that delivered now keeps every model whose rules the conversation may hold, and the next resume delivers again with a note that retires all of them, unless the transcript holds a response of the conversation from after that delivery, which shows it arrived.
+  See `docs/hooks.md` ("SessionStart").
+
+- A conversation resumed without `--model` or `ANTHROPIC_MODEL` under the `model` setting `haiku` now gets Haiku's rules when it last answered on Sonnet.
+  Claude Code resumes a conversation on the model of its last response, except under `haiku`, which outranks a last response from Haiku or Sonnet; the hook took the response's model, so after Sonnet, `/model haiku` and `claude --continue`, Haiku got Sonnet's rules with a note retiring its own, and kept the wrong model through `/clear`.
+  A last response from Opus or Fable keeps its model under `haiku`, and `opusplan` and every other setting leave the conversation its model, as before.
+  See `docs/hooks.md` ("SessionStart").
+
 - The rule effect experiment (`experiments/rules`) can run an arm that delivers one preset rule alone: an arm with `only` in `plan.json` is the preset with every other rule that ships on for the model in `disable`, and the runner refuses a model whose preset lacks that rule before anything is spent.
   An arm with `pointer` as well delivers that rule as one sentence naming a file that holds its text and saying to read it, through a user rule that `replaces` the preset rule, and each run of it records whether and when the session read the file.
   The design `single-rule` (`--design single-rule`) runs Sonnet 5.5 and Haiku 5.5 on `fix` and `bug` with `verify-changes` alone, as a pointer, `carry-through` alone, both and neither, 30 runs per arm, so the tests and the cost the `rules` arm added on 2026-11-19 can be credited to each rule, and the pointer compared with the rule inline; its twenty-one comparisons are fixed before it runs, and `npm run experiment -- estimate --design single-rule` projects $14.55 against a $25 cap.
@@ -12,7 +23,7 @@
 
 - The delivery benchmark (`experiments/delivery`) ran its fuzz level and native arms again on the build with the fixes of F1 and F2, with the seed, sizes and Claude Code version of the run before them, against comparisons fixed beforehand in `experiments/delivery/plan.json`.
   Sessions under `on` that break the invariant went from 26 of 296 to 3 of 300, and on the same 60 sequences `on` covered every request with rules due, against 87.4% for a `CLAUDE.md`, 70.9% for `.claude/rules` and none for skills; all eight primary comparisons are supported.
-  The fuzzer found two open failures, F3 (a resume's delivery lost to another resume) and F4 (a resume after `/model` from Sonnet to Haiku runs on the setting, not on the last response's model); the corpus records both, and neither is fixed yet.
+  The fuzzer found two open failures, F3 (a resume's delivery lost to another resume) and F4 (a resume after `/model` from Sonnet to Haiku runs on the setting, not on the last response's model); the corpus records both, and the two entries above fix them.
   `npm run delivery -- compare --design <name>` evaluates a design's comparisons against an earlier run, pairing the sessions of the same sequence with the exact McNemar test.
   See `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/README.md`.
 

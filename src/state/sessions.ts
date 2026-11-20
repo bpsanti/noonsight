@@ -25,13 +25,18 @@ export interface DeliveryState {
    */
   readonly held?: readonly string[];
   /**
-   * Whether the last delivery came from a /model switch: Claude Code adds what that hook returns to
-   * the next request only, so another switch or the end of the session before one loses it, and no
-   * hook can tell whether it arrived.
+   * Which delivery may not have reached the conversation. Claude Code adds what a /model switch or a
+   * resume returns to the next request only, so the end of the session before one loses it:
+   *   switch  a /model switch's, which another switch loses too; no hook can tell whether it arrived
+   *   resume  a resume's or a fork's, which runs before the process sends any request, so a response
+   *           of the conversation after it shows it arrived
+   * Absent when the last delivery reached the conversation or nothing was delivered.
    */
-  readonly unconfirmed?: boolean;
+  readonly unconfirmed?: Unconfirmed;
   readonly at: string;
 }
+
+export type Unconfirmed = 'switch' | 'resume';
 
 /** Records older than this are removed; any write refreshes a record. */
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -64,7 +69,12 @@ export function readState(file: string | null): DeliveryState | null {
           : value.status === 'matched' && value.model
             ? [value.model]
             : [],
-        unconfirmed: value.unconfirmed === true,
+        // A record written before resumes were told apart holds true for a switch's delivery.
+        ...((value.unconfirmed as unknown) === true || value.unconfirmed === 'switch'
+          ? { unconfirmed: 'switch' as const }
+          : value.unconfirmed === 'resume'
+            ? { unconfirmed: 'resume' as const }
+            : {}),
         at: String(value.at),
       };
   } catch {
