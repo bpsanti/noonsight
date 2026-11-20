@@ -103,6 +103,12 @@ On 2026-11-16, with Claude Code 2.1.326 at medium effort, 112 runs cost $7.57:
 
 The samples are small (3 to 10 runs per arm), so these are directions, not significant results, and the preset was left unchanged; [the dated results](experiments/rules/results/2026-11-16/README.md) give every count and the review of each rule.
 
+On 2026-11-19, with Claude Code 2.1.328, 540 runs tested those three rules again on three tasks of different shapes, 30 runs per arm and task, for $73.82 against a $120 cap ([results](experiments/rules/results/2026-11-19/README.md)):
+
+- Fable 5.2's report rule gave shorter sentences and fewer semicolons on all three tasks, each significant after Holm's adjustment.
+- The verify rules made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix (30 of 30 and 27 of 30, against 0 of 30 each), and Sonnet after a bug fix (30 of 30 against 15 of 30); where the models already ran the tests without them, on a feature for both and on the bug for Haiku, they changed nothing.
+- Every run passed its hidden check, with or without rules, and the preset was left unchanged.
+
 `experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
 
 `experiments/delivery/` measures whether each model's rules reach every request it receives, and only those rules, through `/model`, compaction, `/clear`, resumes, subagents and file edits, for noonsight and for a `CLAUDE.md`, `.claude/rules` and a skill per model; it runs real Claude Code sessions against a local stand-in for the API, so it spends no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).

@@ -86,6 +86,7 @@ Twelve comparisons, each task apart, with the rule against without it:
 
 Each comparison has a two-sided p, Fisher's exact test for the share and the Mann-Whitney U test for the measures, and Holm's adjustment runs over all twelve.
 A comparison supports the rule's source when its adjusted p is below 0.05 and the difference goes the way the source claims; `summarize --design expanded` writes that reading for each one.
+For a measure, the direction is the one the test measures, from its statistic U, not from the medians, which can tie (at no semicolon, say) while the runs still differ.
 Everything else in the summary (the other signals, correctness, tokens and cost) is reported as measured and read as secondary.
 With 30 runs per arm, a share that goes from 10% to 50% gives p of about 0.002, still below 0.05 after Holm's adjustment over twelve, so the differences of 2026-11-16 would show clearly if they hold; a difference of a few points would not.
 
@@ -163,3 +164,4 @@ A results directory holds stub runs or real ones, never both, and the summary of
 ## Results
 
 `results/` holds the result of each run of the experiment that was written up, with its date: `runs.jsonl`, the generated `summary.md`, and a reading of the data.
+[results/2026-11-19](results/2026-11-19/README.md) is the first run of the design `expanded`.

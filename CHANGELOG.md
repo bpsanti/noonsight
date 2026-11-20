@@ -6,6 +6,7 @@
   The design `expanded` (`--design expanded`) runs the three rules whose effect showed on 2026-11-16 on three tasks each, 30 runs per arm, with twelve comparisons fixed before it runs and read with Fisher's exact test or the Mann-Whitney U test and Holm's adjustment; `npm run experiment -- estimate` prints its cost projection, $78 expected against a $120 cap.
   `run --stub` runs every session against a scripted local stand-in for the API, with no login and no tokens, so the harness is checked end to end for free.
   A run cut short by the cap now stops at the first run that does not fit, so every cell keeps the same number of repetitions, instead of going on with cheaper models.
+  `experiments/rules/results/2026-11-19/README.md` records its first run: 540 runs for $73.82, nine of the twelve comparisons supporting the rule's source and none against it; the verify rules changed behavior only where the models skipped the tests without them, and the preset is unchanged.
 
 - A `/model` switch's delivery is no longer taken as received.
   Claude Code adds what the `PostModelSwitch` hook returns to the next request only, and drops it when another `/model` or the end of the session comes first; the hook recorded it as delivered all the same.

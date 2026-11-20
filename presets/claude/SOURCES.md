@@ -186,7 +186,8 @@ The judgment calls with a cost the source measured come first: `fable-5-2/finish
 
 A rule applies to the scopes it lists, or to every scope, and to the places it lists: `session` (a session someone is watching), `unattended` (a session nobody is watching) and `subagent` (the task of a subagent).
 Each rule below gives its scopes, why, and the basis of that choice, by the principles in [How the rules are scoped](#how-the-rules-are-scoped).
-A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when noonsight delivered it; those are small samples, so they give a direction, not a significant result.
+A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when noonsight delivered it.
+The 2026-11-16 samples are small, so they give a direction, not a significant result; the 2026-11-19 run tested three rules again with 30 runs per arm and task, against comparisons fixed before it ran.
 
 ### Claude Fable 5.2 (`claude-fable-5-2`)
 
@@ -214,6 +215,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Effect: On agentic tasks, final reports were less dense and used fewer semicolons; on workflow automation tasks, sentences were shorter.
 - Cost: Not reported by the source.
 - Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered by noonsight to unattended sessions, reports had shorter sentences (11.7 words against 15.3 on the question, 5 runs each) and almost no semicolons (0.8 per 1,000 words against 19.9), with no added cost.
+  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md), 30 runs per arm on three tasks, it did so on each: words per sentence 12.3 against 16.4 on the question, 17.8 against 20.1 on a bug fix and 12.2 against 16.2 on a feature, and semicolons per 1,000 words 2.5 against 13.0, 0.7 against 4.2 and 0 against 3.3, each significant after Holm's adjustment; cost per run changed by +3, +3 and -15 percent.
 - Places: where the reader comes back to a finished report, rather than following the work as it happens.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: every kind of task ends in a report that someone reads after the fact, a summary or a review most of all, and the source reports no cost.
@@ -314,7 +316,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Effect: Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.
 - Cost: Not reported by the source.
 - Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added for consistency with `haiku-5-5/carry-through`, which ends with the same sentence for the reason given there; in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) run set, Sonnet 5.5 showed no measurable change with or without it.
-- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on a one-file fix, no run changed another file, with or without it (0 of 10 each).
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on a one-file fix, no run changed another file, with or without it (0 of 10 each), and again on [2026-11-19](../../experiments/rules/results/2026-11-19/README.md) (0 of 30 each).
   On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), the last sentence made no measurable change in 10 runs per arm: Sonnet met a requirement in a document its CLAUDE.md points to in 10 of 10 runs with and without it, and added nothing unrequested where the project only describes a convention (0 of 10 each).
 - Scopes: `routine`. Not `investigate`, `build`, `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: a well-scoped change is where tests, documentation and files nobody asked for are least welcome.
@@ -330,6 +332,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Effect: At low effort, skipped or superficial checks became rare, with no measurable change in task quality.
 - Cost: Slightly higher cost per task.
 - Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered with `carry-through` and `stay-in-scope` at medium effort, a one-file fix was followed by a test run in 10 of 10 runs, against 0 of 10 without the rules, for about 520 more output tokens and 46 percent more cost per run.
+  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md), 30 runs per arm, Sonnet ran the tests after its last edit in 30 of 30 runs against 0 of 30 on the one-file fix and 30 of 30 against 15 of 30 on a bug known by its symptom, at 59 and 58 percent more cost per run; on a feature across three files it ran them in every run of both arms, and the rules added 7 percent.
 - Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: the rule acts on a code change, and an investigation that ends in a fix, an implementation and a routine change all make one.
   A review and a digest change no code, so there the rule would only add text to read.
@@ -402,6 +405,7 @@ A rule on by default also says what the rule effect experiment ([experiments/rul
 - Effect: The model checked its changes more often, and its performance improved.
 - Cost: More tokens; the source gives no figure.
 - Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered with `carry-through` at medium effort, a one-file fix was followed by a test run in 8 of 10 runs, against 0 of 10 without the rules, for about 1,400 more output tokens per run.
+  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md), 30 runs per arm, Haiku ran the tests after its last edit in 27 of 30 runs against 0 of 30 on the one-file fix; on a bug and a feature it already did without the rules (30 of 30 and 29 of 30 in both arms), and the rules added under a tenth of a cent per run.
 - Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: as for `sonnet-5-5/verify-changes`, the rule acts on a code change, which an investigation that ends in a fix, an implementation and a routine change all make, and a review or a digest does not.
 - Scope basis: sourced for `build`, `routine`; judgment for `investigate`.

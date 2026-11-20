@@ -354,6 +354,9 @@ test('a design\'s comparisons read each task apart, with Holm\'s adjustment over
     runs.push(run({ task: 'bug', model: 'haiku', arm: 'none', rep }, { verified: true }));
     runs.push(run({ task: 'question', model: 'fable', arm: 'rules', rep }, { report: prose('Short one here. Another short one.') }));
     runs.push(run({ task: 'question', model: 'fable', arm: 'none', rep }, { report: prose('This sentence is a good deal longer than the others; it also has a semicolon in it.') }));
+    // Medians tie at no semicolon, but only the runs without the rule ever use one.
+    runs.push(run({ task: 'feature', model: 'fable', arm: 'rules', rep }, { report: prose('One. Two.') }));
+    runs.push(run({ task: 'feature', model: 'fable', arm: 'none', rep }, { report: prose(rep <= 14 ? 'One; two. Three.' : 'One. Two.') }));
   }
   const cs = comparisons(design, runs);
   assert.equal(cs.length, 12);
@@ -367,6 +370,9 @@ test('a design\'s comparisons read each task apart, with Holm\'s adjustment over
   assert.equal(find('haiku-5-5/verify-changes', 'feature', 'verified')?.reading, 'not shown');
   assert.equal(find('fable-5-2/low-context-report', 'question', 'words_per_sentence')?.reading, 'supports the source');
   assert.equal(find('fable-5-2/low-context-report', 'question', 'semicolons_per_1k_words')?.reading, 'supports the source');
+  const tied = find('fable-5-2/low-context-report', 'feature', 'semicolons_per_1k_words');
+  assert.equal(tied?.reading, 'supports the source');
+  assert.match(tied?.with ?? '', /^mean 0\.0, median 0\.0 \(30 runs\)$/);
   for (const c of cs) if (!Number.isNaN(c.p)) assert.ok(c.holm >= c.p);
 
   const decisions = path.join(tempTree({}), 'decisions.jsonl');

@@ -224,11 +224,15 @@ export function comparisons(design: Design, runs: readonly RunRecord[]): Compari
         up = a.n && b.n ? a.k / a.n > b.k / b.n : null;
         shown = [shareWithInterval(a), shareWithInterval(b)];
       } else {
-        const a = median(prose(on, primary.signal));
-        const b = median(prose(off, primary.signal));
-        up = Number.isNaN(a) || Number.isNaN(b) || a === b ? null : a > b;
-        const runsOf = (n: number): string => `${n} run${n === 1 ? '' : 's'}`;
-        shown = [`median ${Number.isNaN(a) ? 'n/a' : a.toFixed(1)} (${runsOf(on.length)})`, `median ${Number.isNaN(b) ? 'n/a' : b.toFixed(1)} (${runsOf(off.length)})`];
+        const xs = prose(on, primary.signal);
+        const ys = prose(off, primary.signal);
+        // The direction is the test's own: U above half its range means the runs with the rule rank higher.
+        // Medians can tie (at 0 semicolons, say) while the ranks still differ.
+        const { u } = mannWhitney(xs, ys);
+        const middle = (xs.length * ys.length) / 2;
+        up = Number.isNaN(u) || u === middle ? null : u > middle;
+        const describe = (vs: number[]): string => (vs.length ? `mean ${mean(vs).toFixed(1)}, median ${median(vs).toFixed(1)} (${vs.length} run${vs.length === 1 ? '' : 's'})` : 'n/a');
+        shown = [describe(xs), describe(ys)];
       }
       return { primary, task, with: shown[0], without: shown[1], p: compare(primary.signal, on, off), up };
     }),
