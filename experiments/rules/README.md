@@ -43,8 +43,16 @@ The four tasks have different shapes: a read-only question, a precise one-file f
 | `bug` | `rain-gauge`, weekly and season rainfall totals per station | `build` | A symptom, the cause in another module | The weekly totals sometimes add up to more than the season total: find the cause, fix it, report the cause and the change | `checks/bug.test.js` passes: a reading on the hour two weeks meet counts once, in the later week, as `src/periods.js` documents, and the weeks add up to the season |
 | `feature` | `parcel-rates`, parcel prices by weight and zone, with a command line | `build` | A feature across several files | An express option at twice the price in zones 1 to 3 and refused in zone 4, in `quote()` and as `--express`, documented in `README.md` | `checks/feature.test.js` passes: prices, the zone 4 error naming the zone, the flag in any position, and the README |
 
+Two more tasks are long, with many parts each, for the rules against stopping early ([The long design](#the-long-design)):
+
+| Task | Fixture | Scope | Shape | Asks for | Parts |
+| --- | --- | --- | --- | --- | --- |
+| `migrate` | `ledger-reports`, 18 plain-text reports over a ledger that holds amounts in five currencies | `build` | The same change, with a different detail, in many modules | Move every report from the deprecated `formatMoney`, which prints every amount as dollars, to `formatAmount(minor, currency)`, as `MIGRATION.md` describes, then add a line under Unreleased in `CHANGELOG.md` | 19: each report formats every amount in its own currency and no longer uses `formatMoney`, and the changelog has the entry |
+| `backlog` | `orchard-log`, crate and weight totals from an orchard's harvest log, with a command line | `build` | Eight tickets of different kinds, listed in `TICKETS.md` | Work through all of the tickets: a bug, an input check, two command-line options, a unit conversion, a new command, the README, and a sort order the ticket leaves to whoever does it | 8, one per ticket |
+
 A hidden check is copied into the project only after the session ends, so the session never sees it.
 `solutions/` holds a reference solution for each task; `npm test` checks that each hidden check fails on its fixture and passes on its solution, and that the fixture's own suite passes on both.
+The hidden check of a long task holds one test per part, named `part <name>`, each loading what it checks on its own, so a part left undone or broken fails only itself; `npm test` also checks that no part passes on the fixture and that one part's change passes that part alone.
 
 ### The signals
 
@@ -53,6 +61,7 @@ Each signal stands for an effect a rule's source claims; `plan.json` maps each r
 | Signal | How it is computed | Rules |
 | --- | --- | --- |
 | Finished | The deliverable exists (`report.md`, or a change to a file the task allows), the session ended in success, and the final message does not hand the work back (an offer to go on or a question to the person, found by wording) | `sonnet-5-5/carry-through`, `haiku-5-5/carry-through`, `opus-5-5/unattended-run`, `fable-5-2/finish-work` |
+| Every part done | On a long task, every part of the hidden check passes; the run also records how many did and which did not | `sonnet-5-5/carry-through`, `haiku-5-5/carry-through`, `opus-5-5/unattended-run` |
 | Tests after the last edit | A test or run command that was allowed to run, after the last edit of a file other than the report | `sonnet-5-5/verify-changes`, `haiku-5-5/verify-changes` |
 | Extra files | Files changed beyond the ones the task allows (`allowed_changes` in `plan.json`, where `*` stands for any characters) | `sonnet-5-5/stay-in-scope`, `haiku-5-5/carry-through` |
 | Words per sentence, semicolons and parentheses per 1,000 words | Measured on the report (`report.md`, or the final message), outside code blocks, tables and headings | `fable-5-2/low-context-report` |
@@ -199,26 +208,112 @@ Where the expected costs come from:
 - If `verify` and `pointer` cost what `rules` did and `carry` what `none` did, the total is about $12.37.
 - The cap leaves room for runs that cost up to 1.7 times the projection; past that, it stops the run before its last repetitions.
 
+## The long design
+
+Two rules on by default claim that a model stops less before the work is done: `sonnet-5-5/carry-through` and `haiku-5-5/carry-through`.
+On 2026-11-16 and 2026-11-19 every run finished with and without them, because every model finishes a short task, so their effect could not show.
+The design `long` in `plan.json` gives them tasks long enough to stop before the end, `migrate` and `backlog`, and measures whether each run did every part.
+`opus-5-5/unattended-run`, which claims the same of Opus 5.5, is left out: at about $1 a run on these tasks, its cells would cost more than twice the rest of the design together.
+Its comparisons and the way they are read are fixed here and in `plan.json` before it runs.
+
+| Model | Effort | Tasks | The rule in the arm `carry` |
+| --- | --- | --- | --- |
+| Sonnet 5.5 | `low` | `migrate`, `backlog` | `sonnet-5-5/carry-through` |
+| Haiku 5.5 | `low` | `migrate`, `backlog` | `haiku-5-5/carry-through` |
+
+The choices that shape it:
+
+- The arm with the rule is `carry`, which delivers the model's `carry-through` alone ([The design](#the-design)).
+  The arm `rules` would also deliver the verify rules of Sonnet 5.5 and Haiku 5.5, which change what a run does after an edit and so could change whether a part passes.
+- Both models run at `low` effort, where their sources place the early stops (Sonnet's at low and medium effort, Haiku's at low).
+- Both tasks are in the scope `build` and the place `unattended`, where both rules apply.
+- Each run gets a budget of at least five times its expected cost (Sonnet 5.5 $2.50, Haiku 5.5 $0.50) and 40 minutes, so a limit rarely cuts a run short.
+  A run cut short by its budget or its time limit with a part undone counts as not done, in either arm; the summary reports how every run ended.
+
+### The pilot
+
+Whether these models stop short on these tasks without the rules is not known, and where they never do, the rules have nothing to change.
+So a pilot runs first: 5 runs of the arm `none` in each of the four cells, in a results directory of its own, within a cap of $10.
+A cell enters the design only when at least 2 of its 5 pilot runs left a part undone.
+The pilot's runs are not part of the design's data, and the gate reads the arm without the rules only, so it cannot favor either arm.
+If no cell enters, the design does not run, and the reading is that these models do every part of these tasks without the rules.
+
+### Comparisons
+
+One comparison per cell that enters, up to four, each task apart, with the rule against without it:
+
+| Rule | Model | Arms | Signal | Direction the source claims | Tasks |
+| --- | --- | --- | --- | --- | --- |
+| `sonnet-5-5/carry-through` | Sonnet 5.5 | `carry` against `none` | Every part done | Higher | `migrate`, `backlog` |
+| `haiku-5-5/carry-through` | Haiku 5.5 | `carry` against `none` | Every part done | Higher | `migrate`, `backlog` |
+
+Each comparison has a two-sided p from Fisher's exact test, and Holm's adjustment runs over the comparisons of the cells that entered.
+A comparison supports the rule's source when its adjusted p is below 0.05 and the share with the rule is the higher one.
+A part counts as done when its test in the hidden check passes, so a part done wrong counts as undone in both arms; the summary tells the runs that stopped with parts left (those that ended on their own, and whether they handed the work back) from those cut short by a limit.
+The number of parts done, the hand-backs, the turns, tokens and cost are reported as measured and read as secondary.
+
+The design runs 40 runs per arm and task.
+In a simulation of Fisher's exact test at Holm's strictest threshold over four comparisons, a share of runs with every part done that goes from 50% without the rule to 90% with it shows about 9 times in 10 at 40 runs per arm, against about 8 in 10 at 30; from 70% to 95% it shows about 6 times in 10, and a difference of a few points does not show.
+
+### Cost projection and cap of the long design
+
+`npm run experiment -- estimate --design long` prints the projection from the expected cost per run in `plan.json`:
+
+| Model | Pilot runs | Pilot expected | Design runs | Design expected |
+| --- | --- | --- | --- | --- |
+| Sonnet 5.5 | 10 | $4.25 | 160 | $68.00 |
+| Haiku 5.5 | 10 | $0.40 | 160 | $6.40 |
+| In total | 20 | $4.65 | 320 | $74.40 |
+
+So $79.05 is expected if every cell enters, and less for each cell the pilot keeps out.
+The pilot's cap is $10 and the design's $110, $120 in all; each run keeps the design's budget for its model.
+Costs are list prices as Claude Code reports them, whatever the login pays.
+
+Where the expected costs come from:
+
+- The list prices per million tokens that the recorded runs of 2026-11-16 and 2026-11-19 imply, fitted on every run of each model: Sonnet 5.5 $0.10 for a cached input token read, $4 for one written and $10 for an output token; Haiku 5.5 $0.01, $0.20 and $0.50.
+- The token counts of a run, assumed from Sonnet 5.5's `feature` runs of 2026-11-19, about 120,000 input tokens, 14,000 of them written to the cache, and 7,000 output tokens in 20 turns: a `migrate` run at about 750,000 read, 40,000 written and 12,000 output, a `backlog` run at about 1,400,000 read, 50,000 written and 15,000 output, for its eight tickets and test runs.
+- Haiku 5.5 is assumed at about half again Sonnet's tokens, as it took more turns on the same tasks on 2026-11-19.
+- Per run, that gives Sonnet 5.5 $0.35 on `migrate` and $0.50 on `backlog`, and Haiku 5.5 $0.03 and $0.05.
+- The same assumptions give Opus 5.5, at medium effort and about two thirds more output, $0.90 and $1.20 a run, $178.50 for its pilot and design cells: the reason it is left out.
+- If every run cost twice what is assumed, the design would cost about $149 with every cell in, and the cap would stop it after about 29 repetitions.
+
+The pilot measures the cost per run before the design starts, and `summarize --design long --pilot` prints the design's projection at the measured cost for the cells that enter.
+If that projection is above the design's cap, the design does not start with fewer repetitions; the cap or the cells are decided again first, since the 40 runs per arm are what the comparisons need.
+
+### Running the long design
+
+```bash
+npm run experiment -- run --design long --pilot --concurrency 2 --out <pilot dir>
+npm run experiment -- summarize <pilot dir> --design long --pilot
+npm run experiment -- run --design long --gate <pilot dir> --concurrency 2 --out <dir>
+npm run experiment -- summarize <dir> --design long
+```
+
+`--pilot` runs the pilot's cells within the pilot's cap; `summarize --pilot` writes the gate's reading of each cell and the design's projection after it.
+`--gate` runs only the cells the pilot let in.
+Long sessions take more memory, so these runs go two at a time.
+
 ## Running it
 
 ```bash
-npm run experiment -- run [--design expanded|single-rule] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--concurrency 3] [--stub] [--out <dir>]
-npm run experiment -- estimate [--design expanded|single-rule] [--reps 30]
-npm run experiment -- summarize <dir> [--design expanded|single-rule] [--to <dir>]
+npm run experiment -- run [--design expanded|single-rule|long [--pilot | --gate <pilot dir>]] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--concurrency 3] [--stub] [--out <dir>]
+npm run experiment -- estimate [--design expanded|single-rule|long] [--reps 30]
+npm run experiment -- summarize <dir> [--design expanded|single-rule|long [--pilot]] [--to <dir>]
 ```
 
 `run` records one JSON line per run in `<dir>/runs.jsonl`, and keeps each run's event stream, report and diff under `<dir>/runs/`.
-With `--design`, the design gives the models, tasks, arms, repetitions and cap, and `--models`, `--tasks`, `--arms`, `--reps` and `--cap-usd` narrow or change them; without it, every given model runs every given task.
+With `--design`, the design gives the models, tasks, arms, repetitions and cap, and the effort, budgets and time limit where it sets them, and `--models`, `--tasks`, `--arms`, `--reps` and `--cap-usd` narrow or change them; without it, every given model runs every given task, and the tasks are the four short ones unless `--tasks` names others.
 The decision log of every run goes to `<dir>/decisions.jsonl`, so `noonsight report --log <dir>/decisions.jsonl` shows what noonsight delivered.
 The hooks run this checkout's `dist/`, so do not build while an experiment runs: a hook that loads a file being rewritten fails.
 A run whose decision log holds no session start, because the hook did not run or failed, is not recorded.
 A run that stops can be started again with the same `--out`: the runs already recorded are skipped, so a later call with more `--reps` or other `--models` adds to the same results.
 `summarize` writes `<dir>/summary.md` and, with `--to`, copies it with `runs.jsonl` into a results directory; `runs.jsonl` holds no path of the machine that ran it.
-With `--design`, the summary adds the design's comparisons and its cost against the projection.
+With `--design`, the summary adds the design's comparisons and its cost against the projection, and on the long tasks how the runs ended.
 
 ### Cost control
 
-Each run passes `--max-budget-usd` with its model's budget from `plan.json`.
+Each run passes `--max-budget-usd` with its model's budget from `plan.json`, the design's where it sets one.
 A run starts only while the money already spent in `<dir>`, plus the budgets of the runs in flight, plus its own budget stays within the cap.
 The first run that cannot fit ends the queue, even when a cheaper one would fit, so the cells keep the same number of repetitions up to the one under way.
 Claude Code checks a run's budget between turns, so a run can pass its own budget by the cost of its last turn.
@@ -237,6 +332,8 @@ Given the pointer rule, it first reads the file the pointer names, then plays th
 So a stub run of the design `expanded` must show every comparison on `fix`, `bug` and `feature` supporting the source, and none on `question`, whose report is the same file in both arms.
 A stub run of the design `single-rule` must show the three test comparisons of `verify` supporting the source and the three of `carry` not shown, and every arm with a rule costing more than `none`: `verify` by one more turn, `carry` by the rule's text in every request, so the cost comparisons of `carry` read "supports the source" for Sonnet and "higher" for Haiku.
 In the same run, every `pointer` run reads the rule file at its first tool call, `pointer` against `verify` is not shown on the tests, and its cost reads "higher", by the turn that reads the file.
+On a long task, the script writes only the first half of the solution's files and ends with an offer to go on, so it leaves parts undone and hands the work back, unless the session received a rule against early stopping (a `carry-through` rule, or `opus-5-5/unattended-run`); with one, it does every part.
+A stub run of the design `long` lets every cell in after its pilot and must show every comparison supporting the source.
 Any other reading means the harness, not a model, changed.
 The stub reports usage at about four characters a token with no caching, so the cost of a stub run is simulated: it exercises the cap, and says nothing about what a model would spend.
 A results directory holds stub runs or real ones, never both, and the summary of stub runs says so at its top.
@@ -247,10 +344,12 @@ A results directory holds stub runs or real ones, never both, and the summary of
 - The rules that ship off are not delivered by `"use": "preset"`, so they are not measured unless an arm enables them.
 - Where an arm delivers several rules together, as Sonnet's does, a signal is credited to the rule whose source claims it, but the arm cannot tell the rules apart; the design `single-rule` separates `verify-changes` from `carry-through` for Sonnet and Haiku, on `fix` and `bug` only.
 - The pointer arm tries one wording of the pointer, with the file outside the project and named by its absolute path, for one rule; another wording, a file inside the project, or a longer rule could read differently.
-- The tasks are small, so the finished signal can hardly tell the arms apart: both usually finish.
+- The four short tasks are small, so the finished signal can hardly tell the arms apart on them: both usually finish. The long design is there for that.
 - The hand-back check reads wording and can miss an offer or flag a sentence that only mentions one.
 - The prose measures leave tables out, so a report written mostly as a table gets few sentences.
-- The fixtures are small JavaScript projects with no dependencies, in one language, at one effort level (`medium`) and in the place `unattended` only.
+- The fixtures are small JavaScript projects with no dependencies, in one language, in the place `unattended` only, and at one effort per model: `medium` in every design but `long`, which runs Sonnet 5.5 and Haiku 5.5 at `low`.
+- `opus-5-5/unattended-run`: the short tasks cannot tell its signal apart, and the long design leaves Opus 5.5 out for its cost.
+- The long tasks are long for a session on a small project, not of the size of real work; a model that does every part here may still stop on a task many times longer.
 - The hidden checks test behavior; the quality of the code or of the tests a session adds is not assessed.
 
 ## Results
@@ -258,3 +357,4 @@ A results directory holds stub runs or real ones, never both, and the summary of
 `results/` holds the result of each run of the experiment that was written up, with its date: `runs.jsonl`, the generated `summary.md`, and a reading of the data.
 [results/2026-11-19](results/2026-11-19/README.md) is the first run of the design `expanded`.
 [results/2026-11-20](results/2026-11-20/README.md) is the first run of the design `single-rule`.
+[results/2026-11-20-long](results/2026-11-20-long/README.md) is the first run of the design `long`: its pilot found no early stop without the rules, so the comparisons did not run.

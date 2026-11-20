@@ -1,0 +1,12 @@
+{
+  "name": "orchard-log",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "orchard": "bin/orchard.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

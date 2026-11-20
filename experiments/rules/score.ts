@@ -179,6 +179,20 @@ export function verification(calls: readonly ToolCall[], projectDir: string, ign
   return { edited: lastEdit >= 0, ran_tests: tests.length > 0, verified: lastEdit >= 0 && tests.some(([, i]) => i > lastEdit) };
 }
 
+/**
+ * The parts of a long task, from the TAP report of its hidden check: one top-level test per part,
+ * named `part <name>: ...`. Subtests are indented and left out; a test whose name does not start
+ * with `part ` is not a part.
+ */
+export function partResults(tap: string): { name: string; ok: boolean }[] {
+  const out: { name: string; ok: boolean }[] = [];
+  for (const line of tap.split('\n')) {
+    const m = /^(not )?ok \d+ - part ([^:\s]+)/.exec(line);
+    if (m) out.push({ name: m[2] as string, ok: !m[1] });
+  }
+  return out;
+}
+
 /** Files added, removed or changed in `after` compared with `before`, as sorted relative paths. */
 export function changedFiles(before: string, after: string, skip: readonly string[] = ['.claude', '.git', 'node_modules']): string[] {
   const a = listFiles(before, skip);

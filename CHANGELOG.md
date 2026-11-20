@@ -16,6 +16,13 @@
   `npm run delivery -- compare --design <name>` evaluates a design's comparisons against an earlier run, pairing the sessions of the same sequence with the exact McNemar test.
   See `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/README.md`.
 
+- The rule effect experiment (`experiments/rules`) has two long tasks, for the rules against stopping early, which every run of the short tasks finished with or without: `migrate` moves 18 report modules to a new money API and adds a changelog line, and `backlog` works through eight tickets of different kinds, one of them a choice the ticket leaves open.
+  Each part of a long task has its own test in the hidden check, and each run records which parts it did.
+  The design `long` (`--design long`) tests `sonnet-5-5/carry-through` and `haiku-5-5/carry-through`, each delivered alone by the arm `carry`, on both tasks at low effort, 40 runs per arm, with the share of runs that did every part as the comparison fixed before it runs; Opus 5.5 is left out for its cost.
+  A pilot of 5 runs without the rules per cell (`run --pilot`) comes first, and only the cells where it left parts undone run (`run --gate`); `npm run experiment -- estimate --design long` prints the projection, $79.05 expected if every cell enters, against caps of $10 for the pilot and $110 for the design.
+  A design can now set the effort, budget and time limit of each model's runs, and a comparison whose cell did not run is left out of Holm's adjustment.
+  `experiments/rules/results/2026-11-20-long/README.md` records its first run: the pilot's 20 runs, for $2.52, found Sonnet 5.5 and Haiku 5.5 doing every part of both tasks without the rules, so no cell entered, the design did not run, and the carry-through rules are still not measured.
+
 - `noonsight report` now reads the configuration with the project of the directory it runs for laid over it, as `noonsight check` and `noonsight models` do.
   It read the machine's configuration alone, so a trusted project's rules were counted from the decision log but had no `text` length, and a project rule on for a model that never received it was left out of the rules never delivered, so a project rule that stopped reaching a model went unnoticed.
   The report's second line names the project and what became of it (`project` in `--json`), and the heading of the rules never delivered names the project file when it applied, since the log holds the sessions of every project.
