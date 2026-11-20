@@ -1,6 +1,7 @@
 // The statistics the summary gives beside the counts: an interval for a share, a two-sided test for
-// each comparison of the arms, and Holm's correction across the comparisons a design tests. Exact or
-// closed-form methods only, so the same runs always give the same numbers.
+// each comparison of the arms, and Holm's correction across the comparisons a design tests; and the
+// paired test the delivery benchmark's comparisons use. Exact or closed-form methods only, so the same
+// runs always give the same numbers.
 
 /** The Wilson score interval of k successes in n tries, at 95 percent. */
 export function wilson(k: number, n: number, z = 1.959964): readonly [number, number] {
@@ -34,6 +35,20 @@ export function fisher(k1: number, n1: number, k2: number, n2: number): number {
     if (l <= seen + 1e-7) p += Math.exp(l);
   }
   return Math.min(1, p);
+}
+
+/**
+ * The two-sided p of the exact McNemar test on paired outcomes: `onlyFirst` pairs where only the
+ * first member has the outcome, `onlySecond` where only the second does. Under no difference each
+ * discordant pair goes either way with probability one half, so it is the exact binomial test.
+ */
+export function mcnemar(onlyFirst: number, onlySecond: number): number {
+  const n = onlyFirst + onlySecond;
+  if (n === 0) return 1;
+  const k = Math.min(onlyFirst, onlySecond);
+  let tail = 0;
+  for (let i = 0; i <= k; i++) tail += Math.exp(logFactorial(n) - logFactorial(i) - logFactorial(n - i) - n * Math.LN2);
+  return Math.min(1, 2 * tail);
 }
 
 /** The standard normal distribution function, by the Abramowitz and Stegun 7.1.26 approximation of erf. */

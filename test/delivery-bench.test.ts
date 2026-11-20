@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { evaluate, pair, readDesign, renderComparison, type Design, type Folder } from '../experiments/delivery/compare.js';
 import { check, readCorpus, type Entry } from '../experiments/delivery/corpus.js';
 import { failed, fuzzRuns, knownReason, sessionKey, signature, violationsOf, type Line } from '../experiments/delivery/fuzz.js';
 import { generate, hasQuietPair, show, valid, type Sequence } from '../experiments/delivery/generate.js';
@@ -17,6 +18,7 @@ import { comparePlant, occurrences, PLANTS } from '../experiments/delivery/plant
 import type { RequestFact, Run } from '../experiments/delivery/session.js';
 import { shrink } from '../experiments/delivery/shrink.js';
 import { reply } from '../experiments/delivery/stub.js';
+import { PACKAGE_ROOT } from '../src/config/paths.js';
 import { resolve, switchNote } from '../src/core/resolve.js';
 
 const ref = loadReference(fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-delivery-test-')));
@@ -232,6 +234,56 @@ test('measure: coverage, precision, cost and robustness of a set of sessions', (
   assert.deepEqual(Object.keys(m.byPath), ['after /model', 'start']);
   assert.equal(pathOf(spec, { kind: 'subagent', step: 3 }), 'subagent');
   assert.match(renderMarkdown({ 'on-s1-n2': m }), /\| Coverage \| 100\.0% \(2 of 2\) \|/);
+});
+
+test('compare: paired sessions, Holm over the primary comparisons, and the verdict of each kind', () => {
+  const run = (arm: Run['arm'], i: number): Run => ({ id: `${arm}-s1-${String(i).padStart(4, '0')}`, arm, plant: null, model: 'haiku', scope: null, unattended: true, steps: [{ k: 'turn' }] });
+  const ok = fact({ kind: 'main', step: 0, covered: true, expected: ['a'], expectedPresent: 1 });
+  const bad = fact({ kind: 'main', step: 0, covered: false, expected: ['a'], violations: [{ class: 'missing-own', rules: ['a'] }] });
+  const badSub = fact({ kind: 'subagent', step: 0, covered: false, expected: ['a'], violations: [{ class: 'missing-own', rules: ['a'] }] });
+  // Before: sessions 0 to 11 fail; after: only session 0 does, and session 12 did not run.
+  const before = Array.from({ length: 20 }, (_, i) => line(run('on', i), [i < 12 ? bad : ok]));
+  const after = Array.from({ length: 20 }, (_, i) => line(run('on', i), [i === 0 ? bad : ok], i === 12 ? 'step-timeout:0' : 'ok'));
+  const native = Array.from({ length: 10 }, (_, i) => line(run('claudemd', i), [ok, badSub]));
+  assert.deepEqual(pair(before, after, 'failed'), { sessions: 19, both: 1, onlyA: 11, onlyB: 0, onlyAExamples: ['s1-0001', 's1-0002', 's1-0003', 's1-0004', 's1-0005'], onlyBExamples: [] });
+  assert.equal(pair(native, after, 'uncovered-subagent').onlyA, 10);
+  assert.equal(pair(native, after, 'uncovered').both, 1, 'a session lacking a rule in its own conversation is uncovered too');
+
+  const folder = (runs: Record<string, Line[]>, agree: Record<string, unknown> | null = null): Folder => ({ sessions: (r) => runs[r] ?? null, file: (n) => (n === 'agree' ? agree : null) });
+  const design: Design = {
+    description: 'test',
+    claudeCode: '2.1.328',
+    command: 'all',
+    before: 'x',
+    alpha: 0.05,
+    comparisons: [
+      { id: 'P1', primary: true, question: 'fewer failures', a: { folder: 'before', run: 'on' }, b: { folder: 'after', run: 'on' }, measure: 'robustness.sessionsFailed', expect: 'lower', paired: 'failed' },
+      { id: 'P2', primary: true, question: 'more failures', a: { folder: 'after', run: 'on' }, b: { folder: 'before', run: 'on' }, measure: 'robustness.sessionsFailed', expect: 'lower', paired: 'failed' },
+      { id: 'P3', primary: true, question: 'first ten', a: { folder: 'after', run: 'claudemd' }, b: { folder: 'after', run: 'on', first: 10 }, measure: 'coverage.subagents.coverage', expect: 'higher', paired: 'uncovered-subagent' },
+      { id: 'C1', question: 'unchanged', a: { folder: 'after', run: 'claudemd' }, b: { folder: 'after', run: 'claudemd' }, measure: 'coverage.coverage', expect: 'same', paired: 'uncovered' },
+      { id: 'S1', question: 'log', a: { folder: 'after', run: 'on', file: 'agree', measure: 'coverage.log' }, b: { folder: 'after', run: 'on', file: 'agree', measure: 'coverage.stub' }, expect: 'same' },
+      { id: 'R1', question: 'cost', a: { folder: 'before', run: 'on' }, b: { folder: 'after', run: 'on' }, measure: 'cost.addedCharsPerAgentRequest', expect: null },
+      { id: 'N1', question: 'missing', a: { folder: 'before', run: 'rules' }, b: { folder: 'after', run: 'on' }, measure: 'coverage.coverage', expect: 'higher' },
+    ],
+  };
+  const rows = evaluate(design, { before: folder({ on: before }), after: folder({ on: after, claudemd: native }, { on: { coverage: { log: 1, stub: 0.99 } } }) });
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.deepEqual([byId.P1?.a, byId.P1?.b, byId.P1?.verdict], [12, 1, 'supported']);
+  assert.equal(byId.P2?.verdict, 'against');
+  assert.equal(byId.P1?.adjustedP, 3 * (byId.P1?.p as number), 'Holm multiplies the smallest of three p values by three');
+  assert.deepEqual([byId.P3?.a, byId.P3?.b, byId.P3?.pairs?.sessions, byId.P3?.verdict], [0, null, 10, 'not measured'], 'the first ten `on` sessions have no subagent request');
+  assert.equal(byId.C1?.verdict, 'holds');
+  assert.deepEqual([byId.S1?.a, byId.S1?.b, byId.S1?.verdict], [1, 0.99, 'does not hold']);
+  assert.equal(byId.R1?.verdict, 'reported');
+  assert.equal(byId.N1?.verdict, 'not measured');
+  assert.equal(byId.C1?.adjustedP, null, 'only primary comparisons are adjusted');
+  const md = renderComparison('test', design, rows);
+  assert.match(md, /\| P1 \(primary\) \| fewer failures \| `robustness\.sessionsFailed` \| lower \| 12 \| 1 \| 19: 1, 11, 0 \|/);
+  assert.match(md, /\| S1 \| log \| `coverage\.log against coverage\.stub` \| same \| 100\.0% \| 99\.0% \|/);
+
+  const planned = readDesign(path.join(PACKAGE_ROOT, 'experiments', 'delivery', 'plan.json'), 'after-f1-f2');
+  assert.ok(planned.comparisons.every((c) => c.measure || (c.a.measure && c.b.measure)), 'every planned comparison names its measure');
+  assert.throws(() => readDesign(path.join(PACKAGE_ROOT, 'experiments', 'delivery', 'plan.json'), 'nope'), /no design nope/);
 });
 
 test('log replay: what the conversation holds after each decision', () => {

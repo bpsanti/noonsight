@@ -7,6 +7,8 @@
 //   npm run delivery -- shrink     --sessions <file> --id <session> [--class <class> --kind main|subagent] [--plant <name>]
 //   npm run delivery -- measure    the four measures of every sessions/*.jsonl in the results folder
 //   npm run delivery -- agree      the decision log against the stub, on the `on` sessions of the results folder
+//   npm run delivery -- compare    --design <name>   the pre-registered comparisons of a design in plan.json,
+//                                  the results folder against the run the design names
 //   npm run delivery -- hooktime   [--runs 40]
 //   npm run delivery -- log        [--file <decisions.jsonl>]   aggregates of a real decision log, printed only
 //   npm run delivery -- all        corpus, fuzz under `on` and under each native arm, selfcheck, measure, agree, hooktime
@@ -24,6 +26,7 @@ import { readSettings } from '../../src/adapters/claude-code/install.js';
 import { managedTarget } from '../../src/adapters/claude-code/locations.js';
 import { findNoonsightHandlers } from '../../src/adapters/claude-code/settings.js';
 import { PACKAGE_ROOT, stateDir } from '../../src/config/paths.js';
+import { evaluate, folderAt, readDesign, renderComparison } from './compare.js';
 import { check, readCorpus, type Checked } from './corpus.js';
 import { failed, fuzzRuns, readLines, runMany, sessionKey, signature, violationsOf, type Line } from './fuzz.js';
 import { hasQuietPair, type Sequence } from './generate.js';
@@ -260,6 +263,18 @@ function agreeCommand(ctx: Context): void {
   process.stdout.write(`${JSON.stringify(out, null, 1)}\n`);
 }
 
+function compareCommand(ctx: Context): void {
+  const name = str(ctx.args, 'design', '');
+  if (!name) throw new Error('compare needs --design <name>');
+  const root = path.join(PACKAGE_ROOT, 'experiments', 'delivery');
+  const design = readDesign(path.join(root, 'plan.json'), name);
+  const rows = evaluate(design, { before: folderAt(path.join(root, 'results', design.before)), after: folderAt(ctx.results) });
+  writeJson(path.join(ctx.results, 'comparison.json'), { design: name, before: design.before, comparisons: rows });
+  const md = renderComparison(name, design, rows);
+  fs.writeFileSync(path.join(ctx.results, 'comparison.md'), md);
+  process.stdout.write(md);
+}
+
 function logCommandMeasure(args: Args): void {
   const file = str(args, 'file', path.join(stateDir(), 'decisions.jsonl'));
   const all = readLog(file);
@@ -282,7 +297,7 @@ async function main(): Promise<number> {
     logCommandMeasure(args);
     return 0;
   }
-  if (!['corpus', 'fuzz', 'selfcheck', 'shrink', 'measure', 'agree', 'hooktime', 'all'].includes(command)) {
+  if (!['corpus', 'fuzz', 'selfcheck', 'shrink', 'measure', 'agree', 'compare', 'hooktime', 'all'].includes(command)) {
     process.stdout.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'experiments', 'delivery', 'run.ts'), 'utf8').split('\n\n')[0]?.replace(/^\/\/ ?/gm, '') ?? '');
     process.stdout.write('\n');
     return command === 'help' ? 0 : 2;
@@ -300,6 +315,7 @@ async function main(): Promise<number> {
   if (command === 'shrink') await shrinkCommand(ctx);
   if (command === 'measure') measureCommand(ctx);
   if (command === 'agree') agreeCommand(ctx);
+  if (command === 'compare') compareCommand(ctx);
   if (command === 'hooktime') writeJson(path.join(ctx.results, 'hooktime.json'), hookTime(path.join(ctx.work, 'hooktime'), num(args, 'runs', 40)));
   if (command === 'all') {
     const corpusOk = (await corpus(ctx)).every((c) => c.outcome === 'as-expected');

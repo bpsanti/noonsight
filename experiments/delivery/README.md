@@ -96,6 +96,7 @@ npm run delivery -- shrink --sessions <results>/sessions/on-s1-n300.jsonl --id o
 npm run delivery -- measure                     # summary.json and summary.md from every sessions file
 npm run delivery -- agree                       # the decision log against the stub
 npm run delivery -- hooktime                    # the time of each hook
+npm run delivery -- compare --design after-f1-f2 --results <results>  # a design's comparisons against an earlier run
 npm run delivery -- all                         # all of the above but shrink, for one Claude Code version
 ```
 
@@ -103,6 +104,40 @@ npm run delivery -- all                         # all of the above but shrink, f
 An interrupted fuzz run continues where it stopped when run again with the same arm, seed and size; `--fresh` starts it over.
 `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` runs the corpus as a test (`test/live/delivery-corpus.test.ts`), next to the delivery probe of the benchmark pilot.
 Nothing in this folder installs anything machine-wide, and it refuses to run where noonsight is installed machine-wide, since those hooks would run in its sessions too.
+
+### Comparing two runs
+
+`plan.json` holds designs: each names the run it compares against (`before`, a folder under `results/`), the command it runs, and its comparisons, fixed before it runs.
+`npm run delivery -- compare --design <name> --results <folder>` evaluates them on that folder and writes `comparison.json` and `comparison.md` there ([compare.ts](compare.ts)).
+A comparison reads one measure on two sides, each a run of one of the two folders or the first sessions of one, and says how the second side should relate to the first.
+A paired comparison also pairs the sessions of the same sequence that ran on both sides, and counts those where only one side failed or had a request without its right rules; its p is the exact McNemar test, which fits the design since a seed gives every arm and every build the same sequences.
+Holm's adjustment runs over the primary comparisons, and a primary comparison is supported when its measure moves the way it expects and its adjusted p is below the design's alpha.
+The others are read from the measure alone.
+Sessions files are not committed, so a paired comparison against an older run needs that run's `sessions/` folder in place; without it, only the measures compare.
+
+### The design `after-f1-f2`
+
+The run of 2026-11-19 at `467d465` measured the fuzz level and the native arms before the fixes of F1 and F2; after them, only the corpus and the self-check ran.
+The design `after-f1-f2` runs the fuzz level and the native arms again on the fixed build, with what makes the two runs comparable held fixed: Claude Code 2.1.328, the same command (`all`), seed 1, 300 sessions under `on` and the first 60 under each native arm.
+Only the concurrency changes, from 6 to 2 sessions at once, which changes how long steps take but not the sequences.
+Its comparisons:
+
+| | Question | Measure | Expects | Paired on |
+| --- | --- | --- | --- | --- |
+| P1, primary | Fewer sessions under `on` break the invariant in a way nothing documented explains | Sessions with an unexplained violation, before and after | Lower | Failing sessions |
+| P2, primary | Coverage under `on` is higher | Coverage, before and after | Higher | Sessions with a request without its right rules |
+| P3 to P5, primary | On the same 60 sequences, coverage is higher under `on` than under `claudemd`, `rules` and `skills` | Coverage, each arm against the first 60 `on` sessions of the same run | Higher | Sessions with a request without its right rules |
+| P6 to P8, primary | The same for subagents | Subagent coverage | Higher | Sessions with a subagent request without its right rules |
+| C1 to C3, controls | `claudemd`, `rules` and `skills` are unchanged, since noonsight delivers nothing under a native arm | Coverage, before and after | The same, and no session that changed | Sessions with a request without its right rules |
+| S1 | Under `on`, coverage is higher in the sessions with two quiet steps in a row | Coverage of those sessions | Higher | |
+| S2 | Under `on`, fewer requests hold another model's rule with no note | Requests with `foreign-unretired` | Lower | |
+| S3 | Under `on`, subagent coverage is no lower | Subagent coverage | Not lower | |
+| S4 | The decision log gives the coverage the stub saw under `on` | `agree.json`, the log against the stub | The same | |
+| R1 to R3 | Under `on`, the own share, the right share and the characters added per request | | Reported only | |
+
+The prediction behind P1 and S1: every failing session before the fixes had two quiet steps in a row, the shape F1 and F2 need, so after them no session should fail but those a documented limit explains.
+A failing session after the fixes is read one by one: one that a documented limit explains is recorded as such, and any other is a new defect, shrunk with `shrink` and recorded in the results' `failures/` folder, not fixed in the same change.
+The controls check the harness: noonsight's configuration under a native arm is `"use": "none"`, so a native arm that changed would mean the sessions are not as repeatable as the comparison assumes.
 
 ### The decision log
 
@@ -124,6 +159,7 @@ results/
       selfcheck.json  whether each plant was caught, and the sequence it shrank to
       agree.json      the decision log against the stub
       hooktime.json   the time of each hook
+      comparison.json the comparisons of a design in plan.json against an earlier run (comparison.md renders them)
       failures/       one shrunk sequence per file
       sessions/       one line per session (not committed: the seed reproduces them)
 ```

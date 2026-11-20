@@ -9,7 +9,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { allowedChange, cellKey, cells, designCells, EXPERIMENT_DIR, loadPlan, projection, renderProjection, stubEnv, type RunRecord } from '../experiments/rules/run.js';
 import { answerLine, answerScore, changedFiles, handsBack, prose, toolCalls, verification } from '../experiments/rules/score.js';
-import { fisher, holm, mannWhitney, wilson } from '../experiments/rules/stats.js';
+import { fisher, holm, mannWhitney, mcnemar, wilson } from '../experiments/rules/stats.js';
 import { RULES_MARKER, script, solutionFiles, STUB_REPORTS, stubReply } from '../experiments/rules/stub.js';
 import { comparisons, summarize } from '../experiments/rules/summary.js';
 import { tempTree } from './helpers.js';
@@ -206,7 +206,7 @@ test('the expanded design runs each model on its own three tasks, 30 times per a
   assert.match(renderProjection(plan, design), /Expected in total: \$78\.18, at list price as Claude Code reports it\. The cap is \$120\.00/);
 });
 
-test('statistics: Wilson intervals, Fisher\'s exact test, Mann-Whitney U and Holm\'s adjustment give the published values', () => {
+test('statistics: Wilson intervals, Fisher\'s exact test, Mann-Whitney U, McNemar\'s exact test and Holm\'s adjustment give the published values', () => {
   const pct = ([lo, hi]: readonly [number, number]): string => `${Math.round(lo * 100)}-${Math.round(hi * 100)}`;
   // The intervals and p values of experiments/rules/results/2026-11-18.
   assert.equal(pct(wilson(28, 30)), '79-98');
@@ -223,6 +223,12 @@ test('statistics: Wilson intervals, Fisher\'s exact test, Mann-Whitney U and Hol
   assert.equal(mw.p.toFixed(4), '0.0122');
   assert.equal(mannWhitney([2, 2, 2], [2, 2, 2]).p, 1);
   assert.deepEqual(holm([0.01, 0.04, 0.03]).map((p) => p.toFixed(2)), ['0.03', '0.06', '0.06']);
+  // The exact McNemar test: twice the binomial tail of the smaller discordant count, at one half.
+  assert.equal(mcnemar(1, 9).toFixed(4), '0.0215');
+  assert.equal(mcnemar(9, 1), mcnemar(1, 9));
+  assert.equal(mcnemar(0, 26).toPrecision(6), (2 / 2 ** 26).toPrecision(6));
+  assert.equal(mcnemar(5, 5), 1);
+  assert.equal(mcnemar(0, 0), 1);
 });
 
 test('the stub plays the reference solution, runs the tests only when the session received rules, and answers side requests with a short text', () => {
