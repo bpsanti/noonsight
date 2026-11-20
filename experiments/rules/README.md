@@ -7,14 +7,19 @@ With `--stub`, a scripted stand-in on the same machine answers instead, so the w
 
 ## The design
 
-The same small task runs on each target model in two arms:
+The same small task runs on each target model in two arms, or in four for the design `single-rule`:
 
 | Arm | Configuration | What the session receives |
 | --- | --- | --- |
 | `rules` | The model declared with `"use": "preset"` | The preset rules for the model, the task's scope and the place `unattended`, delivered by noonsight's `SessionStart` hook |
 | `none` | The model declared with `"use": "none"` | Nothing; the same hook runs and logs `declared-none` |
+| `verify` | The preset with every other rule that ships on for the model in `disable` | The model's `verify-changes` rule alone |
+| `carry` | The same, keeping the model's `carry-through` rule | The model's `carry-through` rule alone |
 
-Everything else is the same in both arms: the prompt, the model, the effort, the tools, the fixture project and the hooks.
+An arm in `plan.json` is the entry the model gets in noonsight's configuration, except for `only`, which names the one preset rule the arm keeps, without its model prefix; the harness turns it into the `disable` list from the installed preset, and refuses a model whose preset has no such rule that ships on.
+Without a design, a run covers the arms in `default_arms`, `rules` and `none`.
+
+Everything else is the same in every arm: the prompt, the model, the effort, the tools, the fixture project and the hooks.
 So a difference between the arms comes from the rules or from chance, and with a few runs per arm chance stays large.
 
 A session is in the place `unattended` because the plan's variable (`NOONSIGHT_EXPERIMENT`) is listed in `session.unattended_when_env` and set, as an orchestrator's workers would be.
@@ -113,12 +118,78 @@ Where the expected costs come from:
 
 To check the assumptions before most of the money is spent, run the first 10 repetitions (about $26 expected), compare the measured cost with the projection (`summarize --design expanded` prints both), and then run again with `--reps 30` and the same `--out`, which adds the rest.
 
+## The single-rule design
+
+On 2026-11-19 the `rules` arm delivered `verify-changes` and `carry-through` together to Sonnet 5.5 and Haiku 5.5, so the tests it added and the cost it added could not be credited to either rule.
+The design `single-rule` in `plan.json` separates them: each rule alone, both together and neither, on the same tasks, in the same run.
+Its comparisons and the way they are read are fixed here and in `plan.json` before it runs.
+
+| Model | Tasks | Arms |
+| --- | --- | --- |
+| Sonnet 5.5 | `fix`, `bug` | `rules`, `verify`, `carry`, `none` |
+| Haiku 5.5 | `fix`, `bug` | `rules`, `verify`, `carry`, `none` |
+
+That is 480 runs: 2 models, 2 tasks each, 4 arms, 30 repetitions.
+
+- The tasks are the two where the `rules` arm changed what a model did on 2026-11-19 (`fix` for both models, `bug` for Sonnet), and where it cost the most (from +22% to +127% per run).
+- `feature` is left out: on 2026-11-19 both arms ran the tests in nearly every run there and the rules added under 10% to the cost, so there is little to split.
+- `rules` and `none` run again rather than being taken from 2026-11-19, so that all four arms share one day, one Claude Code version and one machine.
+- On `fix`, whose scope is `routine`, Sonnet's `rules` arm also delivers `sonnet-5-5/stay-in-scope`, as it did on 2026-11-19; the arms with one rule leave it out, so on that task the difference between `rules` and the two single rules also holds `stay-in-scope`.
+- The `rules` arm is the reference for the parts: the summary gives each single rule's difference from `none` as a part of the `rules` arm's difference, and the parts need not add up to the whole, since two rules can overlap or add to each other.
+
+### Comparisons
+
+Fourteen comparisons, each task apart, with the arm of one rule against `none`:
+
+| Rule | Model | Arms | Signal | Direction the source claims | Tasks |
+| --- | --- | --- | --- | --- | --- |
+| `sonnet-5-5/verify-changes` | Sonnet 5.5 | `verify` against `none` | Tests after the last edit, among the runs that edited code | Higher | `fix`, `bug` |
+| `haiku-5-5/verify-changes` | Haiku 5.5 | `verify` against `none` | Tests after the last edit, among the runs that edited code | Higher | `fix` |
+| `sonnet-5-5/carry-through` | Sonnet 5.5 | `carry` against `none` | Tests after the last edit, among the runs that edited code | None | `fix`, `bug` |
+| `haiku-5-5/carry-through` | Haiku 5.5 | `carry` against `none` | Tests after the last edit, among the runs that edited code | None | `fix` |
+| `sonnet-5-5/verify-changes` | Sonnet 5.5 | `verify` against `none` | Cost per run | Higher ("slightly higher cost per task") | `fix`, `bug` |
+| `haiku-5-5/verify-changes` | Haiku 5.5 | `verify` against `none` | Cost per run | Higher ("more tokens") | `fix`, `bug` |
+| `sonnet-5-5/carry-through` | Sonnet 5.5 | `carry` against `none` | Cost per run | Higher ("sessions run longer and cost more") | `fix`, `bug` |
+| `haiku-5-5/carry-through` | Haiku 5.5 | `carry` against `none` | Cost per run | None ("not reported for the text") | `fix`, `bug` |
+
+The claimed directions are the rule's `effect` and `cost` in the preset, from its source.
+Haiku's `bug` is left out of the test comparisons: both arms ran the tests after the last edit in all 30 runs on 2026-11-19, so a single rule has nothing to show there.
+
+Each comparison has a two-sided p, Fisher's exact test for the share and the Mann-Whitney U test for the cost, and Holm's adjustment runs over all fourteen.
+Where the source claims a direction, a comparison supports it when its adjusted p is below 0.05 and the difference goes that way, as in the expanded design.
+Where the source claims none, the reading is the direction found ("higher" or "lower") when the adjusted p is below 0.05, and "not shown" otherwise.
+`summarize --design single-rule` writes that reading for each one, and a table of every arm against `none` with each single rule's part of the `rules` arm's difference, which is descriptive.
+
+They answer the question this way:
+
+- If `verify` against `none` supports the source and `carry` against `none` is not shown, the tests come from `verify-changes`; a `carry` reading of "higher" would mean `carry-through` adds tests of its own (Haiku's version asks for the work to be "done and checked" before it stops).
+- The cost of each rule alone is the difference of its arm from `none`; set against the `rules` arm, it says how much of the combined cost each rule carries.
+
+### Cost projection and cap
+
+`npm run experiment -- estimate --design single-rule` prints the projection from the expected cost per run in `plan.json`:
+
+| Model | Runs | Expected |
+| --- | --- | --- |
+| Sonnet 5.5 | 240 | $10.68 |
+| Haiku 5.5 | 240 | $0.96 |
+| In total | 480 | $11.64 |
+
+The cap is $20, and each run keeps its model's budget (`budget_usd` in `plan.json`).
+
+Where the expected costs come from:
+
+- Every arm is assumed at the mean cost per run of the `rules` arm on 2026-11-19, on the same task and model, with Claude Code 2.1.328 (`results/2026-11-19/runs.jsonl`): $0.038 on `fix` and $0.051 on `bug` for Sonnet, $0.0034 and $0.0046 for Haiku.
+- That should be an upper estimate, since `verify` and `carry` deliver one of the rules `rules` delivers and `none` delivers none.
+- If `verify` costs what `rules` did and `carry` what `none` did, the total is about $9.47.
+- The cap leaves room for runs that cost up to 1.7 times the projection; past that, it stops the run before its last repetitions.
+
 ## Running it
 
 ```bash
-npm run experiment -- run [--design expanded] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--concurrency 3] [--stub] [--out <dir>]
-npm run experiment -- estimate [--design expanded] [--reps 30]
-npm run experiment -- summarize <dir> [--design expanded] [--to <dir>]
+npm run experiment -- run [--design expanded|single-rule] [--models fable,sonnet] [--tasks question,fix] [--arms rules,none] [--reps 3] [--cap-usd 10] [--concurrency 3] [--stub] [--out <dir>]
+npm run experiment -- estimate [--design expanded|single-rule] [--reps 30]
+npm run experiment -- summarize <dir> [--design expanded|single-rule] [--to <dir>]
 ```
 
 `run` records one JSON line per run in `<dir>/runs.jsonl`, and keeps each run's event stream, report and diff under `<dir>/runs/`.
@@ -145,8 +216,11 @@ Cost is what Claude Code reports, which is the API list price whatever the login
 `run --stub` sends every request of every session to a local stand-in for the Messages API ([stub.ts](stub.ts), on the delivery benchmark's server, [../delivery/stub.ts](../delivery/stub.ts)).
 Each session gets its own home and Claude Code configuration directory and a placeholder login token, so nothing of the person's login is used and nothing reaches Anthropic.
 Claude Code, the lab, noonsight's hooks, the hidden checks, the scoring and the summary are the real ones; only the answers are scripted.
-The script plays the task's reference solution: it reads the files the solution changes, writes the solution, runs `npm test` only when the session received noonsight's rules and the task changes code, and ends with a short report, plain with the rules and dense without them.
-So a stub run of a design must show every comparison on `fix`, `bug` and `feature` supporting the source, and none on `question`, whose report is the same file in both arms; any other reading means the harness, not a model, changed.
+The script plays the task's reference solution: it reads the files the solution changes, writes the solution, runs `npm test` only when the session received a `verify-changes` rule and the task changes code, and ends with a short report, plain with any rule and dense without one.
+It reads which rules the session received from noonsight's own envelope in the request, so it plays an arm of one rule as that rule alone.
+So a stub run of the design `expanded` must show every comparison on `fix`, `bug` and `feature` supporting the source, and none on `question`, whose report is the same file in both arms.
+A stub run of the design `single-rule` must show the three test comparisons of `verify` supporting the source and the three of `carry` not shown, and every arm with a rule costing more than `none`: `verify` by one more turn, `carry` by the rule's text in every request, so the cost comparisons of `carry` read "supports the source" for Sonnet and "higher" for Haiku.
+Any other reading means the harness, not a model, changed.
 The stub reports usage at about four characters a token with no caching, so the cost of a stub run is simulated: it exercises the cap, and says nothing about what a model would spend.
 A results directory holds stub runs or real ones, never both, and the summary of stub runs says so at its top.
 
@@ -154,7 +228,7 @@ A results directory holds stub runs or real ones, never both, and the summary of
 
 - `fable-5-2/finish-work` reaches subagents only, and these tasks start none; Fable sessions already get Claude Code's own "Finishing work" advice.
 - The rules that ship off are not delivered by `"use": "preset"`, so they are not measured unless an arm enables them.
-- Where an arm delivers several rules together, as Sonnet's does, a signal is credited to the rule whose source claims it, but the arm cannot tell the rules apart.
+- Where an arm delivers several rules together, as Sonnet's does, a signal is credited to the rule whose source claims it, but the arm cannot tell the rules apart; the design `single-rule` separates `verify-changes` from `carry-through` for Sonnet and Haiku, on `fix` and `bug` only.
 - The tasks are small, so the finished signal can hardly tell the arms apart: both usually finish.
 - The hand-back check reads wording and can miss an offer or flag a sentence that only mentions one.
 - The prose measures leave tables out, so a report written mostly as a table gets few sentences.

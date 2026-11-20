@@ -7,11 +7,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { allowedChange, cellKey, cells, designCells, EXPERIMENT_DIR, loadPlan, projection, renderProjection, stubEnv, type RunRecord } from '../experiments/rules/run.js';
+import { allowedChange, armEntry, cellKey, cells, designCells, EXPERIMENT_DIR, loadPlan, projection, renderProjection, stubEnv, type RunRecord } from '../experiments/rules/run.js';
 import { answerLine, answerScore, changedFiles, handsBack, prose, toolCalls, verification } from '../experiments/rules/score.js';
 import { fisher, holm, mannWhitney, wilson } from '../experiments/rules/stats.js';
-import { RULES_MARKER, script, solutionFiles, STUB_REPORTS, stubReply } from '../experiments/rules/stub.js';
+import { deliveredRules, RULES_MARKER, script, solutionFiles, STUB_REPORTS, stubReply } from '../experiments/rules/stub.js';
 import { comparisons, summarize } from '../experiments/rules/summary.js';
+import { loadConfig } from '../src/config/load.js';
+import { PACKAGE_ROOT } from '../src/config/paths.js';
+import { resolve } from '../src/core/resolve.js';
 import { tempTree } from './helpers.js';
 
 test('prose counts sentences and words outside code, tables and headings, and the semicolons and parentheses per 1,000 words', () => {
@@ -112,12 +115,19 @@ test('the plan is complete, and its cells go rep by rep with a key per run', () 
         assert.ok(design.expected_usd[model]?.[task] !== undefined, `${name}: no expected cost for ${model} on ${task}`);
       }
     }
-    for (const arm of design.arms) assert.ok(plan.arms[arm], `${name}: arm ${arm}`);
+    for (const arm of design.arms) {
+      assert.ok(plan.arms[arm], `${name}: arm ${arm}`);
+      // Every arm resolves for every model of the design: an arm with one rule needs that rule in the model's preset.
+      for (const model of Object.keys(design.cells)) armEntry(plan, arm, plan.models[model]?.id ?? model);
+    }
     for (const p of design.primary) {
       assert.ok(plan.signals[p.rule], `${name}: primary rule ${p.rule}`);
+      assert.ok(p.rule.startsWith(`${plan.models[p.model]?.id.replace(/^claude-/, '')}/`), `${name}: ${p.rule} is not a rule of ${p.model}`);
+      for (const arm of [p.arm ?? 'rules', p.against ?? 'none']) assert.ok(design.arms.includes(arm), `${name}: ${p.rule} compares the arm ${arm}, which the design does not run`);
       for (const task of p.tasks) assert.ok(design.cells[p.model]?.includes(task), `${name}: ${p.rule} on ${task} is not a cell of the design`);
     }
   }
+  for (const arm of plan.default_arms) assert.ok(plan.arms[arm], `default arm ${arm}`);
   const preset = JSON.parse(fs.readFileSync(path.join(EXPERIMENT_DIR, '..', '..', 'presets', 'claude', 'preset.json'), 'utf8')) as Record<string, any>;
   const ids = Object.values(preset.models as Record<string, { rules: { id: string }[] }>).flatMap((m) => m.rules.map((r) => r.id));
   for (const rule of Object.keys(plan.signals)) assert.ok(ids.includes(rule), `the plan names a rule the preset does not have: ${rule}`);
@@ -225,22 +235,26 @@ test('statistics: Wilson intervals, Fisher\'s exact test, Mann-Whitney U and Hol
   assert.deepEqual(holm([0.01, 0.04, 0.03]).map((p) => p.toFixed(2)), ['0.03', '0.06', '0.06']);
 });
 
-test('the stub plays the reference solution, runs the tests only when the session received rules, and answers side requests with a short text', () => {
+test('the stub plays the reference solution, runs the tests only when the session received a verify rule, and answers side requests with a short text', () => {
   const plan = loadPlan();
   const task = plan.tasks.feature;
   assert.ok(task);
   const fixture = path.join(EXPERIMENT_DIR, 'fixtures', task.fixture);
   const solution = solutionFiles(path.join(EXPERIMENT_DIR, task.solution));
   assert.deepEqual(Object.keys(solution).sort(), ['README.md', 'src/cli.js', 'src/quote.js']);
-  const steps = (rules: boolean) => script(task, solution, fixture, '/work/p', rules);
+  const steps = (rules: readonly string[]) => script(task, solution, fixture, '/work/p', rules);
   const tools = [{ name: 'Read' }];
-  const turn = (assistants: number, rules: boolean) =>
+  // The envelope as noonsight's SessionStart hook writes it (src/core/resolve.ts).
+  const envelope = (ids: readonly string[]): string =>
+    `${RULES_MARKER} model="claude-sonnet-5-5" scope="build">\nWorking rules the user declared for claude-sonnet-5-5, task scope "build" (delivered by noonsight, rules ${ids.join(', ')}):\nThe rules.\n</noonsight-rules>`;
+  const both = ['sonnet-5-5/carry-through', 'sonnet-5-5/verify-changes'];
+  const turn = (assistants: number, rules: boolean | readonly string[]) =>
     stubReply(
       {
         tools,
         system: 'You are Claude Code.',
         messages: [
-          { role: 'user', content: rules ? `${RULES_MARKER} model="claude-sonnet-5-5">...` : 'the task' },
+          { role: 'user', content: rules === false ? 'the task' : envelope(rules === true ? both : rules) },
           ...Array.from({ length: assistants }, () => [{ role: 'assistant', content: [] }, { role: 'user', content: [] }]).flat(),
         ],
       },
@@ -255,11 +269,18 @@ test('the stub plays the reference solution, runs the tests only when the sessio
   assert.equal((turn(1, false).content[1]?.input as Record<string, unknown>).content, solution['src/cli.js']);
   assert.deepEqual(turn(2, true).content.map((b) => [b.name, (b.input as Record<string, unknown>).command]), [['Bash', 'npm test']]);
   assert.equal(turn(3, true).content[0]?.text, STUB_REPORTS.rules);
+  // A rule other than a verify rule: no test run, and the plain report.
+  assert.equal(turn(2, ['sonnet-5-5/carry-through']).content[0]?.text, STUB_REPORTS.rules);
+  assert.deepEqual(turn(2, ['sonnet-5-5/verify-changes']).content.map((b) => b.name), ['Bash']);
   assert.equal(turn(2, false).content[0]?.text, STUB_REPORTS.none);
   assert.equal(turn(2, false).stop, 'end_turn');
   assert.equal(turn(9, false).content[0]?.text, 'Done.');
   assert.ok((turn(0, false).usage?.input_tokens ?? 0) > 0);
   assert.deepEqual(stubReply({ messages: [{ role: 'user', content: 'a title, please' }] }, steps).content, [{ type: 'text', text: 'ok' }]);
+
+  assert.deepEqual(deliveredRules({ messages: [{ role: 'user', content: envelope(both) }] }), both);
+  assert.deepEqual(deliveredRules({ system: envelope(['haiku-5-5/verify-changes']), messages: [] }), ['haiku-5-5/verify-changes']);
+  assert.deepEqual(deliveredRules({ messages: [{ role: 'user', content: 'the task (delivered by noonsight, rules x/y)' }] }), []);
 });
 
 test('a stub run reaches nothing of the person\'s login: its own home and configuration, a placeholder token and the local API', () => {
@@ -325,12 +346,12 @@ test('the summary compares each rule\'s signals with and without it, from the ru
   assert.match(text, /sonnet-5-5\/verify-changes: 1 delivery in 1 session/);
   assert.match(
     text,
-    /\| fix \| sonnet \| Runs that ran the tests after their last edit, of those that edited code \| 2 of 2 \(34-100%\) \| 0 of 2 \(0-66%\) \| 0\.33 \|/,
+    /\| fix \| sonnet \| rules \| Runs that ran the tests after their last edit, of those that edited code \| 2 of 2 \(34-100%\) \| 0 of 2 \(0-66%\) \| 0\.33 \|/,
   );
-  assert.match(text, /\| fix \| sonnet \| Runs that changed files beyond the ones asked \| 0 of 2 \(0-66%\) \| 1 of 2 \(9-91%\) \| 1\.00 \|/);
-  assert.match(text, /\| fix \| sonnet \| Output tokens per run \| 1,300 \(1,200 to 1,400\) \| 900 \(800 to 1,000\) \| [\d.]+ \|/);
-  assert.match(text, /\| fix \| sonnet \| Difference of the means \| \+400 output, \+0 input tokens \| \+\$0\.020 per run \|  \|/);
-  assert.match(text, /\| fix \| sonnet \| Delivered in the same runs \| sonnet-5-5\/stay-in-scope \|/);
+  assert.match(text, /\| fix \| sonnet \| rules \| Runs that changed files beyond the ones asked \| 0 of 2 \(0-66%\) \| 1 of 2 \(9-91%\) \| 1\.00 \|/);
+  assert.match(text, /\| fix \| sonnet \| rules \| Output tokens per run \| 1,300 \(1,200 to 1,400\) \| 900 \(800 to 1,000\) \| [\d.]+ \|/);
+  assert.match(text, /\| fix \| sonnet \| rules \| Difference of the means \| \+400 output, \+0 input tokens \| \+\$0\.020 per run \|  \|/);
+  assert.match(text, /\| fix \| sonnet \| rules \| Delivered in the same runs \| sonnet-5-5\/stay-in-scope \|/);
   assert.match(text, /### `opus-5-5\/unattended-run`\n\nNot delivered in any run of this experiment, so not measured\./);
   assert.doesNotMatch(text, /stub/);
   assert.doesNotMatch(text, /## Pre-registered comparisons/);
@@ -379,7 +400,99 @@ test('a design\'s comparisons read each task apart, with Holm\'s adjustment over
   fs.writeFileSync(decisions, '');
   const text = summarize(plan, runs, decisions, design);
   assert.match(text, /## Pre-registered comparisons\n\nThe comparisons the design fixed before it ran, each task apart\. p is two-sided; Holm's adjustment runs over all 12/);
-  assert.match(text, /\| `sonnet-5-5\/verify-changes` \| fix \| Tests after the last edit \(higher claimed\) \| 30 of 30 \(89-100%\) \| 3 of 30 \(3-26%\) \| < 0\.001 \| < 0\.001 \| supports the source \|/);
+  assert.match(text, /\| `sonnet-5-5\/verify-changes` \| fix \| rules against none \| Tests after the last edit \(higher claimed\) \| 30 of 30 \(89-100%\) \| 3 of 30 \(3-26%\) \| < 0\.001 \| < 0\.001 \| supports the source \|/);
   assert.match(text, /## Cost against the projection/);
   assert.match(text, /\| sonnet \| fix \| 60 \| \$0\.032 \| \$0\.050 \| \$3\.00 \|/);
+});
+
+test('an arm with one rule is the preset with every other rule that ships on for the model turned off, so noonsight delivers that rule alone', () => {
+  const plan = loadPlan();
+  assert.deepEqual(armEntry(plan, 'rules', 'claude-sonnet-5-5'), { use: 'preset' });
+  assert.deepEqual(armEntry(plan, 'none', 'claude-sonnet-5-5'), { use: 'none' });
+  assert.deepEqual(armEntry(plan, 'verify', 'claude-sonnet-5-5'), { use: 'preset', disable: ['sonnet-5-5/carry-through', 'sonnet-5-5/stay-in-scope'] });
+  assert.deepEqual(armEntry(plan, 'carry', 'claude-sonnet-5-5'), { use: 'preset', disable: ['sonnet-5-5/stay-in-scope', 'sonnet-5-5/verify-changes'] });
+  assert.deepEqual(armEntry(plan, 'verify', 'claude-haiku-5-5'), { use: 'preset', disable: ['haiku-5-5/carry-through'] });
+  assert.deepEqual(armEntry(plan, 'carry', 'claude-haiku-5-5'), { use: 'preset', disable: ['haiku-5-5/verify-changes'] });
+  assert.throws(() => armEntry(plan, 'verify', 'claude-fable-5-2'), /the arm "verify" keeps the rule "verify-changes", which the preset does not have for claude-fable-5-2/);
+  assert.throws(() => armEntry(plan, 'nothing', 'claude-sonnet-5-5'), /unknown arm "nothing"/);
+
+  // What noonsight decides for each arm, in the place and scopes the runs have, with and without the code-edit trigger.
+  const delivered = (arm: string, model: string, scope: string, triggers: 'code-edit'[] = []): readonly string[] => {
+    const file = path.join(tempTree({}), 'noonsight.json');
+    fs.writeFileSync(file, JSON.stringify({ version: 1, models: { [model]: armEntry(plan, arm, model) }, session: { unattended_when_env: [plan.unattended_env] } }));
+    const d = resolve(loadConfig(file, { presetsDir: path.join(PACKAGE_ROOT, 'presets') }, {}), { model, scope, place: 'unattended', triggers });
+    return d.status === 'matched' ? d.rules : [];
+  };
+  for (const [model, prefix] of [['claude-sonnet-5-5', 'sonnet-5-5'], ['claude-haiku-5-5', 'haiku-5-5']] as const)
+    for (const scope of ['routine', 'build'])
+      for (const triggers of [[], ['code-edit']] as 'code-edit'[][]) {
+        assert.deepEqual(delivered('verify', model, scope, triggers), [`${prefix}/verify-changes`], `${model} ${scope} ${triggers}`);
+        assert.deepEqual(delivered('carry', model, scope, triggers), [`${prefix}/carry-through`], `${model} ${scope} ${triggers}`);
+        assert.ok(delivered('rules', model, scope, triggers).length >= 2);
+        assert.deepEqual(delivered('none', model, scope, triggers), []);
+      }
+  assert.deepEqual(delivered('rules', 'claude-sonnet-5-5', 'routine'), ['sonnet-5-5/carry-through', 'sonnet-5-5/stay-in-scope', 'sonnet-5-5/verify-changes']);
+});
+
+test('the single-rule design runs Sonnet and Haiku on fix and bug in four arms, 30 times each, within a cap above its projection', () => {
+  const plan = loadPlan();
+  const design = plan.designs['single-rule'];
+  assert.ok(design);
+  const all = designCells(plan, design);
+  assert.equal(all.length, 2 * 2 * 4 * 30);
+  assert.deepEqual(all.slice(0, 8).map(cellKey), [
+    'fix.sonnet.rules.1',
+    'fix.sonnet.verify.1',
+    'fix.sonnet.carry.1',
+    'fix.sonnet.none.1',
+    'fix.haiku.rules.1',
+    'fix.haiku.verify.1',
+    'fix.haiku.carry.1',
+    'fix.haiku.none.1',
+  ]);
+  const p = projection(plan, design);
+  assert.ok(Math.abs(p.expected - 11.64) < 0.01, String(p.expected));
+  assert.ok(p.expected < design.cap_usd && design.cap_usd < p.ceiling);
+  assert.equal(comparisons(design, []).length, 14);
+});
+
+test('a comparison of two named arms reads the direction found where the source claims none, and compares cost per run', () => {
+  const plan = loadPlan();
+  const design = plan.designs['single-rule'];
+  assert.ok(design);
+  const one = (model: string, rule: string) => ({ status: 'matched', reason: null, place: 'unattended', rules: [`${model}-5-5/${rule}`], sha256: 'abc', delivered: 'rules' });
+  const runs: RunRecord[] = [];
+  for (let rep = 1; rep <= 30; rep++)
+    for (const task of ['fix', 'bug'])
+      for (const model of ['sonnet', 'haiku']) {
+        runs.push(run({ task, model, arm: 'none', rep }, { verified: false }, 700, 0.02 + rep / 10000));
+        // Verify alone tests after every edit and costs more; carry-through alone tests less often than none, at the same cost.
+        runs.push(run({ task, model, arm: 'verify', rep, noonsight: one(model, 'verify-changes') }, { verified: true }, 1200, 0.03 + rep / 10000));
+        runs.push(run({ task, model, arm: 'carry', rep, noonsight: one(model, 'carry-through') }, { verified: false }, 700, 0.02 + rep / 10000));
+        runs.push(run({ task, model, arm: 'rules', rep, noonsight: { ...one(model, 'verify-changes'), rules: [`${model}-5-5/carry-through`, `${model}-5-5/verify-changes`] } }, { verified: true }, 1300, 0.032 + rep / 10000));
+      }
+  const cs = comparisons(design, runs);
+  const find = (rule: string, task: string, signal: string) => cs.find((c) => c.primary.rule === rule && c.task === task && c.primary.signal === signal);
+  assert.deepEqual(find('sonnet-5-5/verify-changes', 'fix', 'verified')?.arms, ['verify', 'none']);
+  assert.equal(find('sonnet-5-5/verify-changes', 'fix', 'verified')?.reading, 'supports the source');
+  assert.equal(find('sonnet-5-5/carry-through', 'fix', 'verified')?.reading, 'not shown');
+  assert.equal(find('haiku-5-5/verify-changes', 'bug', 'cost_usd')?.reading, 'supports the source');
+  assert.match(find('haiku-5-5/verify-changes', 'bug', 'cost_usd')?.with ?? '', /^mean \$0\.0316, median \$0\.031\d \(30 runs\)$/);
+  assert.equal(find('sonnet-5-5/carry-through', 'bug', 'cost_usd')?.reading, 'not shown');
+  assert.equal(find('haiku-5-5/carry-through', 'bug', 'cost_usd')?.reading, 'not shown');
+
+  // Where the source claims no direction, a difference is read as the direction found.
+  const lower = runs.map((r) => (r.arm === 'carry' && r.model === 'haiku' ? { ...r, cost_usd: r.cost_usd - 0.01 } : r));
+  assert.equal(comparisons(design, lower).find((c) => c.primary.rule === 'haiku-5-5/carry-through' && c.task === 'fix' && c.primary.signal === 'cost_usd')?.reading, 'lower');
+
+  const decisions = path.join(tempTree({}), 'decisions.jsonl');
+  fs.writeFileSync(decisions, '');
+  const text = summarize(plan, runs, decisions, design);
+  assert.match(text, /\| `sonnet-5-5\/carry-through` \| fix \| carry against none \| Tests after the last edit \(no direction claimed\) \| 0 of 30 \(0-11%\) \| 0 of 30 \(0-11%\) \| 1\.00 \| 1\.00 \| not shown \|/);
+  assert.match(text, /\| fix \| sonnet \| verify: sonnet-5-5\/verify-changes \| 30 \|/);
+  assert.match(text, /\| fix \| sonnet \| verify \| Delivered in the same runs \| no other rule \|/);
+  assert.match(text, /## Each arm against none/);
+  assert.match(text, /\| sonnet \| fix \| verify \| sonnet-5-5\/verify-changes \| 30 \| 30 of 30 \(89-100%\) \| \+100 points \| 100% \| \$0\.0316 \| \+\$0\.0100 \| 83% \| 4\.0 \|/);
+  assert.match(text, /\| sonnet \| fix \| none \| none \| 30 \| 0 of 30 \(0-11%\) \|  \|  \| \$0\.0216 \|  \|  \| 4\.0 \|/);
+  assert.match(text, /\| sonnet \| fix \| rules \| sonnet-5-5\/carry-through, sonnet-5-5\/verify-changes \| 30 \| 30 of 30 \(89-100%\) \| \+100 points \|  \| \$0\.033\d \| \+\$0\.0120 \|  \| 4\.0 \|/);
 });

@@ -63,12 +63,17 @@ function compare(name: string, on: readonly RunRecord[], off: readonly RunRecord
     const b = count(off, test);
     return a.n && b.n ? fisher(a.k, a.n, b.k, b.n) : NaN;
   }
-  if (PROSE.has(name)) return mannWhitney(prose(on, name), prose(off, name)).p;
+  if (PROSE.has(name) || name === 'cost_usd') return mannWhitney(measure(on, name), measure(off, name)).p;
   return NaN;
 }
 
 function prose(runs: readonly RunRecord[], name: string): number[] {
   return runs.map((r) => r.signals.report[name as 'words_per_sentence']);
+}
+
+/** A measured signal of each run: a prose measure of its report, or its cost. */
+function measure(runs: readonly RunRecord[], name: string): number[] {
+  return name === 'cost_usd' ? runs.map((r) => r.cost_usd) : prose(runs, name);
 }
 
 const inputTokens = (r: RunRecord): number => r.tokens.input + r.tokens.cache_creation + r.tokens.cache_read;
@@ -141,7 +146,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
     rows.push([
       task,
       model,
-      arm === 'rules' ? `rules: ${rules.length ? rules.join(', ') : 'none apply'}` : arm,
+      plan.arms[arm]?.use === 'none' ? arm : `${arm}: ${rules.length ? rules.join(', ') : 'none apply'}`,
       String(g.length),
       share(g, (r) => r.signals.finished),
       share(g, (r) => r.signals.handed_back),
@@ -168,31 +173,32 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
   // Per rule.
   lines.push('## Each rule', '');
   for (const [rule, names] of Object.entries(plan.signals)) {
-    const withRule = runs.filter((r) => r.arm === 'rules' && r.noonsight.rules.includes(rule));
+    // Every arm whose runs received the rule, each against the arm `none` of the same task and model.
+    const withRule = runs.filter((r) => plan.arms[r.arm]?.use !== 'none' && r.noonsight.rules.includes(rule));
     lines.push(`### \`${rule}\``, '');
     if (!withRule.length) {
       lines.push('Not delivered in any run of this experiment, so not measured.', '');
       continue;
     }
-    const pairs = [...new Set(withRule.map((r) => `${r.task}\u0000${r.model}`))];
+    const groupsRule = [...new Set(withRule.map((r) => `${r.task}\u0000${r.model}\u0000${r.arm}`))];
     const rowsRule: Row[] = [];
-    for (const pair of pairs) {
-      const [task, model] = pair.split('\u0000') as [string, string];
-      const on = withRule.filter((r) => r.task === task && r.model === model);
+    for (const group of groupsRule) {
+      const [task, model, arm] = group.split('\u0000') as [string, string, string];
+      const on = withRule.filter((r) => r.task === task && r.model === model && r.arm === arm);
       const off = runs.filter((r) => r.arm === 'none' && r.task === task && r.model === model);
       const others = [...new Set(on.flatMap((r) => r.noonsight.rules).filter((x) => x !== rule))];
-      for (const name of names) rowsRule.push([task, model, SIGNAL_NAMES[name] ?? name, signal(name, on), signal(name, off), formatP(compare(name, on, off))]);
+      for (const name of names) rowsRule.push([task, model, arm, SIGNAL_NAMES[name] ?? name, signal(name, on), signal(name, off), formatP(compare(name, on, off))]);
       const dOut = mean(on.map((r) => r.tokens.output)) - mean(off.map((r) => r.tokens.output));
       const dIn = mean(on.map(inputTokens)) - mean(off.map(inputTokens));
       const dCost = mean(on.map((r) => r.cost_usd)) - mean(off.map((r) => r.cost_usd));
       const pOut = mannWhitney(on.map((r) => r.tokens.output), off.map((r) => r.tokens.output)).p;
-      rowsRule.push([task, model, 'Output tokens per run', spread(on.map((r) => r.tokens.output)), spread(off.map((r) => r.tokens.output)), formatP(pOut)]);
-      rowsRule.push([task, model, 'Difference of the means', `${signed(dOut)} output, ${signed(dIn)} input tokens`, `${signedUsd(dCost)} per run`, '']);
-      if (others.length) rowsRule.push([task, model, 'Delivered in the same runs', others.join(', '), '', '']);
+      rowsRule.push([task, model, arm, 'Output tokens per run', spread(on.map((r) => r.tokens.output)), spread(off.map((r) => r.tokens.output)), formatP(pOut)]);
+      rowsRule.push([task, model, arm, 'Difference of the means', `${signed(dOut)} output, ${signed(dIn)} input tokens`, `${signedUsd(dCost)} per run`, '']);
+      rowsRule.push([task, model, arm, 'Delivered in the same runs', others.length ? others.join(', ') : 'no other rule', '', '']);
     }
-    lines.push(table(['Task', 'Model', 'Signal', 'With the rule', 'Without', 'p'], rowsRule), '');
+    lines.push(table(['Task', 'Model', 'Arm', 'Signal', 'With the rule', 'Without (arm none)', 'p'], rowsRule), '');
   }
-  if (design) lines.push(...preregistered(design, runs), ...costAgainstProjection(design, runs));
+  if (design) lines.push(...preregistered(design, runs), ...(design.arms.length > 2 ? eachArm(design, runs) : []), ...costAgainstProjection(design, runs));
   return `${lines.join('\n')}\n`;
 }
 
@@ -202,46 +208,55 @@ export const ALPHA = 0.05;
 export interface Comparison {
   readonly primary: Primary;
   readonly task: string;
+  /** The two arms compared: the one with the rule, then the one without it. */
+  readonly arms: readonly [string, string];
   readonly with: string;
   readonly without: string;
   readonly p: number;
   readonly holm: number;
-  /** Whether the runs show the difference the rule's source claims, after Holm's adjustment. */
-  readonly reading: 'supports the source' | 'not shown' | 'opposite to the source';
+  /**
+   * After Holm's adjustment: whether the runs show the difference the rule's source claims, or, where
+   * the source claims no direction, which way the arm with the rule goes.
+   */
+  readonly reading: 'supports the source' | 'not shown' | 'opposite to the source' | 'higher' | 'lower';
 }
 
 /** The pre-registered comparisons of a design, each task apart, with Holm's adjustment over all of them. */
 export function comparisons(design: Design, runs: readonly RunRecord[]): Comparison[] {
   const raw = design.primary.flatMap((primary) =>
     primary.tasks.map((task) => {
-      const on = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === 'rules');
-      const off = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === 'none');
+      const arms = [primary.arm ?? 'rules', primary.against ?? 'none'] as const;
+      const on = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === arms[0]);
+      const off = runs.filter((r) => r.model === primary.model && r.task === task && r.arm === arms[1]);
       let up: boolean | null;
       let shown: [string, string];
       if (primary.signal === 'verified') {
         const a = count(on, BINARY.verified as (r: RunRecord) => boolean | undefined);
         const b = count(off, BINARY.verified as (r: RunRecord) => boolean | undefined);
-        up = a.n && b.n ? a.k / a.n > b.k / b.n : null;
+        up = a.n && b.n && a.k / a.n !== b.k / b.n ? a.k / a.n > b.k / b.n : null;
         shown = [shareWithInterval(a), shareWithInterval(b)];
       } else {
-        const xs = prose(on, primary.signal);
-        const ys = prose(off, primary.signal);
+        const xs = measure(on, primary.signal);
+        const ys = measure(off, primary.signal);
         // The direction is the test's own: U above half its range means the runs with the rule rank higher.
         // Medians can tie (at 0 semicolons, say) while the ranks still differ.
         const { u } = mannWhitney(xs, ys);
         const middle = (xs.length * ys.length) / 2;
         up = Number.isNaN(u) || u === middle ? null : u > middle;
-        const describe = (vs: number[]): string => (vs.length ? `mean ${mean(vs).toFixed(1)}, median ${median(vs).toFixed(1)} (${vs.length} run${vs.length === 1 ? '' : 's'})` : 'n/a');
+        const f = (n: number): string => (primary.signal === 'cost_usd' ? `$${n.toFixed(4)}` : n.toFixed(1));
+        const describe = (vs: number[]): string => (vs.length ? `mean ${f(mean(vs))}, median ${f(median(vs))} (${vs.length} run${vs.length === 1 ? '' : 's'})` : 'n/a');
         shown = [describe(xs), describe(ys)];
       }
-      return { primary, task, with: shown[0], without: shown[1], p: compare(primary.signal, on, off), up };
+      return { primary, task, arms, with: shown[0], without: shown[1], p: compare(primary.signal, on, off), up };
     }),
   );
   const adjusted = holm(raw.map((c) => (Number.isNaN(c.p) ? 1 : c.p)));
   return raw.map(({ up, ...c }, i) => {
     const h = adjusted[i] ?? 1;
-    const claimed = c.primary.direction === 'higher';
-    const reading = h >= ALPHA || up === null ? 'not shown' : up === claimed ? 'supports the source' : 'opposite to the source';
+    let reading: Comparison['reading'];
+    if (h >= ALPHA || up === null) reading = 'not shown';
+    else if (c.primary.direction === undefined) reading = up ? 'higher' : 'lower';
+    else reading = up === (c.primary.direction === 'higher') ? 'supports the source' : 'opposite to the source';
     return { ...c, holm: h, reading };
   });
 }
@@ -250,6 +265,7 @@ const PRIMARY_SIGNAL: Readonly<Record<Primary['signal'], string>> = {
   verified: 'Tests after the last edit',
   words_per_sentence: 'Words per sentence',
   semicolons_per_1k_words: 'Semicolons per 1,000 words',
+  cost_usd: 'Cost per run',
 };
 
 function preregistered(design: Design, runs: readonly RunRecord[]): string[] {
@@ -257,12 +273,78 @@ function preregistered(design: Design, runs: readonly RunRecord[]): string[] {
   return [
     '## Pre-registered comparisons',
     '',
-    `The comparisons the design fixed before it ran, each task apart. p is two-sided; Holm's adjustment runs over all ${cs.length}, and a comparison supports the rule's source when its adjusted p is below ${ALPHA} and the difference goes the way the source claims.`,
+    `The comparisons the design fixed before it ran, each task apart. p is two-sided; Holm's adjustment runs over all ${cs.length}, and a comparison supports the rule's source when its adjusted p is below ${ALPHA} and the difference goes the way the source claims. Where the source claims no direction, the reading is the direction found, or "not shown".`,
     '',
     table(
-      ['Rule', 'Task', 'Signal', 'With the rule', 'Without', 'p', 'Holm p', 'Reading'],
-      cs.map((c) => [`\`${c.primary.rule}\``, c.task, `${PRIMARY_SIGNAL[c.primary.signal]} (${c.primary.direction} claimed)`, c.with, c.without, formatP(c.p), formatP(c.holm), c.reading]),
+      ['Rule', 'Task', 'Arms', 'Signal', 'With the rule', 'Without', 'p', 'Holm p', 'Reading'],
+      cs.map((c) => [
+        `\`${c.primary.rule}\``,
+        c.task,
+        `${c.arms[0]} against ${c.arms[1]}`,
+        `${PRIMARY_SIGNAL[c.primary.signal]} (${c.primary.direction ? `${c.primary.direction} claimed` : 'no direction claimed'})`,
+        c.with,
+        c.without,
+        formatP(c.p),
+        formatP(c.holm),
+        c.reading,
+      ]),
     ),
+    '',
+  ];
+}
+
+/**
+ * Each arm of a design against the arm `none`, for a design with more than two arms: the share of
+ * runs that tested after their last edit and the cost per run, with each difference from `none` and
+ * the part it is of the difference of the arm `rules`. Descriptive only: the tests are the
+ * pre-registered comparisons above.
+ */
+function eachArm(design: Design, runs: readonly RunRecord[]): string[] {
+  const rows: Row[] = [];
+  const verified = BINARY.verified as (r: RunRecord) => boolean | undefined;
+  const rate = (g: readonly RunRecord[]): number => {
+    const c = count(g, verified);
+    return c.n ? c.k / c.n : NaN;
+  };
+  const pct = (n: number): string => (Number.isNaN(n) ? 'n/a' : `${Math.round(n * 100)}%`);
+  const points = (n: number): string => (Number.isNaN(n) ? 'n/a' : `${n >= 0 ? '+' : '-'}${Math.abs(Math.round(n * 100))} points`);
+  const part = (d: number, whole: number): string => (Number.isNaN(d) || Number.isNaN(whole) || whole === 0 ? 'n/a' : `${Math.round((d / whole) * 100)}%`);
+  for (const [model, tasks] of Object.entries(design.cells))
+    for (const task of tasks) {
+      const of = (arm: string): RunRecord[] => runs.filter((r) => r.model === model && r.task === task && r.arm === arm);
+      const none = of('none');
+      const all = of('rules');
+      const dCostAll = mean(all.map((r) => r.cost_usd)) - mean(none.map((r) => r.cost_usd));
+      const dRateAll = rate(all) - rate(none);
+      for (const arm of design.arms) {
+        const g = of(arm);
+        if (!g.length) continue;
+        const rules = [...new Set(g.flatMap((r) => r.noonsight.rules))];
+        const dCost = mean(g.map((r) => r.cost_usd)) - mean(none.map((r) => r.cost_usd));
+        const dRate = rate(g) - rate(none);
+        const base = arm === 'none';
+        rows.push([
+          model,
+          task,
+          arm,
+          rules.length ? rules.join(', ') : 'none',
+          String(g.length),
+          `${shareWithInterval(count(g, verified))}`,
+          base ? '' : points(dRate),
+          base || arm === 'rules' ? '' : part(dRate, dRateAll),
+          `$${mean(g.map((r) => r.cost_usd)).toFixed(4)}`,
+          base ? '' : signedUsd4(dCost),
+          base || arm === 'rules' ? '' : part(dCost, dCostAll),
+          mean(g.map((r) => r.turns)).toFixed(1),
+        ]);
+      }
+    }
+  return [
+    '## Each arm against none',
+    '',
+    'Descriptive, beside the comparisons above: for each arm, the tests after the last edit and the mean cost per run, each with its difference from the arm `none` and, for an arm with fewer rules than `rules`, that difference as a part of the difference of the arm `rules`. Parts need not add up to 100%: rules can overlap or add to each other, and chance moves every mean.',
+    '',
+    table(['Model', 'Task', 'Arm', 'Rules delivered', 'Runs', 'Tests after last edit', 'Against none', 'Part of rules', 'Cost per run', 'Against none', 'Part of rules', 'Turns per run'], rows),
     '',
   ];
 }
@@ -275,7 +357,9 @@ function costAgainstProjection(design: Design, runs: readonly RunRecord[]): stri
       const g = runs.filter((r) => r.model === model && r.task === task);
       const per = design.expected_usd[model]?.[task] ?? NaN;
       expected += per * g.length;
-      rows.push([model, task, String(g.length), `$${per.toFixed(3)}`, g.length ? `$${mean(g.map((r) => r.cost_usd)).toFixed(3)}` : 'n/a', `$${g.reduce((s, r) => s + r.cost_usd, 0).toFixed(2)}`]);
+      // Below a cent, three decimals would round Haiku's costs to a single digit.
+      const usd = (n: number): string => `$${n.toFixed(per < 0.01 ? 4 : 3)}`;
+      rows.push([model, task, String(g.length), usd(per), g.length ? usd(mean(g.map((r) => r.cost_usd))) : 'n/a', `$${g.reduce((s, r) => s + r.cost_usd, 0).toFixed(2)}`]);
     }
   const spent = runs.reduce((s, r) => s + r.cost_usd, 0);
   return [
@@ -292,6 +376,11 @@ function signed(n: number): string {
   if (Number.isNaN(n)) return 'n/a';
   const r = Math.round(n);
   return `${r >= 0 ? '+' : '-'}${Math.abs(r).toLocaleString('en-US')}`;
+}
+
+function signedUsd4(n: number): string {
+  if (Number.isNaN(n)) return 'n/a';
+  return `${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(4)}`;
 }
 
 function signedUsd(n: number): string {
