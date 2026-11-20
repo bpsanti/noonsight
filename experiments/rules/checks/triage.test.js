@@ -125,7 +125,8 @@ test('part PAN-27', () => {
 });
 
 test('part PAN-29', () => {
-  const file = stockFile(['milk;dairy;6;l;2027-01-11', 'rice;dry;25;kg;2027-03-11', 'cream;dairy;1;l;']);
+  // Whatever window a category has, a batch due tomorrow is listed and one that expired yesterday is not (PAN-24 leaves the windows open).
+  const file = stockFile(['milk;dairy;6;l;2027-01-11', 'rice;dry;25;kg;2027-01-09', 'cream;dairy;1;l;']);
   const json = (command, rest) => {
     const r = pantry(command, file, rest);
     assert.equal(r.status, 0, r.err);

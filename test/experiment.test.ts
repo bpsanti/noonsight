@@ -830,6 +830,8 @@ test('the triage check accepts every choice the tickets leave open, and refuses 
     assert.ok(passes('PAN-32', solutionWith('triage', 'src/cli.js', (t) => t.replace('opts.below ?? opts.min', read).replace("opts[a.slice(2)] = next;", read.includes('maxQty') ? "opts[a.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = next;" : "opts[a.slice(2)] = next;"))), read);
   assert.equal(passes('PAN-32', solutionWith('triage', 'src/cli.js', (t) => t.replace('opts.below ?? opts.min', 'opts.min'))), false);
   assert.equal(passes('PAN-32', solutionWith('triage', 'src/cli.js', (t) => t.replace('opts.below ?? opts.min', 'opts.below'))), false);
+  // PAN-29: with long windows for every category, which PAN-24 allows.
+  assert.ok(passes('PAN-29', solutionWith('triage', 'src/stock.js', (t) => t.replace('{ produce: 3, canned: 30 }', '{ produce: 3, canned: 60, dry: 60, frozen: 365, hygiene: 3650 }'))));
   // PAN-29: JSON printed over several lines.
   assert.ok(passes('PAN-29', solutionWith('triage', 'src/cli.js', (t) => t.replace('io.out(JSON.stringify(items));', 'io.out(JSON.stringify(items, null, 2));'))));
   // PAN-26: the shelf shown in any form.
