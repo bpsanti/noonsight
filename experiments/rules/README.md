@@ -441,3 +441,4 @@ A results directory holds stub runs or real ones, never both, and the summary of
 [results/2026-11-19](results/2026-11-19/README.md) is the first run of the design `expanded`.
 [results/2026-11-20](results/2026-11-20/README.md) is the first run of the design `single-rule`.
 [results/2026-11-20-long](results/2026-11-20-long/README.md) is the first run of the design `long`: its pilot found no early stop without the rules, so the comparisons did not run.
+[results/2026-11-20-harder](results/2026-11-20-harder/README.md) is the first run of the design `harder`: `triage` entered for both models and `codes` for neither; `sonnet-5-5/carry-through` supports its source there, and `haiku-5-5/carry-through` is not shown.

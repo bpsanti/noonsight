@@ -714,6 +714,8 @@ test('the summary reads a long design: completion with and without the rule, how
   const decisions = path.join(tempTree({}), 'decisions.jsonl');
   fs.writeFileSync(decisions, '');
   const text = summarize(plan, runs, decisions, design);
+  // The header gives the effort the runs recorded, not the plan's.
+  assert.match(summarize(plan, runs.map((r) => ({ ...r, effort: 'low' })), decisions, design), /^160 runs, Claude Code [^,]+, effort low, /m);
   assert.match(text, /Holm's adjustment runs over the 2 that ran \(2 of the 4 have no run in one of their arms, so they are not run\)/);
   assert.match(text, /\| `sonnet-5-5\/carry-through` \| migrate \| carry against none \| Every part done \(higher claimed\) \| 40 of 40 \(91-100%\) \| 20 of 40 \(35-65%\) \| < 0\.001 \| < 0\.001 \| supports the source \|/);
   assert.match(text, /## Long tasks: how the runs ended/);

@@ -118,6 +118,12 @@ On 2026-11-20, with Claude Code 2.1.329, 600 runs split Sonnet 5.5's and Haiku 5
 On 2026-11-20, a pilot of 20 runs looked for early stops on two long tasks, an 18-module migration and an 8-ticket backlog, at low effort and without the rules, for $2.52 ([results](experiments/rules/results/2026-11-20-long/README.md)).
 Sonnet 5.5 and Haiku 5.5 did every part in every run, so the carry-through rules had nothing to change there, the comparisons fixed for them did not run, and those rules are still not measured.
 
+On 2026-11-20, 180 runs tried them on two harder long tasks, for $27.18 against a $120 cap ([results](experiments/rules/results/2026-11-20-harder/README.md)):
+
+- On a 13-ticket backlog where one ticket leaves a decision open, `sonnet-5-5/carry-through` made Sonnet 5.5 settle it instead of handing it back, and the runs that did every part went from 9 of 40 to 32 of 40, at no measurable cost.
+- `haiku-5-5/carry-through` was not shown (6 of 40 against 2 of 40): Haiku 5.5 settled the decision without the rule too, and its misses were a part it did not see.
+- On a 36-file migration both models did every part without the rules, writing a script for the repeated edits, so the rules were not compared there.
+
 `experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
 
 `experiments/delivery/` measures whether each model's rules reach every request it receives, and only those rules, through `/model`, compaction, `/clear`, resumes, subagents and file edits, for noonsight and for a `CLAUDE.md`, `.claude/rules` and a skill per model; it runs real Claude Code sessions against a local stand-in for the API, so it spends no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).

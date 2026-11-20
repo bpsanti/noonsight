@@ -302,6 +302,8 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Cost: Sessions at low and medium effort run longer and cost more; the source gives no figure.
 - Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
   Not measured again on [2026-11-20](../../experiments/rules/results/2026-11-20-long/README.md): on two long tasks at low effort, an 18-module migration and an 8-ticket backlog, Sonnet 5.5 did every part in 10 of 10 runs without it, so the comparison with it did not run.
+  On [2026-11-20](../../experiments/rules/results/2026-11-20-harder/README.md), at low effort and unattended, on a 13-ticket backlog with a decision the ticket leaves open, Sonnet 5.5 did every part in 32 of 40 runs with it alone, against 9 of 40 without it: without it, 30 of 40 runs handed the open decision back, against 6 of 40 with it; the cost per run did not change measurably ($0.285 against $0.292).
+  On a 36-file migration, Sonnet 5.5 did every part in 5 of 5 runs without it, so that comparison did not run.
 - Places: where nobody can answer a check-in. The guide's suggested prompt has a second paragraph, which is the rule `sonnet-5-5/stay-in-scope`.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: where nobody can answer a check-in, a stop before the end leaves the work undone in any kind of task.
@@ -394,6 +396,8 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
   On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), with the last sentence, Haiku met a requirement in a document its project's CLAUDE.md points to in 59 of 60 runs, against 44 of 60 without it, and added something unrequested in 0 of 60 runs where the project only describes a convention.
   Not measured again on [2026-11-20](../../experiments/rules/results/2026-11-20-long/README.md): on two long tasks at low effort, an 18-module migration and an 8-ticket backlog, Haiku 5.5 did every part in 10 of 10 runs without it (9 of 10 as first scored, the tenth a mistake of the hidden check), so the comparison with it did not run.
+  Inconclusive on [2026-11-20](../../experiments/rules/results/2026-11-20-harder/README.md), at low effort and unattended, on a 13-ticket backlog with a decision the ticket leaves open: Haiku 5.5 did every part in 6 of 40 runs with it alone and 2 of 40 without it (p 0.26); it settled the decision itself in 39 of 40 runs without it, and most runs of both arms missed a part found only through a TODO; it added about 2,200 output tokens per run (11 percent of the cost).
+  On a 36-file migration, Haiku 5.5 did every part in 5 of 5 runs without it, so that comparison did not run.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: a subagent or an unattended session that hands the task back before the end leaves half a search or half a change, whatever the kind of task, and with routing on the preset's table sends digest subagents to Haiku 5.5.
   Its sentences on work nobody requested keep that work out, as `sonnet-5-5/stay-in-scope` does in `routine` only; the Haiku 5.5 guide writes them into the same prompt, so they come with it in every scope, and so does the last sentence, which qualifies them.
