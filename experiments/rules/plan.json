@@ -4,6 +4,7 @@
   "cap_usd": 10,
   "unattended_env": "NOONSIGHT_EXPERIMENT",
   "default_models": ["fable", "sonnet"],
+  "default_arms": ["rules", "none"],
   "models": {
     "fable": { "id": "claude-fable-5-2", "budget_usd": 1.5 },
     "opus": { "id": "claude-opus-5-5", "budget_usd": 1 },
@@ -12,7 +13,10 @@
   },
   "arms": {
     "rules": { "use": "preset" },
-    "none": { "use": "none" }
+    "none": { "use": "none" },
+    "verify": { "use": "preset", "only": "verify-changes" },
+    "pointer": { "use": "preset", "only": "verify-changes", "pointer": true },
+    "carry": { "use": "preset", "only": "carry-through" }
   },
   "tasks": {
     "question": {
@@ -71,6 +75,34 @@
         { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix", "bug", "feature"], "signal": "verified", "direction": "higher" },
         { "rule": "fable-5-2/low-context-report", "model": "fable", "tasks": ["question", "bug", "feature"], "signal": "words_per_sentence", "direction": "lower" },
         { "rule": "fable-5-2/low-context-report", "model": "fable", "tasks": ["question", "bug", "feature"], "signal": "semicolons_per_1k_words", "direction": "lower" }
+      ]
+    },
+    "single-rule": {
+      "description": "Sonnet's and Haiku's verify-changes and carry-through, each alone and both together, against no rule, and verify-changes delivered as a pointer to a file holding its text against the same rule inline, on the two tasks where the rules arm changed what the models did on 2026-11-19.",
+      "reps": 30,
+      "cap_usd": 25,
+      "arms": ["rules", "verify", "pointer", "carry", "none"],
+      "cells": {
+        "sonnet": ["fix", "bug"],
+        "haiku": ["fix", "bug"]
+      },
+      "expected_usd": {
+        "sonnet": { "fix": 0.038, "bug": 0.051 },
+        "haiku": { "fix": 0.0034, "bug": 0.0046 }
+      },
+      "primary": [
+        { "rule": "sonnet-5-5/verify-changes", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "verified", "arm": "verify", "against": "none", "direction": "higher" },
+        { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix"], "signal": "verified", "arm": "verify", "against": "none", "direction": "higher" },
+        { "rule": "sonnet-5-5/carry-through", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "verified", "arm": "carry", "against": "none" },
+        { "rule": "haiku-5-5/carry-through", "model": "haiku", "tasks": ["fix"], "signal": "verified", "arm": "carry", "against": "none" },
+        { "rule": "sonnet-5-5/verify-changes", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "verify", "against": "none", "direction": "higher" },
+        { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "verify", "against": "none", "direction": "higher" },
+        { "rule": "sonnet-5-5/carry-through", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "carry", "against": "none", "direction": "higher" },
+        { "rule": "haiku-5-5/carry-through", "model": "haiku", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "carry", "against": "none" },
+        { "rule": "sonnet-5-5/verify-changes", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "verified", "arm": "pointer", "against": "verify" },
+        { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix"], "signal": "verified", "arm": "pointer", "against": "verify" },
+        { "rule": "sonnet-5-5/verify-changes", "model": "sonnet", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "pointer", "against": "verify" },
+        { "rule": "haiku-5-5/verify-changes", "model": "haiku", "tasks": ["fix", "bug"], "signal": "cost_usd", "arm": "pointer", "against": "verify" }
       ]
     }
   },

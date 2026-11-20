@@ -125,6 +125,41 @@ export function toolCalls(stream: readonly Record<string, any>[]): ToolCall[] {
 }
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+/** Whether and when a session read a given file: what a pointer arm records of the file holding its rule. */
+export interface RuleFileRead {
+  /** A call that opened the file was allowed to run. */
+  readonly read: boolean;
+  /** Calls that tried to open it, refused ones included. */
+  readonly attempts: number;
+  /** The position of the first allowed read among the session's tool calls, from 1; null when it never read the file. */
+  readonly first_call: number | null;
+  /** Whether that read came before the session's first edit of a file other than the ones in `ignore`; null when it never read the file. */
+  readonly before_first_edit: boolean | null;
+}
+
+/**
+ * Whether and when the session read `file`: a Read of it, a Grep in it, or a Bash command that names
+ * it, such as `cat`. The position counts every tool call of the main session, so it says how far into
+ * the work the read came.
+ */
+export function ruleFileRead(calls: readonly ToolCall[], file: string, projectDir: string, ignore: readonly string[] = []): RuleFileRead {
+  const opens = (c: ToolCall): boolean =>
+    (c.name === 'Read' && c.input.file_path === file) || (c.name === 'Grep' && c.input.path === file) || (c.name === 'Bash' && String(c.input.command ?? '').includes(file));
+  const tries = calls.map((c, i) => [c, i] as const).filter(([c]) => opens(c));
+  const first = tries.find(([c]) => !c.denied)?.[1];
+  const firstEdit = calls.findIndex((c) => {
+    if (!EDIT_TOOLS.has(c.name) || c.denied) return false;
+    const target = String(c.input.file_path ?? c.input.notebook_path ?? '');
+    return !ignore.includes(path.isAbsolute(target) ? path.relative(projectDir, target) : target);
+  });
+  return {
+    read: first !== undefined,
+    attempts: tries.length,
+    first_call: first === undefined ? null : first + 1,
+    before_first_edit: first === undefined ? null : firstEdit < 0 || first < firstEdit,
+  };
+}
 const TEST_COMMAND = /\b(npm\s+(run\s+)?test|npm\s+t\b|node\s+(--test|\S*test\S*\.m?js)|node\s+-e\b.*\bimport\b)/;
 
 /**
