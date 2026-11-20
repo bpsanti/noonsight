@@ -112,7 +112,7 @@ export function summarize(plan: Plan, runs: readonly RunRecord[], decisions: str
   const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-summary-'));
   const config = path.join(configDir, 'noonsight.json');
   fs.writeFileSync(config, JSON.stringify({ version: 1, models: Object.fromEntries(Object.values(plan.models).map((m) => [m.id, { use: 'preset' }])) }));
-  const report = buildReport({ NOONSIGHT_CONFIG: config }, { log: decisions });
+  const report = buildReport({ NOONSIGHT_CONFIG: config }, { log: decisions, project: null });
   // The first line names the log file; the configuration is named for what it is, not where it was.
   const delivery = renderReport({ ...report, config: { ...report.config, file: 'every model of the plan with "use": "preset"' } }).split('\n').slice(1);
   lines.push(

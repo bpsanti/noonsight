@@ -216,7 +216,7 @@ A trusted project must not read other files of the account into the model's cont
 ### Which project a session is in
 
 The project directory is `CLAUDE_PROJECT_DIR`, which Claude Code sets for its hooks, else the `cwd` of the hook input, as for the other project files noonsight reads.
-`noonsight run`, `check`, `models` and `resolve` take `CLAUDE_PROJECT_DIR` too, else the directory they run in, so they show what a session started there receives.
+`noonsight run`, `check`, `models`, `resolve` and `report` take `CLAUDE_PROJECT_DIR` too, else the directory they run in, so they show what a session started there receives.
 noonsight looks for `.noonsight/noonsight.json` in that directory and in each directory above it up to the repository root, the directory that holds `.git`, and the closest file wins, so a package of a repository can have its own.
 Outside a git repository, only the directory itself counts, and a file above the repository root is never read.
 The machine's configuration file is never also read as a project's.
@@ -285,6 +285,8 @@ A project with any problem, alone or once merged, is refused alone: sessions in 
 A problem in the machine's configuration still refuses everything, whatever the project.
 
 `noonsight check` and `noonsight models` show the project found from the directory they run for and what became of it, and mark the project's rules (`project` in `--json`, `from the project` in the listing).
+The rules they list for an applied project are those the merged configuration gives at least one model, so a project rule for a model the machine leaves out is not listed, only noted.
+`noonsight report` shows the same line for the project, and its rule lengths and the rules never delivered are those of the configuration with that project laid over it, while its counts come from the decision log, which holds the sessions of every project ([hooks.md](hooks.md#the-decision-log)).
 The decision log records the project directory as `project` and what became of it as `project_status`: `applied`, `untrusted`, `declined`, `ignored` or `refused` ([hooks.md](hooks.md#the-decision-log)).
 
 

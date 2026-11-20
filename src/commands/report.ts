@@ -2,14 +2,16 @@
 // often it was delivered, and to which models, scopes, places and events, and whether its scope or a
 // trigger brought it; the triggers sessions revealed, and with which edits; the rules the
 // configuration has on that the log never shows delivered; the decisions that delivered nothing, by
-// why; and what the classifier did, how long it took and what it cost. It reads local files only and
-// changes nothing.
+// why; and what the classifier did, how long it took and what it cost. The configuration is read as
+// a session started in the current directory reads it, with that directory's project laid over it.
+// It reads local files only and changes nothing.
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ConfigError, loadConfigDetails } from '../config/load.js';
+import { ConfigError, loadConfigDetails, type ProjectLayer } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
+import { describeProject, projectFor } from '../config/project.js';
 import { ANY_SCOPE, type Config, type Place } from '../core/types.js';
 import { LOG_FILE, readDecisionFile, readDecisions, ROTATED_LOG_FILE } from '../state/log.js';
 import { UsageError } from './usage.js';
@@ -20,7 +22,9 @@ Report what the decision log records: for each rule, how often it was delivered 
 models, scopes, places and events, whether its scope or a trigger brought it, and the length of its
 text; the triggers sessions revealed, by the edits that revealed them; the rules the configuration
 has on that the log never shows delivered; the decisions that delivered nothing, by why; and the
-classifier's results, time and cost.
+classifier's results, time and cost. Rule lengths and the rules never delivered come from the
+configuration as a session started in the current directory reads it, with the project
+configuration found from there laid over it; the log counts the sessions of every project.
 
   --log <file>  read this log file instead of the account's decision log
   --json        print the same as JSON
@@ -120,7 +124,18 @@ export interface Report {
   readonly triggers: Readonly<Record<string, TriggerReport>>;
   /** Read from the configuration: null when there is none or it is refused, with why. */
   readonly config: { readonly file: string; readonly status: 'read' | 'missing' | 'refused' };
-  /** Rules on in the configuration for an exact model that no delivery in this log carries. */
+  /**
+   * The project configuration found from the directory the report runs for, and what became of it,
+   * as `noonsight models` shows it; null when there is none, or when the configuration is missing or refused.
+   */
+  readonly project: {
+    readonly file: string;
+    readonly dir: string;
+    readonly allow: ProjectLayer['allow'];
+    readonly status: ProjectLayer['status'];
+    readonly summary: string;
+  } | null;
+  /** Rules on in the configuration, with an applied project's, for an exact model that no delivery in this log carries. */
   readonly never_delivered: readonly IdleRule[];
   /** Null when no decision in the log records the classifier. */
   readonly classifier: ClassifierReport | null;
@@ -129,16 +144,19 @@ export interface Report {
 interface Options {
   readonly json: boolean;
   readonly log: string | null;
+  /** The directory whose project configuration is laid over the configuration, or null for none. */
+  readonly project: string | null;
 }
 
 export function runReport(args: readonly string[], env: Env, out: (text: string) => void): number {
   const options = parseArgs(args);
-  const report = buildReport(env, options);
+  // As `noonsight check` and `noonsight models` do: the project a session started here would get.
+  const report = buildReport(env, { ...options, project: env.CLAUDE_PROJECT_DIR || process.cwd() });
   out(options.json ? JSON.stringify(report, null, 2) : renderReport(report));
   return 0;
 }
 
-function parseArgs(args: readonly string[]): Options {
+function parseArgs(args: readonly string[]): Omit<Options, 'project'> {
   let json = false;
   let log: string | null = null;
   for (let i = 0; i < args.length; i++) {
@@ -153,7 +171,7 @@ function parseArgs(args: readonly string[]): Options {
   return { json, log };
 }
 
-export function buildReport(env: Env, options: Pick<Options, 'log'>, home: string = os.homedir()): Report {
+export function buildReport(env: Env, options: Pick<Options, 'log' | 'project'>, home: string = os.homedir()): Report {
   const dir = stateDir(home);
   const files = options.log !== null ? [path.resolve(options.log)] : [path.join(dir, ROTATED_LOG_FILE), path.join(dir, LOG_FILE)];
   if (options.log !== null && !readableFile(files[0] as string)) throw new UsageError(`cannot read the log file ${options.log}`, REPORT_USAGE);
@@ -236,10 +254,11 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
 
   const file = configPath(env, home);
   let config: Config | null = null;
+  let layer: ProjectLayer | null = null;
   let status: Report['config']['status'] = fs.existsSync(file) ? 'read' : 'missing';
   if (status === 'read')
     try {
-      config = loadConfigDetails(file, {}, env).config;
+      ({ config, project: layer } = loadConfigDetails(file, { project: projectFor(options.project, file, dir) }, env));
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
       status = 'refused';
@@ -289,6 +308,7 @@ export function buildReport(env: Env, options: Pick<Options, 'log'>, home: strin
         .map(([name, t]) => [name, { revealed: t.revealed, delivered: t.delivered, tools: sorted(t.tools), extensions: sorted(t.extensions), files: sorted(t.files) }]),
     ),
     config: { file, status },
+    project: layer && { file: layer.file, dir: layer.dir, allow: layer.allow, status: layer.status, summary: describeProject(layer) },
     never_delivered: neverDelivered,
     classifier:
       total(classifierResults) === 0
@@ -401,6 +421,7 @@ function sorted(tally: Record<string, number>): Tally {
 export function renderReport(r: Report): string {
   const lines: string[] = [];
   lines.push(`log ${r.log.join(', ')}`);
+  if (r.project) lines.push(`project ${r.project.file}: ${r.project.summary}`);
   if (r.decisions === 0) {
     lines.push('No decisions in the log.');
   } else {
@@ -454,11 +475,13 @@ export function renderReport(r: Report): string {
   }
 
   if (r.config.status === 'read') {
+    // The log holds the sessions of every project; the configuration is the one of this directory.
+    const configuration = r.project?.status === 'applied' ? `${r.config.file}, with the project ${r.project.file}` : r.config.file;
     if (r.never_delivered.length) {
-      lines.push('', `On in the configuration (${r.config.file}), never delivered in this log:`);
+      lines.push('', `On in the configuration (${configuration}), never delivered in this log:`);
       for (const idle of r.never_delivered)
         lines.push(`  ${idle.id} for ${idle.model} (scopes: ${idle.scopes.includes(ANY_SCOPE) ? 'every scope' : idle.scopes.join(', ')}; places: ${idle.where.join(', ')})`);
-    } else if (r.rules.length) lines.push('', `Every rule on in the configuration (${r.config.file}) was delivered at least once in this log.`);
+    } else if (r.rules.length) lines.push('', `Every rule on in the configuration (${configuration}) was delivered at least once in this log.`);
   } else
     lines.push(
       '',

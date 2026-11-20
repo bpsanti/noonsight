@@ -6,6 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Config } from '../core/types.js';
 import { writeFileAtomic } from '../state/files.js';
 import type { ProjectLayer, RawConfig, RawModelEntry, RawModelRule, RawUserRule } from './load.js';
 
@@ -321,17 +322,30 @@ function mergeEntry(
   return { use, ...(enable.length ? { enable } : {}), ...(disable.length ? { disable } : {}), ...(add.length || mine.add ? { add } : {}) };
 }
 
-/** The top-level keys and the rules a project file writes, as commands describe it. */
-export function projectSummary(project: RawProject): { readonly keys: readonly string[]; readonly rules: readonly string[] } {
+/** The top-level keys a project file writes, and the models whose declaration it changes, as commands describe it. */
+export function projectKeys(project: RawProject): readonly string[] {
   const keys = Object.keys(project).filter((k) => k !== 'version' && k !== '$schema' && k !== 'all_models' && k !== 'models');
   const changed = Object.entries(project.models ?? {}).filter(([, e]) => Object.keys(e).some((k) => k !== 'add'));
-  return {
-    keys: [...keys, ...changed.map(([model]) => `models.${model}`)],
-    rules: [
-      ...(project.all_models?.add ?? []).map((r) => `${r.id} (all_models)`),
-      ...Object.entries(project.models ?? {}).flatMap(([model, e]) => (e.add ?? []).map((r) => `${r.id} (${model})`)),
-    ],
-  };
+  return [...keys, ...changed.map(([model]) => `models.${model}`)];
+}
+
+/**
+ * The project's rules a merged configuration gives at least one model, as commands describe them:
+ * those of "all_models" once each, then each model's own. A rule the project writes for a model the
+ * machine leaves out, or for a model that receives no rules, is not one of them.
+ */
+export function projectRules(config: Config): string[] {
+  const shared = new Set<string>();
+  const own: string[] = [];
+  for (const [model, entry] of config.exact) {
+    if (entry.use !== 'rules') continue;
+    for (const rule of entry.rules) {
+      if (!rule.project) continue;
+      if (rule.allModels) shared.add(`${rule.id} (all_models)`);
+      else own.push(`${rule.id} (${model})`);
+    }
+  }
+  return [...shared, ...own];
 }
 
 function unique(ids: readonly string[]): string[] {
@@ -388,16 +402,16 @@ export function projectFields(layer: ProjectLayer | null): Record<string, unknow
   return layer === null ? {} : { project: layer.dir, project_status: layer.status };
 }
 
-/** What became of a project, in one line, as `noonsight check` and `noonsight models` print it. */
+/** What became of a project, in one line, as `noonsight check`, `models`, `trust` and `report` print it. */
 export function describeProject(layer: ProjectLayer): string {
   const only = `so sessions in ${layer.dir} get only the machine's configuration`;
   switch (layer.status) {
     case 'applied': {
-      const s = layer.raw ? projectSummary(layer.raw) : { keys: [], rules: [] };
+      const keys = layer.raw ? projectKeys(layer.raw) : [];
       return (
         `applied over the machine's configuration ("projects.allow": "${layer.allow}"), trusted for this account` +
-        (s.rules.length ? `; rules: ${s.rules.join(', ')}` : '') +
-        (s.keys.length ? `; sets ${s.keys.join(', ')}` : '')
+        (layer.rules.length ? `; rules: ${layer.rules.join(', ')}` : '') +
+        (keys.length ? `; sets ${keys.join(', ')}` : '')
       );
     }
     case 'untrusted':

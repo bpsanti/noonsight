@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `noonsight report` now reads the configuration with the project of the directory it runs for laid over it, as `noonsight check` and `noonsight models` do.
+  It read the machine's configuration alone, so a trusted project's rules were counted from the decision log but had no `text` length, and a project rule on for a model that never received it was left out of the rules never delivered, so a project rule that stopped reaching a model went unnoticed.
+  The report's second line names the project and what became of it (`project` in `--json`), and the heading of the rules never delivered names the project file when it applied, since the log holds the sessions of every project.
+  The rules `noonsight trust`, `check` and `models` list for an applied project are now those the merged configuration gives a model, not every rule the project file writes: a rule for a model the machine leaves out is only noted.
+  See `docs/hooks.md` ("The decision log").
+
 - The rule effect experiment (`experiments/rules`) has three fixtures and four tasks of different shapes: the read-only question and the one-file fix, a bug known only by its symptom whose cause is in another module, and a feature across several files, each with a hidden check and a reference solution that `npm test` checks against it.
   The design `expanded` (`--design expanded`) runs the three rules whose effect showed on 2026-11-16 on three tasks each, 30 runs per arm, with twelve comparisons fixed before it runs and read with Fisher's exact test or the Mann-Whitney U test and Holm's adjustment; `npm run experiment -- estimate` prints its cost projection, $78 expected against a $120 cap.
   `run --stub` runs every session against a scripted local stand-in for the API, with no login and no tokens, so the harness is checked end to end for free.

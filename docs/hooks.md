@@ -323,7 +323,9 @@ When the classifier acted, it also prints a classifier section: the tasks it was
 A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-prompt`; a session start that found the rules already in the launcher's system prompt (`launcher`) is counted once, under `launch`.
 On a `model-switch` line, `delivered` says what the hook returned to Claude Code, not what reached the model ([PostModelSwitch](#postmodelswitch)): a switch whose session's next line in the log is another switch is not counted as a delivery but as `switched-again`, since the second switch may have come before any request.
 A subagent's rules are counted once, on its `subagent-start` line; its `agent-call` line hands them over (`at-start`) and is not counted.
-`--log <file>` reads another log, such as one copied from another machine (a file it cannot read is a usage error), and `--json` prints the same as JSON.
+The rule lengths and the rules never delivered come from the configuration as a session started in the directory the report runs for reads it: with the project configuration found from `CLAUDE_PROJECT_DIR`, else that directory, laid over the machine's ([Project configuration](configuration.md#project-configuration)).
+The report names that project and what became of it on its second line, and the heading of the rules never delivered names the project file when it applied; the log itself holds the sessions of every project, so run the report inside a project to see that project's rules never delivered.
+`--log <file>` reads another log, such as one copied from another machine (a file it cannot read is a usage error), and `--json` prints the same as JSON, with the project as `project`.
 
 ```json
 {"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/noonsight/noonsight.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"session","scope_source":null,"model_source":"hook-input","delivered":"rules","warned":false}
