@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The delivery benchmark (`experiments/delivery`) ran again in full on the build with the fixes of F3 and F4, with the seed, sizes, command and Claude Code version of the run that found them, against comparisons fixed beforehand in the design `after-f3-f4` of `experiments/delivery/plan.json`.
+  One session of 300 under `on` breaks the invariant, against 3 of 300 before the fixes, and it is the documented limit `limit-default-model-after-compact`; coverage under `on` is 99.9% (3,219 of 3,221 requests), subagent coverage 100%, and no new failure appeared.
+  Every corpus entry had the outcome it records, and both self-check plants were caught.
+  See `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md`.
+
 - `experiments/adoption` asks fresh Claude Code sessions, each given only a clean copy of the repository at a commit and a team's neutral question, whether to adopt noonsight, and has a judge score each answer against a fixed reference of what the code and the committed results support: the verdict, whether its reasons are true, whether it states the delivery claim correctly, whether it names a real limit and whether it invents a feature.
   It compares the README before its rewrite (`f061f03`) with after (`d956687`) on Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5; its README pre-registers the prompt, the scoring, the judge and its calibration, the pass bar, and the rule that sets the number of sessions from a pilot's measured costs within a $20 cap.
   `npm run adoption -- run --stub` runs the whole pipeline against a local stand-in for the API, with no login and no tokens, and `experiments/adoption/results/2026-11-20-stub/` records that check; `npm test` checks the scoring, the parsing, the allocation and the summary (`test/adoption.test.ts`).

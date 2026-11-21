@@ -139,6 +139,24 @@ The prediction behind P1 and S1: every failing session before the fixes had two 
 A failing session after the fixes is read one by one: one that a documented limit explains is recorded as such, and any other is a new defect, shrunk with `shrink` and recorded in the results' `failures/` folder, not fixed in the same change.
 The controls check the harness: noonsight's configuration under a native arm is `"use": "none"`, so a native arm that changed would mean the sessions are not as repeatable as the comparison assumes.
 
+### The design `after-f3-f4`
+
+The run of 2026-11-20 at `4e18c43` found F3 and F4; after their fixes, only the corpus ran.
+The design `after-f3-f4` runs the whole benchmark again on the fixed build, with what the design `after-f1-f2` held fixed held fixed again: Claude Code 2.1.328, the command `all`, seed 1, 300 sessions under `on`, the first 60 under each native arm, and 2 sessions at once.
+At most the three sessions that failed in that run can stop failing, too few for a paired test to reach the alpha, so no comparison is primary and each is read from its measure alone:
+
+| | Question | Measure | Expects | Paired on |
+| --- | --- | --- | --- | --- |
+| K1 | Fewer sessions under `on` break the invariant: only `s1-0096`, the documented limit, should still fail | Sessions with an unexplained violation, before and after | Lower | Failing sessions |
+| K2 | Coverage under `on` is higher | Coverage, before and after | Higher | Sessions with a request without its right rules |
+| K3 | Under `on`, fewer requests hold another model's rule with no note | Requests with `foreign-unretired` | Lower | |
+| K4 | Under `on`, subagent coverage is no lower | Subagent coverage | Not lower | Sessions with a subagent request without its right rules |
+| C1 to C3, controls | `claudemd`, `rules` and `skills` are unchanged | Coverage, before and after | The same, and no session that changed | Sessions with a request without its right rules |
+| S4 | The decision log gives the coverage the stub saw under `on` | `agree.json`, the log against the stub | The same | |
+| R1 to R3 | Under `on`, the own share, the right share and the characters added per request | | Reported only | |
+
+A failing session other than `s1-0096` is read one by one as in the design `after-f1-f2`, and a new defect is recorded, not fixed in the same change.
+
 ### The decision log
 
 `npm run delivery -- log` computes the same measures from a decision log alone (`~/.local/state/noonsight/decisions.jsonl`, or `--file`), split by the place each session started in, and prints aggregates only.
@@ -188,6 +206,7 @@ All four are fixed, and their entries must pass.
   Under the setting `haiku`, written exactly so, Claude Code resumes a conversation that last answered on Haiku or Sonnet on Haiku, and noonsight now does the same (`docs/hooks.md`, "SessionStart").
 
 F3 and F4 were found by the run [after the fixes of F1 and F2](results/claude-code-2.1.328/2026-11-20-4e18c43/README.md).
+The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md) measured the fuzz level again: one session of 300 under `on` breaks the invariant, and it is the documented limit below.
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 

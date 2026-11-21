@@ -1,0 +1,122 @@
+{
+ "runsPerHook": 40,
+ "node": "v26.13.0",
+ "cpus": 8,
+ "loadAverage": [
+  3.9,
+  3.1,
+  3
+ ],
+ "baseline": {
+  "wall": {
+   "median": 36,
+   "p90": 38,
+   "max": 40
+  },
+  "cpu": {
+   "median": 20,
+   "p90": 20,
+   "max": 20
+  }
+ },
+ "hooks": {
+  "session-start": {
+   "when": "start, /clear, compaction, resume",
+   "wall": {
+    "median": 75,
+    "p90": 80,
+    "max": 140
+   },
+   "cpu": {
+    "median": 60,
+    "p90": 60,
+    "max": 130
+   },
+   "printedSomething": 40
+  },
+  "model-switch": {
+   "when": "each /model",
+   "wall": {
+    "median": 73,
+    "p90": 76,
+    "max": 84
+   },
+   "cpu": {
+    "median": 60,
+    "p90": 60,
+    "max": 70
+   },
+   "printedSomething": 40
+  },
+  "file-edit, first edit of tracked code": {
+   "when": "once per session; runs git",
+   "wall": {
+    "median": 130,
+    "p90": 133,
+    "max": 156
+   },
+   "cpu": {
+    "median": 90,
+    "p90": 100,
+    "max": 120
+   },
+   "printedSomething": 40
+  },
+  "file-edit, later edits": {
+   "when": "each Edit or Write after that",
+   "wall": {
+    "median": 62,
+    "p90": 65,
+    "max": 65
+   },
+   "cpu": {
+    "median": 50,
+    "p90": 50,
+    "max": 60
+   },
+   "printedSomething": 0
+  },
+  "agent-call": {
+   "when": "each subagent call, before",
+   "wall": {
+    "median": 74,
+    "p90": 76,
+    "max": 77
+   },
+   "cpu": {
+    "median": 60,
+    "p90": 60,
+    "max": 60
+   },
+   "printedSomething": 0
+  },
+  "subagent-start": {
+   "when": "each subagent, as it starts",
+   "wall": {
+    "median": 73,
+    "p90": 77,
+    "max": 77
+   },
+   "cpu": {
+    "median": 60,
+    "p90": 60,
+    "max": 60
+   },
+   "printedSomething": 40
+  },
+  "agent-result": {
+   "when": "each subagent call, after",
+   "wall": {
+    "median": 73,
+    "p90": 77,
+    "max": 117
+   },
+   "cpu": {
+    "median": 60,
+    "p90": 60,
+    "max": 100
+   },
+   "printedSomething": 0
+  }
+ }
+}

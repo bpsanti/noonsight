@@ -1,0 +1,82 @@
+{
+ "no-switch-note": {
+  "about": "A /model switch delivers the new model rules without the note that retires the earlier model rules.",
+  "caught": true,
+  "plant": "no-switch-note",
+  "sessions": 60,
+  "failedOnReal": 0,
+  "failedOnPlanted": 28,
+  "failedOnlyOnPlanted": [
+   "plant-no-switch-note-s1-0001",
+   "plant-no-switch-note-s1-0008",
+   "plant-no-switch-note-s1-0009",
+   "plant-no-switch-note-s1-0010",
+   "plant-no-switch-note-s1-0014",
+   "plant-no-switch-note-s1-0016",
+   "plant-no-switch-note-s1-0017",
+   "plant-no-switch-note-s1-0020",
+   "plant-no-switch-note-s1-0021",
+   "plant-no-switch-note-s1-0023",
+   "plant-no-switch-note-s1-0024",
+   "plant-no-switch-note-s1-0025",
+   "plant-no-switch-note-s1-0026",
+   "plant-no-switch-note-s1-0030",
+   "plant-no-switch-note-s1-0032",
+   "plant-no-switch-note-s1-0035",
+   "plant-no-switch-note-s1-0036",
+   "plant-no-switch-note-s1-0038",
+   "plant-no-switch-note-s1-0039",
+   "plant-no-switch-note-s1-0043",
+   "plant-no-switch-note-s1-0044",
+   "plant-no-switch-note-s1-0046",
+   "plant-no-switch-note-s1-0049",
+   "plant-no-switch-note-s1-0052",
+   "plant-no-switch-note-s1-0053",
+   "plant-no-switch-note-s1-0055",
+   "plant-no-switch-note-s1-0058",
+   "plant-no-switch-note-s1-0059"
+  ],
+  "exposed": 28,
+  "exposedAndCaught": 27,
+  "exposedNotCaught": [
+   "plant-no-switch-note-s1-0022"
+  ],
+  "caughtNotExposed": [
+   "plant-no-switch-note-s1-0030"
+  ],
+  "minimal": "start(haiku, scope=none, unattended) > /model opus > turn",
+  "shrinkRuns": 5,
+  "minimalOnReal": "passes"
+ },
+ "compact-as-resume": {
+  "about": "A compaction is treated as a resume, so the rules compaction dropped are not delivered again.",
+  "caught": true,
+  "plant": "compact-as-resume",
+  "sessions": 60,
+  "failedOnReal": 0,
+  "failedOnPlanted": 9,
+  "failedOnlyOnPlanted": [
+   "plant-compact-as-resume-s1-0008",
+   "plant-compact-as-resume-s1-0014",
+   "plant-compact-as-resume-s1-0016",
+   "plant-compact-as-resume-s1-0028",
+   "plant-compact-as-resume-s1-0045",
+   "plant-compact-as-resume-s1-0049",
+   "plant-compact-as-resume-s1-0052",
+   "plant-compact-as-resume-s1-0056",
+   "plant-compact-as-resume-s1-0057"
+  ],
+  "exposed": 13,
+  "exposedAndCaught": 9,
+  "exposedNotCaught": [
+   "plant-compact-as-resume-s1-0020",
+   "plant-compact-as-resume-s1-0053",
+   "plant-compact-as-resume-s1-0058",
+   "plant-compact-as-resume-s1-0059"
+  ],
+  "caughtNotExposed": [],
+  "minimal": "start(opus, scope=none, unattended) > turn > /compact > turn",
+  "shrinkRuns": 9,
+  "minimalOnReal": "passes"
+ }
+}
