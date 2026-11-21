@@ -10,7 +10,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { PACKAGE_ROOT } from '../src/config/paths.js';
+import { validateSchema } from '../src/config/json-schema.js';
+import { PACKAGE_ROOT, SCHEMA_DIR } from '../src/config/paths.js';
 import { CLI } from './helpers.js';
 
 const README = fs.readFileSync(path.join(PACKAGE_ROOT, 'README.md'), 'utf8');
@@ -135,6 +136,88 @@ test('README: the resolve example prints the rules the session then receives', (
   const decision = JSON.parse(sh(resolve.code.trim(), box.project, box.env).stdout);
   assert.equal(decision.status, 'matched');
   assert.deepEqual(decision.rules, rules);
+});
+
+/** The configuration examples the README and docs/usage.md show, each with the file it is for. */
+const CONFIG_DOCS = ['README.md', 'docs/usage.md'];
+const MACHINE_FILE = '~/.config/noonsight/noonsight.json';
+const PROJECT_FILE = '.noonsight/noonsight.json';
+
+interface ConfigExample {
+  readonly where: string;
+  readonly kind: 'machine' | 'project';
+  readonly config: any;
+}
+
+/**
+ * Every JSON block of the documents, placed by the file the text between it and the block before
+ * names last: an example that names neither file fails, so a reader always knows where it goes.
+ */
+function configExamples(): ConfigExample[] {
+  const examples: ConfigExample[] = [];
+  for (const doc of CONFIG_DOCS) {
+    const text = fs.readFileSync(path.join(PACKAGE_ROOT, doc), 'utf8');
+    const lines = text.split('\n');
+    let previousEnd = 0;
+    for (const block of codeBlocks(text)) {
+      const lead = lines.slice(previousEnd, block.line - 1).join('\n');
+      previousEnd = block.line + block.code.split('\n').length + 1;
+      if (block.lang !== 'json') continue;
+      const where = `${doc}:${block.line}`;
+      const machineAt = lead.lastIndexOf(MACHINE_FILE);
+      const projectAt = lead.lastIndexOf(PROJECT_FILE);
+      assert.ok(machineAt >= 0 || projectAt >= 0, `${where}: the text before a configuration example names the file it goes in`);
+      examples.push({ where, kind: machineAt > projectAt ? 'machine' : 'project', config: JSON.parse(block.code) });
+    }
+  }
+  return examples;
+}
+
+/** Writes a placeholder for each rule file a configuration names, relative to the configuration's directory. */
+function writeRuleFiles(config: any, dir: string): void {
+  const rules = [...Object.values<any>(config.models ?? {}).flatMap((m) => m.add ?? []), ...(config.all_models?.add ?? [])];
+  for (const rule of rules) {
+    const file = path.resolve(dir, rule.file);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `Placeholder text of ${rule.id}.\n`);
+  }
+}
+
+test('README and docs/usage.md: every configuration example passes noonsight check', () => {
+  const examples = configExamples();
+  assert.ok(examples.some((e) => e.where.startsWith('README.md') && e.kind === 'machine'), 'the README shows a machine configuration');
+  assert.ok(examples.some((e) => e.where.startsWith('README.md') && e.kind === 'project'), 'the README shows a repository configuration');
+  const schemas = {
+    machine: JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, 'noonsight.schema.json'), 'utf8')),
+    project: JSON.parse(fs.readFileSync(path.join(SCHEMA_DIR, 'noonsight-project.schema.json'), 'utf8')),
+  };
+  const preset = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'presets', 'claude', 'preset.json'), 'utf8'));
+  for (const example of examples) {
+    assert.deepEqual(validateSchema(schemas[example.kind], example.config), [], `${example.where}: the example satisfies the ${example.kind} schema`);
+    if (example.config.preset_version !== undefined) assert.equal(example.config.preset_version, preset.version, `${example.where}: preset_version is the shipped preset's`);
+
+    const box = sandbox();
+    assert.equal(sh('noonsight install', box.project, box.env).status, 0);
+    const machineFile = path.join(box.home, '.config', 'noonsight', 'noonsight.json');
+    const file = example.kind === 'machine' ? machineFile : path.join(box.project, '.noonsight', 'noonsight.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(example.config, null, 2));
+    writeRuleFiles(example.config, path.dirname(file));
+    if (example.kind === 'project') {
+      const trust = sh('noonsight trust', box.project, box.env);
+      assert.equal(trust.status, 0, `${example.where}: noonsight trust exited ${trust.status}\n${trust.stdout}${trust.stderr}`);
+    }
+    const check = sh('noonsight check', box.project, box.env);
+    const problems = `${check.stdout}${check.stderr}`.split('\n').filter((l) => /^(problem|error)\b/.test(l));
+    assert.deepEqual(problems, [], `${example.where}: noonsight check reports no problem`);
+    assert.equal(check.status, 0, `${example.where}: noonsight check exited ${check.status}\n${check.stdout}${check.stderr}`);
+
+    // noonsight models, run where the sessions run, lists every rule the example adds.
+    const models = sh('noonsight models --json', box.project, box.env);
+    assert.equal(models.status, 0, `${example.where}: noonsight models exited ${models.status}\n${models.stderr}`);
+    for (const rule of [...Object.values<any>(example.config.models ?? {}).flatMap((m) => m.add ?? []), ...(example.config.all_models?.add ?? [])])
+      assert.ok(models.stdout.includes(`"${rule.id}"`), `${example.where}: noonsight models lists ${rule.id}`);
+  }
 });
 
 test('the package holds what the README\'s commands need once installed from npm', () => {

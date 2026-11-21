@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The README presents noonsight as a way to deliver instructions by model, with the preset as a starting set taken from Anthropic's guides, and a new section, "Your own rules", shows a machine configuration with rules for one model and for every model, and a repository's `.noonsight/noonsight.json` with `noonsight trust`.
+  It says that the delivery claim covers any rule, since noonsight picks a rule by its model, scope, place and trigger and never by its text, while the measured rule effects are for the preset's rules alone.
+  `npm test` now runs `noonsight check` and `noonsight models` on every configuration example of the README and `docs/usage.md`, in a sandbox account with its rule files, checks each against its schema and its `preset_version` against the shipped preset, and fails on an example whose text does not name the file it goes in (`test/readme.test.ts`).
+
 - A headless run, such as `claude -p` or the Agent SDK, is now in the place `unattended` by default, so with no configuration for it, it receives the rules written for sessions nobody watches: the place every rule effect was measured in.
   This changes what existing configurations deliver on upgrade: a `claude -p` run on Opus 5.5 now gets `opus-5-5/unattended-run`, on Fable 5.2 `fable-5-2/low-context-report`, and on Sonnet 5.5 and Haiku 5.5 their `carry-through` rule.
   To keep the earlier behavior, set `"session": { "headless_is_unattended": false }`; `session.unattended_when_env` works as before and is still the way to mark interactive sessions nobody watches, such as an orchestrator's workers.
