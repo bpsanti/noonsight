@@ -331,7 +331,22 @@ test('one command on a clean machine: writes the configuration, installs in ever
   const first = runCli(['install'], env);
   assert.equal(first.status, 0, first.stdout + first.stderr);
   assert.match(first.stdout, /wrote .*noonsight\.json: preset claude/);
-  assert.match(first.stdout, /Each declared model receives:\n  claude-fable-5-2: \d+ of \d+ rules/);
+  // What each model receives in each place is written out, "nothing" included, then how to change it.
+  const receives = first.stdout.slice(first.stdout.indexOf('Each declared model receives'), first.stdout.indexOf('\nok: '));
+  assert.deepEqual(receives.split('\n'), [
+    'Each declared model receives, with no scope:',
+    '  claude-fable-5-2: watched session: nothing; unattended session: fable-5-2/low-context-report; subagent: fable-5-2/low-context-report',
+    '  claude-opus-5-5: watched session: nothing; unattended session: opus-5-5/unattended-run; subagent: nothing',
+    '  claude-sonnet-5-5: watched session: nothing, then sonnet-5-5/verify-changes once it edits tracked code (code-edit); ' +
+      'unattended session: sonnet-5-5/carry-through, then sonnet-5-5/verify-changes once it edits tracked code (code-edit); subagent: sonnet-5-5/carry-through',
+    '  claude-haiku-5-5: watched session: nothing, then haiku-5-5/verify-changes once it edits tracked code (code-edit); ' +
+      'unattended session: haiku-5-5/carry-through, then haiku-5-5/verify-changes once it edits tracked code (code-edit); subagent: haiku-5-5/carry-through',
+    '  A session is unattended when it runs headless, as `claude -p` and the Agent SDK do, or when a variable of `session.unattended_when_env` is set; ' +
+      "set it to your CI's or orchestrator's variable so the interactive sessions nobody watches are unattended too.",
+    '  A rule limited to scopes adds to these only in one of its scopes: a session takes its scope from `NOONSIGHT_SCOPE` or `noonsight run --scope`, ' +
+      'a subagent from its task; `noonsight models` lists every rule with its scopes and places.',
+  ]);
+  assert.doesNotMatch(first.stdout, /^ok: receives with no scope/m, 'the check install runs does not list them a second time');
   assert.match(first.stdout, /^ok: config .*noonsight\.json: valid/m);
   assert.match(first.stdout, /^Changed: the configuration file was written; hooks were added to 2 Claude Code configuration directories\./m);
   assert.ok(fs.existsSync(configFile));
@@ -344,10 +359,8 @@ test('one command on a clean machine: writes the configuration, installs in ever
   assert.match(second.stdout, /^Nothing changed: noonsight was already set up here\./m);
   assert.deepEqual([configFile, ...dirs.map((d) => path.join(d, 'settings.json'))].map((f) => fs.readFileSync(f, 'utf8')), snapshot);
 
-  // The done line promises only what the configuration gives: a session with no scope gets its model's
-  // every-scope rules, and a scope is needed for the rest.
-  assert.match(first.stdout, /^Done: .*a session with no scope receives only the rules its model has for every scope/m);
-  assert.match(first.stdout, /^Done: .*`NOONSIGHT_SCOPE` or `noonsight run --scope`/m);
+  // The done line promises only what the lines above say.
+  assert.match(first.stdout, /^Done: from the next Claude Code session on, each session and subagent receives what the lines above give its model in its place and scope\./m);
 
   // The first session receives exactly what the preset gives its model there, and report sees it:
   // Sonnet has no rule for a session with no scope, and verify-changes for a session in build.
@@ -358,6 +371,9 @@ test('one command on a clean machine: writes the configuration, installs in ever
   const none = runCli(['report'], env);
   assert.match(none.stdout, /delivered rules: 0\b/);
   assert.match(none.stdout, /no-rule-applies 1\b/);
+  // A headless run, which Claude Code marks with CLAUDE_CODE_SESSION_ATTENDED=0, is unattended with no configuration.
+  const headless = runProgram(hook, ['session-start'], { ...env, CLAUDE_CODE_SESSION_ATTENDED: '0' }, hookInput('session-start-print', { model: 'claude-sonnet-5-5' }));
+  assert.match(headless.stdout, /noonsight-rules model=\\"claude-sonnet-5-5\\">[^]*sonnet-5-5\/carry-through/);
   const session = runProgram(hook, ['session-start'], { ...env, NOONSIGHT_SCOPE: 'build' }, hookInput('session-start-startup', { model: 'claude-sonnet-5-5' }));
   assert.match(session.stdout, /noonsight-rules model=\\"claude-sonnet-5-5\\" scope=\\"build/);
   const report = runCli(['report'], env);

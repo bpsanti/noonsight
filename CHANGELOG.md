@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- A headless run, such as `claude -p` or the Agent SDK, is now in the place `unattended` by default, so with no configuration for it, it receives the rules written for sessions nobody watches: the place every rule effect was measured in.
+  This changes what existing configurations deliver on upgrade: a `claude -p` run on Opus 5.5 now gets `opus-5-5/unattended-run`, on Fable 5.2 `fable-5-2/low-context-report`, and on Sonnet 5.5 and Haiku 5.5 their `carry-through` rule.
+  To keep the earlier behavior, set `"session": { "headless_is_unattended": false }`; `session.unattended_when_env` works as before and is still the way to mark interactive sessions nobody watches, such as an orchestrator's workers.
+  Claude Code tells a hook that its session runs headless with `CLAUDE_CODE_SESSION_ATTENDED=0`, a variable it does not document; noonsight reads only `0` as headless, so a Claude Code without the variable leaves every session where it was.
+  Interactive sessions, in a terminal, an IDE or the desktop app, are unchanged.
+  `noonsight run` decides the same place from `-p` or `--print` on the command line it passes, so the hook finds the same rules in the system prompt.
+  The decision log records `unattended_because` (`env` or `headless`) for a session in the place `unattended`; `unattended_env` names the variable as before.
+  `docs/verification/claude-code.md` records the variable and the versions it was read on, and `npm run test:live` checks it without a login.
+
+- `noonsight install` and `noonsight check` write out what each declared model receives with no scope in each place, a watched session, an unattended session and a subagent, with `nothing` where it receives nothing and the rules a trigger adds, followed by the two ways to change it: the place (headless runs and `session.unattended_when_env`) and the scope (`NOONSIGHT_SCOPE` or `noonsight run --scope`).
+  With the preset, they say that a watched Opus 5.5 or Fable 5.2 session receives nothing, which before was only implied.
+  `install` prints these lines in place of the count of rules per model, and leaves them out of the check it runs after; its last line no longer repeats them.
+
 - The delivery benchmark (`experiments/delivery`) ran again in full on the build with the fixes of F3 and F4, with the seed, sizes, command and Claude Code version of the run that found them, against comparisons fixed beforehand in the design `after-f3-f4` of `experiments/delivery/plan.json`.
   One session of 300 under `on` breaks the invariant, against 3 of 300 before the fixes, and it is the documented limit `limit-default-model-after-compact`; coverage under `on` is 99.9% (3,219 of 3,221 requests), subagent coverage 100%, and no new failure appeared.
   Every corpus entry had the outcome it records, and both self-check plants were caught.

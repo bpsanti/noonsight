@@ -61,7 +61,7 @@
       "additionalProperties": false,
       "properties": {
         "unattended_when_env": {
-          "description": "Environment variables that mark a session as unattended (the place \"unattended\") when any of them is set and not empty in the environment Claude Code runs in. With none set, a session is in the place \"session\".",
+          "description": "Environment variables that mark a session as unattended (the place \"unattended\") when any of them is set and not empty in the environment Claude Code runs in. With none set, a session is in the place \"session\", unless it runs headless and \"headless_is_unattended\" is true.",
           "type": "array",
           "uniqueItems": true,
           "items": {
@@ -70,6 +70,11 @@
             "x-hint": "an environment variable name is letters, digits and underscores, not starting with a digit"
           },
           "default": []
+        },
+        "headless_is_unattended": {
+          "description": "Whether a headless run, such as claude -p or the Agent SDK, is in the place \"unattended\": nobody can answer it mid-turn. Claude Code marks such a run in the environment of its hooks. false leaves it in the place \"session\" unless a variable of \"unattended_when_env\" is set.",
+          "type": "boolean",
+          "default": true
         }
       },
       "default": {}

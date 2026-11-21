@@ -3,7 +3,9 @@
 //
 // It decides exactly as the SessionStart hook does for a session that reports no model: the model
 // Claude Code will start with, read from the arguments it is about to pass, ANTHROPIC_MODEL and the
-// settings files (launch.ts); the scope from NOONSIGHT_SCOPE; the place from session.unattended_when_env.
+// settings files (launch.ts); the scope from NOONSIGHT_SCOPE; the place from session.unattended_when_env
+// and, since the session it starts reports a headless run to its hooks only once it runs, from -p or
+// --print on the command line it is about to pass.
 // So when the hooks are installed too, SessionStart finds the same rules already in the system prompt
 // and does not deliver them a second time (launcherPrompt below).
 //
@@ -103,7 +105,7 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
     matters: () => {
       if (routeReadsScope(config, { target: 'launcher', env: req.env, held })) return true;
       const before = launchModelFrom(given, { env: explicitEnv, home: req.home, cwd: req.cwd });
-      return before.kind !== 'found' || scopeChangesRules(config, before.model, sessionPlace(config, explicitEnv).place);
+      return before.kind !== 'found' || scopeChangesRules(config, before.model, sessionPlace(config, explicitEnv, printMode(req.args)).place);
     },
     env: req.env,
   });
@@ -121,7 +123,7 @@ export function planLaunch(config: Config, configFile: string, req: LaunchReques
   const inferred = scope.source === 'task-text' || scope.source === 'classifier';
   const base = inferred ? passThrough(args, scope.scope, req.env, 'inferred') : passThrough(args, req.scope, req.env);
   const env = applyEnv(req.env, base.env);
-  const place = sessionPlace(config, env);
+  const place = sessionPlace(config, env, printMode(args));
   const cmd: CommandLine = { args, exact: true };
   const launch = launchModelFrom(cmd, { env, home: req.home, cwd: req.cwd });
   const decision = resolve(config, { model: launch.kind === 'found' ? launch.model : null, scope: scope.scope, place: place.place });
@@ -183,6 +185,15 @@ function launchScope(config: Config, env: Env, task: string | null, cmd: Command
   if (explicit.scope !== null) return explicit;
   const text = task ?? printPrompt(cmd.args);
   return text !== null ? taskScope(config, taskText(null, text).text) : explicit;
+}
+
+/** Whether a claude command line runs headless: it gives -p or --print before a "--" that ends the options. */
+export function printMode(args: readonly string[]): boolean {
+  for (const a of args) {
+    if (a === '--') return false;
+    if (a === '-p' || a === '--print') return true;
+  }
+  return false;
 }
 
 /**

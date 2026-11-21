@@ -102,7 +102,7 @@ export interface RawConfig {
   models?: Record<string, RawModelEntry>;
   on_undeclared?: 'warn' | 'ignore';
   scopes?: Record<string, RawScope>;
-  session?: { unattended_when_env?: string[] };
+  session?: { unattended_when_env?: string[]; headless_is_unattended?: boolean };
   subagents?: { delivery?: 'prompt' | 'off'; permission?: 'allow' | 'ask' | 'passthrough'; on_mismatch?: 'warn' | 'ignore' };
   routing?: {
     enabled?: boolean;
@@ -570,6 +570,7 @@ function build(
   };
   const session = {
     unattendedWhenEnv: cfg.session?.unattended_when_env ?? DEFAULT_SESSION_SETTINGS.unattendedWhenEnv,
+    headlessIsUnattended: cfg.session?.headless_is_unattended ?? DEFAULT_SESSION_SETTINGS.headlessIsUnattended,
   };
   const routing = loadRouting(cfg.routing ?? {}, preset, scopes, exact, report);
   const c = cfg.classifier ?? {};

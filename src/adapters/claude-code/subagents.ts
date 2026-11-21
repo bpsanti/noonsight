@@ -571,7 +571,8 @@ export function choiceFields(scope: ScopeChoice, place?: PlaceChoice): Record<st
   return {
     scope_source: scope.source,
     ...(scope.matcher !== undefined ? { scope_matcher: scope.matcher } : {}),
-    ...(place?.because !== undefined ? { unattended_env: place.because } : {}),
+    ...(place?.because !== undefined ? { unattended_because: place.because } : {}),
+    ...(place?.env !== undefined ? { unattended_env: place.env } : {}),
   };
 }
 

@@ -105,13 +105,14 @@ From there, edit `~/.config/noonsight/noonsight.json` ([docs/configuration.md](c
 
 - **Declare every model you run.** A model with no entry gets a warning at each session start and no rules; `"use": "none"` says you decided it needs none.
 - **Say when nobody is watching.** Every preset rule of Opus 5.5 and Fable 5.2 that ships on is for the place `unattended` or `subagent`, so a watched session on either receives none, in any scope; the carry-through rules of Sonnet 5.5 and Haiku 5.5 are for those places too.
-  A session is unattended when a variable of `session.unattended_when_env` is set; put your CI's or your orchestrator's variable there.
+  A headless run, such as `claude -p` or the Agent SDK, is unattended by default, since nobody can answer it mid-turn; `"session": { "headless_is_unattended": false }` turns that off.
+  An interactive session is watched unless a variable of `session.unattended_when_env` is set; put your orchestrator's variable there for the interactive sessions it runs with nobody watching, and your CI's for the interactive ones it starts.
 - **Give tasks a scope.** A watched Sonnet 5.5 or Haiku 5.5 session with no scope receives `verify-changes` once it edits a code file its git repository tracks, and nothing else; their other rules for the place `session` are written for named scopes.
   Start sessions with `NOONSIGHT_SCOPE=<scope>`, or with `noonsight run --scope <scope>`, and give scopes `match` patterns for subagents ([docs/configuration.md](configuration.md#scopes)).
   The classifier can place the tasks no pattern places, at the cost of one small model call each ([docs/configuration.md](configuration.md#the-classifier)).
 - **Review preset updates.** An update of noonsight can change the preset; `noonsight check` lists what changed, and `noonsight accept` takes the new version.
   `"on_preset_change": "hold"` keeps the rules you accepted until then ([docs/configuration.md](configuration.md#preset-updates)).
-- **Check the result** with `noonsight check`, `noonsight models` and `noonsight resolve <model> [scope] [place]`, which prints the exact text a model receives.
+- **Check the result** with `noonsight check`, which writes out what each model receives with no scope in a watched session, an unattended session and a subagent, `noonsight models` and `noonsight resolve <model> [scope] [place]`, which prints the exact text a model receives.
 
 ## Rules for one repository
 

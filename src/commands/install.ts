@@ -5,14 +5,15 @@ import { checkInstallable, checkUninstallable, install, InstallRefused, NeedsPer
 import { accountTarget, defaultAccountDir, discoverConfigDirs, managedTarget, UnsupportedPlatformError, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readRemoteSettings } from '../adapters/claude-code/managed.js';
 import { findNoonsightHandlers } from '../adapters/claude-code/settings.js';
-import { ConfigError, loadConfig } from '../config/load.js';
+import { ConfigError, loadConfig, loadConfigDetails } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
+import { projectFor } from '../config/project.js';
 import { isPermissionError } from '../state/files.js';
 import { accountInstalls, recordAccountInstall } from '../state/installs.js';
 import { packageVersion } from '../version.js';
 import { runCheck } from './check.js';
 import { writeConfig } from './init.js';
-import { modelsReport } from './models.js';
+import { changeLines, receivesLines } from './receives.js';
 import { UsageError } from './usage.js';
 
 export const INSTALL_USAGE = `usage: noonsight install [--account <dir> | --managed]
@@ -168,7 +169,7 @@ function finishSetup(setupLines: readonly string[], wroteConfig: boolean, target
   }
 
   const checked: string[] = [];
-  const checkStatus = runCheck([], env, (t) => checked.push(t));
+  const checkStatus = runCheck([], env, (t) => checked.push(t), { receives: false });
   if (checkStatus === 2) usable = false;
   out.push(...checked, ...installNotes(targets, env, home, false));
 
@@ -184,28 +185,25 @@ function finishSetup(setupLines: readonly string[], wroteConfig: boolean, target
   else if (checkStatus !== 0) out.push('Not done yet: fix the problems the check reports above, then run `noonsight check` again.');
   else
     out.push(
-      'Done: from the next Claude Code session on, a session with no scope receives only the rules its model has for every scope in that place, which may be none. ' +
-        'A rule limited to scopes reaches a session only in one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`, and a subagent in the scope its task matches, or the classifier gives it when the classifier is on. ' +
+      'Done: from the next Claude Code session on, each session and subagent receives what the lines above give its model in its place and scope. ' +
         '`noonsight report` shows what was delivered. To undo: `noonsight uninstall`.',
     );
   io.out(out.join('\n'));
   return usable ? 0 : 2;
 }
 
-/** What each declared model will receive, one line each, as `noonsight models` lists it. */
+/**
+ * What each declared model will receive in each place with no scope, one line each, and the two ways
+ * to change it; the configuration is read as a session started here would read it.
+ */
 function receives(env: Env, home: string): string[] {
-  const report = modelsReport(env, home);
-  const lines = ['Each declared model receives:'];
-  for (const m of report.declared) {
-    if (m.wildcard) lines.push(`  ${m.key}: a wildcard, covering the models it matches`);
-    else if (m.use === 'none') lines.push(`  ${m.key}: nothing, by decision`);
-    else {
-      const on = m.rules.filter((r) => r.on);
-      lines.push(`  ${m.key}: ${on.length} of ${m.rules.length} rules${on.length ? ` (${on.map((r) => `${r.id}: ${r.where.join(', ')}`).join('; ')})` : ''}`);
-    }
-  }
-  lines.push('  (after each rule: the places it is delivered in; `noonsight models` shows scopes, source, effect and cost)');
-  return lines;
+  const file = configPath(env, home);
+  const { config } = loadConfigDetails(file, { project: projectFor(env.CLAUDE_PROJECT_DIR || process.cwd(), file, stateDir(home)) }, env);
+  return [
+    'Each declared model receives, with no scope:',
+    ...receivesLines(config).map((l) => `  ${l}`),
+    ...changeLines(config).map((l) => `  ${l}`),
+  ];
 }
 
 /**

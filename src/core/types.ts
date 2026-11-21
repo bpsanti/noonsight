@@ -95,9 +95,11 @@ export interface Scope {
 export interface SessionSettings {
   /** Environment variables that, when any is set and not empty, mark a session as unattended. */
   readonly unattendedWhenEnv: readonly string[];
+  /** Whether a headless run, such as `claude -p` or the Agent SDK, is unattended. */
+  readonly headlessIsUnattended: boolean;
 }
 
-export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [] };
+export const DEFAULT_SESSION_SETTINGS: SessionSettings = { unattendedWhenEnv: [], headlessIsUnattended: true };
 
 /** Where routing can act: the session `noonsight run` starts, and the subagents a session starts. */
 export const ROUTE_TARGETS = ['launcher', 'subagents'] as const;

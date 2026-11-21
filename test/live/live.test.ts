@@ -6,7 +6,8 @@
 //     Needs `claude` and `expect` on PATH; fails when either is missing. Sends no prompt and no
 //     request to Anthropic: a placeholder token gets Claude Code past sign-in and the API address
 //     points at a closed local port. It proves that Claude Code runs the hooks on startup, /model and
-//     /clear, with the inputs the adapter expects, and shows noonsight's warnings.
+//     /clear, with the inputs the adapter expects, shows noonsight's warnings, and tells its hooks
+//     whether the session runs headless (CLAUDE_CODE_SESSION_ATTENDED), which decides the place.
 //
 //   NOONSIGHT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live
 //     Also asks the models which rules they received; this spends a little usage on the account the
@@ -142,6 +143,8 @@ function session(l: Lab, config: string, steps: readonly string[], claudeArgs: r
 const squeeze = (s: string): string => s.replace(/\s+/g, '');
 const pick = (log: Record<string, any>[]): unknown[][] =>
   log.map((d) => [d.event, d.source, d.model ?? null, d.model_source ?? null, d.status, d.delivered, d.warned]);
+/** Where each decision placed the session, and why it was unattended. */
+const places = (log: Record<string, any>[]): unknown[][] => log.map((d) => [d.event, d.place ?? null, d.unattended_because ?? null]);
 
 test('live, no tokens: claude and expect are installed', () => {
   assert.deepEqual(tools, [], `missing on PATH: ${tools.join(', ')}`);
@@ -157,6 +160,13 @@ test('live, no tokens: startup, /model and /clear run the hooks with the inputs 
     ['model-switch', 'command', 'claude-opus-5-5', 'hook-input', 'matched', 'rules+note', false],
     ['model-switch', 'command', 'claude-haiku-5-5', 'hook-input', 'none', 'note', false],
     ['session-start', 'clear', 'claude-haiku-5-5', 'process-record', 'none', 'nothing', false],
+  ]);
+  // An interactive session is a watched one: Claude Code gives its hooks CLAUDE_CODE_SESSION_ATTENDED=1.
+  assert.deepEqual(places(l.log()), [
+    ['session-start', 'session', null],
+    ['model-switch', 'session', null],
+    ['model-switch', 'session', null],
+    ['session-start', 'session', null],
   ]);
 });
 
@@ -194,6 +204,13 @@ test('live, no tokens: claude -p reports no model, and the hook takes it from --
     ['session-start', 'startup', 'claude-sonnet-5-5', 'claude-args', 'matched', 'rules', false],
     ['session-start', 'startup', 'claude-opus-5-5', 'env', 'matched', 'rules', false],
     ['session-start', 'startup', 'claude-haiku-5-5', 'settings', 'none', 'nothing', false],
+  ]);
+  // A -p run is headless: Claude Code gives its hooks CLAUDE_CODE_SESSION_ATTENDED=0, so with no
+  // configuration for it the session is unattended. This fails if a Claude Code version drops the signal.
+  assert.deepEqual(places(l.log()), [
+    ['session-start', 'unattended', 'headless'],
+    ['session-start', 'unattended', 'headless'],
+    ['session-start', 'unattended', 'headless'],
   ]);
 });
 

@@ -101,7 +101,8 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
   A `model` set only in an MDM profile is not read.
 
 The session's task scope is the value of `NOONSIGHT_SCOPE` in the environment Claude Code runs in, which its hooks inherit, so whoever starts the session (a person, a script, an orchestrator) can name it; without it, the session receives only the rules for every scope.
-Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, and `session` otherwise ([Scopes](configuration.md#scopes)).
+Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, or when Claude Code runs it headless, as `claude -p` and the Agent SDK do, and `session.headless_is_unattended` is on, as it is by default; it is `session` otherwise ([Scopes](configuration.md#scopes)).
+Claude Code tells a hook that its session runs headless with `CLAUDE_CODE_SESSION_ATTENDED=0` in the hook's environment; the variable is not documented, so the hook reads only `0` as headless, and a session whose environment lacks it is in the place it would have without this check ([verification](verification/claude-code.md)).
 A resumed session gets the rules again when a change of scope or place changed which rules apply.
 The rules are resolved with the triggers the session has revealed ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)), which belong to its session id: after compaction the session gets the rules its triggers added again, with the others, and a resumed session that already holds them gets nothing again; after `/clear`, the new session has revealed none.
 
@@ -374,7 +375,8 @@ The report names that project and what became of it on its second line, and the 
 | `classifier` | With `classifier.mode` on, for a task the classifier was meant to place: `scoped` (it gave a declared scope), `none` (it found that no scope fits), `failed`, `timeout`, `invalid` (it answered outside the declared scopes), `not-needed` (the scope could change neither the rules nor the route, so it was not asked) or `no-task` (a launch with no task text). Absent when no classification was due ([The classifier](configuration.md#the-classifier)) |
 | `classifier_ms`, `classifier_error`, `classifier_cost_usd` | For a task the classifier was asked about: how long it took, why it gave no scope, and the cost Claude Code reported for the call |
 | `matcher_scope` | With `classifier.mode` set to `always`: the scope a matcher had chosen before the classifier decided |
-| `unattended_env` | For a session in the place `unattended`: the variable that put it there |
+| `unattended_because` | For a session in the place `unattended`: `env` when a variable of `session.unattended_when_env` put it there, `headless` when it runs headless |
+| `unattended_env` | For a session a variable of `session.unattended_when_env` put in the place `unattended`: that variable |
 | `task_text_cut` | `true` for a subagent whose description and task text are longer than the matchers read, so the scope may be missing because the matching text was cut ([Scopes](configuration.md#scopes)) |
 | `delivered` | `rules`, `rules+note`, `note`, `already-delivered`, `nothing`, as the hook returned them to Claude Code; `launcher` for a session start that found the rules in the system prompt `noonsight run` gave; `system-prompt` for a launch that added them; `at-start` for an agent call whose rules its subagent's start gives; and for a subagent with `subagents.delivery` set to `off`, `off` |
 | `launch_file`, `launch_model` | For a session start under `noonsight run` with rules in the system prompt: the launcher's file, and the model its rules are for |

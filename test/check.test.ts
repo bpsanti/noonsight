@@ -325,7 +325,58 @@ test('check says which scope and place sessions started from its environment get
   assert.match(quiet.stdout, /^ok: scopes: 1 scope declared, 1 matcher; no two scopes overlap$/m);
   assert.doesNotMatch(quiet.stdout, /sessions started from this environment/);
   assert.match(runCli(['check'], { ...scoped, NOONSIGHT_SCOPE: 'investigate', CI: '1' }).stdout, /^ok: sessions started from this environment get scope "investigate" \(NOONSIGHT_SCOPE\), place "unattended" \(CI is set\)$/m);
+  assert.match(runCli(['check'], { ...scoped, CLAUDE_CODE_SESSION_ATTENDED: '0' }).stdout, /^ok: sessions started from this environment get no scope, place "unattended" \(a headless run\)$/m);
+  assert.doesNotMatch(runCli(['check'], { ...scoped, CLAUDE_CODE_SESSION_ATTENDED: '1' }).stdout, /sessions started from this environment/);
   const unknown = runCli(['check'], { ...scoped, NOONSIGHT_SCOPE: 'release' });
   assert.equal(unknown.status, 0);
   assert.match(unknown.stdout, /^warning: NOONSIGHT_SCOPE is "release" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope$/m);
+});
+
+test('check writes out what each declared model receives in each place with no scope, "nothing" included, then how to change it', () => {
+  const { env } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const dir = tempTree({
+    'noonsight.json': {
+      version: 1,
+      scopes: { investigate: { match: ['\\binvestigat'] } },
+      models: {
+        'claude-sonnet-5-5': {
+          use: 'custom',
+          add: [
+            { id: 't/general', file: 'r.md' },
+            { id: 't/away', file: 'r.md', where: ['unattended'] },
+            { id: 't/sub', file: 'r.md', where: ['subagent'] },
+            { id: 't/scoped', file: 'r.md', scopes: ['investigate'] },
+            { id: 't/verify', file: 'r.md', scopes: ['investigate'], triggers: ['code-edit'] },
+          ],
+        },
+        'claude-opus-5-5': { use: 'custom', add: [{ id: 't/opus-away', file: 'r.md', where: ['unattended'] }] },
+        'claude-haiku-5-5': { use: 'none' },
+        'claude-*-4-*': { use: 'none' },
+      },
+    },
+    'r.md': '- A rule.',
+  });
+  const config = { ...env, NOONSIGHT_CONFIG: path.join(dir, 'noonsight.json') };
+  const r = runCli(['check'], config);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(
+    lines(r.stdout).filter((l) => l.startsWith('ok: receives with no scope')),
+    [
+      'ok: receives with no scope, claude-sonnet-5-5: watched session: t/general, then t/verify once it edits tracked code (code-edit); ' +
+        'unattended session: t/general, t/away, then t/verify once it edits tracked code (code-edit); subagent: t/general, t/sub',
+      'ok: receives with no scope, claude-opus-5-5: watched session: nothing; unattended session: t/opus-away; subagent: nothing',
+      'ok: receives with no scope, claude-haiku-5-5: nothing in any place, by decision ("use": "none")',
+      'ok: receives with no scope, claude-*-4-*: nothing in any place, by decision ("use": "none" for every model it matches)',
+    ],
+  );
+  assert.match(r.stdout, /^ok: places and scopes: A session is unattended when it runs headless, as `claude -p` and the Agent SDK do, or when a variable of `session\.unattended_when_env` is set; .* A rule limited to scopes adds to these only in one of its scopes: /m);
+
+  // With headless runs left watched, the line says so, and names the variables the configuration lists.
+  const raw = JSON.parse(fs.readFileSync(config.NOONSIGHT_CONFIG, 'utf8')) as Record<string, unknown>;
+  fs.writeFileSync(config.NOONSIGHT_CONFIG, JSON.stringify({ ...raw, session: { unattended_when_env: ['CI', 'FM_TASK_ID'], headless_is_unattended: false } }));
+  assert.match(
+    runCli(['check'], config).stdout,
+    /^ok: places and scopes: A session is unattended only when a variable of `session\.unattended_when_env` is set \(here: CI, FM_TASK_ID\), because `session\.headless_is_unattended` is false; /m,
+  );
 });

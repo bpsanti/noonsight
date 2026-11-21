@@ -26,6 +26,7 @@ import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { lastDecision } from '../state/log.js';
 import { compareVersions, packageVersion } from '../version.js';
+import { changeLines, receivesLines } from './receives.js';
 import { UsageError } from './usage.js';
 
 export const CHECK_USAGE = `usage: noonsight check
@@ -37,7 +38,12 @@ and 2 when the configuration is missing or refused.`;
 
 type Level = 'ok' | 'warning' | 'problem';
 
-export function runCheck(args: readonly string[], env: Env, out: (text: string) => void): number {
+export interface CheckOptions {
+  /** Whether to list what each declared model receives in each place; install lists it itself. */
+  readonly receives?: boolean;
+}
+
+export function runCheck(args: readonly string[], env: Env, out: (text: string) => void, options: CheckOptions = {}): number {
   if (args.length) throw new UsageError(`unexpected argument "${args[0]}"`, CHECK_USAGE);
   const home = os.homedir();
   const lines: [Level, string][] = [];
@@ -65,6 +71,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     checkProject(details, add);
     checkPreset(details, env, add);
     checkAllModels(config, add);
+    if (options.receives !== false) checkReceives(config, add);
     checkScopes(config, env, add);
     checkTriggers(config, add);
     checkRouting(config, env, add);
@@ -209,6 +216,12 @@ function checkAllModels(config: Config, add: (level: Level, text: string) => voi
   if (receiving.length === 0) add('warning', 'all_models: no model is declared with "use": "preset" or "use": "custom", so no model receives these rules');
 }
 
+/** What each declared model receives in each place with no scope, then how to change it. */
+function checkReceives(config: Config, add: (level: Level, text: string) => void): void {
+  for (const line of receivesLines(config)) add('ok', `receives with no scope, ${line}`);
+  add('ok', `places and scopes: ${changeLines(config).join(' ')}`);
+}
+
 /**
  * The declared scopes: scopes a single task can fall in, matchers that could not be tested for that,
  * and the scope and place sessions started from this environment get.
@@ -242,7 +255,7 @@ function checkScopes(config: Config, env: Env, add: (level: Level, text: string)
       'sessions started from this environment get ' +
         (scope !== null ? `scope "${scope}" (${SCOPE_ENV})` : 'no scope') +
         `, place "${place.place}"` +
-        (place.because !== undefined ? ` (${place.because} is set)` : ''),
+        (place.because === 'env' ? ` (${place.env} is set)` : place.because === 'headless' ? ' (a headless run)' : ''),
     );
 }
 
