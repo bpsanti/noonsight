@@ -144,6 +144,14 @@ The comparison with `before` is Fisher's exact test, two-sided, as before, and t
 v4 has a cap of $25 of its own, for its calibration, sessions and judgments.
 The runner is given what remains after the calibration, less a reserve for the 32 judgments at the highest judgment cost measured so far; v4 stops and reports if the measured costs project past the cap.
 
+**Revision after the first calibration.**
+This paragraph was written after the first v4 calibration, and before any v4 session or judgment of a real answer; it departs from the rule above that a failed calibration stops v4 with no revision.
+The judge reached the expected `grounded` on eight of the nine calibration answers and disagreed on `rounding`, which it judged false for citing 70.9% for `.claude/rules` and 99.5% for coverage under noonsight.
+Those were the values of the delivery run of 2026-11-20, when the calibration answers were written; the v4 evidence map gives 70.6% (D7) and 99.9% (D2), so by the rubric the judge was right and the answer had gone stale.
+The calibration answers `rounding` and `grounded-conditions` now cite the v4 values, and their cases are unchanged: `rounding` still rounds D6's 87.3% to 87.4%.
+The calibration runs once more, and the first one is kept as `results/2026-11-21-v4/calibration-first.json`; if the judge again misses any of the nine, v4 stops and reports.
+[rubric.md](rubric.md) is left as pre-registered, though its statement of the delivery claim still gives the run of 2026-11-20 (99.5%, 3 of 300); the judge reads the evidence map for numbers.
+
 v4's results are in `results/2026-11-21-v4/`.
 
 ## Limits
