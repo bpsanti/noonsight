@@ -2,3 +2,4 @@ node_modules/
 dist/
 __pycache__/
 experiments/delivery/results/*/*/sessions/
+experiments/adoption/results/*/streams/

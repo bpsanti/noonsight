@@ -26,7 +26,7 @@ It takes these steps in order, and a step with a command named in brackets does 
 3. **What each model receives** [`noonsight models`].
    One line per declared model: how many of its rules are on, and for each the places it is delivered in.
    A rule is delivered only where its scope and place apply.
-   A session with no scope receives only the rules its model has for every scope in that place; the preset has none for the `session` place, so with it such a session gets no rule.
+   A session with no scope receives only the rules its model has for every scope in that place, and those a trigger brings; the preset has no rule for every scope in the `session` place, so such a session gets a rule only from the `code-edit` trigger: `verify-changes`, on Sonnet 5.5 and Haiku 5.5, once it edits a code file its git repository tracks.
    A rule limited to scopes reaches a session only when it has one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`.
    A subagent gets the scope its task matches, or the one the classifier gives it when the classifier is on.
 4. **The check** [`noonsight check`].
@@ -263,6 +263,7 @@ They call `noonsight-hook`, a small shell script that runs the Node.js and the c
 `PostModelSwitch` runs it with `model-switch`, `SubagentStart`, with no matcher, with `subagent-start`, and `PostToolUse` twice, in two matcher groups: with the same matcher as `PreToolUse`, with `agent-result`, and with the matcher `Edit|Write`, with `file-edit`.
 An install made before noonsight used `SubagentStart` lacks that entry, so its subagents get no rules, and one made before triggers lacks the `Edit|Write` entry, so its sessions never reveal `code-edit` ([hooks.md](hooks.md#posttooluse-on-edit-and-write-the-triggers)); `noonsight check` reports either, and running `noonsight install` again adds them.
 
+The pointer runs `noonsight hook --install <account|managed> <event>` with that argument (`--install` names the install that ran it, which the decision log records as `install`), the hook adapter, which reads the hook input on stdin, prints at most one JSON object and always exits 0; it is not meant to be run by hand, and unlike every other command it prints no usage, since Claude Code would show it as a hook error.
 So the hook does not depend on the `PATH` of whatever started Claude Code, and installing a new copy of noonsight rewrites only the pointer, never a settings file.
 If the copy it points at is removed, the pointer exits quietly and `noonsight check` reports it.
 

@@ -7,137 +7,139 @@
 
 **Every model has its own north.**
 
-Take a fix before you set the course: pick the right model for each agent task, and hand every agent the practices that fit the model it actually runs on.
+Anthropic publishes a prompting guide for each Claude model, and their advice differs from one model to the next ([S1](docs/sources.md#s1), [S2](docs/sources.md#s2)).
+noonsight hands each Claude Code session, and each subagent it starts, the rules written for the model it actually runs on, and hands them again when that model changes.
+It works through Claude Code's own hooks, reads only local files, and records every delivery so you can check it.
+It ships a preset of rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each taken from that model's guide with its source, and you can add your own, for the machine or for one repository.
 
-**Status: early development.** Nothing is published yet.
-Each Claude Code session already receives the rules declared for the model it runs on, at startup and again after `/model`, through official Claude Code hooks.
-So does each subagent a session starts: before it starts, noonsight predicts the model it will run on, hands it that model's rules as it starts, without changing the call that started it, then checks the model it actually started on and warns on a difference.
-Rules can also depend on the task scope, such as investigating or summarizing: a session takes its scope from `NOONSIGHT_SCOPE`, a subagent from matchers run over its task, and `noonsight check` reports scopes that overlap.
-A rule can also list a trigger, an action that reveals the kind of task: a session that first edits a code file its project's git already tracks receives the rules that list `code-edit`, such as the preset's verify rules for Sonnet and Haiku, with that edit ([docs/configuration.md](docs/configuration.md#triggers)).
-`noonsight run` starts Claude Code with the rules in the system prompt instead, for sessions the hooks do not reach; with the hooks installed too, the rules still arrive once.
-Routing is optional and off by default: once turned on, a task's scope picks the model and effort for a session `noonsight run` starts and for each subagent, from a table of preferences, and it yields to a model the caller chose and to an orchestrator's environment ([docs/configuration.md](docs/configuration.md#routing)).
-The classifier is optional and off by default too: once turned on, a small model places a task that no explicit scope and no matcher placed, and a task it cannot place in time gets no scope ([The classifier](#the-classifier)).
-The package ships a starting preset, `claude`: 16 rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each adapted from Anthropic's prompting guide for that exact model and listed with its source, the effect the guide reports and its cost ([presets/claude/SOURCES.md](presets/claude/SOURCES.md)).
-Eight of them are on by default; the rest have a high cost, a side effect or a narrow use, and the user turns them on.
-None is delivered where Claude Code already sends the same advice.
+## What it guarantees, and what it does not
 
-## What it will do
+**The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.5% (3,199 of 3,216) of the requests that had rules due ([D2](docs/evidence.md#d2)); 3 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
+That run is Claude Code 2.1.328 against a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
 
-1. **Route (optional).** Choose the model and effort for a task from rules you declare, based on where each model is strong. Skip this part if an orchestrator already picks models for you.
-2. **Instruct.** Give each Claude Code session and subagent the rules for the model it runs on, through official Claude Code hooks: no network proxy, no credentials handled.
-   It ships a starting preset per current model, built from the vendor's prompting guides with every source cited, and every rule is configurable.
+The fuzzer has found four failures of noonsight, F1 to F4: F1 and F2 were fixed before that run, and F3 and F4, found by it, were fixed after it.
+The three failing sessions are the documented limit below, F3 and F4.
+Their shortest reproductions are in the corpus, which expects them to pass since the fixes; neither the corpus nor the 300 random sessions has a committed run on the fixed build, so the committed rate is still the one above.
 
-It works on its own and alongside agent orchestrators.
-One configuration file serves the whole machine, for every Claude Code account on it.
-A repository can commit its own, `.noonsight/noonsight.json`, which applies over the machine's for the sessions that run in it once each person trusts the project with `noonsight trust`; by default a project can only add rules ([docs/configuration.md](docs/configuration.md#project-configuration)).
+On the same first 60 sequences, the native ways to give a model rules covered fewer requests (each number links to its entry):
 
-## Install
+| Every model's rules in | Requests with their rules | Subagent requests with their rules |
+| --- | --- | --- |
+| noonsight | [100%](docs/evidence.md#d5) | [100%](docs/evidence.md#d9) |
+| A user `CLAUDE.md` | [87.3% (566 of 648)](docs/evidence.md#d6) | [32.2% (39 of 121)](docs/evidence.md#d10) |
+| `.claude/rules`, one file per model | [70.9% (460 of 649)](docs/evidence.md#d7) | [32.2% (39 of 121)](docs/evidence.md#d10) |
+| A skill per model | [0% (0 of 650)](docs/evidence.md#d8) | [0 of 121](docs/evidence.md#d11) |
 
-From a clone of this repository, until the package is published:
+A `CLAUDE.md` reached every request of the session's own conversation, through `/model`, `/compact`, `/clear` and resumes: 100% (527 of 527) ([D17](docs/evidence.md#d17)).
+What it missed were subagents: it never reaches the built-in Explore and Plan subagents, which Claude Code's documentation confirms ([S4](docs/sources.md#s4)), and it gives every model the other models' rules too: of the rule text in a request, 78.8%, 31.6% and 27.1% was written for the request's model under noonsight, a `CLAUDE.md` and `.claude/rules` ([D12](docs/evidence.md#d12)).
+A skill guarantees only its description until the model decides to open it ([S5](docs/sources.md#s5)).
+
+**What it does not guarantee.**
+
+- Delivery is not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
+  [What the rules change](#what-the-rules-change) is a separate question with its own data.
+- Right after install, what a watched session receives from the preset depends on its model.
+  On Opus 5.5 and Fable 5.2 it receives nothing, in any scope: every preset rule of theirs that ships on is for unattended runs or subagents.
+  On Sonnet 5.5 and Haiku 5.5 it receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
+  So for Opus and Fable the gap is the place, which `session.unattended_when_env` fixes for the runs of a CI or an orchestrator, and for Sonnet and Haiku it is the scope.
+  [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
+- Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
+- A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
+- It is measured on one Claude Code version at a time, and Claude Code changes how hooks behave; [docs/verification/claude-code.md](docs/verification/claude-code.md) lists each fact noonsight relies on and the version it was checked on.
+
+## Your first delivered rule
+
+noonsight needs Node.js 20 or newer and Claude Code.
+Version 0.1 is not on npm yet (the name holds an empty placeholder), so install it from a clone:
 
 ```bash
+git clone https://github.com/bpsanti/noonsight.git
+cd noonsight
 npm install && npm run build && npm link   # puts `noonsight` on PATH
+```
+
+Once 0.1 is published, `npx noonsight install` replaces all of this.
+
+Then set it up.
+This writes `~/.config/noonsight/noonsight.json` when there is none, adds the hooks to every Claude Code login of your account, keeping every other setting, and checks the result:
+
+```bash
 noonsight install
 ```
 
-Once version 0.1 is published, `npx noonsight install` becomes the whole route.
-One command sets noonsight up, and running it again is safe.
-It writes the configuration file when there is none (`~/.config/noonsight/noonsight.json`, or the file `NOONSIGHT_CONFIG` names, declaring every model the preset covers; an existing file is never replaced), adds the hooks to every Claude Code login of this account (no administrator rights), runs `noonsight check`, lists the rules each declared model receives, and ends by saying what it changed, or that nothing changed.
-The next Claude Code session already gets what the configuration gives its model in its scope and place, and `noonsight report` shows what was delivered.
-A session with no scope gets only the rules its model has for every scope, which with the preset is none; set a scope with `NOONSIGHT_SCOPE` or `noonsight run --scope` for the rules limited to scopes.
-[docs/install.md](docs/install.md#the-one-command) lists the steps it takes and how to undo them.
+See the exact text a model receives in a scope, before any session runs:
 
-Three of its steps are also commands of their own: `noonsight init`, `noonsight models` and `noonsight check`.
-Turn a preset rule on or off with `enable` and `disable`, replace one with your own version with `replaces`, add your own rule files (under `all_models` for rules every model should get; [when that beats a `CLAUDE.md`](docs/configuration.md#when-all_models-is-worth-it-and-when-a-claudemd-is-enough)), and declare the models you use; [docs/configuration.md](docs/configuration.md) explains each key.
+```bash
+noonsight resolve claude-sonnet-5-5 routine
+```
 
-The configuration records the preset version it was checked against (`preset_version`), so when an update of noonsight changes the preset, `noonsight check` and the start of each session it affects say which rules turned on or off, were renamed or changed, and which `enable`, `disable` or `replaces` entries no longer match; `noonsight accept` accepts the new version, and `"on_preset_change": "hold"` keeps the accepted version's rules until then ([docs/configuration.md](docs/configuration.md#preset-updates)).
+Start a session in any project with that scope, and ask what it received:
 
-`noonsight watch enable` optionally keeps a small watcher running that installs the hooks into each new Claude Code login as it appears; it is off unless you turn it on, and `noonsight watch disable` turns it off.
+```text
+NOONSIGHT_SCOPE=routine claude --model sonnet
+> Which working rules did you receive from noonsight, and for which model?
+```
 
-`noonsight install` adds noonsight's hooks (after the configuration file, when there is none) to the user settings of every Claude Code configuration directory it finds (`~/.claude`, the one in `CLAUDE_CONFIG_DIR`, and every other one in the home directory), keeping every other setting and hook.
-User settings reach every login, including one whose organization delivers server-managed settings, where Claude Code ignores machine-wide managed settings files.
-`noonsight install --account <dir>` installs into one directory, and `sudo ... noonsight install --managed` once for every account through Claude Code's managed settings files.
-[docs/install.md](docs/install.md) covers the three installs, what they write, why the default is the default, and how to remove them.
-noonsight was called sextant before; [docs/install.md](docs/install.md#moving-from-sextant) says how to move an install made under that name.
-[docs/hooks.md](docs/hooks.md) describes what the hooks deliver, the decision log, and how to turn noonsight off for a session (`NOONSIGHT_DISABLE=1`).
+The model names `sonnet-5-5/stay-in-scope` and `sonnet-5-5/verify-changes`.
+Leave the session, and confirm the delivery from noonsight's own log:
 
-`noonsight report` reads the decision log and tells, for each rule, how often it was delivered and to which models, scopes and places, which deliveries a trigger made and with which edits, and which rules are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).
+```bash
+noonsight report
+```
 
-`noonsight run [--scope <scope>] -- <claude arguments>` starts `claude` with the rules for its model added through `--append-system-prompt-file`, keeping any `--append-system-prompt` someone else passes, and with routing on, the model and effort the scope's row gives; [docs/launcher.md](docs/launcher.md) explains it.
-
-The hooks read only local files: nothing leaves the machine, unless the classifier is on, which sends the first 4,000 characters of a task's text to the classifier's model through Claude Code.
-
-## The classifier
-
-With `"classifier": { "mode": "fallback" }`, a task that no explicit scope and no matcher placed is placed by a small model, Haiku at low effort by default, through one `claude -p` call that uses the login Claude Code already has.
-It reads the descriptions of the declared scopes, and its answer is held to one of them or `none`.
-It acts in the agent call hook, for each subagent, and in `noonsight run`, for the task text it is given, and only when the scope can change the task's rules or its route.
-A classification that fails, or takes longer than `classifier.timeout_ms` (8 seconds by default and at most), leaves the task with no scope, warns the person, and is recorded in the decision log.
-The classifier's own session runs with `NOONSIGHT_DISABLE=1` and `--safe-mode`, so noonsight's hooks never act inside it.
-[docs/configuration.md](docs/configuration.md#the-classifier) covers the modes, what it is asked, and what it costs.
-
-How often it agrees with a person: `test/fixtures/classifier/tasks.json` holds 45 task texts, each labeled by hand with one of the `claude` preset's five scopes or `none`, by the rule written in `test/fixtures/classifier/README.md`.
-On 2026-11-16, with Claude Code 2.1.325 and the classifier's defaults (Haiku 5.5 at low effort), the live test `classifier-agreement` ran over all 45 twice, and the classifier agreed with the hand label on 44 of them in the first run (98%) and on 43 in the second (96%).
-No classification failed or ran out of time in either run.
-
-| Label | Tasks | Agreed, run 1 | Agreed, run 2 |
-| --- | --- | --- | --- |
-| `investigate` | 9 | 9 | 9 |
-| `build` | 9 | 9 | 8 |
-| `review` | 8 | 8 | 8 |
-| `routine` | 9 | 9 | 8 |
-| `digest` | 7 | 7 | 7 |
-| `none` | 3 | 2 | 3 |
-
-The disagreements: a request for a short poem, labeled `none`, placed in `digest` (run 1); a race condition to fix whose cause is not yet clear, labeled `build`, placed in `investigate` (run 2); and a `--json` flag whose output format is already specified, labeled `routine`, placed in `build` (run 2).
-The answers vary from run to run, so the agreement is a measure of these tasks on that day, not a guarantee; `NOONSIGHT_LIVE_LOGIN=1 npm run test:live` measures it again.
+The report lists each rule with how often it was delivered, to which models, scopes and places, and the rules that are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).
+`noonsight uninstall` takes the hooks out again; [docs/install.md](docs/install.md) covers every install and how to undo it.
 
 ## What the rules change
 
-`experiments/rules/` runs the same small task on each target model with the model's preset rules delivered by noonsight and with no rules, and records the outcome each rule's source claims and the tokens and cost Claude Code reports ([experiments/rules/README.md](experiments/rules/README.md)).
-On 2026-11-16, with Claude Code 2.1.326 at medium effort, 112 runs cost $7.57:
+Delivery is what noonsight guarantees; what a rule then changes depends on the rule, the model and the task.
+The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without ([experiments/rules](experiments/rules/README.md)):
 
-- With their rules, Sonnet 5.5 ran the tests after a one-file fix in 10 of 10 runs and Haiku 5.5 in 8 of 10, against 0 of 10 each without them; for Sonnet that cost about 46 percent more per run.
-- With its report rule, Fable 5.2 wrote shorter sentences (11.7 words against 15.3) and almost no semicolons, at no added cost.
-- The rules against stopping early could not be told apart from no rules: on these short tasks every run finished either way.
+- One rule, `verify-changes` delivered alone, made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix in 29 of 30 and 27 of 30 runs, where `carry-through` delivered alone did it in 0 of 30 and 0 of 30 ([R3](docs/evidence.md#r3)); without any rule, each model ran them in 0 of 30 runs ([R1](docs/evidence.md#r1)).
+- That extra work has a price: on Sonnet's fix, a run cost $0.0240 without rules and $0.0505 with `verify-changes` alone ([R6](docs/evidence.md#r6)).
+- Delivered as one sentence pointing to a file with its text, `verify-changes` was read in 120 of 120 runs and did as well as the rule inline ([R4](docs/evidence.md#r4)).
+- On a 13-ticket backlog with an open decision, `sonnet-5-5/carry-through` raised the runs that did every part from 9 of 40 to 32 of 40 ([R10](docs/evidence.md#r10)); Haiku's `carry-through` showed nothing there ([R11](docs/evidence.md#r11)).
+- Where the models already did the work, the rules changed nothing and still cost a little ([R6](docs/evidence.md#r6)); every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8)).
 
-The samples are small (3 to 10 runs per arm), so these are directions, not significant results, and the preset was left unchanged; [the dated results](experiments/rules/results/2026-11-16/README.md) give every count and the review of each rule.
+The tasks are small and the samples are 30 or 40 runs per arm, so read these as results on those tasks, not as general effects.
+[docs/usage.md](docs/usage.md#what-a-rule-costs) gives the cost of each rule, and [docs/sources.md](docs/sources.md) where each result confirms, refines or contradicts what Anthropic published.
 
-On 2026-11-19, with Claude Code 2.1.328, 540 runs tested those three rules again on three tasks of different shapes, 30 runs per arm and task, for $73.82 against a $120 cap ([results](experiments/rules/results/2026-11-19/README.md)):
+## Features
 
-- Fable 5.2's report rule gave shorter sentences and fewer semicolons on all three tasks, each significant after Holm's adjustment.
-- The verify rules made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix (30 of 30 and 27 of 30, against 0 of 30 each), and Sonnet after a bug fix (30 of 30 against 15 of 30); where the models already ran the tests without them, on a feature for both and on the bug for Haiku, they changed nothing.
-- Every run passed its hidden check, with or without rules, and the preset was left unchanged.
+| Feature | How | More |
+| --- | --- | --- |
+| Rules per model, for sessions and subagents | The hooks, after `noonsight install` | [docs/hooks.md](docs/hooks.md) |
+| A preset per current model, with sources | `"use": "preset"`, `enable`, `disable`, `replaces` | [presets/claude/SOURCES.md](presets/claude/SOURCES.md) |
+| Your own rules, per model or for every model | `models.<id>.add`, `all_models.add` | [docs/configuration.md](docs/configuration.md#rules-for-every-model) |
+| Rules for one repository | `.noonsight/noonsight.json`, `noonsight trust`, `projects.allow` | [docs/configuration.md](docs/configuration.md#project-configuration) |
+| Rules for a kind of task | Scopes: `NOONSIGHT_SCOPE`, matchers, the optional classifier | [docs/configuration.md](docs/configuration.md#scopes) |
+| Rules for a place | `where`: `session`, `unattended`, `subagent` | [docs/configuration.md](docs/configuration.md#keys) |
+| Rules on an action | Triggers: `code-edit` | [docs/configuration.md](docs/configuration.md#triggers) |
+| Sessions the hooks do not reach | `noonsight run` | [docs/launcher.md](docs/launcher.md) |
+| Model and effort by task (off by default) | `routing` | [docs/configuration.md](docs/configuration.md#routing) |
+| Preset updates you review | `preset_version`, `on_preset_change`, `noonsight accept` | [docs/configuration.md](docs/configuration.md#preset-updates) |
+| Checking what is delivered | `noonsight check`, `models`, `resolve`, `report` | [docs/hooks.md](docs/hooks.md#the-decision-log) |
+| New Claude Code logins (off by default) | `noonsight watch enable` | [docs/install.md](docs/install.md#new-logins-as-they-appear-optional) |
+| Turning it off for a session | `NOONSIGHT_DISABLE=1` | [docs/hooks.md](docs/hooks.md#turning-noonsight-off) |
 
-On 2026-11-20, with Claude Code 2.1.329, 600 runs split Sonnet 5.5's and Haiku 5.5's rules arm, on the fix and the bug, for $13.41 against a $25 cap ([results](experiments/rules/results/2026-11-20/README.md)):
+The hooks never block anything and never use the network.
+The one exception is the classifier, off unless you turn it on, which sends the first 4,000 characters of a task to a small model through your own Claude Code login ([docs/configuration.md](docs/configuration.md#the-classifier)).
 
-- The tests after the fix came from `verify-changes` alone (29 of 30 for Sonnet and 27 of 30 for Haiku, against none with `carry-through` alone or without rules); on Sonnet's bug, either rule alone gave 30 of 30, against 11 of 30 without rules.
-- `verify-changes` carried most of the rules' cost where it changed what the model did, and `carry-through` cost almost nothing where it changed nothing.
-- `verify-changes` delivered as one sentence pointing to a file holding its text was read at the first tool call in all 120 runs and gave the same tests as the rule inline.
+## Using it well
 
-On 2026-11-20, a pilot of 20 runs looked for early stops on two long tasks, an 18-module migration and an 8-ticket backlog, at low effort and without the rules, for $2.52 ([results](experiments/rules/results/2026-11-20-long/README.md)).
-Sonnet 5.5 and Haiku 5.5 did every part in every run, so the carry-through rules had nothing to change there, the comparisons fixed for them did not run, and those rules are still not measured.
+- Give noonsight what differs by model, by kind of task or by place, and leave in `CLAUDE.md` what every model should always have ([docs/usage.md](docs/usage.md#choosing-where-a-rule-lives)).
+- Tell noonsight when nobody is watching, with `session.unattended_when_env` set to your CI's or orchestrator's variable, since Opus 5.5's and Fable 5.2's preset rules are for unattended runs and subagents only, and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
+- Write a rule as a check the model can pass, in plain words; Anthropic's best practices say the same, and the verify rules are where our data shows the largest effect ([docs/usage.md](docs/usage.md#writing-a-rule)).
+- Keep long rule text in a file and deliver one sentence pointing to it ([docs/usage.md](docs/usage.md#a-pointer-to-a-file)).
+- Commit a repository's rules in `.noonsight/noonsight.json`, where each person trusts them once ([docs/usage.md](docs/usage.md#rules-for-one-repository)).
+- Check what each model receives with `noonsight models` and what was delivered with `noonsight report`, and drop a rule that never changes anything you can see.
+- Skip noonsight when every session runs one model with fixed rules: a `CLAUDE.md` is simpler ([docs/usage.md](docs/usage.md#when-not-to-use-noonsight)).
 
-On 2026-11-20, 180 runs tried them on two harder long tasks, for $27.18 against a $120 cap ([results](experiments/rules/results/2026-11-20-harder/README.md)):
+## How this README is checked
 
-- On a 13-ticket backlog where one ticket leaves a decision open, `sonnet-5-5/carry-through` made Sonnet 5.5 settle it instead of handing it back, and the runs that did every part went from 9 of 40 to 32 of 40, at no measurable cost.
-- `haiku-5-5/carry-through` was not shown (6 of 40 against 2 of 40): Haiku 5.5 settled the decision without the rule too, and its misses were a part it did not see.
-- On a 36-file migration both models did every part without the rules, writing a script for the repeated edits, so the rules were not compared there.
-
-`experiments/benchmark/` is the pilot of a larger study on public tasks (SWE-bench Verified, Terminal-Bench 2.1, ReviewBench, SWE Atlas and issue digests), run through Harbor with noonsight inside each task's container, under the conditions `off`, `on`, `claudemd` (every model's rules in one `CLAUDE.md`) and `scattered` (a `CLAUDE.md` that only points to them); its plan is pre-registered in [experiments/benchmark/preregistration.md](experiments/benchmark/preregistration.md).
-
-`experiments/delivery/` measures whether each model's rules reach every request it receives, and only those rules, through `/model`, compaction, `/clear`, resumes, subagents and file edits, for noonsight and for a `CLAUDE.md`, `.claude/rules` and a skill per model; it runs real Claude Code sessions against a local stand-in for the API, so it spends no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).
-
-## Try the core
-
-```bash
-npm install
-npm run build
-NOONSIGHT_CONFIG=test/fixtures/lab/config/noonsight.json NOONSIGHT_PRESETS_DIR=test/fixtures/lab/presets \
-  node dist/src/cli.js resolve claude-sonnet-5-5 investigate
-```
-
-See [docs/configuration.md](docs/configuration.md) for the configuration file and the `resolve` output.
+- Every measured number links to [docs/evidence.md](docs/evidence.md), which names the raw result file, how the number is computed from it, its date and its Claude Code version; `npm test` computes each number again from the file.
+- Every quotation of Anthropic is in [docs/sources.md](docs/sources.md) with its link, its retrieval date and the literal excerpt; `NOONSIGHT_LIVE_SOURCES=1 npm run test:live` checks each excerpt against the live page.
+- `npm test` runs the commands of [Your first delivered rule](#your-first-delivered-rule) in a sandbox, and fails when a command, option, configuration key, environment variable or hook event is missing from the documentation.
 
 ## Development
 
@@ -146,17 +148,9 @@ npm test             # builds, then runs every test with node --test
 npm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt
 ```
 
-Without a login, `npm run test:live` also runs a `claude -p` session against a local stand-in for the Messages API that answers with a fixed script of tool calls: it checks that writing an HTML report delivers nothing and that the first edit of a tracked code file delivers the preset's verify rule for Sonnet, once, right after the edit's result.
-
-`NOONSIGHT_LIVE_LOGIN=1 npm run test:live` also runs the subagent cases (three models in parallel, an inherited model with the built-in Explore subagent, nested subagents, a model mismatch, and an interactive session), the scope cases (two sessions on one model in two scopes through `NOONSIGHT_SCOPE`, and two subagents on one model whose tasks fall in two scopes) the preset cases (what Claude Code's own system prompt already sends each model, compared with the preset, and the real preset reaching a session and a subagent with the hash `noonsight resolve` gives) the launcher cases (`noonsight run` with an explicit model, with and without the hooks, next to another `--append-system-prompt` or `--append-system-prompt-file`, and routed without `--model`) the routing cases (`route-subagents`, `explicit-model` and `orchestrator-env`) and the classifier cases (`classifier-agreement` over the hand-labeled tasks, `classifier-subagent` and `classifier-timeout`) in real sessions, from the Claude Code login of whoever runs it; they spend a little usage, Fable 5.2 included.
-`npm run experiment -- run` runs the rule effect experiment from the same login, within a spending cap it states, and `npm run experiment -- run --stub` runs it against a local stand-in for the API, with no login and no tokens ([experiments/rules/README.md](experiments/rules/README.md)).
-`npm run benchmark -- gold` runs the benchmark pilot's reference solutions in Docker, with no model; its paid nights need a token of the account they bill ([experiments/benchmark/README.md](experiments/benchmark/README.md)).
-`npm run delivery -- all` runs the delivery benchmark for the installed Claude Code: the corpus, the lifecycle fuzz and the fuzzer's self-check, with no login and no tokens ([experiments/delivery/README.md](experiments/delivery/README.md)).
-`NOONSIGHT_LIVE_TOKENS=1 CLAUDE_CODE_OAUTH_TOKEN=... npm run test:live` asks the session models which rules they received; the token stays in the environment.
-See [docs/verification/claude-code.md](docs/verification/claude-code.md).
-
-Node 20 or newer.
-There are no runtime dependencies; the only development dependencies are TypeScript and the Node type definitions.
+The live tests, the experiments and the benchmarks that need a login or spend usage say so in [docs/verification/claude-code.md](docs/verification/claude-code.md) and in each experiment's README.
+There are no runtime dependencies; the only development dependencies are TypeScript and the Node.js type definitions.
+noonsight was called sextant before; [docs/install.md](docs/install.md#moving-from-sextant) says how to move an install made under that name.
 
 ## Acknowledgements
 

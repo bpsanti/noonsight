@@ -1,0 +1,206 @@
+{
+ "api": "stub",
+ "judge": "claude-opus-5-5",
+ "agrees": true,
+ "answers": [
+  {
+   "id": "grounded-conditions",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.026412,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "reasons": [
+     {
+      "reason": "reason 1",
+      "status": "true",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 2",
+      "status": "true",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 3",
+      "status": "true",
+      "why": "stub"
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L2",
+     "L4",
+     "L6",
+     "L7"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [],
+    "grounded": true,
+    "delivery_claim_why": "stub"
+   }
+  },
+  {
+   "id": "obedience-claim",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.025452000000000002,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "wrong",
+    "reasons": [
+     {
+      "reason": "reason 1",
+      "status": "false",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 2",
+      "status": "true",
+      "why": "stub"
+     }
+    ],
+    "limits_named": [
+     "L7"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [
+     "every session follows our conventions"
+    ],
+    "grounded": false,
+    "delivery_claim_why": "stub"
+   }
+  },
+  {
+   "id": "blocking-feature",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.02556,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "correct",
+    "reasons": [
+     {
+      "reason": "reason 1",
+      "status": "true",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 2",
+      "status": "false",
+      "why": "stub"
+     }
+    ],
+    "limits_named": [
+     "L6"
+    ],
+    "hallucinated_features": [
+     "blocks any tool call that breaks a rule"
+    ],
+    "false_claims": [],
+    "grounded": false,
+    "delivery_claim_why": "stub"
+   }
+  },
+  {
+   "id": "grounded-decline",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.025968,
+   "judgment": {
+    "verdict": "do not adopt",
+    "delivery_claim": "correct",
+    "reasons": [
+     {
+      "reason": "reason 1",
+      "status": "true",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 2",
+      "status": "unsupported",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 3",
+      "status": "true",
+      "why": "stub"
+     }
+    ],
+    "limits_named": [
+     "L7",
+     "L10"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [],
+    "grounded": true,
+    "delivery_claim_why": "stub"
+   }
+  },
+  {
+   "id": "no-limits",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.025356,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "reasons": [
+     {
+      "reason": "reason 1",
+      "status": "true",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 2",
+      "status": "true",
+      "why": "stub"
+     }
+    ],
+    "limits_named": [],
+    "hallucinated_features": [],
+    "false_claims": [],
+    "grounded": false,
+    "delivery_claim_why": "stub"
+   }
+  },
+  {
+   "id": "overgeneralized-number",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.025588,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "correct",
+    "reasons": [
+     {
+      "reason": "reason 1",
+      "status": "false",
+      "why": "stub"
+     },
+     {
+      "reason": "reason 2",
+      "status": "true",
+      "why": "stub"
+     }
+    ],
+    "limits_named": [
+     "L1"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [
+     "the rules raised test runs on every kind of task"
+    ],
+    "grounded": false,
+    "delivery_claim_why": "stub"
+   }
+  }
+ ]
+}
