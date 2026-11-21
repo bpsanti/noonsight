@@ -1,0 +1,28 @@
+{
+ "session": "plant-no-switch-note-s1-0001",
+ "target": {
+  "class": "foreign-unretired",
+  "kind": "main"
+ },
+ "originalSteps": 4,
+ "minimalSteps": 2,
+ "runs": 5,
+ "seconds": 24,
+ "original": "start(haiku, scope=none, unattended) > spawn(Explore:sonnet) > /compact > /model opus > turn",
+ "minimal": "start(haiku, scope=none, unattended) > /model opus > turn",
+ "spec": {
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "model",
+    "to": "opus"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ },
+ "minimalOnReal": "passes"
+}

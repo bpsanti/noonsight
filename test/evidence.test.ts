@@ -14,7 +14,9 @@ export const CITING_PAGES = ['README.md', 'docs/usage.md', 'docs/sources.md'];
 
 // --- Reading the raw results ---------------------------------------------------------------
 
-const DELIVERY = 'experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43';
+const DELIVERY = 'experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f';
+/** The run before it, whose comparisons hold the build before the fixes of F1 and F2 and the native alternatives against `on`. */
+const DELIVERY_BEFORE = 'experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43';
 const RULES = 'experiments/rules/results';
 
 const json = (rel: string): any => JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8'));
@@ -35,7 +37,7 @@ const mean = (xs: readonly number[]): number => xs.reduce((s, x) => s + x, 0) / 
 const and = (xs: readonly string[]): string => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 
 const summary = (key: string): any => json(`${DELIVERY}/summary.json`)[key];
-const comparison = (id: string): any => (json(`${DELIVERY}/comparison.json`).comparisons as any[]).find((c) => c.id === id);
+const comparison = (id: string): any => (json(`${DELIVERY_BEFORE}/comparison.json`).comparisons as any[]).find((c) => c.id === id);
 
 /** The runs of one cell of a rule effect result. */
 function cell(result: string, filter: { task?: string; model?: string; arm?: string }, file = 'runs.jsonl'): any[] {

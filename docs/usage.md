@@ -11,10 +11,10 @@ The delivery benchmark put every model's rules in each of them and read every re
 
 | Where the rules live | Requests with their rules | Subagent requests with their rules | Rule text that is the model's own | Characters added per request |
 | --- | --- | --- | --- | --- |
-| noonsight | [100%](evidence.md#d5) | [100%](evidence.md#d9) | [78.8%](evidence.md#d12) | [1,154](evidence.md#d13) |
-| A user `CLAUDE.md` | [87.3% (566 of 648)](evidence.md#d6), and [100% (527 of 527)](evidence.md#d17) of the main conversation's | [32.2% (39 of 121)](evidence.md#d10) | [31.6%](evidence.md#d12) | [4,414](evidence.md#d13) |
-| `.claude/rules`, one file per model | [70.9% (460 of 649)](evidence.md#d7) | [32.2% (39 of 121)](evidence.md#d10) | [27.1%](evidence.md#d12) | [3,995](evidence.md#d13) |
-| A skill per model | [0% (0 of 650)](evidence.md#d8) | [0 of 121](evidence.md#d11) | No rule text | None |
+| noonsight | [100%](evidence.md#d5) | [100%](evidence.md#d9) | [79.0%](evidence.md#d12) | [1,155](evidence.md#d13) |
+| A user `CLAUDE.md` | [87.3% (565 of 647)](evidence.md#d6), and [100% (526 of 526)](evidence.md#d17) of the main conversation's | [32.2% (39 of 121)](evidence.md#d10) | [31.5%](evidence.md#d12) | [4,415](evidence.md#d13) |
+| `.claude/rules`, one file per model | [70.6% (459 of 650)](evidence.md#d7) | [32.2% (39 of 121)](evidence.md#d10) | [27.0%](evidence.md#d12) | [3,987](evidence.md#d13) |
+| A skill per model | [0% (0 of 654)](evidence.md#d8) | [0 of 121](evidence.md#d11) | No rule text | None |
 
 What the table says:
 
@@ -22,7 +22,7 @@ What the table says:
   It does not reach the built-in Explore and Plan subagents ([S4](sources.md#s4)), and it cannot choose by model, so every model reads every other model's rules.
 - `.claude/rules` without `paths` loads like a `CLAUDE.md`, and with `paths` only once the session touches a matching file ([S3](sources.md#s3)).
 - A skill puts only its description in the context until the model opens it ([S5](sources.md#s5)); the benchmark's stand-in never opens one, so the table shows what a skill guarantees, not what a real model does with it.
-- noonsight gives each request only its model's rules, including subagents, at the cost of its hooks: a fraction of a second at each event, 60 to 120 ms of processor time per hook run at the median ([D15](evidence.md#d15)).
+- noonsight gives each request only its model's rules, including subagents, at the cost of its hooks: a fraction of a second at each event, 50 to 90 ms of processor time per hook run at the median ([D15](evidence.md#d15)).
 
 So:
 
@@ -79,7 +79,7 @@ On the precise fix, mean cost per run as Claude Code reports it at list price ([
 
 - `carry-through` changed nothing on that task and cost almost nothing.
 - `verify-changes` made the model run the tests, which roughly doubled the cost of a cheap task; on Sonnet the three preset rules together cost less than `verify-changes` alone, which the result's README reads as `stay-in-scope` keeping the runs short, a direction it did not test.
-- The added characters themselves are small: noonsight added 1,154, 4,414 and 3,995 characters per request in the delivery benchmark under noonsight, a `CLAUDE.md` and `.claude/rules` ([D13](evidence.md#d13)).
+- The added characters themselves are small: noonsight added 1,155, 4,415 and 3,987 characters per request in the delivery benchmark under noonsight, a `CLAUDE.md` and `.claude/rules` ([D13](evidence.md#d13)).
 
 `noonsight models` lists each preset rule with the cost its source reports, and `noonsight report` gives the length of each rule's text, so a rule that is long and never changes anything you can see is the first to drop.
 

@@ -1,0 +1,209 @@
+{
+ "design": "after-f3-f4",
+ "before": "claude-code-2.1.328/2026-11-20-4e18c43",
+ "comparisons": [
+  {
+   "id": "K1",
+   "primary": false,
+   "question": "Fewer sessions under `on` break the invariant: only `s1-0096`, the documented limit, should still fail",
+   "measure": "robustness.sessionsFailed",
+   "share": false,
+   "expect": "lower",
+   "a": 3,
+   "b": 1,
+   "pairs": {
+    "sessions": 300,
+    "both": 1,
+    "onlyA": 2,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0205",
+     "s1-0230"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 0.5,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "K2",
+   "primary": false,
+   "question": "Coverage under `on` is higher",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.9947,
+   "b": 0.9994,
+   "pairs": {
+    "sessions": 300,
+    "both": 1,
+    "onlyA": 1,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0230"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "K3",
+   "primary": false,
+   "question": "Under `on`, fewer requests hold another model's rule with no note",
+   "measure": "robustness.requestsWithViolation.foreign-unretired",
+   "share": false,
+   "expect": "lower",
+   "a": 22,
+   "b": 2,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "K4",
+   "primary": false,
+   "question": "Under `on`, subagent coverage is no lower",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "not-lower",
+   "a": 0.9985,
+   "b": 1,
+   "pairs": {
+    "sessions": 300,
+    "both": 0,
+    "onlyA": 1,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "s1-0230"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "C1",
+   "primary": false,
+   "question": "`claudemd` is unchanged: noonsight delivers nothing under a native arm",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0.8735,
+   "b": 0.8733,
+   "pairs": {
+    "sessions": 60,
+    "both": 42,
+    "onlyA": 0,
+    "onlyB": 0,
+    "onlyAExamples": [],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "C2",
+   "primary": false,
+   "question": "`rules` is unchanged",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0.7088,
+   "b": 0.7062,
+   "pairs": {
+    "sessions": 60,
+    "both": 47,
+    "onlyA": 0,
+    "onlyB": 0,
+    "onlyAExamples": [],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "C3",
+   "primary": false,
+   "question": "`skills` is unchanged",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0,
+   "b": 0,
+   "pairs": {
+    "sessions": 60,
+    "both": 58,
+    "onlyA": 0,
+    "onlyB": 0,
+    "onlyAExamples": [],
+    "onlyBExamples": []
+   },
+   "p": 1,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "S4",
+   "primary": false,
+   "question": "The decision log gives the coverage the stub saw under `on`",
+   "measure": "coverage.log against coverage.stub",
+   "share": true,
+   "expect": "same",
+   "a": 1,
+   "b": 0.9992,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "R1",
+   "primary": false,
+   "question": "Under `on`, the own share",
+   "measure": "precision.ownShare",
+   "share": true,
+   "expect": null,
+   "a": 0.7879,
+   "b": 0.7901,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "reported"
+  },
+  {
+   "id": "R2",
+   "primary": false,
+   "question": "Under `on`, the right share",
+   "measure": "precision.rightShare",
+   "share": true,
+   "expect": null,
+   "a": 0.5139,
+   "b": 0.5164,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "reported"
+  },
+  {
+   "id": "R3",
+   "primary": false,
+   "question": "Under `on`, the characters added per request",
+   "measure": "cost.addedCharsPerAgentRequest",
+   "share": false,
+   "expect": null,
+   "a": 1154,
+   "b": 1155,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "reported"
+  }
+ ]
+}
