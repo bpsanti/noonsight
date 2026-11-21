@@ -104,7 +104,7 @@ function after(request: Record<string, any>, toolUseId: string): string {
   return JSON.stringify(messages.slice(at));
 }
 
-test('live, no tokens: writing a report delivers nothing, and the first edit of a tracked code file delivers the verify rule once', { skip: missing, timeout: 300_000 }, async () => {
+test('live, no tokens: a headless run starts with the unattended rule; writing a report delivers nothing, and the first edit of a tracked code file delivers the verify rule once', { skip: missing, timeout: 300_000 }, async () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-live-triggers-')));
   const home = path.join(root, 'home');
   const claudeDir = path.join(root, 'claude');
@@ -161,11 +161,13 @@ test('live, no tokens: writing a report delivers nothing, and the first edit of 
     .trimEnd()
     .split('\n')
     .map((l) => JSON.parse(l) as Record<string, any>);
+  // A claude -p run is headless, so with the configuration a fresh install writes it is unattended and
+  // starts with the preset's rule for unattended sessions.
   assert.deepEqual(
-    log.map((d) => [d.event, d.model, d.delivered, d.trigger ?? null, d.file ?? null, d.tool_name ?? null, d.rules ?? null]),
+    log.map((d) => [d.event, d.model, d.place, d.unattended_because ?? null, d.delivered, d.trigger ?? null, d.file ?? null, d.tool_name ?? null, d.rules ?? null]),
     [
-      ['session-start', 'claude-sonnet-5-5', 'nothing', null, null, null, null],
-      ['file-edit', 'claude-sonnet-5-5', 'rules', 'code-edit', 'src/app.ts', 'Edit', [rule]],
+      ['session-start', 'claude-sonnet-5-5', 'unattended', 'headless', 'rules', null, null, null, ['sonnet-5-5/carry-through']],
+      ['file-edit', 'claude-sonnet-5-5', 'unattended', 'headless', 'rules', 'code-edit', 'src/app.ts', 'Edit', [rule]],
     ],
   );
 });

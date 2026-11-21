@@ -1,7 +1,7 @@
 // The launcher, `noonsight run`, driven as a person runs it, with a stand-in `claude` first on PATH. The
 // stand-in records the arguments and environment it was started with and, when a test asks, runs the
 // SessionStart hook as its child, so the hook reads the stand-in's command line as it reads Claude
-// Code's. Each test has its own home directory, so the decision log and the state start empty.
+// Code's, with CLAUDE_CODE_SESSION_ATTENDED set as Claude Code sets it: "0" for a -p run. Each test has its own home directory, so the decision log and the state start empty.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,6 +10,7 @@ import test from 'node:test';
 import { withoutOption } from '../src/adapters/claude-code/launcher.js';
 import { loadConfig } from '../src/config/load.js';
 import { resolve } from '../src/core/resolve.js';
+import type { Place } from '../src/core/types.js';
 import { CLI, hookHome, hookInput, LAB_CONFIG, LAB_PRESETS, NO_NETWORK, runCli, tempTree, type HookHome } from './helpers.js';
 
 interface Started {
@@ -40,7 +41,8 @@ fs.writeFileSync(${JSON.stringify(record)}, JSON.stringify({
   env: { NOONSIGHT_LAUNCH_FILE: pick('NOONSIGHT_LAUNCH_FILE'), NOONSIGHT_SCOPE: pick('NOONSIGHT_SCOPE'), NOONSIGHT_SCOPE_VIA: pick('NOONSIGHT_SCOPE_VIA'), ANTHROPIC_MODEL: pick('ANTHROPIC_MODEL') },
 }));
 if (process.env.FAKE_HOOK_INPUT) {
-  const r = spawnSync(process.execPath, ${JSON.stringify([...NO_NETWORK, CLI, 'hook', 'session-start'])}, { input: process.env.FAKE_HOOK_INPUT, encoding: 'utf8', env: process.env });
+  const attended = process.argv.slice(2).some((a) => a === '-p' || a === '--print') ? '0' : '1';
+  const r = spawnSync(process.execPath, ${JSON.stringify([...NO_NETWORK, CLI, 'hook', 'session-start'])}, { input: process.env.FAKE_HOOK_INPUT, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SESSION_ATTENDED: attended } });
   process.stdout.write(r.stdout);
   process.stderr.write(r.stderr);
 }
@@ -62,8 +64,9 @@ process.exit(Number(process.env.FAKE_EXIT || 0));
 }
 
 const config = () => loadConfig(LAB_CONFIG, {}, { NOONSIGHT_PRESETS_DIR: LAB_PRESETS });
-const rulesFor = (model: string, scope: string | null = null): string => {
-  const d = resolve(config(), { model, scope, place: 'session' });
+/** The rules a launch delivers; every launch here passes -p, so its session runs headless, in the place unattended. */
+const rulesFor = (model: string, scope: string | null = null, place: Place = 'unattended'): string => {
+  const d = resolve(config(), { model, scope, place });
   assert.equal(d.status, 'matched');
   return d.status === 'matched' ? d.text : '';
 };
@@ -83,12 +86,38 @@ test('launcher route: an explicit --model gets its rules in the system prompt fi
   assert.deepEqual(r.started?.args.slice(2), ['--model', 'claude-sonnet-5-5', '-p', 'Find the cause']);
   assert.equal(fs.readFileSync(file, 'utf8'), `${rulesFor('claude-sonnet-5-5', 'investigate')}\n`);
   assert.match(fs.readFileSync(file, 'utf8'), /SONNET-INV-5182/);
+  assert.match(fs.readFileSync(file, 'utf8'), /SONNET-CARRY-4471/, 'a -p run is unattended, so it gets the rule for unattended sessions');
   assert.equal(path.dirname(file), path.join(l.h.dir, '.local', 'state', 'noonsight', 'launch'));
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   assert.deepEqual(r.started?.env, { NOONSIGHT_LAUNCH_FILE: file, NOONSIGHT_SCOPE: 'investigate', NOONSIGHT_SCOPE_VIA: 'explicit', ANTHROPIC_MODEL: null });
   assert.deepEqual(
-    launches(l.h).map((d) => [d.model, d.model_source, d.model_from, d.status, d.scope, d.scope_source, d.place, d.delivered, d.launch_file]),
-    [['claude-sonnet-5-5', 'claude-args', '--model', 'matched', 'investigate', 'env', 'session', 'system-prompt', file]],
+    launches(l.h).map((d) => [d.model, d.model_source, d.model_from, d.status, d.scope, d.scope_source, d.place, d.unattended_because, d.delivered, d.launch_file]),
+    [['claude-sonnet-5-5', 'claude-args', '--model', 'matched', 'investigate', 'env', 'unattended', 'headless', 'system-prompt', file]],
+  );
+});
+
+test('launcher: a session it starts without -p is a watched one, and so is a -p run with session.headless_is_unattended false', () => {
+  const l = lab();
+  const watched = l.run(['--model', 'sonnet']);
+  assert.equal(fs.readFileSync(fileArg(watched.started), 'utf8'), `${rulesFor('claude-sonnet-5-5', null, 'session')}\n`);
+  // A -p after "--" is a prompt, not the option.
+  l.run(['--model', 'sonnet', '--', '-p']);
+
+  const lab0 = JSON.parse(fs.readFileSync(LAB_CONFIG, 'utf8')) as Record<string, unknown>;
+  const off = tempTree({ 'noonsight.json': { ...lab0, session: { headless_is_unattended: false } } });
+  fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(off, 'rules'), { recursive: true });
+  const kept = lab(path.join(off, 'noonsight.json'));
+  const print = kept.run(['--model', 'sonnet', '-p', 'hi'], { FAKE_HOOK_INPUT: hookInput('session-start-print', { session_id: 'kept' }) });
+  assert.equal(fs.readFileSync(fileArg(print.started), 'utf8'), `${rulesFor('claude-sonnet-5-5', null, 'session')}\n`);
+  assert.equal(print.stdout, '', 'the hook agrees with the launcher, so it delivers nothing again');
+  assert.deepEqual(
+    [...launches(l.h), ...kept.h.log()].map((d) => [d.event, d.place, d.unattended_because ?? null]),
+    [
+      ['launch', 'session', null],
+      ['launch', 'session', null],
+      ['launch', 'session', null],
+      ['session-start', 'session', null],
+    ],
   );
 });
 
@@ -204,6 +233,7 @@ test('launcher route with the hook: in -p mode the hook finds the rules in the s
   const [launch, start] = l.h.log();
   assert.equal(launch?.event, 'launch');
   assert.equal(start?.event, 'session-start');
+  assert.deepEqual([launch?.place, start?.place, start?.unattended_because], ['unattended', 'unattended', 'headless'], 'the launcher and the hook agree on the place');
   assert.deepEqual(
     [start?.model, start?.model_source, start?.scope, start?.status, start?.sha256, start?.delivered, start?.launch_file, start?.launch_model],
     ['claude-sonnet-5-5', 'claude-args', 'investigate', 'matched', launch?.sha256, 'launcher', file, 'claude-sonnet-5-5'],

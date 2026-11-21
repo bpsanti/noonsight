@@ -798,13 +798,45 @@ test('a variable of session.unattended_when_env puts the session in the place un
   assert.match(text, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">/);
   assert.doesNotMatch(h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'attended' }), { CI: '' }).out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
   assert.deepEqual(
-    h.log().map((l) => [l.event, l.place, l.unattended_env ?? null, l.scope]),
+    h.log().map((l) => [l.event, l.place, l.unattended_because ?? null, l.unattended_env ?? null, l.scope]),
     [
-      ['session-start', 'unattended', 'CI', null],
-      ['model-switch', 'unattended', 'CI', 'investigate'],
-      ['session-start', 'session', null, null],
+      ['session-start', 'unattended', 'env', 'CI', null],
+      ['model-switch', 'unattended', 'env', 'CI', 'investigate'],
+      ['session-start', 'session', null, null, null],
     ],
   );
+});
+
+test('a headless run, which Claude Code marks with CLAUDE_CODE_SESSION_ATTENDED=0, is unattended by default, and the log says why', () => {
+  const h = home(scopedConfig());
+  const headless = { CLAUDE_CODE_SESSION_ATTENDED: '0' };
+  const begun = h.hook('session-start', hookInput('session-start-print', { session_id: 'headless', model: 'claude-sonnet-5-5' }), headless);
+  assert.match(begun.out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/, 'the rule for unattended sessions is delivered');
+  const switched = h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { session_id: 'headless' }), headless);
+  assert.match(switched.out?.hookSpecificOutput.additionalContext, /HAIKU-GEN-9047/);
+  const watched = h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'watched' }), { CLAUDE_CODE_SESSION_ATTENDED: '1' });
+  assert.doesNotMatch(watched.out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
+  // A variable of session.unattended_when_env is named over the headless run.
+  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'both' }), { ...headless, CI: '1' });
+  assert.deepEqual(
+    h.log().map((l) => [l.event, l.place, l.unattended_because ?? null, l.unattended_env ?? null]),
+    [
+      ['session-start', 'unattended', 'headless', null],
+      ['model-switch', 'unattended', 'headless', null],
+      ['session-start', 'session', null, null],
+      ['session-start', 'unattended', 'env', 'CI'],
+    ],
+  );
+});
+
+test('session.headless_is_unattended false leaves a headless run in the place session', () => {
+  const file = scopedConfig();
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, any>;
+  fs.writeFileSync(file, JSON.stringify({ ...raw, session: { ...raw.session, headless_is_unattended: false } }));
+  const h = home(file);
+  const r = h.hook('session-start', hookInput('session-start-print', { model: 'claude-sonnet-5-5' }), { CLAUDE_CODE_SESSION_ATTENDED: '0' });
+  assert.doesNotMatch(r.out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
+  assert.deepEqual(h.log().map((l) => [l.place, l.unattended_because ?? null]), [['session', null]]);
 });
 
 test('a resumed session whose scope changed gets the rules of the new scope', () => {

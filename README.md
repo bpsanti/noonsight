@@ -37,10 +37,11 @@ A skill guarantees only its description until the model decides to open it ([S5]
 
 - Delivery is not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
   [What the rules change](#what-the-rules-change) is a separate question with its own data.
-- Right after install, what a watched session receives from the preset depends on its model.
-  On Opus 5.5 and Fable 5.2 it receives nothing, in any scope: every preset rule of theirs that ships on is for unattended runs or subagents.
-  On Sonnet 5.5 and Haiku 5.5 it receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
-  So for Opus and Fable the gap is the place, which `session.unattended_when_env` fixes for the runs of a CI or an orchestrator, and for Sonnet and Haiku it is the scope.
+- Right after install, what a session receives from the preset depends on its model and its place, and `noonsight install` writes it out for each model.
+  A headless run, such as `claude -p` or the Agent SDK, is unattended by default and receives the preset's rules for that place: `unattended-run` on Opus 5.5, `low-context-report` on Fable 5.2, `carry-through` on Sonnet 5.5 and Haiku 5.5.
+  A watched session on Opus 5.5 or Fable 5.2 receives nothing, in any scope: every preset rule of theirs that ships on is for unattended runs or subagents.
+  A watched session on Sonnet 5.5 or Haiku 5.5 receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
+  So for a watched Opus or Fable session the gap is the place, which `session.unattended_when_env` closes for the interactive sessions a CI or an orchestrator runs, and for Sonnet and Haiku it is the scope.
   [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
 - Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
 - A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
@@ -65,6 +66,8 @@ This writes `~/.config/noonsight/noonsight.json` when there is none, adds the ho
 ```bash
 noonsight install
 ```
+
+Its output writes out, for each model, what a watched session, an unattended session and a subagent receive with no scope, `nothing` included, and how to change it.
 
 See the exact text a model receives in a scope, before any session runs:
 
@@ -127,7 +130,7 @@ The one exception is the classifier, off unless you turn it on, which sends the 
 ## Using it well
 
 - Give noonsight what differs by model, by kind of task or by place, and leave in `CLAUDE.md` what every model should always have ([docs/usage.md](docs/usage.md#choosing-where-a-rule-lives)).
-- Tell noonsight when nobody is watching, with `session.unattended_when_env` set to your CI's or orchestrator's variable, since Opus 5.5's and Fable 5.2's preset rules are for unattended runs and subagents only, and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
+- Tell noonsight when nobody is watching, since Opus 5.5's and Fable 5.2's preset rules are for unattended runs and subagents only: headless runs are unattended by default, and `session.unattended_when_env`, set to your orchestrator's variable, covers the interactive sessions nobody watches; and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
 - Write a rule as a check the model can pass, in plain words; Anthropic's best practices say the same, and the verify rules are where our data shows the largest effect ([docs/usage.md](docs/usage.md#writing-a-rule)).
 - Keep long rule text in a file and deliver one sentence pointing to it ([docs/usage.md](docs/usage.md#a-pointer-to-a-file)).
 - Commit a repository's rules in `.noonsight/noonsight.json`, where each person trusts them once ([docs/usage.md](docs/usage.md#rules-for-one-repository)).
