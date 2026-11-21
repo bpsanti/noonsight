@@ -101,6 +101,12 @@ The report lists each rule with how often it was delivered, to which models, sco
 The preset is a starting set, and any rule can replace it or join it.
 A rule is a Markdown file and an entry that names it: an `id`, the `file`, and, when the rule is not for every case, the `scopes`, the places (`where`) and the `triggers` it is for.
 
+| Key | Values | How a session or subagent gets one |
+| --- | --- | --- |
+| `scopes` | The preset's `investigate`, `build`, `review`, `routine` and `digest`, any scope you declare under `scopes` with a `description` and `match` patterns, or `"*"` for every scope (the default) | A session from `NOONSIGHT_SCOPE` or `noonsight run --scope`; a subagent from the first `match` pattern found in its task, or from the classifier when you turn it on, since the preset's scopes have no patterns ([docs/configuration.md](docs/configuration.md#scopes)) |
+| `where` | `session`, `unattended`, `subagent`; all three by default | `unattended` for a headless run by default, or for a session started with a variable of `session.unattended_when_env` set; `subagent` for every subagent; `session` otherwise |
+| `triggers` | `code-edit`, the only one today; none by default | Once the session edits a code file its git repository already tracks, whatever its scope ([docs/configuration.md](docs/configuration.md#triggers)) |
+
 For the machine, edit `~/.config/noonsight/noonsight.json`, which `noonsight install` wrote; a rule's `file` is relative to it:
 
 ```json

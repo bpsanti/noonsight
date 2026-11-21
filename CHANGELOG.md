@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The README presents noonsight as a way to deliver instructions by model, with the preset as a starting set taken from Anthropic's guides, and a new section, "Your own rules", shows a machine configuration with rules for one model and for every model, and a repository's `.noonsight/noonsight.json` with `noonsight trust`.
+  A table there gives the values of a rule's `scopes`, `where` and `triggers`, and how a session or a subagent gets each.
   It says that the delivery claim covers any rule, since noonsight picks a rule by its model, scope, place and trigger and never by its text, while the measured rule effects are for the preset's rules alone.
   `npm test` now runs `noonsight check` and `noonsight models` on every configuration example of the README and `docs/usage.md`, in a sandbox account with its rule files, checks each against its schema and its `preset_version` against the shipped preset, and fails on an example whose text does not name the file it goes in (`test/readme.test.ts`).
 
