@@ -38,7 +38,10 @@ A skill guarantees only its description until the model decides to open it ([S5]
 
 - Delivery is not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
   [What the rules change](#what-the-rules-change) is a separate question with its own data.
-- A watched session with no task scope receives little from the preset: only `verify-changes`, for Sonnet 5.5 and Haiku 5.5, once it edits a code file its git repository tracks; the other rules are written for unattended runs, subagents or a named scope.
+- Right after install, what a watched session receives from the preset depends on its model.
+  On Opus 5.5 and Fable 5.2 it receives nothing, in any scope: every preset rule of theirs that ships on is for unattended runs or subagents.
+  On Sonnet 5.5 and Haiku 5.5 it receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
+  So for Opus and Fable the gap is the place, which `session.unattended_when_env` fixes for the runs of a CI or an orchestrator, and for Sonnet and Haiku it is the scope.
   [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
 - Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
 - A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
@@ -125,7 +128,7 @@ The one exception is the classifier, off unless you turn it on, which sends the 
 ## Using it well
 
 - Give noonsight what differs by model, by kind of task or by place, and leave in `CLAUDE.md` what every model should always have ([docs/usage.md](docs/usage.md#choosing-where-a-rule-lives)).
-- Tell noonsight when nobody is watching, with `session.unattended_when_env`, and give tasks a scope; without either, the preset delivers little ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
+- Tell noonsight when nobody is watching, with `session.unattended_when_env` set to your CI's or orchestrator's variable, since Opus 5.5's and Fable 5.2's preset rules are for unattended runs and subagents only, and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
 - Write a rule as a check the model can pass, in plain words; Anthropic's best practices say the same, and the verify rules are where our data shows the largest effect ([docs/usage.md](docs/usage.md#writing-a-rule)).
 - Keep long rule text in a file and deliver one sentence pointing to it ([docs/usage.md](docs/usage.md#a-pointer-to-a-file)).
 - Commit a repository's rules in `.noonsight/noonsight.json`, where each person trusts them once ([docs/usage.md](docs/usage.md#rules-for-one-repository)).

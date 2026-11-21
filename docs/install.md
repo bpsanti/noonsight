@@ -26,7 +26,7 @@ It takes these steps in order, and a step with a command named in brackets does 
 3. **What each model receives** [`noonsight models`].
    One line per declared model: how many of its rules are on, and for each the places it is delivered in.
    A rule is delivered only where its scope and place apply.
-   A session with no scope receives only the rules its model has for every scope in that place; the preset has none for the `session` place, so with it such a session gets no rule.
+   A session with no scope receives only the rules its model has for every scope in that place, and those a trigger brings; the preset has no rule for every scope in the `session` place, so such a session gets a rule only from the `code-edit` trigger: `verify-changes`, on Sonnet 5.5 and Haiku 5.5, once it edits a code file its git repository tracks.
    A rule limited to scopes reaches a session only when it has one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`.
    A subagent gets the scope its task matches, or the one the classifier gives it when the classifier is on.
 4. **The check** [`noonsight check`].
