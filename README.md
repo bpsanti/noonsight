@@ -14,24 +14,23 @@ It ships a preset of rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 
 
 ## What it guarantees, and what it does not
 
-**The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.5% (3,199 of 3,216) of the requests that had rules due ([D2](docs/evidence.md#d2)); 3 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
+**The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.9% (3,219 of 3,221) of the requests that had rules due ([D2](docs/evidence.md#d2)); 1 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
 That run is Claude Code 2.1.328 against a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
 
-The fuzzer has found four failures of noonsight, F1 to F4: F1 and F2 were fixed before that run, and F3 and F4, found by it, were fixed after it.
-The three failing sessions are the documented limit below, F3 and F4.
-Their shortest reproductions are in the corpus, which expects them to pass since the fixes; neither the corpus nor the 300 random sessions has a committed run on the fixed build, so the committed rate is still the one above.
+The fuzzer has found four failures of noonsight, F1 to F4, all fixed before that run; their shortest reproductions are in the corpus, which passes.
+The one failing session is the documented limit below.
 
 On the same first 60 sequences, the native ways to give a model rules covered fewer requests (each number links to its entry):
 
 | Every model's rules in | Requests with their rules | Subagent requests with their rules |
 | --- | --- | --- |
 | noonsight | [100%](docs/evidence.md#d5) | [100%](docs/evidence.md#d9) |
-| A user `CLAUDE.md` | [87.3% (566 of 648)](docs/evidence.md#d6) | [32.2% (39 of 121)](docs/evidence.md#d10) |
-| `.claude/rules`, one file per model | [70.9% (460 of 649)](docs/evidence.md#d7) | [32.2% (39 of 121)](docs/evidence.md#d10) |
-| A skill per model | [0% (0 of 650)](docs/evidence.md#d8) | [0 of 121](docs/evidence.md#d11) |
+| A user `CLAUDE.md` | [87.3% (565 of 647)](docs/evidence.md#d6) | [32.2% (39 of 121)](docs/evidence.md#d10) |
+| `.claude/rules`, one file per model | [70.6% (459 of 650)](docs/evidence.md#d7) | [32.2% (39 of 121)](docs/evidence.md#d10) |
+| A skill per model | [0% (0 of 654)](docs/evidence.md#d8) | [0 of 121](docs/evidence.md#d11) |
 
-A `CLAUDE.md` reached every request of the session's own conversation, through `/model`, `/compact`, `/clear` and resumes: 100% (527 of 527) ([D17](docs/evidence.md#d17)).
-What it missed were subagents: it never reaches the built-in Explore and Plan subagents, which Claude Code's documentation confirms ([S4](docs/sources.md#s4)), and it gives every model the other models' rules too: of the rule text in a request, 78.8%, 31.6% and 27.1% was written for the request's model under noonsight, a `CLAUDE.md` and `.claude/rules` ([D12](docs/evidence.md#d12)).
+A `CLAUDE.md` reached every request of the session's own conversation, through `/model`, `/compact`, `/clear` and resumes: 100% (526 of 526) ([D17](docs/evidence.md#d17)).
+What it missed were subagents: it never reaches the built-in Explore and Plan subagents, which Claude Code's documentation confirms ([S4](docs/sources.md#s4)), and it gives every model the other models' rules too: of the rule text in a request, 79.0%, 31.5% and 27.0% was written for the request's model under noonsight, a `CLAUDE.md` and `.claude/rules` ([D12](docs/evidence.md#d12)).
 A skill guarantees only its description until the model decides to open it ([S5](docs/sources.md#s5)).
 
 **What it does not guarantee.**

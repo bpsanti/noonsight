@@ -12,38 +12,39 @@ Numbers that appear only in a pull request description, and not in a committed r
 
 The delivery benchmark ([experiments/delivery](../experiments/delivery/README.md)) runs real interactive Claude Code sessions against a local stand-in for the Messages API, so no request reaches a model.
 A request "has its rules" when it holds every rule noonsight's resolver gives its model, scope, place and revealed triggers, and no note retires them; a rule of another model may be present only after a note that retires it.
-Unless an entry says otherwise, the run is `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/`: Claude Code 2.1.328, noonsight at commit `4e18c43`, preset `claude` 1.3.1, measured on 2026-11-20, seed 1, 300 random sessions under noonsight (`on`) and the first 60 of the same sequences under each native alternative.
-That build includes the fixes of F1 and F2 and not those of F3 and F4 ([experiments/delivery/README.md](../experiments/delivery/README.md#failures-found-and-a-limit)).
+Unless an entry says otherwise, the run is `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/`: Claude Code 2.1.328, noonsight at commit `d5fd71f`, preset `claude` 1.3.1, measured on 2026-11-21, seed 1, 300 random sessions under noonsight (`on`) and the first 60 of the same sequences under each native alternative.
+That build includes the fixes of F1 to F4 ([experiments/delivery/README.md](../experiments/delivery/README.md#failures-found-and-a-limit)).
+D4, D5 and D9 come from the run before it, `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/` (noonsight at `4e18c43`, with the fixes of F1 and F2 only), whose `comparison.json` holds them; the run of 2026-11-21 compares itself with that run and not with the native alternatives.
 
 ### D1
 
 - **Claim:** sessions under noonsight that broke the invariant.
-- **Value:** `3 of 300`
+- **Value:** `1 of 300`
 - **Source:** `summary.json`, key `on-s1-n300`.
 - **Measurement:** `robustness.sessionsFailed` of `sessions`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D2
 
 - **Claim:** coverage under noonsight: requests with rules due that held all of them.
-- **Value:** `99.5% (3,199 of 3,216)`
+- **Value:** `99.9% (3,219 of 3,221)`
 - **Source:** `summary.json`, key `on-s1-n300`.
 - **Measurement:** `coverage.covered` of `coverage.due`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D3
 
 - **Claim:** coverage of subagent requests under noonsight.
-- **Value:** `99.9% (667 of 668)`
+- **Value:** `100% (668 of 668)`
 - **Source:** `summary.json`, key `on-s1-n300`.
 - **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D4
 
 - **Claim:** sessions that broke the invariant on the build before the fixes of F1 and F2, among the sessions both runs completed.
 - **Value:** `26 of 296`
-- **Source:** `comparison.json`, comparison `P1`.
+- **Source:** `comparison.json` of the run of 2026-11-20, comparison `P1`.
 - **Measurement:** `a` of `pairs.sessions`.
 - **Date:** 2026-11-19 (the earlier run, `2026-11-19-467d465`), compared on 2026-11-20. **Claude Code:** 2.1.328.
 
@@ -51,39 +52,39 @@ That build includes the fixes of F1 and F2 and not those of F3 and F4 ([experime
 
 - **Claim:** coverage under noonsight on the first 60 sequences, the ones the native alternatives ran.
 - **Value:** `100%`
-- **Source:** `comparison.json`, comparison `P3`.
+- **Source:** `comparison.json` of the run of 2026-11-20, comparison `P3`.
 - **Measurement:** `b`, the coverage of the first 60 `on` sessions.
 - **Date:** 2026-11-20. **Claude Code:** 2.1.328.
 
 ### D6
 
 - **Claim:** coverage with every model's rules in a user `CLAUDE.md`.
-- **Value:** `87.3% (566 of 648)`
+- **Value:** `87.3% (565 of 647)`
 - **Source:** `summary.json`, key `claudemd-s1-n60`.
 - **Measurement:** `coverage.covered` of `coverage.due`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D7
 
 - **Claim:** coverage with one `.claude/rules` file per model.
-- **Value:** `70.9% (460 of 649)`
+- **Value:** `70.6% (459 of 650)`
 - **Source:** `summary.json`, key `rules-s1-n60`.
 - **Measurement:** `coverage.covered` of `coverage.due`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D8
 
 - **Claim:** coverage with one skill per model.
-- **Value:** `0% (0 of 650)`
+- **Value:** `0% (0 of 654)`
 - **Source:** `summary.json`, key `skills-s1-n60`.
 - **Measurement:** `coverage.covered` of `coverage.due`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D9
 
 - **Claim:** coverage of subagent requests under noonsight on the first 60 sequences.
 - **Value:** `100%`
-- **Source:** `comparison.json`, comparison `P6`.
+- **Source:** `comparison.json` of the run of 2026-11-20, comparison `P6`.
 - **Measurement:** `b`, the subagent coverage of the first 60 `on` sessions.
 - **Date:** 2026-11-20. **Claude Code:** 2.1.328.
 
@@ -93,7 +94,7 @@ That build includes the fixes of F1 and F2 and not those of F3 and F4 ([experime
 - **Value:** `32.2% (39 of 121)`
 - **Source:** `summary.json`, keys `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`; the test checks that both keys give it.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D11
 
@@ -101,55 +102,55 @@ That build includes the fixes of F1 and F2 and not those of F3 and F4 ([experime
 - **Value:** `0 of 121`
 - **Source:** `summary.json`, key `skills-s1-n60`.
 - **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D12
 
 - **Claim:** the share of the rule text in a request that was written for the request's model, under noonsight, a `CLAUDE.md` and `.claude/rules`.
-- **Value:** `78.8%, 31.6% and 27.1%`
+- **Value:** `79.0%, 31.5% and 27.0%`
 - **Source:** `summary.json`, keys `on-s1-n300`, `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `precision.ownShare` of each, in that order.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D13
 
 - **Claim:** characters added to each request (rules, envelopes and notes), under noonsight, a `CLAUDE.md` and `.claude/rules`.
-- **Value:** `1,154, 4,414 and 3,995`
+- **Value:** `1,155, 4,415 and 3,987`
 - **Source:** `summary.json`, keys `on-s1-n300`, `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `cost.addedCharsPerAgentRequest` of each, in that order.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D14
 
 - **Claim:** requests holding another model's rule with no note that retires it, under noonsight, a `CLAUDE.md` and `.claude/rules`.
-- **Value:** `22, 706 and 709`
+- **Value:** `2, 707 and 709`
 - **Source:** `summary.json`, keys `on-s1-n300`, `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `robustness.requestsWithViolation.foreign-unretired` of each, in that order.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D15
 
 - **Claim:** the processor time of one hook run, median, from the cheapest hook to the first edit of a tracked code file.
-- **Value:** `60 to 120 ms`
+- **Value:** `50 to 90 ms`
 - **Source:** `hooktime.json`.
 - **Measurement:** the lowest and highest `cpu.median` among `hooks`, 40 runs of each hook with recorded inputs; a Node.js process that does nothing takes `baseline.cpu.median`, 20 ms, of it.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D16
 
-- **Claim:** the corpus entries that had the outcome they record, among them the reproductions of F1 and F2, which pass, and of F3, F4 and the documented limit, which then showed their violations.
+- **Claim:** the corpus entries that had the outcome they record: the reproductions of F1 to F4, which pass, and the documented limit, which shows its violations.
 - **Value:** `18 of 18`
 - **Source:** `corpus.json`.
-- **Measurement:** entries whose `outcome` is `as-expected`, of all entries; run at commit `1b84a31`, before the fixes of F3 and F4.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Measurement:** entries whose `outcome` is `as-expected`, of all entries.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D17
 
 - **Claim:** coverage with every model's rules in a user `CLAUDE.md`, on the requests of the session's own conversation, every subagent request left out.
-- **Value:** `100% (527 of 527)`
+- **Value:** `100% (526 of 526)`
 - **Source:** `summary.json`, key `claudemd-s1-n60`.
 - **Measurement:** `coverage.covered` minus `coverage.subagents.covered`, of `coverage.due` minus `coverage.subagents.due`; `byPath` gives a coverage of 1 on every path but `subagent`, `after /compact` included.
-- **Date:** 2026-11-20. **Claude Code:** 2.1.328.
+- **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ## Rule effects
 

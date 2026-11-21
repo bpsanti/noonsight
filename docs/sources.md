@@ -58,8 +58,8 @@ The guides of Sonnet 5.5 and Haiku 5.5 describe different habits at the same eff
 > Rules load into context every session or when matching files are opened. For task-specific instructions that don't need to be in context all the time, use skills instead, which only load when you invoke them or when Claude determines they're relevant to your prompt.
 
 **Our data: confirms delivery to the main conversation.**
-With every model's rules in a user `CLAUDE.md`, every request of the session's own conversation held them, through `/compact`, `/clear`, `/model` and resumes: 100% (527 of 527) ([D17](evidence.md#d17)).
-What a `CLAUDE.md` cannot do is choose by model: every model reads every other model's rules, and only 31.6% of the rule text in a request was its own, against 78.8% under noonsight ([D12](evidence.md#d12)).
+With every model's rules in a user `CLAUDE.md`, every request of the session's own conversation held them, through `/compact`, `/clear`, `/model` and resumes: 100% (526 of 526) ([D17](evidence.md#d17)).
+What a `CLAUDE.md` cannot do is choose by model: every model reads every other model's rules, and only 31.5% of the rule text in a request was its own, against 79.0% under noonsight ([D12](evidence.md#d12)).
 noonsight's rules are context in the same way, so the second excerpt holds for them too.
 
 ### S4
@@ -75,7 +75,7 @@ noonsight's rules are context in the same way, so the second excerpt holds for t
 
 **Our data: confirms it.**
 With every model's rules in a `CLAUDE.md` or in `.claude/rules`, 32.2% (39 of 121) of subagent requests held their rules ([D10](evidence.md#d10)): the Explore and Plan subagents never did, and a general-purpose subagent got every model's rules.
-noonsight's `SubagentStart` hook reached 99.9% (667 of 668) of subagent requests over 300 sessions ([D3](evidence.md#d3)), Explore and Plan included.
+noonsight's `SubagentStart` hook reached 100% (668 of 668) of subagent requests over 300 sessions ([D3](evidence.md#d3)), Explore and Plan included.
 
 ### S5
 
@@ -87,7 +87,7 @@ noonsight's `SubagentStart` hook reached 99.9% (667 of 668) of subagent requests
 > In a regular session, skill descriptions are loaded into context so Claude knows what's available, but full skill content only loads when invoked.
 
 **Our data: consistent with it, and it measures only the guarantee.**
-The benchmark's stand-in for the model never opens a skill, so a skill per model delivered no rule text: 0% (0 of 650) ([D8](evidence.md#d8)).
+The benchmark's stand-in for the model never opens a skill, so a skill per model delivered no rule text: 0% (0 of 654) ([D8](evidence.md#d8)).
 A real model may open the skill; whether it does on the right model, every time, is not measured.
 
 ### S6
@@ -112,7 +112,7 @@ A real model may open the skill; whether it does on the right model, every time,
 **Our data: refines it.**
 The first excerpt is the use noonsight makes of `PostModelSwitch`.
 The second and third are the cause of F1: a switch's text that never reached a request was still taken as delivered, and a later note did not retire the rules the conversation still held.
-Before noonsight treated such a delivery as unconfirmed, 26 of 296 sessions broke the invariant; after, 3 of 300 ([D4](evidence.md#d4), [D1](evidence.md#d1)).
+Before noonsight treated such a delivery as unconfirmed, 26 of 296 sessions broke the invariant; after that fix and those of F2 to F4, 1 of 300 ([D4](evidence.md#d4), [D1](evidence.md#d1)).
 The same holds at a resume (F3): what `SessionStart` returns there also reaches the conversation with the process's next request only, so a resume ended before any request loses it.
 noonsight writes its envelope as facts, as the fourth and fifth excerpts ask, and [docs/usage.md](usage.md#choosing-where-a-rule-lives) follows the sixth for rules that are the same for every model.
 
@@ -150,6 +150,6 @@ Emphasis was not measured.
 > Rather than pre-processing all relevant data up front, agents built with the “just in time” approach maintain lightweight identifiers (file paths, stored queries, web links, etc.) and use these references to dynamically load data into context at runtime using tools.
 
 **Our data: consistent with the first, confirms the second for one rule.**
-Delivering only the model's own rules added 1,154 characters to each request under noonsight, against 4,414 and 3,995 with every model's rules in a `CLAUDE.md` or `.claude/rules` ([D13](evidence.md#d13)); whether that changes what the model does was not measured.
+Delivering only the model's own rules added 1,155 characters to each request under noonsight, against 4,415 and 3,987 with every model's rules in a `CLAUDE.md` or `.claude/rules` ([D13](evidence.md#d13)); whether that changes what the model does was not measured.
 `verify-changes` delivered as one sentence naming the file that holds it was read in 120 of 120 runs ([R4](evidence.md#r4)) and gave the same tests as the rule inline: 30 of 30 against 29 of 30, and 27 of 30 against 27 of 30 ([R5](evidence.md#r5)).
 Those sessions were short; a pointer read at the start and then compacted away was not measured.

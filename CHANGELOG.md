@@ -5,6 +5,7 @@
 - The delivery benchmark (`experiments/delivery`) ran again in full on the build with the fixes of F3 and F4, with the seed, sizes, command and Claude Code version of the run that found them, against comparisons fixed beforehand in the design `after-f3-f4` of `experiments/delivery/plan.json`.
   One session of 300 under `on` breaks the invariant, against 3 of 300 before the fixes, and it is the documented limit `limit-default-model-after-compact`; coverage under `on` is 99.9% (3,219 of 3,221 requests), subagent coverage 100%, and no new failure appeared.
   Every corpus entry had the outcome it records, and both self-check plants were caught.
+  The README, `docs/usage.md`, `docs/sources.md` and the delivery entries of `docs/evidence.md` now cite this run; D4, D5 and D9 still come from the run of 2026-11-20, whose comparisons hold them.
   See `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md`.
 
 - `experiments/adoption` asks fresh Claude Code sessions, each given only a clean copy of the repository at a commit and a team's neutral question, whether to adopt noonsight, and has a judge score each answer against a fixed reference of what the code and the committed results support: the verdict, whether its reasons are true, whether it states the delivery claim correctly, whether it names a real limit and whether it invents a feature.
