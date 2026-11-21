@@ -19,7 +19,7 @@ That run is Claude Code 2.1.328 against a local stand-in for the API, so every r
 
 The fuzzer has found four failures of noonsight, F1 to F4: F1 and F2 were fixed before that run, and F3 and F4, found by it, were fixed after it.
 The three failing sessions are the documented limit below, F3 and F4.
-Their shortest reproductions are in the corpus and must pass, but the 300 random sessions have not been run again on the fixed build, so the committed rate is still the one above.
+Their shortest reproductions are in the corpus, which expects them to pass since the fixes; neither the corpus nor the 300 random sessions has a committed run on the fixed build, so the committed rate is still the one above.
 
 On the same first 60 sequences, the native ways to give a model rules covered fewer requests (each number links to its entry):
 
@@ -38,7 +38,7 @@ A skill guarantees only its description until the model decides to open it ([S5]
 
 - Delivery is not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
   [What the rules change](#what-the-rules-change) is a separate question with its own data.
-- A watched session with no task scope receives nothing from the preset: its rules are written for unattended runs, subagents or a named scope.
+- A watched session with no task scope receives little from the preset: only `verify-changes`, for Sonnet 5.5 and Haiku 5.5, once it edits a code file its git repository tracks; the other rules are written for unattended runs, subagents or a named scope.
   [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
 - Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
 - A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).

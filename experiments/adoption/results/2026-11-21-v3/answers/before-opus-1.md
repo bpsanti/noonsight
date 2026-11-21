@@ -1,0 +1,29 @@
+**Verdict: adopt with conditions.** Run it as a pinned, hooks-only pilot on a few machines, not a team-wide rollout yet.
+
+**Reasons**
+
+1. **It fits how you work.** It gives each session and each subagent the rules for the model it actually runs on. It covers the cases a single `CLAUDE.md` gets wrong: `/model` switches, `/clear`, compaction, resumes, and subagents that run on a different model from their parent (`docs/hooks.md`). In the authors' own delivery benchmark, it covered every request that was due rules. A `CLAUDE.md` covered 87.4%, `.claude/rules` 70.9%, and a skill per model none. A shared `CLAUDE.md` never reaches Explore or Plan subagents, and only 18–29% of its text was written for the model reading it (`CHANGELOG.md:33`, `:131`).
+2. **Some rules have measured effects, with costs.** At 30 runs per arm, the `verify-changes` rule made Sonnet 5.5 run the tests after a one-file fix in 30 of 30 runs and Haiku 5.5 in 27 of 30, against 0 of 30 without it. Sonnet paid about 46% more per run in the earlier, smaller experiment. `sonnet-5-5/carry-through` raised fully completed runs on a 13-ticket backlog from 9/40 to 32/40 (`README.md:106-125`).
+3. **No proof yet that outcomes improve.** In the public-task benchmark pilot, runs cost 7% more with noonsight on, and the verifier saw no measurable difference between conditions. Every run in the rule experiments passed its hidden check, with or without rules (`CHANGELOG.md:131`, `README.md:110`). You would be paying for changed behavior, not for proven better results.
+4. **Out of the box, a plain session gets almost nothing.** The preset rules are limited to task scopes, the preset ships no scope matchers, and a session with no scope gets only the all-scope rules, which in this preset are none (`README.md:47`). Without `NOONSIGHT_SCOPE`, your own matchers or the classifier, an interactive session mostly receives just the Sonnet and Haiku verify rules, after its first edit of a tracked code file.
+5. **It is early.** Version 0.0.1, `"private": true`, "Nothing is published yet", one author's repository, and a rename from "sextant" that already broke the names of existing installs (`package.json`, `README.md:12`, `CHANGELOG.md:148`).
+6. **The engineering is careful and honest about its limits.** It has no runtime dependencies. Its hooks always exit 0, never block or deny a call, and don't use the network unless the classifier is on. A configuration with any problem is refused whole. It writes a decision log you can audit with `noonsight report`, and every fact it relies on about Claude Code is dated and tied to a check (`docs/verification/claude-code.md`).
+
+**Conditions and risks**
+
+Conditions:
+- **Pin Claude Code.** It depends on fine details of hook behavior checked only on Claude Code 2.1.325–2.1.329, and CI pins 2.1.325. Pin a version it was checked on, and before each upgrade rerun `npm run test:live` and `npm run delivery -- all`. Both send no prompts and spend no tokens.
+- **Keep routing and the classifier off at first.** With subagent routing on in auto mode, each routed call makes Claude Code refuse the other calls in the same response until they are retried (`docs/hooks.md:308`). The classifier sends the first 4,000 characters of each task to Haiku and can add up to 8 seconds per subagent call.
+- **Use explicit model IDs or `--model`, not `default` or `opusplan`.** For those two settings the hook can't tell the model, so it only warns and delivers no rules. It also can't read a model set only in an MDM profile, and it warns instead of delivering for aliases on Bedrock, Vertex or Foundry unless the `ANTHROPIC_DEFAULT_*_MODEL` variables are set.
+- **Decide how sessions get a scope** (`NOONSIGHT_SCOPE`, matchers, or `noonsight run --scope`). Otherwise most rules never fire (reason 4).
+- **Read the 16 rules and choose them deliberately.** Some change behavior a lot. For example, `opus-5-5/explore-before-acting`, off by default, tells Opus to open messages, documents and records in connected apps that the request never names.
+- **Check `noonsight report` and compare against your own baseline** after a few weeks before going wider.
+
+Risks:
+- **Silent gaps.** Plugin subagents, `--agents` and managed subagent definitions, agent-team teammates and workflow agents fall outside the subagent prediction. Plugin, `--agents` and managed subagents may get the wrong model's rules (only a warning afterwards); teammates and workflow agents get none. A subagent held on a permission prompt can lose its rules, and edits made through Bash never fire the code-edit trigger (`docs/hooks.md:314-321`, `:191-195`, `:265`).
+- **Some deliveries still fail.** After two fixes, 3 of 300 fuzzed sessions still broke the delivery check, and one limit is documented as unfixed: a compacted conversation resumed on Claude Code's default model.
+- **Wide install footprint.** `noonsight install` writes hooks into every Claude Code configuration directory it finds in your home directory. The optional watcher, which you have to turn on yourself, keeps adding them to new logins.
+- **Costs.** Rules add tokens: about 7% on the benchmark, up to about 46% per run for Sonnet's verify rule. Running the live tests from a real login (`NOONSIGHT_LIVE_LOGIN=1`) spends usage, and Fable usage is billed to usage credits on plans where Fable draws on them.
+- **Maintenance.** With one maintainer and no published package, every Claude Code release that changes hook behavior can break it until someone rechecks.
+
+**What it guarantees:** Nothing hard. On a best-effort basis, each session and subagent gets its own model's rules, and the decision log lets you check what was delivered. That rests on Claude Code's hook behavior staying as it was observed on versions 2.1.325–2.1.329, and on noonsight's prediction of each subagent's model matching Claude Code's own rules for choosing it. A wrong prediction is caught only afterwards, as a warning.

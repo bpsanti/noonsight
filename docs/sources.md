@@ -20,7 +20,7 @@ Every number below links to its entry in [docs/evidence.md](evidence.md).
 > On agentic coding tasks, Claude Sonnet 5.5 generally checks its work before it reports a change as done. At `low` effort, though, it sometimes reports a change as done without running a check that exercises it.
 
 **Our data: contradicts it for small precise changes, confirms it for larger ones.**
-At `medium` effort, without rules, Sonnet 5.5 ran the tests after a precisely described one-file fix in none of its runs, and after a bug fix in half of them: 30 of 30 against 0 of 30 with and without its rules on the fix ([R1](evidence.md#r1)), 30 of 30 against 15 of 30 on the bug ([R2](evidence.md#r2)).
+At `medium` effort, without rules, Sonnet 5.5 ran the tests after a precisely described one-file fix in none of its runs, and after a bug fix in half of them; with its three preset rules together, it ran them every time: 30 of 30 against 0 of 30 on the fix ([R1](evidence.md#r1)), 30 of 30 against 15 of 30 on the bug ([R2](evidence.md#r2)).
 On a feature across several files it ran them in 30 of 30 runs without any rule ([R13](evidence.md#r13)).
 So the guide's paragraph helps at `medium` effort too, on the tasks small enough that the model judges a check unnecessary.
 

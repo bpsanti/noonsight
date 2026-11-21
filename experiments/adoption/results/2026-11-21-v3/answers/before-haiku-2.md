@@ -1,0 +1,20 @@
+**Verdict:** Adopt with conditions. Start with a two- or three-person pilot, not a team-wide rollout.
+
+**Reasons:**
+1. **The measured effect is narrow.** The 2026-11-20 rule experiment (600 runs) supports one rule clearly. `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes` made the models run the tests after a one-file fix (27 to 30 of 30 runs, against 0 of 30 without the rule). That rule roughly doubled the cost per run on those tasks (Sonnet about +$0.027, Haiku about +$0.002). Sonnet's `carry-through` changed behavior only on a bug task, and `haiku-5-5/carry-through` was not shown to help.
+2. **Opus and Fable have no measured effect yet.** `fable-5-2/finish-work`, `fable-5-2/low-context-report` and `opus-5-5/unattended-run` were never delivered in the experiment (`experiments/rules/results/2026-11-20/summary.md`). Your Opus sessions would get no rules from this preset until someone checks them. The one Fable rule measured earlier (`low-context-report`, 2026-11-19) shortened sentences and cut semicolons, and that is a style effect, not a correctness one.
+3. **Subagent handling is the strongest part.** Hooks run on each subagent start. The tool predicts the subagent's model, delivers that model's rules, and warns when the model it actually starts on differs (README, "Instruct"). That matches your team's heavy use of subagents, and the README records live checks for it.
+4. **It stays out of the way by default.** Routing and the classifier are off. Each rule is on or off, can be replaced, and the decision log shows what was delivered (`noonsight report`). Nothing leaves the machine unless the classifier is turned on.
+5. **The project is early.** The README says "Status: early development. Nothing is published yet." Install is from a clone (`npm link`), not from a registry.
+
+**Conditions and risks:**
+- **Pin the Claude Code version.** Every "checked live" fact is tied to Claude Code 2.1.325–2.1.329 (`docs/verification/claude-code.md`). Hook timing, resume behavior and model selection have changed between versions. Pilot on one version and re-run `npm run test:live` before every upgrade.
+- **Install writes to every login.** `noonsight install` edits the user settings of every Claude Code config directory it finds. The pilot should use `noonsight install --account <dir>` to limit it, and the team should be told how to undo it (`docs/install.md`).
+- **Turn on only what you can justify.** Enable the verify rules for Sonnet and Haiku. Those are the ones with evidence, and they cost more per run. Leave the Opus and Fable rules off until a test on your own tasks shows a benefit.
+- **Project config needs trust.** A repository's `.noonsight/noonsight.json` applies only after each person runs `noonsight trust`. By default a project can add rules but not remove machine rules, so check any committed config before trusting it.
+- **Routing changes which model subagents run on.** It is off by default. If you turn it on, it picks the model and effort per subagent, which changes cost and quality. Confirm that before enabling it.
+- **Warnings are not blocks.** A subagent that starts on the wrong model is reported, not stopped.
+- **Delivery is not compliance.** The log shows a rule reached the model's request. It does not show the model followed it. The experiment measured behavior on small tasks, with 3 to 30 runs per arm.
+- **Some checks are not run.** The docs list facts "not yet run" (for example, whether a model quotes the additional context it is given) and the machine-wide install is not checked live. I did not install the tool or run its test suite; this assessment is from reading the repository and its results.
+
+**What it guarantees:** Each Claude Code session and subagent receives the rules declared for the model it actually runs on, at start and after `/model`, through Claude Code hooks, and every delivery is recorded in a decision log. This rests on Claude Code hook behavior verified live against versions 2.1.325–2.1.329, and on the repository's tests and recorded fixtures; it does not cover other versions, and it does not guarantee the model follows the rules.
