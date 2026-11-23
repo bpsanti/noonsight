@@ -7,6 +7,9 @@
 // Code configuration directory, then installs the hooks as `noonsight install --account <dir>` does,
 // for that directory alone and without the rest of the setup. The wait is kept up for as long as the directory stays there, so a marker
 // written late is still picked up.
+//
+// Events make it react at once, but it does not depend on them: it also looks at the entries again
+// and again, so a directory whose event never came is found by the next look.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,14 +20,15 @@ export interface WatcherOptions {
   /** Install noonsight's hooks, and only them, into one configuration directory, as `noonsight install --account <dir>` does. */
   readonly install: (dir: string) => void;
   readonly log: (text: string) => void;
-  /** How long the marker is checked every POLL_MS before it is checked every slowPollMs. */
+  /** How long the home directory, from the start, and a marker, from its directory's appearance, are checked every POLL_MS before they are checked every slowPollMs. */
   readonly fastWindowMs?: number;
   readonly slowPollMs?: number;
 }
 
 /**
  * Claude Code writes the marker shortly after it creates a configuration directory; the fast window
- * covers that, and the slow poll keeps a late marker in view at almost no cost.
+ * covers that, and the slow poll keeps a late marker in view at almost no cost. The home directory is
+ * looked at again on the same schedule, from the moment the watcher starts.
  */
 const POLL_MS = 100;
 const FAST_WINDOW_MS = 10_000;
@@ -104,14 +108,25 @@ export function startWatcher(options: WatcherOptions): () => void {
     close();
     process.exitCode = 1;
   });
-  // An entry made after the snapshot above and before the watch started has no event; the scan finds it.
-  scan();
+  // fs.watch can return before events are delivered: on macOS, an entry made right after it returns can
+  // get no event. So no single scan closes the gap between the snapshot above and the first event, and
+  // an entry made after that scan would be lost. The home directory is scanned for as long as the
+  // watcher runs, often at first, when that gap is open.
+  const started = Date.now();
+  let rescanTimer: NodeJS.Timeout | undefined;
+  const rescan = (): void => {
+    // Armed before the scan, so a close during the scan also clears it.
+    rescanTimer = setTimeout(rescan, Date.now() - started < fastWindowMs ? POLL_MS : slowPollMs);
+    scan();
+  };
 
   const close = (): void => {
     watcher.close();
+    clearTimeout(rescanTimer);
     for (const timer of timers) clearTimeout(timer);
     timers.clear();
   };
+  rescan();
   log(`watching ${home} for new Claude Code configuration directories (entries directly in it only)`);
   return close;
 }
