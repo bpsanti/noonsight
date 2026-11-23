@@ -154,6 +154,14 @@ The calibration runs once more, and the first one is kept as `results/2026-11-21
 
 v4's results are in `results/2026-11-21-v4/`.
 
+## Revision after v4
+
+This section was written after v4's results, and applies only to runs after it.
+[rubric.md](rubric.md)'s limit L4 said that a watched session with no task scope receives nothing from the shipped preset.
+That was wrong against the code: a Sonnet 5.5 or Haiku 5.5 session with no scope receives `verify-changes` once it edits a code file its git repository tracks, through the `code-edit` trigger, as v3 recorded and as five v4 answers said and were judged false for.
+L4 now says so, and also that the attended rules of Opus 5.5 and Fable 5.2 ship off until `enable` turns one on.
+The results of v1 to v4 stay as judged, with the reference they were pre-registered with; [results/2026-11-21-v4](results/2026-11-21-v4/README.md#where-the-answers-went-wrong) gives what v4 would have scored with L4 read as the code has it.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.

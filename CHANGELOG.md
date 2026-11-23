@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The README no longer names Claude Code versions; it says that each result carries the version it was measured on, in its entry of `docs/evidence.md`, which keeps them with `docs/verification/claude-code.md`.
+  It now gives Fable 5.2's measured rule effect (R9, `low-context-report`) beside Sonnet 5.5's and Haiku 5.5's, and says that `noonsight report` counts deliveries from the decision log and does not measure whether a rule changed anything.
+  These answer the misses the fourth adoption run found (`experiments/adoption/results/2026-11-21-v4/README.md`).
+
+- The adoption evaluation's reference limit L4 (`experiments/adoption/rubric.md`) now matches the code: an attended Sonnet 5.5 or Haiku 5.5 session with no scope receives `verify-changes` once it edits tracked code, and the attended rules of Opus 5.5 and Fable 5.2 ship off.
+  `experiments/adoption/README.md` records this as a revision after v4 that applies to later runs only; the results of v1 to v4 stay as judged.
+
 - The place of a session someone is watching is now named `attended`, and a rule's `where` takes `all` alone for every place.
   `session` is still read as the earlier name of `attended`, in `where`, in `noonsight resolve` and in the decision log, so existing configurations and logs keep their meaning; a `where` that names a place twice, under either name, or lists `all` beside another place is refused.
   The decision log now writes `"place": "attended"`; `noonsight report` and the delivery and benchmark experiments count lines with `session` as `attended`.

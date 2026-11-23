@@ -16,7 +16,8 @@ It works through Claude Code's own hooks, reads only local files, and records ev
 ## What it guarantees, and what it does not
 
 **The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.9% (3,219 of 3,221) of the requests that had rules due ([D2](docs/evidence.md#d2)); 1 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
-That run is Claude Code 2.1.328 against a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
+That run used a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
+Each result in this README carries the Claude Code version it was measured on, in its entry of [docs/evidence.md](docs/evidence.md).
 
 The fuzzer has found four failures of noonsight, F1 to F4, all fixed before that run; their shortest reproductions are in the corpus, which passes.
 The one failing session is the documented limit below.
@@ -96,6 +97,7 @@ noonsight report
 ```
 
 The report lists each rule with how often it was delivered, to which models, scopes and places, and the rules that are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).
+It reads deliveries from noonsight's decision log, which records what the hooks returned to Claude Code; it does not measure whether a rule changed what the model did, which takes an experiment such as those in [What the rules change](#what-the-rules-change).
 `noonsight uninstall` takes the hooks out again; [docs/install.md](docs/install.md) covers every install and how to undo it.
 
 ## Your own rules
@@ -189,11 +191,12 @@ To turn one on, name it in `enable` in `~/.config/noonsight/noonsight.json`:
 
 Delivery is what noonsight guarantees; what a rule then changes depends on the rule, the model and the task.
 These results are for the preset's rules named in them; a rule of your own has no measured effect until you measure it.
-The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without ([experiments/rules](experiments/rules/README.md)):
+The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without, on Fable 5.2, Sonnet 5.5 and Haiku 5.5 ([experiments/rules](experiments/rules/README.md)):
 
 - One rule, `verify-changes` delivered alone, made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix in 29 of 30 and 27 of 30 runs, where `carry-through` delivered alone did it in 0 of 30 and 0 of 30 ([R3](docs/evidence.md#r3)); without any rule, each model ran them in 0 of 30 runs ([R1](docs/evidence.md#r1)).
 - That extra work has a price: on Sonnet's fix, a run cost $0.0240 without rules and $0.0505 with `verify-changes` alone ([R6](docs/evidence.md#r6)).
 - Delivered as one sentence pointing to a file with its text, `verify-changes` was read in 120 of 120 runs and did as well as the rule inline ([R4](docs/evidence.md#r4)).
+- On Fable 5.2, `low-context-report` made the sentences of its final reports shorter, in mean words per sentence 12.3 against 16.4, 17.8 against 20.1, 12.2 against 16.2 with the rule and without, on a question, a bug and a feature ([R9](docs/evidence.md#r9)).
 - On a 13-ticket backlog with an open decision, `sonnet-5-5/carry-through` raised the runs that did every part from 9 of 40 to 32 of 40 ([R10](docs/evidence.md#r10)); Haiku's `carry-through` showed nothing there ([R11](docs/evidence.md#r11)).
 - Where the models already did the work, the rules changed nothing and still cost a little ([R6](docs/evidence.md#r6)); every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8)).
 
