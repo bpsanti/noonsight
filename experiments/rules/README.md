@@ -298,7 +298,7 @@ Long sessions take more memory, so these runs go two at a time.
 
 ## The harder design
 
-The pilot of the design `long` found no early stop: Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without the rules, in 20 of 20 runs ([results/2026-11-20-long](results/2026-11-20-long/README.md)).
+The pilot of the design `long` found no early stop: Sonnet 5.5 and Haiku 5.5 did every part of `migrate` and `backlog` without the rules, in 20 of 20 runs, 19 of 20 as the check recorded them before its fix ([results/2026-11-20-long](results/2026-11-20-long/README.md), Claude Code 2.1.329).
 The design `harder` in `plan.json` asks the same question on two tasks built to give a model reasons to stop before the end.
 Each task puts in more than one such reason, and the two tasks put in different ones, since which one makes these models stop is not known.
 Everything else is the design `long`: the arms `carry` and `none`, `low` effort, the scope `build` and the place `unattended`, the budgets and time limit, the pilot and its gate, and 40 runs per arm.
@@ -355,7 +355,7 @@ The caps are the design `long`'s: $10 for the pilot and $110 for the design, $12
 
 Where the expected costs come from:
 
-- The pilot of the design `long` measured the mean cost per run of the same models at the same effort: Sonnet 5.5 $0.303 on `migrate` and $0.173 on `backlog`, Haiku 5.5 $0.016 and $0.011 ([results/2026-11-20-long](results/2026-11-20-long/README.md)).
+- The pilot of the design `long` measured the mean cost per run of the same models at the same effort: Sonnet 5.5 $0.303 on `migrate` and $0.173 on `backlog`, Haiku 5.5 $0.016 and $0.011 ([results/2026-11-20-long](results/2026-11-20-long/README.md), Claude Code 2.1.329).
   Almost all of it was output tokens and tokens written to the cache, which grow with what a run reads and writes.
 - `codes` changes 79 return sites in 36 files, against 29 calls in 18 files for `migrate`, and its source and instructions are about 1.8 times as long; it is assumed at about twice `migrate`'s cost: Sonnet 5.5 $0.60 and Haiku 5.5 $0.035 a run.
 - `triage` has 13 tickets against 8, one of them a plan to write, and a ticket file about 1.6 times as long; it is assumed at twice `backlog`'s cost: Sonnet 5.5 $0.35 and Haiku 5.5 $0.025 a run.
@@ -438,7 +438,10 @@ A results directory holds stub runs or real ones, never both, and the summary of
 ## Results
 
 `results/` holds the result of each run of the experiment that was written up, with its date: `runs.jsonl`, the generated `summary.md`, and a reading of the data.
-[results/2026-11-19](results/2026-11-19/README.md) is the first run of the design `expanded`.
-[results/2026-11-20](results/2026-11-20/README.md) is the first run of the design `single-rule`.
-[results/2026-11-20-long](results/2026-11-20-long/README.md) is the first run of the design `long`: its pilot found no early stop without the rules, so the comparisons did not run.
-[results/2026-11-20-harder](results/2026-11-20-harder/README.md) is the first run of the design `harder`: `triage` entered for both models and `codes` for neither; `sonnet-5-5/carry-through` supports its source there, and `haiku-5-5/carry-through` is not shown.
+[docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists every run with its Claude Code version, and says which were superseded.
+[results/2026-11-16](results/2026-11-16/README.md), on Claude Code 2.1.326, is the first run, superseded in part by the two below.
+[results/2026-11-18](results/2026-11-18/README.md), on Claude Code 2.1.327, tested a sentence of two rules; its raw runs are not committed.
+[results/2026-11-19](results/2026-11-19/README.md), on Claude Code 2.1.328, is the first run of the design `expanded`, superseded on `fix` and `bug` for Sonnet 5.5 and Haiku 5.5 by the run of 2026-11-20.
+[results/2026-11-20](results/2026-11-20/README.md), on Claude Code 2.1.329, is the first run of the design `single-rule`.
+[results/2026-11-20-long](results/2026-11-20-long/README.md), on Claude Code 2.1.329, is the first run of the design `long`: its pilot found no early stop without the rules, so the comparisons did not run.
+[results/2026-11-20-harder](results/2026-11-20-harder/README.md), on Claude Code 2.1.329, is the first run of the design `harder`: `triage` entered for both models and `codes` for neither; `sonnet-5-5/carry-through` supports its source there, and `haiku-5-5/carry-through` is not shown.

@@ -1,5 +1,7 @@
 # Rule effect, 2026-11-16
 
+> **Superseded in part.** On `fix` for Sonnet 5.5 and Haiku 5.5, by [2026-11-20](../2026-11-20/README.md) (Claude Code 2.1.329); on `question` for Fable 5.2, by [2026-11-19](../2026-11-19/README.md) (Claude Code 2.1.328).
+
 The preset rules noonsight delivers moved two of the three outcomes this experiment could observe, in the direction their sources describe.
 Sonnet 5.5 and Haiku 5.5 ran the tests after fixing the code far more often with their rules (10 of 10 and 8 of 10) than without (0 of 10 each).
 Fable 5.2 wrote reports with shorter sentences and almost no semicolons with its report rule.

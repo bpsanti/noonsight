@@ -20,7 +20,7 @@ This page lists where each rule and each scope comes from, what the source repor
 
 Each rule text is a short adaptation of the guide's suggested prompt, in this project's own words, and not a copy.
 It is written as statements of what the user wants, because Claude Code's hooks documentation asks for hook context written as facts rather than as system commands.
-The guides measured their own wording; the adapted wording has not been measured separately, except the last sentence of `haiku-5-5/carry-through` and `sonnet-5-5/stay-in-scope`, which is not from a guide and was measured in [2026-11-18](../../experiments/rules/results/2026-11-18/README.md).
+The guides measured their own wording; the adapted wording has not been measured separately, except the last sentence of `haiku-5-5/carry-through` and `sonnet-5-5/stay-in-scope`, which is not from a guide and was measured in [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) (Claude Code 2.1.327).
 
 ## Documents
 
@@ -188,6 +188,7 @@ A rule applies to the scopes it lists, or to every scope, and to the places it l
 Each rule below gives its scopes, why, and the basis of that choice, by the principles in [How the rules are scoped](#how-the-rules-are-scoped).
 A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when noonsight delivered it.
 The 2026-11-16 samples are small, so they give a direction, not a significant result; the 2026-11-19 run tested three rules again with 30 runs per arm and task, against comparisons fixed before it ran.
+Where a rule below was measured more than once on the same task, the last run is the current one and the earlier ones are marked superseded; [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists every run with its Claude Code version.
 
 ### Claude Fable 5.2 (`claude-fable-5-2`)
 
@@ -197,7 +198,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Finish the whole task", read 2026-11-16.
 - Effect: In replays of recorded sessions from an agentic coding product at medium effort, a version of this text left about half as many sessions ending with work that could have been continued.
 - Cost: Output tokens rose by about 30 percent.
-- Measured: Not measured on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): it reaches subagents only, and the experiment starts none.
+- Measured: Not measured on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326): it reaches subagents only, and the experiment starts none.
 - Places: Claude Code already sends a block with this advice to every Fable 5.2 session, so the preset only gives it to subagents, whose system prompt has none.
 - Scopes: `investigate`, `build`. Not `review`, `routine` or `digest`, nor a task whose scope is not known.
 - Why these scopes: the rule pays where a subagent owes many steps of work and can stop before the last one: an investigation, or an implementation that needs reasoning.
@@ -214,8 +215,8 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Make reports easy to follow", read 2026-11-16.
 - Effect: On agentic tasks, final reports were less dense and used fewer semicolons; on workflow automation tasks, sentences were shorter.
 - Cost: Not reported by the source.
-- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered by noonsight to unattended sessions, reports had shorter sentences (11.7 words against 15.3 on the question, 5 runs each) and almost no semicolons (0.8 per 1,000 words against 19.9), with no added cost.
-  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md), 30 runs per arm on three tasks, it did so on each: words per sentence 12.3 against 16.4 on the question, 17.8 against 20.1 on a bug fix and 12.2 against 16.2 on a feature, and semicolons per 1,000 words 2.5 against 13.0, 0.7 against 4.2 and 0 against 3.3, each significant after Holm's adjustment; cost per run changed by +3, +3 and -15 percent.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326; on the question, superseded by the run of 2026-11-19 below), delivered by noonsight to unattended sessions, reports had shorter sentences (11.7 words against 15.3 on the question, 5 runs each) and almost no semicolons (0.8 per 1,000 words against 19.9), with no added cost.
+  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md) (Claude Code 2.1.328), 30 runs per arm on three tasks, it did so on each: words per sentence 12.3 against 16.4 on the question, 17.8 against 20.1 on a bug fix and 12.2 against 16.2 on a feature, and semicolons per 1,000 words 2.5 against 13.0, 0.7 against 4.2 and 0 against 3.3, each significant after Holm's adjustment; cost per run changed by +3, +3 and -15 percent.
 - Places: where the reader comes back to a finished report, rather than following the work as it happens.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: every kind of task ends in a report that someone reads after the fact, a summary or a review most of all, and the source reports no cost.
@@ -257,7 +258,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "Unattended agentic runs", read 2026-11-16.
 - Effect: Fewer turns that end early in unattended agent loops: the model carries on where it would otherwise stop to check in. The source says to leave it out where someone is there to answer.
 - Cost: Somewhat more tool calls and output tokens per task; the source gives no figure.
-- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (6 of 6 each); about 30 to 90 more output tokens per run.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326): on two short tasks every run finished with and without it (6 of 6 each); about 30 to 90 more output tokens per run.
 - Places: only sessions nobody is watching, as the guide asks.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: in a session nobody watches, a turn that ends before the work is done halts the work until someone comes back, whatever the kind of task.
@@ -300,9 +301,9 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Carrying work through", read 2026-11-16.
 - Effect: At low and medium effort, the model carries more of the work through instead of checking in before it is done.
 - Cost: Sessions at low and medium effort run longer and cost more; the source gives no figure.
-- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
-  Not measured again on [2026-11-20](../../experiments/rules/results/2026-11-20-long/README.md): on two long tasks at low effort, an 18-module migration and an 8-ticket backlog, Sonnet 5.5 did every part in 10 of 10 runs without it, so the comparison with it did not run.
-  On [2026-11-20](../../experiments/rules/results/2026-11-20-harder/README.md), at low effort and unattended, on a 13-ticket backlog with a decision the ticket leaves open, Sonnet 5.5 did every part in 32 of 40 runs with it alone, against 9 of 40 without it: without it, 30 of 40 runs handed the open decision back, against 6 of 40 with it; the cost per run did not change measurably ($0.285 against $0.292).
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326): on two short tasks every run finished with and without it (20 of 20 each).
+  Not measured again on [2026-11-20](../../experiments/rules/results/2026-11-20-long/README.md) (Claude Code 2.1.329): on two long tasks at low effort, an 18-module migration and an 8-ticket backlog, Sonnet 5.5 did every part in 10 of 10 runs without it, so the comparison with it did not run.
+  On [2026-11-20](../../experiments/rules/results/2026-11-20-harder/README.md) (Claude Code 2.1.329), at low effort and unattended, on a 13-ticket backlog with a decision the ticket leaves open, Sonnet 5.5 did every part in 32 of 40 runs with it alone, against 9 of 40 without it: without it, 30 of 40 runs handed the open decision back, against 6 of 40 with it; the cost per run did not change measurably ($0.285 against $0.292).
   On a 36-file migration, Sonnet 5.5 did every part in 5 of 5 runs without it, so that comparison did not run.
 - Places: where nobody can answer a check-in. The guide's suggested prompt has a second paragraph, which is the rule `sonnet-5-5/stay-in-scope`.
 - Scopes: every scope, including a task whose scope is not known.
@@ -318,9 +319,9 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Unrequested additions when coding", read 2026-11-16.
 - Effect: Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.
 - Cost: Not reported by the source.
-- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added for consistency with `haiku-5-5/carry-through`, which ends with the same sentence for the reason given there; in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) run set, Sonnet 5.5 showed no measurable change with or without it.
-- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on a one-file fix, no run changed another file, with or without it (0 of 10 each), and again on [2026-11-19](../../experiments/rules/results/2026-11-19/README.md) (0 of 30 each).
-  On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), the last sentence made no measurable change in 10 runs per arm: Sonnet met a requirement in a document its CLAUDE.md points to in 10 of 10 runs with and without it, and added nothing unrequested where the project only describes a convention (0 of 10 each).
+- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added for consistency with `haiku-5-5/carry-through`, which ends with the same sentence for the reason given there; in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) (Claude Code 2.1.327) run set, Sonnet 5.5 showed no measurable change with or without it.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326): on a one-file fix, no run changed another file, with or without it (0 of 10 each), and again on [2026-11-19](../../experiments/rules/results/2026-11-19/README.md) (Claude Code 2.1.328) (0 of 30 each).
+  On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) (Claude Code 2.1.327), the last sentence made no measurable change in 10 runs per arm: Sonnet met a requirement in a document its CLAUDE.md points to in 10 of 10 runs with and without it, and added nothing unrequested where the project only describes a convention (0 of 10 each).
 - Scopes: `routine`. Not `investigate`, `build`, `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: a well-scoped change is where tests, documentation and files nobody asked for are least welcome.
   In an investigation or an implementation that needs reasoning, such additions are often wanted, and a review or a digest changes no files, so the rule has nothing to do there.
@@ -334,8 +335,9 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Verification on coding tasks", read 2026-11-16.
 - Effect: At low effort, skipped or superficial checks became rare, with no measurable change in task quality.
 - Cost: Slightly higher cost per task.
-- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered with `carry-through` and `stay-in-scope` at medium effort, a one-file fix was followed by a test run in 10 of 10 runs, against 0 of 10 without the rules, for about 520 more output tokens and 46 percent more cost per run.
-  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md), 30 runs per arm, Sonnet ran the tests after its last edit in 30 of 30 runs against 0 of 30 on the one-file fix and 30 of 30 against 15 of 30 on a bug known by its symptom, at 59 and 58 percent more cost per run; on a feature across three files it ran them in every run of both arms, and the rules added 7 percent.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326, superseded by the run of 2026-11-20 below), delivered with `carry-through` and `stay-in-scope` at medium effort, a one-file fix was followed by a test run in 10 of 10 runs, against 0 of 10 without the rules, for about 520 more output tokens and 46 percent more cost per run.
+  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md) (Claude Code 2.1.328, superseded on the fix and the bug by the run of 2026-11-20 below), 30 runs per arm, Sonnet ran the tests after its last edit in 30 of 30 runs against 0 of 30 on the one-file fix and 30 of 30 against 15 of 30 on a bug known by its symptom, at 59 and 58 percent more cost per run; on a feature across three files, not measured again, it ran them in every run of both arms, and the rules added 7 percent.
+  On [2026-11-20](../../experiments/rules/results/2026-11-20/README.md) (Claude Code 2.1.329), 30 runs per arm, the same two tasks gave 30 of 30 against 0 of 30 on the fix and 30 of 30 against 11 of 30 on the bug, at 58 and 60 percent more cost per run; with `verify-changes` alone, 29 of 30 and 30 of 30.
 - Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: the rule acts on a code change, and an investigation that ends in a fix, an implementation and a routine change all make one.
   A review and a digest change no code, so there the rule would only add text to read.
@@ -392,11 +394,11 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Prevent early stopping in long agent prompts", read 2026-11-16.
 - Effect: Fewer early stops that hand the task back to the user, which appear with a long coding-agent system prompt at low effort.
 - Cost: Not reported for the text. For comparison, raising effort from low to medium roughly halved early stopping and more than doubled output tokens.
-- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added because, in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) run set, on a project whose requirement sat in a document its CLAUDE.md points to, Haiku 5.5 with the rule as adapted from the guide skipped the requirement in about a quarter of runs, often saying nobody had asked for it.
-- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md): on two short tasks every run finished with and without it (20 of 20 each).
-  On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md), with the last sentence, Haiku met a requirement in a document its project's CLAUDE.md points to in 59 of 60 runs, against 44 of 60 without it, and added something unrequested in 0 of 60 runs where the project only describes a convention.
-  Not measured again on [2026-11-20](../../experiments/rules/results/2026-11-20-long/README.md): on two long tasks at low effort, an 18-module migration and an 8-ticket backlog, Haiku 5.5 did every part in 10 of 10 runs without it (9 of 10 as first scored, the tenth a mistake of the hidden check), so the comparison with it did not run.
-  Inconclusive on [2026-11-20](../../experiments/rules/results/2026-11-20-harder/README.md), at low effort and unattended, on a 13-ticket backlog with a decision the ticket leaves open: Haiku 5.5 did every part in 6 of 40 runs with it alone and 2 of 40 without it (p 0.26); it settled the decision itself in 39 of 40 runs without it, and most runs of both arms missed a part found only through a TODO; it added about 2,200 output tokens per run (11 percent of the cost).
+- Deviation from the source: the last sentence, on additions that the project's own instructions explicitly require, is not in the guide's text. Added because, in the [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) (Claude Code 2.1.327) run set, on a project whose requirement sat in a document its CLAUDE.md points to, Haiku 5.5 with the rule as adapted from the guide skipped the requirement in about a quarter of runs, often saying nobody had asked for it.
+- Measured: Inconclusive on [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326): on two short tasks every run finished with and without it (20 of 20 each).
+  On [2026-11-18](../../experiments/rules/results/2026-11-18/README.md) (Claude Code 2.1.327), with the last sentence, Haiku met a requirement in a document its project's CLAUDE.md points to in 59 of 60 runs, against 44 of 60 without it, and added something unrequested in 0 of 60 runs where the project only describes a convention.
+  Not measured again on [2026-11-20](../../experiments/rules/results/2026-11-20-long/README.md) (Claude Code 2.1.329): on two long tasks at low effort, an 18-module migration and an 8-ticket backlog, Haiku 5.5 did every part in 10 of 10 runs without it (9 of 10 as first scored, the tenth a mistake of the hidden check), so the comparison with it did not run.
+  Inconclusive on [2026-11-20](../../experiments/rules/results/2026-11-20-harder/README.md) (Claude Code 2.1.329), at low effort and unattended, on a 13-ticket backlog with a decision the ticket leaves open: Haiku 5.5 did every part in 6 of 40 runs with it alone and 2 of 40 without it (p 0.26); it settled the decision itself in 39 of 40 runs without it, and most runs of both arms missed a part found only through a TODO; it added about 2,200 output tokens per run (11 percent of the cost).
   On a 36-file migration, Haiku 5.5 did every part in 5 of 5 runs without it, so that comparison did not run.
 - Scopes: every scope, including a task whose scope is not known.
 - Why these scopes: a subagent or an unattended session that hands the task back before the end leaves half a search or half a change, whatever the kind of task, and with routing on the preset's table sends digest subagents to Haiku 5.5.
@@ -410,8 +412,9 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Tell coding agents to verify their changes", read 2026-11-16.
 - Effect: The model checked its changes more often, and its performance improved.
 - Cost: More tokens; the source gives no figure.
-- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md), delivered with `carry-through` at medium effort, a one-file fix was followed by a test run in 8 of 10 runs, against 0 of 10 without the rules, for about 1,400 more output tokens per run.
-  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md), 30 runs per arm, Haiku ran the tests after its last edit in 27 of 30 runs against 0 of 30 on the one-file fix; on a bug and a feature it already did without the rules (30 of 30 and 29 of 30 in both arms), and the rules added under a tenth of a cent per run.
+- Measured: On [2026-11-16](../../experiments/rules/results/2026-11-16/README.md) (Claude Code 2.1.326, superseded by the run of 2026-11-20 below), delivered with `carry-through` at medium effort, a one-file fix was followed by a test run in 8 of 10 runs, against 0 of 10 without the rules, for about 1,400 more output tokens per run.
+  On [2026-11-19](../../experiments/rules/results/2026-11-19/README.md) (Claude Code 2.1.328, superseded on the fix and the bug by the run of 2026-11-20 below), 30 runs per arm, Haiku ran the tests after its last edit in 27 of 30 runs against 0 of 30 on the one-file fix; on a bug and a feature it already did without the rules (30 of 30 and 29 of 30 in both arms), and the rules added under a tenth of a cent per run.
+  On [2026-11-20](../../experiments/rules/results/2026-11-20/README.md) (Claude Code 2.1.329), 30 runs per arm, it ran them in 27 of 30 runs against 0 of 30 on the fix, with both rules and with `verify-changes` alone, and in 30 of 30 against 29 of 30 on the bug.
 - Scopes: `investigate`, `build`, `routine`. Not `review` or `digest`, nor a task whose scope is not known.
 - Why these scopes: as for `sonnet-5-5/verify-changes`, the rule acts on a code change, which an investigation that ends in a fix, an implementation and a routine change all make, and a review or a digest does not.
 - Scope basis: sourced for `build`, `routine`; judgment for `investigate`.
@@ -436,7 +439,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 Claude Code records, in each session's transcript, the system prompt it sends with each model request.
 The live test `system-prompt` (`test/live/preset.test.ts`) starts one short session on each of the four models and one session that starts a general-purpose subagent on each, reads those system prompts, and checks every preset rule against them.
 
-With Claude Code 2.1.325, on 2026-11-16:
+With Claude Code 2.1.325, on 2026-11-16, which is the version this comparison of texts read and not one a measurement of [docs/evidence.md](../../docs/evidence.md#runs-and-versions) ran on:
 
 | Where | Model | System prompt | Section headings | Preset advice already in it |
 | --- | --- | --- | --- | --- |

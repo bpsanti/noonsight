@@ -171,6 +171,11 @@ export function measure(lines: readonly Line[]) {
 }
 
 const pct = (x: number | null | undefined): string => (x === null || x === undefined ? 'n/a' : `${(100 * x).toFixed(1)}%`);
+/** A share from its counts: one kept to four decimals can round to one decimal the wrong way. */
+const share = (n: number, d: number, none = 'n/a'): string => (d ? pct(n / d) : none);
+const parts = (m: Measures, keys: readonly (keyof Measures['precision']['parts'])[]): number => keys.reduce((n, k) => n + m.precision.parts[k], 0);
+const OWN = ['ownFirst', 'ownDuplicate', 'ownUnexpected'] as const;
+const RULE_TEXT = [...OWN, 'foreignRetired', 'foreignUnretired'] as const;
 
 /** The measures of several runs as Markdown: one column per run, then each run's paths and robustness. */
 export function renderMarkdown(runs: Readonly<Record<string, Measures>>): string {
@@ -179,11 +184,11 @@ export function renderMarkdown(runs: Readonly<Record<string, Measures>>): string
     ['Arm', (m) => `\`${m.arm}\`${m.plant ? ` (planted: ${m.plant})` : ''}`],
     ['Sessions measured / run', (m) => `${m.harness.ok ?? 0} / ${m.sessions}`],
     ['Requests (main, subagent, compaction)', (m) => `${m.requests} (${m.byKind.main ?? 0}, ${m.byKind.subagent ?? 0}, ${m.byKind.compact ?? 0})`],
-    ['Coverage', (m) => `${pct(m.coverage.coverage)} (${m.coverage.covered} of ${m.coverage.due})`],
-    ['Coverage, subagents', (m) => `${pct(m.coverage.subagents.coverage)} (${m.coverage.subagents.covered} of ${m.coverage.subagents.due})`],
-    ['Coverage, by rule', (m) => pct(m.coverage.rules.share)],
-    ['Own share', (m) => (m.precision.ownShare === null ? 'no rule text' : pct(m.precision.ownShare))],
-    ['Right share', (m) => (m.precision.rightShare === null ? 'no rule text' : pct(m.precision.rightShare))],
+    ['Coverage', (m) => `${share(m.coverage.covered, m.coverage.due)} (${m.coverage.covered} of ${m.coverage.due})`],
+    ['Coverage, subagents', (m) => `${share(m.coverage.subagents.covered, m.coverage.subagents.due)} (${m.coverage.subagents.covered} of ${m.coverage.subagents.due})`],
+    ['Coverage, by rule', (m) => share(m.coverage.rules.present, m.coverage.rules.due)],
+    ['Own share', (m) => share(parts(m, OWN), parts(m, RULE_TEXT), 'no rule text')],
+    ['Right share', (m) => share(m.precision.parts.ownFirst, parts(m, [...RULE_TEXT, 'overhead']), 'no rule text')],
     ['Characters added per request', (m) => String(m.cost.addedCharsPerAgentRequest ?? 'n/a')],
     ['Share of the request text', (m) => pct(m.cost.shareOfRequestText)],
     ['Requests with a rule of another model and no note', (m) => String(m.robustness.requestsWithViolation['foreign-unretired'] ?? 0)],
@@ -196,8 +201,8 @@ export function renderMarkdown(runs: Readonly<Record<string, Measures>>): string
     out.push('', `## ${n}`, '', '| Path | Requests | Rules due | Coverage | Own share | Rule of another model, no note |', '| --- | --- | --- | --- | --- | --- |');
     for (const [p, x] of Object.entries(m.byPath)) out.push(`| ${p} | ${x.requests} | ${x.due} | ${pct(x.coverage)} | ${x.ownShare === null ? 'no rule text' : pct(x.ownShare)} | ${x.foreignUnretired} |`);
     out.push('', '| Sessions | Count | Rules due | Coverage | With an unexplained violation |', '| --- | --- | --- | --- | --- |');
-    for (const [k, x] of [...Object.entries(m.robustness.byQuietPair), ...Object.entries(m.robustness.byStart), ...Object.entries(m.robustness.byLength)])
-      out.push(`| ${k} | ${x.sessions} | ${x.due} | ${pct(x.coverage)} | ${x.sessionsFailed} |`);
+    for (const [k, x] of [...Object.entries(m.robustness.byQuietPair), ...Object.entries(m.robustness.byStart ?? {}), ...Object.entries(m.robustness.byLength)])
+      out.push(`| ${k} | ${x.sessions} | ${x.due} | ${share(x.covered, x.due)} | ${x.sessionsFailed} |`);
     const classes = Object.entries(m.robustness.classes);
     if (classes.length) {
       out.push('', '| Violation | Sessions | Example |', '| --- | --- | --- |');

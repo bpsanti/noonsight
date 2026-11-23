@@ -1,5 +1,7 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-19
 
+> **Superseded.** The current run is [2026-11-23 on Claude Code 2.1.330](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md); quote its numbers, not the ones here, which are history.
+
 The first full run of the delivery benchmark ([experiments/delivery](../../../README.md)), on Claude Code 2.1.328 and the `claude` preset 1.3.1, on a laptop with 8 cores (macOS, arm64) shared with other heavy work the whole time.
 `npm run delivery -- all --concurrency 6` ran at commit `467d465` and took 85 minutes.
 The self-check was run again at `0c072b7`, after a fix to the shrinker: its candidates had shared the session directory of the session they came from, so candidates run at the same time could clash.
@@ -41,7 +43,7 @@ The first 60 sessions of the same seed under each arm; every session ran.
 | Arm | Coverage | Subagents | Own share | Characters per request | Requests with another model's rule and no note |
 | --- | --- | --- | --- | --- | --- |
 | `claudemd` | 87.2% (557 of 639) | 32.2% (39 of 121) | 31.6% | 4,405 | 696 |
-| `rules` | 70.5% (448 of 635) | 32.5% (39 of 120) | 27.4% | 3,972 | 691 |
+| `rules` | 70.6% (448 of 635) | 32.5% (39 of 120) | 27.4% | 3,972 | 691 |
 | `skills` | 0% (0 of 643) | 0% | no rule text | 0 | 0 |
 
 A `CLAUDE.md` or `.claude/rules` file is in every request of the session, whatever the path, so their coverage of the session's own conversation is high; they do not reach the `Explore` and `Plan` subagents, and every model reads the other models' rules with nothing to say they do not apply to it.

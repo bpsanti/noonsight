@@ -1,5 +1,7 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-20, the fuzz level after the fixes of F1 and F2
 
+> **Superseded.** The current run is [2026-11-23 on Claude Code 2.1.330](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md); quote its numbers, not the ones here, which are history.
+
 The fuzz level and the native arms of the delivery benchmark ([experiments/delivery](../../../README.md)) on noonsight with the fixes of F1 and F2 (#46), measured against [the run before the fixes](../2026-11-19-467d465/README.md).
 The design `after-f1-f2` in [plan.json](../../../plan.json) fixed the comparisons before the run, and the delivery README lists them ("The design `after-f1-f2`").
 No request reached Anthropic and no token was spent.
@@ -17,13 +19,14 @@ The paired comparisons need the sessions of both runs, which are not committed; 
 ## The comparisons
 
 [comparison.md](comparison.md), from `npm run delivery -- compare --design after-f1-f2`.
+It shows 87.4% for the coverage of `claudemd`, its share of four decimals rounded once more; 566 of 648 is 87.3%.
 The eight primary comparisons are supported: their measures move the way they expect, with an adjusted p below 0.05.
 
 | | Question | Before or arm | After or `on` | Paired sessions: both, only before or arm, only after or `on` | p (Holm) |
 | --- | --- | --- | --- | --- | --- |
 | P1 | Sessions under `on` with an unexplained violation | 26 of 296 | 3 of 300 | 3, 23, 0 of 296 | < 0.001 |
 | P2 | Coverage under `on` | 99.4% (3,071 of 3,090) | 99.5% (3,199 of 3,216) | 2, 6, 0 of 296 | 0.03 |
-| P3 | Coverage, `claudemd` against `on`, first 60 sequences | 87.4% | 100% | 0, 42, 0 of 60 | < 0.001 |
+| P3 | Coverage, `claudemd` against `on`, first 60 sequences | 87.3% | 100% | 0, 42, 0 of 60 | < 0.001 |
 | P4 | Coverage, `rules` against `on` | 70.9% | 100% | 0, 47, 0 | < 0.001 |
 | P5 | Coverage, `skills` against `on` | 0% | 100% | 0, 58, 0 | < 0.001 |
 | P6 | Subagent coverage, `claudemd` against `on` | 32.2% | 100% | 0, 42, 0 | < 0.001 |
@@ -37,7 +40,7 @@ The secondary comparisons:
 
 | | Question | Before | After | Reading |
 | --- | --- | --- | --- | --- |
-| S1 | Coverage under `on` in the sessions with two quiet steps in a row | 99.0% | 99.1% | Holds |
+| S1 | Coverage under `on` in the sessions with two quiet steps in a row | 98.9% (of 1,805) | 99.1% | Holds |
 | S2 | Requests under `on` with another model's rule and no note | 80 | 22 | Holds |
 | S3 | Subagent coverage under `on` is no lower | 99.7% | 99.9% | Holds |
 | S4 | The decision log gives the coverage the stub saw | | log 100%, stub 99.4% | Does not hold |
@@ -51,7 +54,7 @@ A switch's delivery that may have been lost is now sent again, which adds repeat
 ### The controls
 
 C1 to C3 expected the native arms to measure the same before and after, since noonsight delivers nothing under them.
-`skills` did (0 of 650); `claudemd` went from 87.2% to 87.4% and `rules` from 70.5% to 70.9%, so the two controls do not hold as written.
+`skills` did (0 of 650); `claudemd` went from 87.2% to 87.3% and `rules` from 70.6% to 70.9%, so the two controls do not hold as written.
 The rules a session lacks did not change: `claudemd` has 82 requests without their right rules in both runs, and no session went from covered to uncovered or back.
 What changed is the requests a session sends: 37 of the 60 `claudemd` sessions differ, 19 of them by one or two requests more or fewer, mostly at a step that starts subagents, and the others in the order of their requests or the step a request is counted under, as the subagents' answers came back at other times.
 `claudemd` has 648 main requests instead of 638, all of them covered.
@@ -98,7 +101,7 @@ The first 60 sessions of the same seed under each arm; every session ran.
 
 | Arm | Coverage | Subagents | Own share | Characters per request | Requests with another model's rule and no note |
 | --- | --- | --- | --- | --- | --- |
-| `claudemd` | 87.4% (566 of 648) | 32.2% (39 of 121) | 31.6% | 4,414 | 706 |
+| `claudemd` | 87.3% (566 of 648) | 32.2% (39 of 121) | 31.6% | 4,414 | 706 |
 | `rules` | 70.9% (460 of 649) | 32.2% (39 of 121) | 27.1% | 3,995 | 709 |
 | `skills` | 0% (0 of 650) | 0% | no rule text | 0 | 0 |
 

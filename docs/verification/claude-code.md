@@ -1,6 +1,7 @@
 # Claude Code facts noonsight relies on
 
 Each fact below names the Claude Code version and the date it was last checked, and how to check it again.
+These are checks of how Claude Code behaves, not measurements of noonsight: the versions of the measurements are in [docs/evidence.md](../evidence.md#runs-and-versions), and none of them ran on 2.1.325, the version CI pins for its live checks and the one many facts below were checked on.
 Recheck them all when raising the Claude Code version that CI pins (`.github/workflows/ci.yml`).
 
 `npm run test:live` drives real interactive sessions through a terminal and sends no prompt and no request to Anthropic: a placeholder token gets Claude Code past sign-in, and `ANTHROPIC_BASE_URL` points at a closed local port.

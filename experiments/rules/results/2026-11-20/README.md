@@ -110,7 +110,7 @@ The other 26 still cost $0.0485 per run on average, with 9.1 turns, against $0.0
 The `rules` arm differs from `verify` there by `carry-through`, which alone changed nothing on that task, and by `sonnet-5-5/stay-in-scope`, which asks for a report and a stop once the work is done and checked, and for no unrequested tests.
 That points at `stay-in-scope` keeping the verify rule's runs short, but the design has no arm that delivers it alone, so this is a direction to test, not a result.
 
-The `rules` and `none` arms repeat 2026-11-19 and agree with it: tests after the last edit 30 of 30 against 0 of 30 on Sonnet's fix (the same), 30 of 30 against 11 of 30 on its bug (15 of 30 then), and 27 of 30 against 0 of 30 on Haiku's fix (the same); Sonnet's fix cost $0.0378 per run with the rules, against $0.0377 then.
+The `rules` and `none` arms repeat 2026-11-19 and agree with it: tests after the last edit 30 of 30 against 0 of 30 on Sonnet's fix (the same), 30 of 30 against 11 of 30 on its bug (15 of 30 then, superseded), and 27 of 30 against 0 of 30 on Haiku's fix (the same); Sonnet's fix cost $0.0378 per run with the rules, against $0.0377 then.
 
 ## Cost against the projection
 

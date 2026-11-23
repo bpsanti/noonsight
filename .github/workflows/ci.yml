@@ -27,7 +27,7 @@ jobs:
 
   # Real interactive Claude Code sessions that send no prompt and no request to Anthropic
   # (test/live/live.test.ts). The version is the one docs/verification/claude-code.md records;
-  # raise both together.
+  # raise both together. It is a pin for these checks only: no result of docs/evidence.md ran on it.
   live:
     name: live, no tokens (Claude Code 2.1.325)
     runs-on: ubuntu-latest
