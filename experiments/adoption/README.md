@@ -312,6 +312,56 @@ v7 stops and reports if the measured costs project past the cap.
 
 v7's results are in `results/2026-11-23-v7/`.
 
+## v8: one current value per fact
+
+This section was written before any v8 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `e8a3c60`, the head of `main`.
+Since v7 (`bf929c2`) each measured fact has one current value with its Claude Code version, superseded entries are marked as history, the evidence map lists every run and its version, and D25 to D34, R14 and R15 are added.
+`before` is unchanged, `f061f03`.
+
+**Sessions.**
+Ten new `after` sessions for each of the four models, forty in all, under the same settings as v7, in rounds of one per model in the order Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, under `caffeinate` and at most two at once; no earlier `after` answer counts.
+No `before` session runs: the twelve `before` answers of v3 to v7 are reused as they are.
+A session that ends with no answer is run again only if the spending projection, with its estimated cost, stays within the cap.
+
+**The reference.**
+[rubric.md](rubric.md) is changed in the two statements that v5 to v7 declared stale, so that it agrees with the evidence map of `e8a3c60`, and in nothing else:
+
+- The delivery claim's measurement was 99.5% (3,199 of 3,216) and 3 of 300 sessions, on Claude Code 2.1.328; it is now D19, 100% (3,090 of 3,090), and D18, 0 of 299 sessions that ran to the end of 300 generated, on 2.1.330.
+- L5 no longer says that forks, plan mode, `/resume` inside a session, the launcher and project configurations are not measured, or that the fixed build was not rerun; it now names agent teams, routing and the classifier as not measured, the known limits for subagents, and the nine failures fixed before the current run.
+
+The rule for numbers is unchanged: a number is false when the map gives another value for the same measure, run and arm, so a superseded value cited with its own run is true, and how the judge reads one cited as current is reported, not fixed in advance.
+The list of hooks and places in the reference is left as it was, though the code now also has a `PermissionRequest` hook and calls the watched place `attended`; a failure that rests only on those is reported as the reference's error.
+[judge.md](judge.md) is unchanged.
+Two calibration answers, `grounded-conditions` and `rounding`, quoted superseded values (99.9%, 87.4% and 70.6%); they now quote the current ones (100%, 88.3% as the rounding case of D25's 88.2%, and D26's 76.3%), and their cases and expected judgments are unchanged.
+Before any answer is judged, the judge scores the nine calibration answers against the v8 evidence map and must reach the expected `grounded` on all nine; if it does not, v8 stops and reports, with no revision.
+
+**What the copy was checked for, before the run.**
+The archive of `e8a3c60`, without this folder, was searched for the word "adoption" in every file, and for this evaluation's commits, counts and vocabulary.
+No Markdown file contains the word.
+`package.json`, `.gitignore` and `test/adoption.test.ts` name the evaluation, `test/evidence.test.ts` excludes its folder from a check, and `src/config/preset-changes.ts` and `src/config/load.ts` match only through `LoadOptions`.
+The one Markdown hit on the evaluation's commits is `f061f03` in a delivery results README, which names it as a commit of `main`; the counts and vocabulary that match belong to other experiments.
+
+**Files read.**
+As in v7: the results list the files each session read, and if a session reads `test/adoption.test.ts` or any text that describes this evaluation, the pass bar is still read on all the answers and the counts are also given without those sessions.
+
+**Money.**
+v8 has a cap of $40 of its own, for its calibration, sessions and judgments, on the account of the earlier runs from v4 to v6.
+The evidence map is about 13 KB longer than in v7, so each session and judgment costs more and the cap may not hold all of v7's plan.
+The runner is given what remains of $40 after the calibration and the judgments of the `after` answers still owed, at the highest judgment cost measured in the calibration, plus 10%.
+The sessions left after that run one at a time, each only if the measured spending, its whole budget and the `after` judgments still owed stay within $40.
+The `before` answers are judged again with the v8 reference last, and only if their twelve judgments, at that same reserve, also stay within $40; if they do not, v7's judgments of the same answers stand in for them, and the results say that the `before` side was judged with v7's reference.
+If a round does not fit whole, it is dropped for scoring, so that every model keeps the same number of answers, and the percentages are read on the answers scored.
+v8 stops and reports if the measured costs project past the cap.
+
+**Unchanged.**
+The prompt, the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The results also compare v8's `after` with v5's to v7's, read as a direction, since the judge's reference and evidence map differ.
+
+v8's results are in `results/2026-11-23-v8/`.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.
