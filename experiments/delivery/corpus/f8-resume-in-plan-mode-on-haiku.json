@@ -1,0 +1,33 @@
+{
+  "name": "f8-resume-in-plan-mode-on-haiku",
+  "about": "/resume typed in the session while plan mode runs Sonnet for a session whose chosen model is Haiku: the start reports Haiku, the process goes on running Sonnet, and Haiku's rules went to Sonnet's requests (F8, fixed).",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "back"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

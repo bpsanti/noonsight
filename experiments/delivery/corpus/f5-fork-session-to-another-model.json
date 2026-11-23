@@ -1,0 +1,21 @@
+{
+  "name": "f5-fork-session-to-another-model",
+  "about": "A conversation forked with --fork-session onto another model. The fork's new session id has no record, so its rules came without a note retiring the original model's, which the copied conversation holds (F5, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "opus",
+      "fork": true
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

@@ -1,0 +1,26 @@
+{
+  "name": "branch",
+  "about": "/branch goes on in a copy of the conversation, on the same model, then switches model there.",
+  "model": "fable",
+  "scope": "build",
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "branch"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "sonnet"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

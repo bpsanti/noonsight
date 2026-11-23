@@ -1,0 +1,25 @@
+{
+  "name": "f6-fork-session-after-switch",
+  "about": "A /model switch, then the session ends and is forked with --continue --fork-session and no --model: Claude Code runs the fork on the model of the conversation's last response, which the hook could not read, since the fork's transcript is not written yet (F6, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "fork": true
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

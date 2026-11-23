@@ -1,0 +1,30 @@
+{
+ "session": "plant-compact-as-resume-g2-s1-0000",
+ "target": {
+  "class": "missing-own",
+  "kind": "main"
+ },
+ "originalSteps": 4,
+ "minimalSteps": 3,
+ "runs": 11,
+ "seconds": 86,
+ "original": "start(opus, scope=build, unattended) > spawn(general-purpose edits + general-purpose:fable) > spawn(Explore:sonnet) > /compact > turn",
+ "minimal": "start(opus, scope=none, unattended) > turn > /compact > turn",
+ "spec": {
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ },
+ "minimalOnReal": "passes"
+}

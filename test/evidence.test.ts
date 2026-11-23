@@ -17,6 +17,8 @@ export const CITING_PAGES = ['README.md', 'docs/usage.md', 'docs/sources.md'];
 const DELIVERY = 'experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f';
 /** The run before it, whose comparisons hold the build before the fixes of F1 and F2 and the native alternatives against `on`. */
 const DELIVERY_BEFORE = 'experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43';
+/** The run with generator 2 (experiments/delivery/generate.ts), on Claude Code 2.1.330. */
+const DELIVERY_G2 = 'experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130';
 const RULES = 'experiments/rules/results';
 
 const json = (rel: string): any => JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, rel), 'utf8'));
@@ -37,6 +39,19 @@ const mean = (xs: readonly number[]): number => xs.reduce((s, x) => s + x, 0) / 
 const and = (xs: readonly string[]): string => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 
 const summary = (key: string): any => json(`${DELIVERY}/summary.json`)[key];
+const g2 = (): any => json(`${DELIVERY_G2}/summary.json`)['on-g2-s1-n300'];
+/** The paths only generator 2 draws, as measure.ts names them. */
+const G2_PATHS = [
+  'a /fork session',
+  'after /fork',
+  'after /branch',
+  'after a forking resume',
+  'after a forking resume with --model',
+  'after /resume in the session',
+  'in plan mode',
+  'after leaving plan mode',
+  'after starting subagents that edit',
+];
 const comparison = (id: string): any => (json(`${DELIVERY_BEFORE}/comparison.json`).comparisons as any[]).find((c) => c.id === id);
 
 /** The runs of one cell of a rule effect result. */
@@ -82,6 +97,26 @@ const COMPUTE: Record<string, () => string> = {
   D17: () => {
     const c = summary('claudemd-s1-n60').coverage;
     return pctOf(c.covered - c.subagents.covered, c.due - c.subagents.due);
+  },
+  D18: () => of(g2().robustness.sessionsFailed, g2().sessions),
+  D19: () => pctOf(g2().coverage.covered, g2().coverage.due),
+  D20: () => pctOf(g2().coverage.subagents.covered, g2().coverage.subagents.due),
+  D21: () => {
+    const paths = G2_PATHS.map((p) => g2().byPath[p]);
+    assert.ok(paths.every((p) => p !== undefined), 'D21: a path generator 2 added has no requests');
+    return pctOf(paths.reduce((n, p) => n + Math.round(p.coverage * p.due), 0), paths.reduce((n, p) => n + p.due, 0));
+  },
+  D22: () => {
+    const starts = Object.entries(g2().robustness.byStart as Record<string, any>).filter(([k]) => k !== 'claude').map(([, v]) => v);
+    return pctOf(starts.reduce((n, x) => n + x.covered, 0), starts.reduce((n, x) => n + x.due, 0));
+  },
+  D23: () => {
+    const corpus = json(`${DELIVERY_G2}/corpus.json`) as any[];
+    return of(corpus.filter((e) => e.outcome === 'as-expected').length, corpus.length);
+  },
+  D24: () => {
+    const corpus = json(`${DELIVERY_G2}/before-fix/corpus.json`) as any[];
+    return of(corpus.filter((e) => e.outcome === 'regressed').length, corpus.length);
   },
   R1: () => {
     const t = (model: string, arm: string): string => tested(cell('2026-11-19', { task: 'fix', model, arm }));

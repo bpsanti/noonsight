@@ -1,0 +1,1 @@
+The session that started you in this repository reads your report and nothing else of your work. End with the files you read or changed, each with one line on what you found or did there, and say plainly what you did not get to.

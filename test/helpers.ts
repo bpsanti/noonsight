@@ -83,6 +83,9 @@ const INPUT_VERSIONS: Readonly<Record<string, string>> = {
   'subagent-start-teammate': '2.1.330',
   'post-tool-use-agent-teammate': '2.1.330',
   'subagent-start-workflow': '2.1.330',
+  'session-start-fork-session': '2.1.330',
+  'session-start-fork-branch': '2.1.330',
+  'session-start-fork-background': '2.1.330',
 };
 
 /** A recorded or documented Claude Code hook input, with fields replaced as given. */

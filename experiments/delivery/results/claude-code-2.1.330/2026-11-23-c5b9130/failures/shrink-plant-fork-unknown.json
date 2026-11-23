@@ -1,0 +1,32 @@
+{
+ "session": "plant-fork-unknown-g2-s1-0027",
+ "target": {
+  "class": "foreign-unretired",
+  "kind": "main"
+ },
+ "originalSteps": 6,
+ "minimalSteps": 3,
+ "runs": 19,
+ "seconds": 180,
+ "original": "start(haiku, scope=routine, unattended) > spawn(Explore + Plan:fable) > turn > spawn(Plan + Explore + Explore) > resume --model sonnet > resume --fork-session --model opus > turn",
+ "minimal": "start(haiku, scope=none, unattended) > turn > resume --fork-session --model opus > turn",
+ "spec": {
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "resume",
+    "model": "opus",
+    "fork": true
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ },
+ "minimalOnReal": "passes"
+}

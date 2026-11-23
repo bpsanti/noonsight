@@ -1,0 +1,1 @@
+In this repository a change of behavior lands in steps a reviewer can follow one at a time: first the test that shows what is missing, then the smallest change that makes it pass, then any cleanup, each step leaving the build green.

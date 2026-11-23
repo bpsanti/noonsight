@@ -1,0 +1,14 @@
+{
+  "session_id": "8051e2a5-c454-48b2-a6d3-12f5a4b439b3",
+  "transcript_path": "/Users/user/.claude/projects/-Users-user-project/8051e2a5-c454-48b2-a6d3-12f5a4b439b3.jsonl",
+  "cwd": "/Users/user/project",
+  "prompt_id": "99cd206a-a188-4bbe-979e-a9bdb7afbb6d",
+  "hook_event_name": "SessionStart",
+  "source": "fork",
+  "model": "claude-opus-5-5",
+  "session_title": "DB 0 turn (Branch)",
+  "seconds_since_last_response": 5,
+  "context_tokens": 15,
+  "prompt_cache_likely_expired": false,
+  "estimated_cache_write_usd": 0.0001
+}

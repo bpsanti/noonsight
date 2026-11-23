@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "all_models": {
+    "add": [
+      { "id": "project/record-decisions", "file": "rules/record-decisions.md" },
+      { "id": "project/subagent-report", "file": "rules/subagent-report.md", "where": ["subagent"] }
+    ]
+  },
+  "models": {
+    "claude-sonnet-5-5": { "add": [{ "id": "project/sonnet-small-steps", "file": "rules/sonnet-small-steps.md", "scopes": ["build"] }] },
+    "claude-fable-5-2": { "add": [{ "id": "project/fable-name-the-tests", "file": "rules/fable-name-the-tests.md", "scopes": ["build", "routine"], "where": ["attended", "unattended"] }] }
+  }
+}

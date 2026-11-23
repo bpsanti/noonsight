@@ -3,7 +3,8 @@
 //
 //   npm run delivery -- corpus     [--only <name,...>] [--concurrency 4]
 //   npm run delivery -- fuzz       [--arm on|claudemd|rules|skills|off] [--n 300] [--seed 1] [--from 0] [--concurrency 6] [--fresh]
-//   npm run delivery -- selfcheck  [--plant <name>|all] [--n 60] [--seed 1] [--concurrency 6]
+//                                  [--generator 2]
+//   npm run delivery -- selfcheck  [--plant <name>|all] [--n 60] [--seed 1] [--concurrency 6] [--generator 2]
 //   npm run delivery -- shrink     --sessions <file> --id <session> [--class <class> --kind main|subagent] [--plant <name>]
 //   npm run delivery -- measure    the four measures of every sessions/*.jsonl in the results folder
 //   npm run delivery -- agree      the decision log against the stub, on the `on` sessions of the results folder
@@ -15,8 +16,12 @@
 //
 // Common options: --claude <binary> (default `claude`), --results <dir> (default
 // results/claude-code-<version>/<date>-<commit>/), --work <dir> (default a new folder in the system's
-// temporary directory, which must not be inside a Claude Code scratchpad folder). A fuzz run continues the
-// sessions file an interrupted run of the same arm, seed and size left, unless --fresh.
+// temporary directory, which must not be inside a Claude Code scratchpad folder), --noonsight <dir> (the
+// built noonsight package the sessions install, default this checkout; the harness and the reference
+// stay this checkout's, so a build from before a fix runs the corpus that reproduces its failure). A fuzz run continues the
+// sessions file an interrupted run of the same arm, seed and size left, unless --fresh. --generator 1
+// draws the sequences of the runs up to 2026-11-21 (generate.ts); its sessions files keep the names they
+// had, and a later generator's carry `g<version>-` before the seed.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -29,8 +34,8 @@ import { PACKAGE_ROOT, stateDir } from '../../src/config/paths.js';
 import { placeName } from '../../src/core/types.js';
 import { evaluate, folderAt, readDesign, renderComparison } from './compare.js';
 import { check, readCorpus, type Checked } from './corpus.js';
-import { failed, fuzzRuns, readLines, runMany, sessionKey, signature, violationsOf, type Line } from './fuzz.js';
-import { hasQuietPair, type Sequence } from './generate.js';
+import { failed, fuzzRuns, generatorTag, readLines, runMany, sessionIndex, sessionKey, signature, violationsOf, type Line } from './fuzz.js';
+import { GENERATOR, GENERATORS, hasQuietPair, sequenceOf, type Generator, type Sequence } from './generate.js';
 import { hookTime } from './hooktime.js';
 import { agree, aggregate, readLog, replay, ruleLibrary } from './log-measure.js';
 import { measure, renderMarkdown, type Measures } from './measure.js';
@@ -105,6 +110,7 @@ function context(args: Args): Context {
   fs.mkdirSync(path.join(results, 'sessions'), { recursive: true });
   fs.mkdirSync(work, { recursive: true });
   const ref = loadReference(work);
+  const projectRef = loadReference(path.join(work, 'project-reference'), true);
   const meta = path.join(results, 'run.json');
   // The folder's commit is the first command's; each command records its own, as it was when the command started.
   const head = commit();
@@ -114,7 +120,9 @@ function context(args: Args): Context {
     `${JSON.stringify({ claudeCode: version, commit: prior.commit ?? head, preset: ref.presetVersion, node: process.version, platform: `${process.platform}-${process.arch}`, commands: prior.commands ?? [] }, null, 1)}\n`,
   );
   process.stderr.write(`Claude Code ${version}; results in ${results}; sessions in ${work}\n`);
-  return { args, results, work, commit: head, opts: { ref, workRoot: work, claude, claudeCode: version, noonsightRoot: PACKAGE_ROOT } };
+  const noonsightRoot = path.resolve(str(args, 'noonsight', PACKAGE_ROOT));
+  if (!fs.existsSync(path.join(noonsightRoot, 'dist', 'src', 'cli.js'))) throw new Error(`--noonsight: no built noonsight in ${noonsightRoot}`);
+  return { args, results, work, commit: head, opts: { ref, projectRef, workRoot: work, claude, claudeCode: version, noonsightRoot } };
 }
 
 /** Record a command in run.json, with how long it took. */
@@ -122,7 +130,9 @@ function logCommand(ctx: Context, command: string, started: number): void {
   const meta = path.join(ctx.results, 'run.json');
   const m = JSON.parse(fs.readFileSync(meta, 'utf8')) as { commands: unknown[] };
   // The options that name a path of this machine are left out.
-  const args = Object.fromEntries(Object.entries(ctx.args).filter(([k]) => !['results', 'work', 'claude', 'sessions'].includes(k)));
+  const args: Args = Object.fromEntries(Object.entries(ctx.args).filter(([k]) => !['results', 'work', 'claude', 'sessions', 'noonsight'].includes(k)));
+  // Another build is named without its path; the results' README says which one it was.
+  if (ctx.args.noonsight) args.noonsight = 'another build';
   m.commands.push({ command, args, commit: ctx.commit, at: new Date(started).toISOString(), seconds: Math.round((Date.now() - started) / 1000) });
   fs.writeFileSync(meta, `${JSON.stringify(m, null, 1)}\n`);
 }
@@ -139,7 +149,7 @@ function sessionsFile(ctx: Context, name: string): string {
 async function corpus(ctx: Context): Promise<Checked[]> {
   const only = typeof ctx.args.only === 'string' ? new Set(ctx.args.only.split(',')) : null;
   const entries = readCorpus().filter((e) => !only || only.has(e.name));
-  const runs: Run[] = entries.map((e) => ({ id: `corpus-${e.name}`, arm: 'on', plant: null, model: e.model, scope: e.scope, unattended: e.unattended, steps: e.steps }));
+  const runs: Run[] = entries.map((e) => ({ id: `corpus-${e.name}`, arm: 'on', plant: null, ...sequenceOf(e) }));
   const lines = await runMany(runs, ctx.opts, num(ctx.args, 'concurrency', 4), null);
   const checked = entries.map((e) => check(e, lines.find((l) => l.id === `corpus-${e.name}`) as Line));
   writeJson(path.join(ctx.results, 'corpus.json'), checked);
@@ -147,17 +157,25 @@ async function corpus(ctx: Context): Promise<Checked[]> {
   return checked;
 }
 
+/** The generator version a command runs, `--generator`, else the current one. */
+function generatorOf(args: Args): Generator {
+  const v = num(args, 'generator', GENERATOR);
+  if (!(GENERATORS as readonly number[]).includes(v)) throw new Error(`--generator is one of ${GENERATORS.join(', ')}`);
+  return v as Generator;
+}
+
 async function fuzz(ctx: Context, arm: Arm, n: number, plant: string | null = null): Promise<{ file: string; lines: Line[] }> {
   const seed = num(ctx.args, 'seed', 1);
   const from = num(ctx.args, 'from', 0);
-  const name = `${plant ? `plant-${plant}` : arm}-s${seed}-${from ? `${from}-` : ''}n${n}`;
+  const version = generatorOf(ctx.args);
+  const name = `${plant ? `plant-${plant}` : arm}-${generatorTag(version)}s${seed}-${from ? `${from}-` : ''}n${n}`;
   const file = sessionsFile(ctx, name);
   // A sessions file left by an interrupted run is continued: the sessions it holds are not run again.
   const done = fs.existsSync(file) && !ctx.args.fresh ? readLines(file) : [];
   if (!done.length) fs.writeFileSync(file, '');
   const have = new Set(done.map((l) => l.id));
   const opts = plant ? { ...ctx.opts, noonsightRoot: buildPlant(plantNamed(plant), path.join(ctx.work, `plant-${plant}-build`)) } : ctx.opts;
-  const runs = fuzzRuns(seed, n, arm, plant, from);
+  const runs = fuzzRuns(seed, n, arm, plant, from, version);
   const lines = [...done, ...(await runMany(runs.filter((r) => !have.has(r.id)), opts, num(ctx.args, 'concurrency', 6), file))].sort((a, b) => a.id.localeCompare(b.id));
   const ok = lines.filter((l) => l.harness === 'ok');
   process.stdout.write(`${name}: ${ok.length} of ${lines.length} sessions ran; ${ok.filter(failed).length} with an unexplained violation\n`);
@@ -176,7 +194,7 @@ function checker(opts: RunOptions, label: string, target: Target, plant: string 
   let n = 0;
   return async (spec: Sequence): Promise<boolean> => {
     const id = `shrink-${label}-${n++}`;
-    const r = await runSession({ model: spec.model, scope: spec.scope, unattended: spec.unattended, steps: spec.steps, id, arm: 'on', plant }, opts);
+    const r = await runSession({ ...sequenceOf(spec), id, arm: 'on', plant }, opts);
     const hit = r.harness === 'ok' && violationsOf(r).some((v) => !v.known && v.class === target.class && v.kind === target.kind);
     process.stderr.write(`  ${id}: ${spec.steps.length} steps, ${r.harness}, ${hit ? 'still fails' : 'passes'}\n`);
     return hit;
@@ -200,9 +218,9 @@ async function shrinkCommand(ctx: Context): Promise<void> {
 /** The `on` sessions of a seed already in the results folder, at least `n` of them, or null. */
 function existingOn(ctx: Context, seed: number, n: number): Line[] | null {
   const dir = path.join(ctx.results, 'sessions');
-  for (const f of fs.readdirSync(dir).filter((x) => x.startsWith(`on-s${seed}-n`))) {
+  for (const f of fs.readdirSync(dir).filter((x) => x.startsWith(`on-${generatorTag(generatorOf(ctx.args))}s${seed}-n`))) {
     const lines = readLines(path.join(dir, f));
-    if (lines.length >= n) return lines.filter((l) => Number(sessionKey(l.id).split('-')[1]) < n);
+    if (lines.length >= n) return lines.filter((l) => sessionIndex(l.id) < n);
   }
   return null;
 }

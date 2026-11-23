@@ -1,0 +1,38 @@
+{
+  "name": "plan-mode",
+  "about": "Plan mode on, a turn and a /model switch in it, then off, then an edit of tracked code: plan mode changes nothing noonsight delivers.",
+  "model": "fable",
+  "scope": "routine",
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "sonnet"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "edit",
+      "target": "code"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

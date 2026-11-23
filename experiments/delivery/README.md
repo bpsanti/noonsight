@@ -10,18 +10,36 @@ The stub answers every request from the request alone and hands each one to the 
 
 ## What a session is
 
-A session starts on one of the four models (`--model`), with or without a task scope (`NOONSIGHT_SCOPE`), attended or unattended, and then runs a sequence of steps ([generate.ts](generate.ts)):
+A session starts on one of the four models (`--model`), with or without a task scope (`NOONSIGHT_SCOPE`), attended or unattended, through `claude` or `noonsight run`, in a project with or without a noonsight configuration of its own, and then runs a sequence of steps ([generate.ts](generate.ts)):
 
 | Step | What the driver does |
 | --- | --- |
 | `turn` | A prompt the stub answers with a short text |
-| `spawn` | A prompt the stub answers with one to three agent calls in the same response (`general-purpose`, `Explore` or `Plan`, with or without the `model` parameter) |
+| `spawn` | A prompt the stub answers with one to three agent calls in the same response (`general-purpose`, `Explore` or `Plan`, with or without the `model` parameter); a `general-purpose` subagent may be told to edit, and then reads and edits the tracked code file before it answers |
 | `edit` | A prompt the stub answers with a Read and an Edit of a tracked code file or a tracked document, or a Write of a new file |
 | `/model` | Switches to another model |
 | `/compact`, `/clear` | The commands |
-| `resume` | Leaves the session and comes back with `claude --continue`, with or without `--model` |
+| `resume` | Leaves the session and comes back with `claude --continue`, with or without `--model`, and with or without `--fork-session`, which goes on in a copy of the conversation under a new session id |
+| `/branch` | Goes on in a copy of the conversation under a new session id, in the same process |
+| `/fork` | Runs a copy of the conversation as a background session, with a prompt it answers; the session goes on as it was |
+| `/resume` in the session | `/resume <id>`, back to the conversation the session was in before the current one, the one `/clear`, `/branch` or a forking resume left |
+| `/plan`, plan off | Turns plan mode on with `/plan`, and off with shift+tab; in plan mode only turns, `/model` and `/compact` are drawn: an agent call or an edit waits for approval there, and a conversation left in plan mode comes back in plan mode when another process resumes it |
+
+A session that starts through `noonsight run` goes through it at every launch, resumes included.
+A session in a project has the configuration in [project/](project) as its `.noonsight/noonsight.json`, which the session's account trusts (`noonsight trust`): a rule for every model, one for subagents only, and one each for Sonnet 5.5 and Fable 5.2 in some scopes.
 
 The driver ([session.ts](session.ts), [pty-bridge.py](pty-bridge.py)) types into a pseudo-terminal and waits for a signal, not for a fixed time: the file a `Stop` hook writes, the decision log line the step causes, or a quiet spell with no request.
+A plan step waits for the footer to name the mode: "plan mode on" after `/plan`, and "manual mode on" after shift+tab, which it presses again while the footer names another mode, since after plan mode the cycle goes to auto mode on some models.
+A turn's `Stop` hook names the permission mode too, so a session that is not in plan mode when its sequence says it is, or not in the default mode otherwise, is recorded as one the driver could not run (`wrong-mode`).
+A `/fork` session runs in a daemon Claude Code starts for the configuration directory, which outlives the session; the driver stops it when the session ends.
+Claude Code refuses `/fork` in a session started with a system prompt of its own, as `noonsight run` starts one with rules; the step is then recorded as `fork-refused` and the session goes on, and a `/fork` that neither answers nor is refused within two minutes ends the session as not driven.
+
+### Two generators
+
+The fuzz level draws sequences with a generator version, and the same version, seed and index always give the same sequence.
+Version 1 draws the steps and starts of the runs up to 2026-11-21: no `noonsight run`, no project configuration, no fork, no `/resume` in the session, no plan mode and no subagent that edits.
+Version 2, the default, draws all of them, from the same seed: a session starts through `noonsight run` one time in five and in the project one time in four, and the steps version 1 does not have come with lower weights than the others.
+`--generator 1` draws version 1's sequences again, so a design of [plan.json](plan.json) written for those runs compares like with like; its sessions files keep the names they had (`on-s1-n300`), while version 2's carry `g2-` before the seed (`on-g2-s1-n300`), and sequences of two versions never pair.
 
 ## The invariant
 
@@ -33,7 +51,9 @@ On every request of the session's own conversation and of each subagent ([oracle
 | `own-retired` | No model-change note that retires the request's model comes after the last copy of one of its right rules. |
 | `foreign-unretired` | A rule written only for other models is in the request only when a model-change note naming one of its owners comes after its last copy. |
 
-The right rules of a request are what noonsight's own resolver gives for the request's model, the session's scope and place, and the triggers the session has revealed, on a reference configuration where every model uses the preset; a subagent is resolved for the place `subagent`, with no scope and no trigger.
+The right rules of a request are what noonsight's own resolver gives for the request's model, the session's scope and place, and the triggers the session has revealed, on a reference configuration where every model uses the preset, with the project's configuration laid over it for a session in the project; a subagent is resolved for the place `subagent`, with no scope and no trigger.
+A session reveals `code-edit` from the request that carries the result of its own successful edit of the tracked code file, and so does every copy of its conversation a fork makes; a subagent's edit reveals nothing for the session.
+A `/fork` session runs headless, so its requests are resolved for the place `unattended`, with the session's scope.
 Every arm is measured against that same reference.
 A rule is in a request when the first 160 characters of its text are in the request's text, read in the order the model reads it; a text two models share belongs to both.
 
@@ -59,6 +79,7 @@ From the cheapest to the most expensive:
 1. **Corpus.**
    The hand-kept sequences in [corpus/](corpus), one per file, each with the outcome it must have under `on`: the delivery probe's session, one sequence per lifecycle path, the shortest reproductions of the failures the fuzzer found, which must pass since their fix, and the documented limits.
    An entry that reproduces an open failure or a limit names the violations it must show, so the corpus stays green while it holds and goes red when it changes; the entry's `expect` then becomes `"pass"`.
+   An entry marked `exact` also fails on a request that holds a rule of its model that is not due there, which the invariant leaves to the precision measure; `subagent-edits` uses it, since a trigger revealed by a subagent's edit would show only that way.
    Run it before each release and on each new Claude Code version.
 2. **Fuzz.**
    Random sequences from a seed ([fuzz.ts](fuzz.ts)): 300 sessions under `on`, and the first 60 of the same seed under each native arm.
@@ -66,6 +87,7 @@ From the cheapest to the most expensive:
    A failing session is reduced by [shrink.ts](shrink.ts) to a shortest sequence that still shows the same class of violation, running every candidate as a real session; it keeps the class, not the cause, so after a fix run the fuzz level again, not only the corpus.
 3. **Self-check.**
    The fuzzer must catch failures planted in a copy of the built hook ([plants.ts](plants.ts)), and the shrinker must reduce one to a short sequence that passes on the real build.
+   The plants: a `/model` switch with no note (`no-switch-note`), a compaction treated as a resume (`compact-as-resume`), and a fork's start that knows nothing of the conversation it copied (`fork-unknown`), which brings F5 and F6 back.
    A plant whose line is no longer in the build refuses to apply, and `npm test` checks every plant's line is there.
    Run it when the generator, the stub, the driver or the oracle change.
 
@@ -80,6 +102,7 @@ From the cheapest to the most expensive:
 | `off` | noonsight not installed | Nothing |
 
 [arms.ts](arms.ts) writes them.
+`noonsight run` and the project's configuration are noonsight's own, and the native arms have no counterpart of either, so under them a session drawn to start that way starts through `claude`, in a project without noonsight's configuration, and is measured against the reference without the project.
 A native arm whose text never reaches the session's first request is recorded as `arm-not-loaded`, a harness failure: Claude Code does not load a user `CLAUDE.md` or `.claude/rules` for a project inside one of its own scratchpad folders, so the sessions must run elsewhere (the default is the system's temporary directory).
 The stub never decides to open a skill, so `skills` measures what that arm guarantees, which is only the skill's description.
 
@@ -98,9 +121,10 @@ npm run delivery -- agree                       # the decision log against the s
 npm run delivery -- hooktime                    # the time of each hook
 npm run delivery -- compare --design after-f1-f2 --results <results>  # a design's comparisons against an earlier run
 npm run delivery -- all                         # all of the above but shrink, for one Claude Code version
+npm run delivery -- fuzz --generator 1 --n 300  # the sequences of the runs up to 2026-11-21
 ```
 
-`--claude <binary>` runs another Claude Code version; `--concurrency` sets how many sessions run at once.
+`--claude <binary>` runs another Claude Code version; `--noonsight <dir>` installs another build of noonsight in the sessions, such as one from before a fix, while the harness and the reference stay this checkout's; `--concurrency` sets how many sessions run at once.
 An interrupted fuzz run continues where it stopped when run again with the same arm, seed and size; `--fresh` starts it over.
 `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` runs the corpus as a test (`test/live/delivery-corpus.test.ts`), next to the delivery probe of the benchmark pilot.
 Nothing in this folder installs anything machine-wide, and it refuses to run where noonsight is installed machine-wide, since those hooks would run in its sessions too.
@@ -186,8 +210,8 @@ The folder for one version holds what was measured on that version; comparing tw
 
 ## Failures found, and a limit
 
-The corpus entries that start with `f1-` to `f4-` are the shortest reproductions of four failures of noonsight the fuzzer found.
-All four are fixed, and their entries must pass.
+The corpus entries that start with `f1-` to `f9-` are the shortest reproductions of nine failures of noonsight: F1 to F4 the fuzzer found, F5 to F9 the paths generator 2 added.
+All nine are fixed, and their entries must pass.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
@@ -208,11 +232,38 @@ All four are fixed, and their entries must pass.
 F3 and F4 were found by the run [after the fixes of F1 and F2](results/claude-code-2.1.328/2026-11-20-4e18c43/README.md).
 The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md) measured the fuzz level again: one session of 300 under `on` breaks the invariant, and it is the documented limit below.
 
+- **F5, a fork with no record.**
+  A fork goes on in a copy of a conversation under a new session id, and noonsight's record was by session id, so a fork's start found none: it delivered its model's rules with no note, while the copy held the original model's rules, and a switch's delivery that had not arrived yet (`f5-fork-session-to-another-model`, `f5-branch-after-switch`, `f5-fork-after-switch`).
+  It holds for the three ways Claude Code forks: `--fork-session`, `/branch` and `/fork`.
+  noonsight now finds the conversation the fork copied and takes its record, last response and triggers; with none found, its note retires the rules of every model but the fork's own (`docs/hooks.md`, "Forks").
+- **F6, the wrong model on a fork in a new process.**
+  `claude --continue --fork-session` without `--model` runs on the model of the conversation's last response, as a resume does, but the fork's transcript is not written when its hook runs, so the hook took the `model` setting, which a `/model` since had changed (`f6-fork-session-after-switch`).
+  It is F2 for a fork; noonsight now reads the last response from the original's transcript.
+
+- **F7, the chosen model reported in plan mode.**
+  In plan mode, Claude Code runs Sonnet for a session whose chosen model is Haiku, and says so with a model switch, but a compaction's start in plan mode reports Haiku, and `/clear` then took Haiku from the process's record: Haiku's rules went to Sonnet's requests (`f7-compact-in-plan-mode-on-haiku`, `f7-model-haiku-in-plan-mode`).
+  noonsight now records the chosen model while Claude Code runs another in its place, and a compaction or `/clear` that reports the chosen model keeps the one that runs (`docs/hooks.md`, "SessionStart").
+- **F8, the chosen model reported by `/resume` in plan mode.**
+  The same as F7 for `/resume` typed in the session, whose start reports the model of the process, but in plan mode on Haiku the chosen one (`f8-resume-in-plan-mode-on-haiku`).
+  noonsight now takes the process's record for every start in the same process that reports the chosen model.
+- **F9, a resume's delivery dropped as a repeat.**
+  Claude Code leaves out a `SessionStart` context identical to one an earlier start added to the same conversation.
+  After a `/model` switch to a model with no rules there, whose note alone retired the starting model's rules, a resume or a fork back to the starting model delivered its rules again, the startup's very text, and no request held them (`f9-resume-repeats-startup-delivery`; in the fuzz run, a forking resume, `s1-0182`).
+  It holds for any resume, not only the paths generator 2 added, which drew it first.
+  A resume's or a fork's delivery now carries the time it was made in its opening tags (`docs/hooks.md`, "SessionStart").
+
+F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 to F9 in fuzz runs of generator 2 (`s1-0088`, `s1-0138` and `s1-0182` of seed 1) before their fixes: on the build before their fix, every one of these entries breaks the invariant (`foreign-unretired` in the session's own requests, with `missing-own` for F7 and F8, and `own-retired` for F9), and on the fixed build they pass.
+
+The run [with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md) measured the new paths after the fixes of F5 to F9: no session of 300 under `on` breaks the invariant, and every request with rules due held them.
+
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 
 ## Limits
 
-- The stub answers with fixed texts and never decides anything: each subagent makes one request, no subagent edits a file, and no session compacts by itself.
-- The generator has no `/resume` inside a session, fork, plan mode, agent teams, the `noonsight run` launcher, routing, the classifier or a project configuration; the only trigger is `code-edit` and the only rules are the preset's.
+- The stub answers with fixed texts and never decides anything: a subagent makes one request, or three when it edits, a `/fork` session answers its one prompt, and no session compacts by itself.
+- The generator has no agent teams, routing, classifier, or `opusplan` model; the only trigger is `code-edit`, and the only rules are the preset's and the project's.
+  Routing and the classifier are off in the reference configuration, and `opusplan` picks its model by plan mode, which noonsight documents it cannot tell (`docs/hooks.md`, "SessionStart").
+- Plan mode is left with shift+tab, never by approving a plan, since the stub writes no plan; and `/resume` in the session names the conversation, never picks it from the list.
+- A fork from a new process is measured with `--continue`, which finds the original as the most recently written transcript; with another session of the same project writing its transcript at the same moment, noonsight could take that one (`docs/hooks.md`, "Forks").
 - The reference is noonsight's own resolver: a wrong resolution would not show here, only a wrong delivery.
 - Times depend on the machine and on what else runs on it.

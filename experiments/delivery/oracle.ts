@@ -5,7 +5,9 @@
 // rules: for a request of model M in a session of scope S and place P that has revealed the triggers T,
 // the right rules are resolve(config, {model: M, scope: S, place: P, triggers: T}). Every arm is measured
 // against this same reference, so the numbers of noonsight and of the native alternatives compare. A
-// subagent's request is measured for the place `subagent`, with no scope and no trigger.
+// subagent's request is measured for the place `subagent`, with no scope and no trigger. A session in
+// the benchmark's project (project/) is measured against the same configuration with the project's
+// laid over it, as for a project this account trusts.
 //
 // The invariant, checked on every request of a session's own conversation and of each subagent:
 //   missing-own        every right rule of the request's model is in the request;
@@ -23,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfigDetails } from '../../src/config/load.js';
 import { PACKAGE_ROOT } from '../../src/config/paths.js';
+import { PROJECT_FILE } from '../../src/config/project.js';
 import { normalizeModel } from '../../src/core/normalize.js';
 import { resolve } from '../../src/core/resolve.js';
 import type { Config, Place, Trigger } from '../../src/core/types.js';
@@ -69,23 +72,51 @@ interface PresetFile {
   readonly models: Record<string, { rules: { id: string; file: string }[] }>;
 }
 
-/** The reference configuration and the preset's rule texts, from this checkout. `workDir` receives the configuration file. */
-export function loadReference(workDir: string): Reference {
+/** The benchmark's project configuration, which a session with `project` has in `.noonsight/`. */
+export const PROJECT_DIR = path.join(PACKAGE_ROOT, 'experiments', 'delivery', 'project');
+
+/** Put the benchmark's project configuration into a project directory. */
+export function writeProject(project: string): void {
+  const dir = path.dirname(path.join(project, PROJECT_FILE));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.cpSync(PROJECT_DIR, dir, { recursive: true });
+}
+
+/**
+ * The reference configuration and every rule text it can deliver, from this checkout: with `project`,
+ * the benchmark's project configuration laid over it, as for a project this account trusts. `workDir`
+ * receives the configuration file, and the project directory when there is one.
+ */
+export function loadReference(workDir: string, project = false): Reference {
   const file = path.join(workDir, 'reference.noonsight.json');
   fs.mkdirSync(workDir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(configFor('on')));
-  const config = loadConfigDetails(file, {}, { NOONSIGHT_CONFIG: file }).config;
+  let layer = null;
+  if (project) {
+    const dir = path.join(workDir, 'reference-project');
+    writeProject(dir);
+    layer = { dir, file: path.join(dir, PROJECT_FILE), trusted: true };
+  }
+  const details = loadConfigDetails(file, { project: layer }, { NOONSIGHT_CONFIG: file });
+  if (project && details.project?.status !== 'applied') throw new Error(`the benchmark's project configuration is ${details.project?.status}: ${details.project?.problems.join('; ')}`);
+  const config = details.config;
+  const byText = new Map<string, { text: string; sig: string; ids: string[]; owners: Set<string> }>();
+  const add = (model: string, id: string, raw: string): void => {
+    const text = raw.trim();
+    const e = byText.get(text) ?? { text, sig: text.slice(0, SIGNATURE), ids: [], owners: new Set<string>() };
+    if (!e.ids.includes(id)) e.ids.push(id);
+    e.owners.add(model);
+    byText.set(text, e);
+  };
+  // Every rule of the preset, those it turns off included, so that one a native arm writes is known;
+  // then the rules the configuration adds, such as the project's.
   const dir = path.join(PACKAGE_ROOT, 'presets', 'claude');
   const preset = JSON.parse(fs.readFileSync(path.join(dir, 'preset.json'), 'utf8')) as PresetFile;
-  const byText = new Map<string, { text: string; sig: string; ids: string[]; owners: Set<string> }>();
-  for (const model of MODELS)
-    for (const r of preset.models[model]?.rules ?? []) {
-      const text = fs.readFileSync(path.join(dir, r.file), 'utf8').trim();
-      const e = byText.get(text) ?? { text, sig: text.slice(0, SIGNATURE), ids: [], owners: new Set<string>() };
-      e.ids.push(r.id);
-      e.owners.add(model);
-      byText.set(text, e);
-    }
+  for (const model of MODELS) for (const r of preset.models[model]?.rules ?? []) add(model, r.id, fs.readFileSync(path.join(dir, r.file), 'utf8'));
+  for (const model of MODELS) {
+    const entry = config.exact.get(model);
+    for (const r of entry?.use === 'rules' ? entry.rules : []) add(model, r.id, r.text);
+  }
   const lib = [...byText.values()];
   return { config, lib, byId: new Map(lib.flatMap((e) => e.ids.map((id) => [id, e] as const))), presetVersion: preset.version };
 }
@@ -150,7 +181,7 @@ export function retiredBy(from: string, to: string): (model: string) => boolean 
   return (m) => names.has(m);
 }
 
-const NOTE = /<noonsight-rules-change from="([^"]+)" to="([^"]+)">[\s\S]*?<\/noonsight-rules-change>/g;
+const NOTE = /<noonsight-rules-change from="([^"]+)" to="([^"]+)"[^>]*>[\s\S]*?<\/noonsight-rules-change>/g;
 const ENVELOPE_HEAD = /<noonsight-rules model="[^"]*"[^>]*>\n[^\n]*\n/g;
 const ENVELOPE_TAIL = /<\/noonsight-rules>/g;
 

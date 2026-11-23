@@ -15,6 +15,7 @@ A request "has its rules" when it holds every rule noonsight's resolver gives it
 Unless an entry says otherwise, the run is `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/`: Claude Code 2.1.328, noonsight at commit `d5fd71f`, preset `claude` 1.3.1, measured on 2026-11-21, seed 1, 300 random sessions under noonsight (`on`) and the first 60 of the same sequences under each native alternative.
 That build includes the fixes of F1 to F4 ([experiments/delivery/README.md](../experiments/delivery/README.md#failures-found-and-a-limit)).
 D4, D5 and D9 come from the run before it, `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/` (noonsight at `4e18c43`, with the fixes of F1 and F2 only), whose `comparison.json` holds them; the run of 2026-11-21 compares itself with that run and not with the native alternatives.
+D18 to D24 come from `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/`: Claude Code 2.1.330, noonsight at commit `c5b9130`, preset `claude` 1.3.1, measured on 2026-11-23, seed 1, generator 2, which also starts sessions through `noonsight run` and in a project with a trusted configuration, and draws forks, `/resume` in the session, plan mode and subagents that edit a file; that build includes the fixes of F5 to F9.
 
 ### D1
 
@@ -151,6 +152,62 @@ D4, D5 and D9 come from the run before it, `experiments/delivery/results/claude-
 - **Source:** `summary.json`, key `claudemd-s1-n60`.
 - **Measurement:** `coverage.covered` minus `coverage.subagents.covered`, of `coverage.due` minus `coverage.subagents.due`; `byPath` gives a coverage of 1 on every path but `subagent`, `after /compact` included.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
+
+### D18
+
+- **Claim:** sessions under noonsight that broke the invariant, with the paths generator 2 added.
+- **Value:** `0 of 300`
+- **Source:** `summary.json` of the run of 2026-11-23, key `on-g2-s1-n300`.
+- **Measurement:** `robustness.sessionsFailed` of `sessions`.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
+
+### D19
+
+- **Claim:** coverage under noonsight with the paths generator 2 added: requests with rules due that held all of them.
+- **Value:** `100% (3,090 of 3,090)`
+- **Source:** `summary.json` of the run of 2026-11-23, key `on-g2-s1-n300`.
+- **Measurement:** `coverage.covered` of `coverage.due`.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
+
+### D20
+
+- **Claim:** coverage of subagent requests under noonsight with the paths generator 2 added.
+- **Value:** `100% (763 of 763)`
+- **Source:** `summary.json` of the run of 2026-11-23, key `on-g2-s1-n300`.
+- **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
+
+### D21
+
+- **Claim:** coverage under noonsight on the requests of the paths generator 2 added: a `/fork` session, after `/fork`, `/branch`, a forking resume or `/resume` in the session, in and after plan mode, and after starting subagents that edit a file.
+- **Value:** `100% (453 of 453)`
+- **Source:** `summary.json` of the run of 2026-11-23, key `on-g2-s1-n300`.
+- **Measurement:** the sum of `due` over those paths of `byPath`, each covered at its `coverage`.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
+
+### D22
+
+- **Claim:** coverage under noonsight in the sessions started through `noonsight run`, in a project with a trusted configuration, or both.
+- **Value:** `100% (1,308 of 1,308)`
+- **Source:** `summary.json` of the run of 2026-11-23, key `on-g2-s1-n300`.
+- **Measurement:** `covered` of `due`, summed over `robustness.byStart` but `claude`.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
+
+### D23
+
+- **Claim:** the corpus entries that had the outcome they record: the reproductions of F1 to F9, which pass, an entry for each path generator 2 added, and the documented limit.
+- **Value:** `33 of 33`
+- **Source:** `corpus.json` of the run of 2026-11-23.
+- **Measurement:** entries whose `outcome` is `as-expected`, of all entries.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
+
+### D24
+
+- **Claim:** the reproductions of F5 to F9 that break the invariant on the build before their fixes.
+- **Value:** `8 of 8`
+- **Source:** `before-fix/corpus.json` of the run of 2026-11-23: those entries, run with that run's harness against `main` at `19adf38`.
+- **Measurement:** entries whose `outcome` is `regressed`, of all entries.
+- **Date:** 2026-11-23. **Claude Code:** 2.1.330.
 
 ## Rule effects
 

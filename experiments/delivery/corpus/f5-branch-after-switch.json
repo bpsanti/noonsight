@@ -1,0 +1,23 @@
+{
+  "name": "f5-branch-after-switch",
+  "about": "/branch right after a /model switch, before any request: the branch runs on the new model and holds the original model's rules, which nothing retired yet (F5, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "branch"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

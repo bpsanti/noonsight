@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizeModel } from './normalize.js';
-import { ANY_SCOPE, SWITCH_NOTE_RESERVE } from './types.js';
+import { ANY_MODEL, ANY_SCOPE, SWITCH_NOTE_RESERVE } from './types.js';
 import type { Config, Decision, ModelEntry, Place, Rule, Trigger } from './types.js';
 
 export interface ResolveRequest {
@@ -159,10 +159,26 @@ export function switchNote(from: string | null, to: string, retired: readonly st
     `The working rules noonsight delivered earlier in this conversation for ${names} no longer apply.\n` +
     `</noonsight-rules-change>`;
   const names = [...new Set(retired.map(noteName))];
-  const listed = build(names.join(' '), listText(names));
-  const note = listed.length + 2 <= SWITCH_NOTE_RESERVE ? listed : build('*', `every model other than ${target}`);
-  if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('switchNote: the note outgrew its reserve');
+  const every = build(ANY_MODEL, `every model other than ${target}`);
+  const listed = retired.includes(ANY_MODEL) ? every : build(names.join(' '), listText(names));
+  // The room holds the note and the separator before the rules, with the time a resume stamps on both.
+  const fits = (n: string): boolean => n.length + 2 + 2 * STAMP_LENGTH <= SWITCH_NOTE_RESERVE;
+  const note = fits(listed) ? listed : every;
+  if (!fits(note)) throw new Error('switchNote: the note outgrew its reserve');
   return note;
+}
+
+/** The length of the attribute stampDelivery adds to each opening tag. */
+export const STAMP_LENGTH = ' at="2026-01-01T00:00:00.000Z"'.length;
+
+/**
+ * Mark a delivery with the time it was made, in the opening tag of each envelope and note. Claude
+ * Code leaves out a SessionStart context identical to one an earlier SessionStart added to the same
+ * conversation, so a resume or a fork that delivers again what a later note retired must not repeat the
+ * text of an earlier delivery. `at` is an ISO time, as Date.toISOString writes it.
+ */
+export function stampDelivery(text: string, at: string): string {
+  return text.replace(/<noonsight-rules(?:-change)? [^>]*/g, (tag) => `${tag} at="${at}"`);
 }
 
 /** "a", "a and b", "a, b and c". */

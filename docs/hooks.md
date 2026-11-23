@@ -8,7 +8,7 @@ Seven hook entries do it: `SessionStart`, when a session starts, `PostModelSwitc
 
 - **It never holds the session, or a subagent call, beyond a bound.**
   It always exits 0, reads only local files and never uses the network itself.
-  It starts no other process, with three exceptions: on macOS, it runs `ps` once to read the Claude Code command line when the input does not name the session's model and, except at a resume, neither does noonsight's record, or when `noonsight run` started the session (see [SessionStart](#sessionstart)), and in the agent call hook when the subagent's model depends on its definition, which `--agents`, `--plugin-dir`, `--add-dir` and `--setting-sources` can change ([PreToolUse](#pretooluse-the-prediction)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
+  It starts no other process, with three exceptions: on macOS, it runs `ps` once to read the Claude Code command line when the input does not name the session's model and, except at a resume, neither does noonsight's record, when `noonsight run` started the session, or at a fork whose own transcript and background job do not name the conversation it copied (see [SessionStart](#sessionstart)), and in the agent call hook when the subagent's model depends on its definition, which `--agents`, `--plugin-dir`, `--add-dir` and `--setting-sources` can change ([PreToolUse](#pretooluse-the-prediction)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
   A subagent's start waits at most two seconds more when several calls could have started it ([SubagentStart](#subagentstart-the-rules)).
 - **It never blocks anything.**
@@ -18,7 +18,7 @@ Seven hook entries do it: `SessionStart`, when a session starts, `PostModelSwitc
   The result of an agent call under a refused configuration is logged as `config-invalid` too, without a second warning, and its subagent's start does nothing.
   A project's configuration with a problem is refused alone: the hooks apply the machine's configuration as if there were no project ([Project configuration](configuration.md#a-project-with-a-problem)).
 - **It decides from what Claude Code itself uses.**
-  The model comes from the hook input Claude Code sends, from noonsight's own record of the same session or of the same Claude Code process, from the conversation's transcript, or from the same launch settings Claude Code chose the model from, in Claude Code's own order.
+  The model comes from the hook input Claude Code sends, from noonsight's own record of the same session or of the same Claude Code process, from the conversation's transcript, or from the same launch settings Claude Code chose the model from, in Claude Code's own order; a fork's, from what the hook finds of the conversation it copied ([Forks](#forks)).
   The decision log names the source every time.
 - **It leaves foreign input alone.**
   Input that is not the expected Claude Code event, such as another tool reading the same settings, gets no output and no log line.
@@ -50,7 +50,7 @@ The hook decides by how the session started (the `source` field):
 | --- | --- | --- |
 | `startup` | Delivers the rules | A new session |
 | `clear`, `compact` | Delivers them again | The earlier context, and the rules in it, are gone |
-| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply | The restored conversation already holds them, except a switch's or a resume's that may never have reached it (below, and [PostModelSwitch](#postmodelswitch)) |
+| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply. A fork, whose new session id has no record yet, goes by the record of the conversation it copied ([Forks](#forks)) | The restored conversation already holds them, except a switch's or a resume's that may never have reached it (below, and [PostModelSwitch](#postmodelswitch)) |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect noonsight exists to prevent |
 
 The model comes from the first of these that knows it:
@@ -79,6 +79,10 @@ One setting outranks the conversation: under `"model": "haiku"`, written exactly
 A `--model` or `ANTHROPIC_MODEL` value noonsight cannot pin down outranks the setting, as in Claude Code, so the conversation, then the record, decides, and the log line records the value.
 With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides.
 After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
+One exception comes first: Claude Code can run another model in place of the one the person chose, and in plan mode it runs Sonnet for Haiku.
+It says so with a `PostModelSwitch`: `source: "auto"` as plan mode starts and ends, and `to_model` Sonnet with `requested_model: "haiku"` for a `/model haiku` typed in plan mode; but the start of a compaction, or of a `/resume` typed in the session, in plan mode still reports Haiku, while the requests go on to Sonnet ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+So the record keeps the model the person chose while another runs in its place, and a start in the same process, a compaction, `/clear`, or a `/resume` or `/branch` typed in the session, whose input reports that chosen model, or none, takes the model the process runs from the process's record; the log line names the chosen model in `chosen_model` and the reported one in `reported_model`.
+A resume or fork in a new process reports no model and starts on the model it is given, as above.
 `/resume` typed inside a running session reports the model in the input.
 When the resumed conversation's record holds the rules of another model, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
 
@@ -104,13 +108,17 @@ The session's task scope is the value of `NOONSIGHT_SCOPE` in the environment Cl
 Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, or when Claude Code runs it headless, as `claude -p` and the Agent SDK do, and `session.headless_is_unattended` is on, as it is by default; it is `attended` otherwise ([Scopes](configuration.md#scopes)).
 Claude Code tells a hook that its session runs headless with `CLAUDE_CODE_SESSION_ATTENDED=0` in the hook's environment; the variable is not documented, so the hook reads only `0` as headless, and a session whose environment lacks it is in the place it would have without this check ([verification](verification/claude-code.md)).
 A resumed session gets the rules again when a change of scope or place changed which rules apply.
-The rules are resolved with the triggers the session has revealed ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)), which belong to its session id: after compaction the session gets the rules its triggers added again, with the others, and a resumed session that already holds them gets nothing again; after `/clear`, the new session has revealed none.
+The rules are resolved with the triggers the session has revealed ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)), which belong to its session id: after compaction the session gets the rules its triggers added again, with the others, and a resumed session that already holds them gets nothing again; after `/clear`, the new session has revealed none; a fork starts with the triggers of the conversation it copied ([Forks](#forks)).
 
 What a resume or a fork returns reaches the conversation as a switch's does: with the process's next request only, so ending the session before one loses it ([recorded on Claude Code 2.1.328](verification/claude-code.md)).
 So the record of a resume that delivered keeps every model whose rules the conversation may hold, as after a switch, and the next resume delivers again, with a note that retires all of them.
 Unlike a switch, a resume runs before its process sends any request, so a response of the conversation after it shows that its delivery arrived: when the transcript holds one, from the session's own messages since the last compaction and later than the delivery, the next resume takes the delivery as received, and with it its note, and delivers again only what changed.
 A transcript that cannot be read, or a response with no time, confirms nothing.
 The deliveries of a startup, `/clear` and compaction are part of the conversation from its start, and a later resume finds them ([recorded on 2.1.328](verification/claude-code.md)).
+
+Claude Code leaves out a `SessionStart` context whose text an earlier start already added to the same conversation, at a resume, a fork or a `/resume` typed in the session; contexts of other events, such as a switch's note, are not compared ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+A resume that delivers again rules a later note retired would repeat an earlier start's text, such as the startup's, and reach no request.
+So a resume's or a fork's delivery carries the time it was made in the opening tag of its note and of its rules, `<noonsight-rules model="claude-sonnet-5-5" at="2026-11-23T14:12:50.665Z">`, and never repeats an earlier one.
 
 A session started by `noonsight run` already holds its rules in the system prompt.
 At `startup`, `clear` and `compact`, when the Claude Code process was started with the launcher's file and the file holds exactly the rules decided here, the hook delivers nothing and logs `delivered: "launcher"`.
@@ -124,6 +132,32 @@ A model the update leaves as it was gets no warning, nor does a start other than
 
 The session's project is `CLAUDE_PROJECT_DIR`, else the input's `cwd`, and every hook of the session lays the project's configuration over the machine's, when there is one and this account trusts it ([Project configuration](configuration.md#project-configuration)).
 At `startup`, a session in a project this account has not trusted is warned that only the machine's configuration applies and how to trust the project, and a session in a project whose configuration is refused is warned that it was refused; a project the account declined with `noonsight untrust`, or that `projects.allow` ignores, gives no warning.
+
+### Forks
+
+A fork goes on in a copy of a conversation under a new session id, which has no record of its own.
+Claude Code forks a conversation three ways, and each fires `SessionStart` with `source: "fork"` ([recorded on Claude Code 2.1.330](verification/claude-code.md)):
+
+| Fork | Process | Input `model` | The fork's transcript when the hook runs |
+| --- | --- | --- | --- |
+| `claude --continue --fork-session`, `claude --resume <id> --fork-session` | A new one | Left out | Not written yet |
+| `/branch` | The same | The model the process runs | The copied conversation |
+| `/fork <prompt>` | A background session | Left out | No message yet |
+
+The copy holds what the original held: the rules delivered to it, a delivery that may not have arrived yet, and the rules its triggers added.
+So the hook finds the conversation the fork copied, and takes its record, its last response and its triggers as the fork's own:
+
+1. after `/branch`, the copied entries of the fork's transcript name the original in `forkedFrom`;
+2. a `/fork` session's background job names the original in its `state.json`, in the directory `CLAUDE_JOB_DIR` names (`forkParentSessionId`), and the model the job was started with among its `respawnFlags`, which counts as the session's `--model`;
+3. a process started with `--fork-session` names the original with `--resume <session id>`; with `--continue`, the original is the conversation Claude Code continues, the most recently written transcript in the fork's transcript folder other than the fork's own.
+
+None of these is documented by Claude Code, and each was recorded on 2.1.330.
+The hook reads the transcript folder after Claude Code chose what to continue, so a transcript another session of the same project writes in between would be taken for the original.
+A fork in a new process then takes its model in the order of a resume, with the original's last response where its own transcript has none; Claude Code runs it so.
+Its delivery reaches the conversation as a resume's does, with its first request, so its record keeps every model the copy may hold until a response confirms it.
+A fork whose original none of these names, such as one of `claude --resume <name> --fork-session`, may hold the rules of any model: it gets its model's rules with a note that those of every model but its own no longer apply (`from="*"`), and a `/model` before it answers says the same.
+The log line records how the original was found in `fork_origin` (`fork-transcript`, `background-job`, `resume-argument`, `continue`, or `unknown`) and the original's session id in `forked_from`.
+A `/fork` session runs headless (`CLAUDE_CODE_SESSION_ATTENDED=0`), so its place is `unattended` while `session.headless_is_unattended` is on.
 
 ## PostModelSwitch
 
@@ -396,7 +430,9 @@ The report names that project and what became of it on its second line, and the 
 | `project`, `project_status` | When the session's directory has a project configuration: the project directory, and what became of the project: `applied`, `untrusted`, `declined`, `ignored` (`"projects.allow": "none"`) or `refused` ([Project configuration](configuration.md#project-configuration)) |
 | `model`, `from_model` | The normalized model identifiers; on a session start, `from_model` is the model of the resumed conversation's record when the session runs on another one |
 | `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `session-transcript` (a resumed conversation's last response), `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
-| `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, or the settings file that set it |
+| `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, the settings file that set it, or `--model of the background job` for a `/fork` session |
+| `chosen_model`, `reported_model` | When Claude Code runs another model in place of the one the person chose, as in plan mode on Haiku: on a switch and a session start, the chosen model; on a session start, the model its input reported ([SessionStart](#sessionstart)) |
+| `fork_origin`, `forked_from` | For a fork's start: how the conversation it copied was found (`fork-transcript`, `background-job`, `resume-argument`, `continue`, or `unknown`), and that conversation's session id ([Forks](#forks)) |
 | `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model noonsight cannot tell: the value, and why |
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |

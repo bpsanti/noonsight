@@ -1,0 +1,93 @@
+[
+ {
+  "name": "f5-branch-after-switch",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main"
+  ],
+  "due": 2,
+  "seconds": 13
+ },
+ {
+  "name": "f5-fork-after-switch",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main"
+  ],
+  "due": 3,
+  "seconds": 16
+ },
+ {
+  "name": "f5-fork-session-to-another-model",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main"
+  ],
+  "due": 2,
+  "seconds": 12
+ },
+ {
+  "name": "f6-fork-session-after-switch",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main"
+  ],
+  "due": 2,
+  "seconds": 16
+ },
+ {
+  "name": "f7-compact-in-plan-mode-on-haiku",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main",
+   "missing-own/main"
+  ],
+  "due": 5,
+  "seconds": 16
+ },
+ {
+  "name": "f7-model-haiku-in-plan-mode",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main",
+   "missing-own/main"
+  ],
+  "due": 4,
+  "seconds": 17
+ },
+ {
+  "name": "f8-resume-in-plan-mode-on-haiku",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "foreign-unretired/main",
+   "missing-own/main"
+  ],
+  "due": 3,
+  "seconds": 15
+ },
+ {
+  "name": "f9-resume-repeats-startup-delivery",
+  "expect": "pass",
+  "outcome": "regressed",
+  "harness": "ok",
+  "shows": [
+   "own-retired/main"
+  ],
+  "due": 2,
+  "seconds": 18
+ }
+]

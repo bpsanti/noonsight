@@ -23,13 +23,14 @@ import { changesDelivery, comparePresets, describeChanges } from '../../config/p
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { projectFields, projectFor, projectWarning } from '../../config/project.js';
 import { normalizeModel } from '../../core/normalize.js';
-import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '../../core/resolve.js';
+import { joinDelivery, launcherNote, resolve, resolveAdded, stampDelivery, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
-import type { Config, Decision, Trigger } from '../../core/types.js';
+import { ANY_MODEL, type Config, type Decision, type Trigger } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { heldModels, processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
-import { sessionTriggers } from '../../state/triggers.js';
-import { launchFields, launchModel, readCommandLine, type LaunchModel, type LaunchSources } from './launch.js';
+import { inheritTriggers, sessionTriggers } from '../../state/triggers.js';
+import { forkOrigin, type ForkOrigin } from './fork.js';
+import { launchFields, launchModel, readCommandLine, resolveModelValue, resolveValue, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { conversationResponse, type Response } from './predict.js';
@@ -174,6 +175,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
             ...outcome.state,
             held,
             ...(before?.unconfirmed !== undefined ? { unconfirmed: before.unconfirmed } : {}),
+            ...(before?.chosen !== undefined ? { chosen: before.chosen } : {}),
             // A resume's delivery is confirmed by a response after it, so its time is kept.
             at: before?.unconfirmed === 'resume' ? before.at : ctx.now.toISOString(),
           });
@@ -183,13 +185,17 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
       return output([], outcome.context ? { hookEventName: event, additionalContext: outcome.context } : null);
     }
     const processState = processFile(state, ctx.parentPid);
+    const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
+    const own = readState(sessionState);
+    // A fork starts with a copy of another conversation under a new id that has no record (fork.ts).
+    const fork = event === 'SessionStart' && str(input.source) === 'fork' && own === null ? forkContext(input, state, ctx.env, commandLine) : null;
+    if (fork?.origin) inheritTriggers(state, fork.origin.sessionId, sessionId);
     // Both come from the environment Claude Code runs in, which its hooks inherit.
     const where: Where = {
       scope: sessionScope(ctx.env),
       place: sessionPlace(config, ctx.env),
       triggers: sessionTriggers(state, str(input.session_id)),
     };
-    const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
     const response = once(() => conversationResponse(str(input.transcript_path)));
     const result =
       event === 'SessionStart'
@@ -198,13 +204,14 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
             config,
             file,
             where,
-            readState(sessionState),
+            own,
             readState(processState),
             (sources) => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }, sources),
             response,
             () => launcherPrompt(ctx.env, commandLine),
+            fork,
           )
-        : modelSwitch(input, config, file, where, readState(sessionState));
+        : modelSwitch(input, config, file, where, readState(sessionState), ctx.env);
     const startup = event === 'SessionStart' && input.source === 'startup';
     const update = startup ? presetUpdate(details, result.state?.model ?? null, file, ctx.env) : null;
     if (update !== null) {
@@ -225,9 +232,13 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
         // Without the record, a later resume delivers again: the safe direction.
       }
     }
+    // Claude Code leaves out a resume's or a fork's context when an earlier start of the conversation
+    // added the same text, so each such delivery carries its time (docs/hooks.md, "SessionStart").
+    const resumedStart = event === 'SessionStart' && (input.source === 'resume' || input.source === 'fork');
+    const context = result.context !== null && resumedStart ? stampDelivery(result.context, ctx.now.toISOString()) : result.context;
     return output(
       [...result.messages, ...(update !== null ? [update.message] : []), ...(projectNote !== null ? [projectNote] : [])],
-      result.context ? { hookEventName: event, additionalContext: result.context } : null,
+      context ? { hookEventName: event, additionalContext: context } : null,
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -253,6 +264,33 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
     return output([`noonsight: the hook failed (${message}), so no rules were delivered.`], null);
   }
 }
+
+/**
+ * What a fork's start knows of the conversation it copied (fork.ts): the original, when it can be
+ * found, with its record, its last response, and the model a background job was started with.
+ */
+interface ForkContext {
+  readonly origin: ForkOrigin | null;
+  readonly record: DeliveryState | null;
+  readonly response: () => Response | null;
+  readonly launch: LaunchModel | null;
+}
+
+function forkContext(input: Record<string, unknown>, state: string, env: Env, commandLine: () => ReturnType<typeof readCommandLine>): ForkContext {
+  const origin = forkOrigin(str(input.transcript_path), env, commandLine);
+  return {
+    origin,
+    record: origin !== null ? readState(sessionFile(state, origin.sessionId)) : null,
+    response: once(() => conversationResponse(origin?.transcript ?? null)),
+    launch: origin?.model !== undefined ? resolveValue(origin.model, 'claude-args', '--model of the background job', env) : null,
+  };
+}
+
+/**
+ * The record of a conversation nothing is known of: it may hold the rules of any model, so the next
+ * delivery says that those of every model but the session's own no longer apply.
+ */
+const UNKNOWN_HELD: DeliveryState = { model: null, status: 'none', sha256: null, held: [ANY_MODEL], at: new Date(0).toISOString() };
 
 /** A session's scope and place, and the triggers it has revealed. */
 interface Where {
@@ -306,17 +344,34 @@ function sessionStart(
   session: DeliveryState | null,
   process: DeliveryState | null,
   readLaunch: (sources: LaunchSources) => LaunchModel,
-  readConversation: () => Response | null,
+  ownConversation: () => Response | null,
   readLauncher: () => LauncherPrompt | null,
+  fork: ForkContext | null = null,
 ): Outcome {
   const source = str(input.source);
   const resumed = source === 'resume' || source === 'fork';
+  // A fork's own id has no record yet: the conversation it copied stands in for it, as that
+  // conversation's record and last response; with nothing known of it, it may hold any model's rules.
+  const known = fork !== null ? (fork.record ?? UNKNOWN_HELD) : session;
+  const readConversation = fork !== null ? () => ownConversation() ?? fork.response() : ownConversation;
+  // A background job runs on the model it was started with, which its own command line does not show.
+  const readStart: typeof readLaunch = fork?.launch ? (sources) => (sources === 'settings' ? readLaunch(sources) : (fork.launch as LaunchModel)) : readLaunch;
   const reported = normalizeModel(str(input.model));
-  const recorded = session?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
-  const chosen: ModelChoice = reported
-    ? { model: reported, source: 'hook-input', launch: null }
-    : resumed
-      ? resumedModel(recorded, readLaunch, () => readConversation()?.model ?? null)
+  const recorded = known?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
+  // Claude Code may run another model in place of the one the person chose, as it runs Sonnet in plan
+  // mode for Haiku; the start of a compaction, /resume or /branch in that process then reports the
+  // chosen model, and the process keeps running the other, so the record of the same process, which
+  // the switch to it wrote, decides. A resume or fork that reports a model runs in the same process;
+  // one in a new process reports none, and a new process starts on the model it is given.
+  const sameProcess = source === 'compact' || source === 'clear' || (resumed && !!reported);
+  const carried = sameProcess ? (process ?? (source === 'compact' ? known : null)) : null;
+  const substituted = carried?.chosen !== undefined && carried.model !== null && (!reported || reported === carried.chosen) ? carried : null;
+  const chosen: ModelChoice = substituted
+    ? { model: substituted.model, source: substituted === process ? 'process-record' : 'session-record', launch: null }
+    : reported
+      ? { model: reported, source: 'hook-input', launch: null }
+      : resumed
+      ? resumedModel(recorded, readStart, () => readConversation()?.model ?? null)
       : recorded
         ? { model: recorded, source: session?.model ? 'session-record' : 'process-record', launch: null }
         : launchChoice(readLaunch('all'), null);
@@ -324,7 +379,7 @@ function sessionStart(
   const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const record = resumed && session !== null ? confirmed(session, readConversation) : session;
+  const record = resumed && known !== null ? confirmed(known, fork !== null ? fork.response : readConversation) : known;
   // A delivery that may never have reached the conversation is made again.
   const unconfirmed = resumed && record?.unconfirmed !== undefined;
   const repeat = resumed && record !== null && !unconfirmed && record.model === decision.model && record.sha256 === sha;
@@ -375,6 +430,8 @@ function sessionStart(
       ...choiceFields(where.scope, where.place),
       ...triggerFields(where.triggers),
       model_source: chosen.source,
+      ...(substituted !== null ? { chosen_model: substituted.chosen, ...(reported ? { reported_model: reported } : {}) } : {}),
+      ...(fork !== null ? { fork_origin: fork.origin?.via ?? 'unknown', ...(fork.origin !== null ? { forked_from: fork.origin.sessionId } : {}) } : {}),
       ...(changedFrom !== null ? { from_model: changedFrom } : {}),
       ...launchFields(launch),
       ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),
@@ -383,7 +440,10 @@ function sessionStart(
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}) },
+    state:
+      decision.model === null
+        ? null
+        : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}), ...(substituted?.chosen ? { chosen: substituted.chosen } : {}) },
   };
 }
 
@@ -452,9 +512,10 @@ function keepsHaikuSetting(settings: LaunchModel, conversation: string): boolean
  * of the session comes first, so a switch's delivery stays unconfirmed: the next switch's note again
  * names every model whose rules the conversation may hold, and the next resume delivers again.
  */
-function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null): Outcome {
+function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null, env: Env): Outcome {
   const to = normalizeModel(str(input.to_model));
   const from = normalizeModel(str(input.from_model));
+  const chosen = chosenModel(input, from, to, session, env);
   const request = { scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
@@ -466,6 +527,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     ...triggerFields(where.triggers),
     model_source: 'hook-input',
     from_model: from || null,
+    ...(chosen !== null ? { chosen_model: chosen } : {}),
   };
   // Without a record, the previous model's rules are those the conversation may hold.
   const kept = session
@@ -481,7 +543,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
       record: { ...base, delivered: 'already-delivered', warned: false },
       context: null,
       messages: [],
-      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held },
+      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(chosen !== null ? { chosen } : {}) },
     };
 
   const retired = kept.filter((m) => m !== decision.model);
@@ -496,8 +558,27 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(parts.length ? { unconfirmed: 'switch' as const } : {}) },
+    state:
+      decision.model === null
+        ? null
+        : { model: decision.model, status: decision.status, sha256: sha, held, ...(parts.length ? { unconfirmed: 'switch' as const } : {}), ...(chosen !== null ? { chosen } : {}) },
   };
+}
+
+/**
+ * The model the person chose, when the switch leaves Claude Code running another in its place, else
+ * null. A switch Claude Code makes by itself (`source: "auto"`, as when plan mode on Haiku runs Sonnet)
+ * keeps the model chosen before it, until a switch back to that model; a `/model` whose
+ * `requested_model` selects another model than the one it switched to was substituted the same way.
+ */
+function chosenModel(input: Record<string, unknown>, from: string, to: string, session: DeliveryState | null, env: Env): string | null {
+  if (str(input.source) === 'auto') {
+    const before = session?.chosen ?? (from || null);
+    return before !== null && before !== to ? before : null;
+  }
+  const requested = str(input.requested_model);
+  const asked = requested !== null ? resolveModelValue(requested, env) : null;
+  return asked?.kind === 'found' && asked.model !== to ? asked.model : null;
 }
 
 /**

@@ -19,6 +19,11 @@ export interface Entry extends Sequence {
   readonly about: string;
   /** "pass", or the known failure the sequence reproduces and the `class/kind` violations it must show. */
   readonly expect: 'pass' | { readonly failure: string; readonly shows: readonly string[] };
+  /**
+   * Also hold every request to no rule of its model that is not due there (`own-unexpected`), which the
+   * invariant leaves to the precision measure: a trigger revealed by mistake shows only this way.
+   */
+  readonly exact?: true;
 }
 
 export function readCorpus(dir = CORPUS_DIR): Entry[] {
@@ -57,7 +62,8 @@ export interface Checked {
 }
 
 export function check(entry: Entry, line: Line): Checked {
-  const shows = signature(line);
+  const unexpected = entry.exact ? [...new Set(line.facts.filter((f) => isAgent(f) && f.chars.ownUnexpected > 0).map((f) => `own-unexpected/${f.kind}`))] : [];
+  const shows = [...signature(line), ...unexpected].sort();
   const due = line.facts.filter((f) => isAgent(f) && f.covered !== null).length;
   let outcome: Outcome;
   if (line.harness !== 'ok') outcome = 'harness';

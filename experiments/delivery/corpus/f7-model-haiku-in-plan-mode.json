@@ -1,0 +1,37 @@
+{
+  "name": "f7-model-haiku-in-plan-mode",
+  "about": "/model haiku typed in plan mode, which Claude Code runs as Sonnet, then /compact: its start reports Haiku while Sonnet runs (F7, fixed).",
+  "model": "fable",
+  "scope": "build",
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

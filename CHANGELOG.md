@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- A fork of a conversation now starts with what the conversation it copied holds.
+  Claude Code forks three ways, `claude --continue --fork-session` or `--resume <id> --fork-session`, `/branch`, and `/fork`, each under a new session id with no record of its own, so a fork's start delivered its model's rules with no note retiring the other model's rules the copy held (F5), and a fork in a new process took the `model` setting instead of the model of the conversation's last response, which Claude Code runs it on (F6).
+  The hook now finds the original, from the `forkedFrom` entries `/branch` writes, the background job of `/fork`, or the `--resume` id or the conversation `--continue` picks, and takes its record, last response and triggers; a fork whose original it cannot find gets a note that retires the rules of every model but its own (`from="*"`).
+  The decision log records `fork_origin` and `forked_from` (`docs/hooks.md`, "Forks").
+
+- In plan mode, Claude Code runs Sonnet for a session whose chosen model is Haiku, and reports that with a model switch, but the start of a compaction, or of a `/resume` typed in the session, still reports Haiku, so those starts and a `/clear` after them delivered Haiku's rules to Sonnet's requests (F7, F8).
+  The session's record now keeps the chosen model while Claude Code runs another in its place, and a start in the same process that reports the chosen model keeps the one that runs; the log records `chosen_model` and `reported_model`.
+
+- Claude Code leaves out a `SessionStart` context identical to one an earlier start added to the same conversation, so a resume or fork that delivered again rules a later note had retired, the startup's very text, reached no request (F9).
+  A resume's or a fork's delivery now carries the time it was made in the opening tag of its note and its rules (`at="..."`), and never repeats an earlier one.
+
+- The delivery benchmark (`experiments/delivery`) measures the paths it left out, with a second generator, the default: sessions started through `noonsight run` and in a project with a trusted configuration (`experiments/delivery/project/`), forks with `--fork-session`, `/branch` and `/fork`, `/resume` typed in the session, plan mode, and subagents that edit a file.
+  `--generator 1` draws the earlier runs' sequences again, under the names they had; the corpus has an entry for each new path and the reproductions of F5 to F9; a third self-check plant takes away the fork fix; and `--noonsight <dir>` runs the sessions with another build, such as one from before a fix.
+  The driver waits for the mode Claude Code's footer names in plan mode, records a `/fork` Claude Code refuses, as it does in a session `noonsight run` started with rules, and stops the daemon a `/fork` leaves behind.
+  The run on Claude Code 2.1.330 after the fixes (`experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/`): 0 of 300 sessions under noonsight break the invariant, coverage is 100% (3,090 of 3,090 requests, 763 of 763 for subagents), 453 of 453 on the new paths, and all 33 corpus entries have the outcome they record; on `main` before the fixes, all 8 reproductions of F5 to F9 fail.
+  The README's "Not measured" now names agent teams, routing and the classifier only; `docs/evidence.md` gains D18 to D24, and `docs/verification/claude-code.md` records the Claude Code 2.1.330 behaviors the fixes rely on.
+
 - The agent call hook now reads subagent definitions everywhere Claude Code reads them, in Claude Code's order: managed definitions in `.claude/agents/` of the managed settings directory, `--agents` on the `claude` command line (inline JSON, or a JSON file in `claude -p`), the project's `.claude/agents/` and those of `--add-dir` directories, the user's, and plugins given with `--plugin-dir`, `--plugin-dir-no-mcp` or `CLAUDE_CODE_PLUGIN_DIRS` or installed from a marketplace and enabled for the project; `--setting-sources` leaves out the folders it does not list.
   A plugin's or an `--agents` subagent that sets its own model was predicted on its parent's model before, so it received the parent model's rules and its result showed `MISMATCH`; it now gets its own model's rules.
   On macOS the hook runs `ps` once per agent call whose model depends on a definition, to read those options.

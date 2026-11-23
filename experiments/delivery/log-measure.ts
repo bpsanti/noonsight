@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PACKAGE_ROOT } from '../../src/config/paths.js';
-import { envelope, switchNote } from '../../src/core/resolve.js';
+import { envelope, STAMP_LENGTH, switchNote } from '../../src/core/resolve.js';
 import type { Trigger } from '../../src/core/types.js';
 import type { Line } from './fuzz.js';
 import type { Chars } from './oracle.js';
@@ -193,6 +193,12 @@ export function replay(decisions: readonly Decision[], lib: Library): Replay {
     }
     if (!SESSION_EVENTS.has(String(d.event))) continue;
     let s = sessions.get(sid);
+    // A fork starts with a copy of the conversation it was forked from, when the log names it.
+    const origin = !s && d.event === 'session-start' && d.source === 'fork' && d.forked_from ? sessions.get(String(d.forked_from)) : undefined;
+    if (origin) {
+      s = { items: [...origin.items], expected: [...origin.expected], model: origin.model, known: origin.known, events: [] };
+      sessions.set(sid, s);
+    }
     const fresh = d.event === 'session-start' && (d.source === 'startup' || d.source === 'clear');
     if (!s || fresh) {
       // A resume of a conversation whose earlier lines are not in the log: what it holds is not known.
@@ -202,18 +208,20 @@ export function replay(decisions: readonly Decision[], lib: Library): Replay {
     if (d.event === 'session-start' && d.source === 'compact') s.items = [];
     const delivered = String(d.delivered ?? '');
     let deliveredChars = 0;
+    // A resume's or a fork's delivery carries its time in each opening tag.
+    const stamp = d.event === 'session-start' && (d.source === 'resume' || d.source === 'fork') ? STAMP_LENGTH : 0;
     if (delivered === 'rules+note' || delivered === 'note') {
       // The log names one model in from_model; the note retires every other model whose rules the
       // conversation may hold, as noonsight's hook does since it treats a switch's delivery as unconfirmed.
       const held = s.items.filter((it) => it.type === 'rules' && it.model !== d.model).map((it) => String(it.model));
       s.items.push({ type: 'note', retires: [...new Set([...(d.from_model ? [String(d.from_model)] : []), ...held])] });
-      deliveredChars += lib.noteLength(d.from_model ?? null, d.model ?? null);
+      deliveredChars += lib.noteLength(d.from_model ?? null, d.model ?? null) + stamp;
     }
     const ids = (d.rules ?? []) as string[];
     if (delivered === 'rules' || delivered === 'rules+note' || delivered === 'launcher') {
       s.items.push({ type: 'rules', model: d.model, ids });
       if (delivered !== 'launcher') {
-        deliveredChars += lib.envelopeOverhead(String(d.model), d.scope ?? null, ids, d.trigger ? [d.trigger] : []);
+        deliveredChars += lib.envelopeOverhead(String(d.model), d.scope ?? null, ids, d.trigger ? [d.trigger] : []) + stamp;
         for (const id of ids) deliveredChars += lib.get(id)?.length ?? 0;
       }
     } else if (delivered === 'already-delivered' && !s.known && d.status === 'matched' && !s.items.some((it) => it.type === 'rules' && it.model === d.model)) {
