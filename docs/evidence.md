@@ -12,17 +12,18 @@ Numbers that appear only in a pull request description, and not in a committed r
 
 The delivery benchmark ([experiments/delivery](../experiments/delivery/README.md)) runs real interactive Claude Code sessions against a local stand-in for the Messages API, so no request reaches a model.
 A request "has its rules" when it holds every rule noonsight's resolver gives its model, scope, place and revealed triggers, and no note retires them; a rule of another model may be present only after a note that retires it.
-Unless an entry says otherwise, the run is `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/`: Claude Code 2.1.328, noonsight at commit `d5fd71f`, preset `claude` 1.3.1, measured on 2026-11-21, seed 1, 300 random sessions under noonsight (`on`) and the first 60 of the same sequences under each native alternative.
+Unless an entry says otherwise, the run is `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/`: Claude Code 2.1.328, noonsight at commit `d5fd71f`, preset `claude` 1.3.1, measured on 2026-11-21, seed 1, 300 random sessions generated under noonsight (`on`), all of which ran to the end, and the first 60 of the same sequences under each native alternative.
 That build includes the fixes of F1 to F4 ([experiments/delivery/README.md](../experiments/delivery/README.md#failures-found-and-a-limit)).
 D4, D5 and D9 come from the run before it, `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/` (noonsight at `4e18c43`, with the fixes of F1 and F2 only), whose `comparison.json` holds them; the run of 2026-11-21 compares itself with that run and not with the native alternatives.
 D18 to D24 come from `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/`: Claude Code 2.1.330, noonsight at commit `c5b9130`, preset `claude` 1.3.1, measured on 2026-11-23, seed 1, generator 2, which also starts sessions through `noonsight run` and in a project with a trusted configuration, and draws forks, `/resume` in the session, plan mode and subagents that edit a file; that build includes the fixes of F5 to F9.
+That run generated 300 sessions under `on`, and 299 ran to the end; D18 to D22 are measured on those 299.
 
 ### D1
 
-- **Claim:** sessions under noonsight that broke the invariant.
+- **Claim:** sessions under noonsight that broke the invariant, of those that ran to the end: all of the 300 generated.
 - **Value:** `1 of 300`
 - **Source:** `summary.json`, key `on-s1-n300`.
-- **Measurement:** `robustness.sessionsFailed` of `sessions`.
+- **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
 
 ### D2
@@ -43,7 +44,7 @@ D18 to D24 come from `experiments/delivery/results/claude-code-2.1.330/2026-11-2
 
 ### D4
 
-- **Claim:** sessions that broke the invariant on the build before the fixes of F1 and F2, among the sessions both runs completed.
+- **Claim:** sessions that broke the invariant on the build before the fixes of F1 and F2, among the sessions both runs completed: each generated 300, and 296 ran to the end in the earlier run (4 stopped on a step that got no answer, `step-timeout`) and 300 in the later one.
 - **Value:** `26 of 296`
 - **Source:** `comparison.json` of the run of 2026-11-20, comparison `P1`.
 - **Measurement:** `a` of `pairs.sessions`.
@@ -155,10 +156,10 @@ D18 to D24 come from `experiments/delivery/results/claude-code-2.1.330/2026-11-2
 
 ### D18
 
-- **Claim:** sessions under noonsight that broke the invariant, with the paths generator 2 added.
-- **Value:** `0 of 300`
+- **Claim:** sessions under noonsight that broke the invariant, with the paths generator 2 added, of those that ran to the end: 299 of the 300 generated. The other, `s1-0123`, stopped on a turn that got no answer (`step-timeout`).
+- **Value:** `0 of 299`
 - **Source:** `summary.json` of the run of 2026-11-23, key `on-g2-s1-n300`.
-- **Measurement:** `robustness.sessionsFailed` of `sessions`.
+- **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
 
 ### D19

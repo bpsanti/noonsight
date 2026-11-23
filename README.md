@@ -15,14 +15,14 @@ It works through Claude Code's own hooks, reads only local files, and records ev
 
 ## What it guarantees, and what it does not
 
-**The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.9% (3,219 of 3,221) of the requests that had rules due ([D2](docs/evidence.md#d2)); 1 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
+**The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.9% (3,219 of 3,221) of the requests that had rules due ([D2](docs/evidence.md#d2)); all 300 ran to the end, and 1 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
 That run used a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
 Each result in this README carries the Claude Code version it was measured on, in its entry of [docs/evidence.md](docs/evidence.md).
 
 The fuzzer has found four failures of noonsight, F1 to F4, all fixed before that run; their shortest reproductions are in the corpus, which passes.
 The one failing session is the documented limit below.
 A later run on Claude Code 2.1.330 added forks, `/resume` typed in a session, plan mode, `noonsight run`, a repository's configuration and subagents that edit files, which found five more failures, F5 to F9, now fixed ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
-After their fixes, 0 of 300 sessions broke the invariant ([D18](docs/evidence.md#d18)), with 100% (453 of 453) of the requests on those paths holding their rules ([D21](docs/evidence.md#d21)).
+After their fixes, 0 of 299 sessions that ran to the end broke the invariant ([D18](docs/evidence.md#d18); 300 were generated, and the other one stopped on a turn that got no answer and is not measured), with 100% (453 of 453) of the requests on those paths holding their rules ([D21](docs/evidence.md#d21)).
 
 noonsight picks a rule by its model, scope, place and trigger, never by its text, so this claim covers any rule, yours or the preset's.
 The benchmark's sessions carried the preset's rules from the machine's configuration; in the later run, a session in four also had a repository's configuration, and those sessions, with those started through `noonsight run`, held their rules on 100% (1,308 of 1,308) of their requests ([D22](docs/evidence.md#d22)).

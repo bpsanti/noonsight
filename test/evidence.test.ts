@@ -52,6 +52,11 @@ const G2_PATHS = [
   'after leaving plan mode',
   'after starting subagents that edit',
 ];
+/** Sessions that broke the invariant of those that ran to the end, checked against the counts the entry's claim gives. */
+function failedOfRan(m: any, generated: number, ran: number): string {
+  assert.deepEqual([m.sessions, m.harness.ok], [generated, ran], 'the sessions generated and run to the end');
+  return of(m.robustness.sessionsFailed, m.harness.ok);
+}
 const comparison = (id: string): any => (json(`${DELIVERY_BEFORE}/comparison.json`).comparisons as any[]).find((c) => c.id === id);
 
 /** The runs of one cell of a rule effect result. */
@@ -68,10 +73,14 @@ const cost = (rs: readonly any[]): string => usd(mean(rs.map((r) => r.cost_usd))
 
 /** How each entry's value is computed from its raw file, as its Measurement field says. */
 const COMPUTE: Record<string, () => string> = {
-  D1: () => of(summary('on-s1-n300').robustness.sessionsFailed, summary('on-s1-n300').sessions),
+  D1: () => failedOfRan(summary('on-s1-n300'), 300, 300),
   D2: () => pctOf(summary('on-s1-n300').coverage.covered, summary('on-s1-n300').coverage.due),
   D3: () => pctOf(summary('on-s1-n300').coverage.subagents.covered, summary('on-s1-n300').coverage.subagents.due),
-  D4: () => of(comparison('P1').a, comparison('P1').pairs.sessions),
+  D4: () => {
+    const earlier = json('experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465/summary.json')['on-s1-n300'];
+    assert.deepEqual([earlier.sessions, earlier.harness], [300, { ok: 296, 'step-timeout': 4 }], 'D4: the earlier run\'s sessions generated and run');
+    return of(comparison('P1').a, comparison('P1').pairs.sessions);
+  },
   D5: () => pct(comparison('P3').b),
   D6: () => pctOf(summary('claudemd-s1-n60').coverage.covered, summary('claudemd-s1-n60').coverage.due),
   D7: () => pctOf(summary('rules-s1-n60').coverage.covered, summary('rules-s1-n60').coverage.due),
@@ -98,7 +107,7 @@ const COMPUTE: Record<string, () => string> = {
     const c = summary('claudemd-s1-n60').coverage;
     return pctOf(c.covered - c.subagents.covered, c.due - c.subagents.due);
   },
-  D18: () => of(g2().robustness.sessionsFailed, g2().sessions),
+  D18: () => failedOfRan(g2(), 300, 299),
   D19: () => pctOf(g2().coverage.covered, g2().coverage.due),
   D20: () => pctOf(g2().coverage.subagents.covered, g2().coverage.subagents.due),
   D21: () => {

@@ -14,9 +14,9 @@ Generator 2 draws other sequences than generator 1 from the same seed, so this r
 
 ## The result
 
-Under `on`, 299 of 300 sessions ran, and none breaks the invariant: coverage is 100% (3,090 of 3,090 requests with rules due), subagent coverage 100% (763 of 763), and no request holds another model's rule without a note that retires it.
+Under `on`, 300 sessions were generated, 299 ran to the end, and none of the 299 breaks the invariant: coverage is 100% (3,090 of 3,090 requests with rules due), subagent coverage 100% (763 of 763), and no request holds another model's rule without a note that retires it.
 The documented exception for subagents whose calls differ no longer occurs, since noonsight gives those subagents rules since #61.
-The session that did not run, `s1-0123`, is one where a `/model` switch drew no switch and the turn after it got no answer; the driver records it as not driven.
+The session that did not run to the end, `s1-0123`, is one where a `/model` switch drew no switch and the turn after it got no answer (`step-timeout`), which leaves it out of the measures.
 
 Every path is covered on every request with rules due ([summary.md](summary.md)), the new ones included:
 
@@ -68,7 +68,7 @@ The 8 exposed sessions it did not catch were not read one by one.
 
 ## The decision log
 
-[agree.json](agree.json): on the 299 sessions under `on` that ran, the log and the stub give the same coverage, 100%, on all 2,804 requests of the sessions' own conversations, and name the same model on each.
+[agree.json](agree.json): on the 299 sessions under `on` that ran to the end, the log and the stub give the same coverage, 100%, on all 2,804 requests of the sessions' own conversations, and name the same model on each.
 They differ on the characters in 135 sessions, as in earlier runs: the log records what the hook returned, including a delivery Claude Code then dropped or never sent.
 
 ## Hook time
