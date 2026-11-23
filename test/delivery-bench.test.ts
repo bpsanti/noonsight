@@ -210,7 +210,7 @@ test('oracle: a session in the benchmark\'s project is measured with the project
   assert.ok(!ref.lib.some((e) => e.ids.some((id) => id.startsWith('project/'))));
   const project = withProject.lib.filter((e) => e.ids.some((id) => id.startsWith('project/')));
   assert.deepEqual(project.map((e) => e.ids[0]).sort(), ['project/fable-name-the-tests', 'project/record-decisions', 'project/sonnet-small-steps', 'project/subagent-report']);
-  const atBuild = { scope: 'build', place: 'session' as const, triggers: [] };
+  const atBuild = { scope: 'build', place: 'attended' as const, triggers: [] };
   const due = resolve(withProject.config, { model: 'claude-fable-5-2', ...atBuild });
   assert.ok(due.status === 'matched' && due.rules.includes('project/fable-name-the-tests') && due.rules.includes('project/record-decisions'));
   const texts = due.status === 'matched' ? due.rules.map((id) => withProject.byId.get(id)?.text ?? '') : [];
