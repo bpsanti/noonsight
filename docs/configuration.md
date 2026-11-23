@@ -486,6 +486,7 @@ In the agent call hook, the subagent waits for it before it starts, so turning t
 
 `test/fixtures/classifier/tasks.json` holds 45 task texts, each labeled by hand with one of the `claude` preset's five scopes or `none`, by the rule written in `test/fixtures/classifier/README.md`.
 On 2026-11-16, with Claude Code 2.1.325 and the classifier's defaults (Haiku 5.5 at low effort), the live test `classifier-agreement` ran over all 45 twice, and the classifier agreed with the hand label on 44 of them in the first run and on 43 in the second.
+Its answers were not committed, so this is not an entry of [docs/evidence.md](evidence.md#runs-and-versions), none of whose runs used that version.
 No classification failed or ran out of time in either run.
 
 | Label | Tasks | Agreed, run 1 | Agreed, run 2 |

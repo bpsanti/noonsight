@@ -2,6 +2,7 @@
 
 The whole delivery benchmark ([experiments/delivery](../../../README.md)) with the second generator, which draws the paths the earlier runs left out: sessions started through `noonsight run` and in a project with a trusted noonsight configuration, forks (`--fork-session`, `/branch`, `/fork`), `/resume` typed in the session, plan mode, and subagents that edit a file.
 No request reached Anthropic and no token was spent.
+This is the current run of the delivery benchmark: its numbers are the ones [docs/evidence.md](../../../../../docs/evidence.md#delivery) gives (D18 to D34), and the runs on Claude Code 2.1.328 are superseded by it.
 
 ## How it ran
 
@@ -38,7 +39,7 @@ Of the 15 `/model` steps that drew no switch, 14 switched between Sonnet and Hai
 
 All 33 entries had the outcome they record ([corpus.json](corpus.json)): the reproductions of F1 to F9 pass, every entry for a new path passes, and `limit-default-model-after-compact` shows the violations it names.
 
-[before-fix/](before-fix) holds the eight entries of F5 to F9 run with this harness against the build of `main` before their fixes (`19adf38`), through `--noonsight`: every one breaks the invariant there, with `foreign-unretired` in the session's own requests, `missing-own` too for F7 and F8, and `own-retired` for F9.
+[before-fix/](before-fix) holds the eight entries of F5 to F9 run with the harness of commit `1247866` against the build of `main` before their fixes (`19adf38`), through `--noonsight`: every one breaks the invariant there, with `foreign-unretired` in the session's own requests, `missing-own` too for F7 and F8, and `own-retired` for F9.
 
 ## The native alternatives
 

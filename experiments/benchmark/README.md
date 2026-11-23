@@ -134,7 +134,8 @@ A pilot's results go to `results/<date>/` with a reading of them, as in [experim
 `summarize` prints the tables a reading is written from, for a folder holding those result files: the delivery check of every run, the share of the received rule text written for the run's model (and, when the folder holds `delivery-probe/delivery.json`, for each probe path), how often the `scattered` rules file was opened, the model switches, cost and input tokens per run, the verifier's verdicts and the judge's scores.
 
 ```bash
-npm run benchmark -- summarize --results experiments/benchmark/results/2026-11-19
+npm run benchmark -- summarize --results experiments/benchmark/results/2026-11-19   # the pilot, on Claude Code 2.1.326
 ```
 
-The pilot's results and their reading are in [results/2026-11-19](results/2026-11-19/README.md).
+The pilot's results and their reading are in [results/2026-11-19](results/2026-11-19/README.md), on Claude Code 2.1.326.
+Its delivery probe ran one session per condition; what noonsight delivers is measured by the [delivery benchmark](../delivery/README.md), whose numbers are the ones to quote.

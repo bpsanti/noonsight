@@ -5,11 +5,11 @@
 | Arm | `claudemd` | `on` | `on` (planted: compact-as-resume) | `on` (planted: no-switch-note) | `rules` | `skills` |
 | Sessions measured / run | 60 / 60 | 300 / 300 | 60 / 60 | 60 / 60 | 60 / 60 | 60 / 60 |
 | Requests (main, subagent, compaction) | 861 (648, 184, 29) | 4376 (3274, 934, 168) | 862 (649, 184, 29) | 871 (658, 184, 29) | 864 (651, 184, 29) | 866 (653, 184, 29) |
-| Coverage | 87.4% (566 of 648) | 99.5% (3199 of 3216) | 94.4% (611 of 647) | 100.0% (654 of 654) | 70.9% (460 of 649) | 0.0% (0 of 650) |
+| Coverage | 87.3% (566 of 648) | 99.5% (3199 of 3216) | 94.4% (611 of 647) | 100.0% (654 of 654) | 70.9% (460 of 649) | 0.0% (0 of 650) |
 | Coverage, subagents | 32.2% (39 of 121) | 99.9% (667 of 668) | 100.0% (121 of 121) | 100.0% (121 of 121) | 32.2% (39 of 121) | 0.0% (0 of 121) |
 | Coverage, by rule | 90.2% | 99.6% | 94.6% | 100.0% | 77.5% | 0.0% |
 | Own share | 31.6% | 78.8% | 80.7% | 79.0% | 27.1% | no rule text |
-| Right share | 12.8% | 51.4% | 51.9% | 54.0% | 11.9% | no rule text |
+| Right share | 12.8% | 51.4% | 51.9% | 54.1% | 11.9% | no rule text |
 | Characters added per request | 4414 | 1154 | 1115 | 1137 | 3995 | 0 |
 | Share of the request text | 15.3% | 4.7% | 4.5% | 4.6% | 14.0% | 0.0% |
 | Requests with a rule of another model and no note | 706 | 22 | 0 | 113 | 709 | 0 |
@@ -65,7 +65,7 @@
 | every quiet step followed by a request | 124 | 1323 | 100.0% | 0 |
 | two quiet steps in a row | 176 | 1893 | 99.1% | 3 |
 | 0-2 events | 28 | 131 | 100.0% | 0 |
-| 3-5 events | 106 | 791 | 99.8% | 1 |
+| 3-5 events | 106 | 791 | 99.7% | 1 |
 | 6-8 events | 121 | 1538 | 99.0% | 1 |
 | 9+ events | 45 | 756 | 100.0% | 1 |
 

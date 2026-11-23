@@ -1,5 +1,7 @@
 # Rule effect, 2026-11-19
 
+> **Superseded in part.** On `fix` and `bug` for Sonnet 5.5 and Haiku 5.5, by [2026-11-20](../2026-11-20/README.md) (Claude Code 2.1.329), where Sonnet's bug without rules gives 11 of 30; the rest is current.
+
 This run tests again the three rules whose effect showed on [2026-11-16](../2026-11-16/README.md), each on three tasks of different shapes, with 30 runs per arm and task.
 It is the design `expanded` of [the experiment's README](../../README.md#the-expanded-design), whose twelve comparisons were fixed before it ran.
 

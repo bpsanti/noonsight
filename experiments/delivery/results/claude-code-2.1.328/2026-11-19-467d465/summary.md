@@ -5,7 +5,7 @@
 | Arm | `claudemd` | `on` | `on` (planted: compact-as-resume) | `on` (planted: no-switch-note) | `rules` | `skills` |
 | Sessions measured / run | 60 / 60 | 296 / 300 | 60 / 60 | 60 / 60 | 60 / 60 | 60 / 60 |
 | Requests (main, subagent, compaction) | 851 (638, 184, 29) | 4202 (3121, 916, 165) | 853 (640, 184, 29) | 856 (643, 184, 29) | 845 (633, 183, 29) | 855 (642, 184, 29) |
-| Coverage | 87.2% (557 of 639) | 99.4% (3071 of 3090) | 91.3% (587 of 643) | 99.8% (642 of 643) | 70.5% (448 of 635) | 0.0% (0 of 643) |
+| Coverage | 87.2% (557 of 639) | 99.4% (3071 of 3090) | 91.3% (587 of 643) | 99.8% (642 of 643) | 70.6% (448 of 635) | 0.0% (0 of 643) |
 | Coverage, subagents | 32.2% (39 of 121) | 99.7% (653 of 655) | 100.0% (121 of 121) | 100.0% (121 of 121) | 32.5% (39 of 120) | 0.0% (0 of 121) |
 | Coverage, by rule | 90.0% | 99.7% | 91.7% | 99.9% | 77.3% | 0.0% |
 | Own share | 31.6% | 78.4% | 79.9% | 78.8% | 27.4% | no rule text |
@@ -63,7 +63,7 @@
 | Sessions | Count | Rules due | Coverage | With an unexplained violation |
 | --- | --- | --- | --- | --- |
 | every quiet step followed by a request | 122 | 1285 | 100.0% | 0 |
-| two quiet steps in a row | 174 | 1805 | 99.0% | 26 |
+| two quiet steps in a row | 174 | 1805 | 98.9% | 26 |
 | 0-2 events | 28 | 128 | 100.0% | 0 |
 | 3-5 events | 104 | 766 | 99.6% | 7 |
 | 6-8 events | 121 | 1498 | 99.5% | 13 |
@@ -157,7 +157,7 @@
 | every quiet step followed by a request | 28 | 274 | 69.3% | 28 |
 | two quiet steps in a row | 32 | 361 | 71.5% | 32 |
 | 0-2 events | 6 | 26 | 88.5% | 6 |
-| 3-5 events | 26 | 205 | 58.1% | 26 |
+| 3-5 events | 26 | 205 | 58.0% | 26 |
 | 6-8 events | 19 | 252 | 74.6% | 19 |
 | 9+ events | 9 | 152 | 77.6% | 9 |
 

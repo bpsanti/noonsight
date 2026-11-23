@@ -1,5 +1,7 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-21, after the fixes of F3 and F4
 
+> **Superseded.** The current run is [2026-11-23 on Claude Code 2.1.330](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md); quote its numbers, not the ones here, which are history.
+
 The whole delivery benchmark ([experiments/delivery](../../../README.md)) on noonsight with the fixes of F3 and F4 (#53), measured against [the run that found them](../2026-11-20-4e18c43/README.md).
 The design `after-f3-f4` in [plan.json](../../../plan.json) fixed the comparisons before the run, and the delivery README lists them ("The design `after-f3-f4`").
 No request reached Anthropic and no token was spent.
@@ -29,7 +31,7 @@ At most three sessions could change, too few for a paired test to reach 0.05, so
 | K2 | Coverage under `on` | 99.5% (3,199 of 3,216) | 99.9% (3,219 of 3,221) | 1, 1, 0 | Holds |
 | K3 | Requests under `on` with another model's rule and no note | 22 | 2 | | Holds |
 | K4 | Subagent coverage under `on` is no lower | 99.9% | 100% | 0, 1, 0 | Holds |
-| C1 | `claudemd` is unchanged | 87.4% | 87.3% | 42, 0, 0 of 60 | Does not hold as written |
+| C1 | `claudemd` is unchanged | 87.3% (566 of 648) | 87.3% (565 of 647) | 42, 0, 0 of 60 | Does not hold as written |
 | C2 | `rules` is unchanged | 70.9% | 70.6% | 47, 0, 0 | Does not hold as written |
 | C3 | `skills` is unchanged | 0% | 0% | 58, 0, 0 | Holds |
 | S4 | The decision log gives the coverage the stub saw | | log 100%, stub 99.9% | | Does not hold |

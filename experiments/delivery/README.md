@@ -206,6 +206,7 @@ results/
       sessions/       one line per session (not committed: the seed reproduces them)
 ```
 
+The current run is the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)); every run on 2.1.328 is superseded by it, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
 The folder for one version holds what was measured on that version; comparing two versions is comparing their `summary.json` and `corpus.json`.
 
 ## Failures found, and a limit
@@ -229,8 +230,8 @@ All nine are fixed, and their entries must pass.
   After `/model haiku` in a conversation that last answered on Sonnet, a resume without `--model` runs on Haiku, the model setting, while the hook took Sonnet, the model of the last response, since the fix of F2 (`f4-resume-after-switch-from-sonnet`).
   Under the setting `haiku`, written exactly so, Claude Code resumes a conversation that last answered on Haiku or Sonnet on Haiku, and noonsight now does the same (`docs/hooks.md`, "SessionStart").
 
-F3 and F4 were found by the run [after the fixes of F1 and F2](results/claude-code-2.1.328/2026-11-20-4e18c43/README.md).
-The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md) measured the fuzz level again: all 300 sessions under `on` ran to the end and one of the 300 breaks the invariant, and it is the documented limit below.
+F3 and F4 were found by the run [after the fixes of F1 and F2](results/claude-code-2.1.328/2026-11-20-4e18c43/README.md), superseded since.
+The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md), superseded by the run with generator 2 below, measured the fuzz level again: all 300 sessions under `on` ran to the end and one of the 300 breaks the invariant, and it is the documented limit below.
 
 - **F5, a fork with no record.**
   A fork goes on in a copy of a conversation under a new session id, and noonsight's record was by session id, so a fork's start found none: it delivered its model's rules with no note, while the copy held the original model's rules, and a switch's delivery that had not arrived yet (`f5-fork-session-to-another-model`, `f5-branch-after-switch`, `f5-fork-after-switch`).
@@ -254,7 +255,7 @@ The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5
 
 F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 to F9 in fuzz runs of generator 2 (`s1-0088`, `s1-0138` and `s1-0182` of seed 1) before their fixes: on the build before their fix, every one of these entries breaks the invariant (`foreign-unretired` in the session's own requests, with `missing-own` for F7 and F8, and `own-retired` for F9), and on the fixed build they pass.
 
-The run [with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md) measured the new paths after the fixes of F5 to F9: 300 sessions were generated under `on`, 299 ran to the end and none of the 299 breaks the invariant, and every request with rules due held them; the other, `s1-0123`, stopped on a turn that got no answer and is not measured.
+The current run, [with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md), measured the new paths after the fixes of F5 to F9: 300 sessions were generated under `on`, 299 ran to the end and none of the 299 breaks the invariant, and every request with rules due held them; the other, `s1-0123`, stopped on a turn that got no answer and is not measured.
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 

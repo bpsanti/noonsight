@@ -7,14 +7,14 @@ Every number links to its entry in [docs/evidence.md](evidence.md), and every qu
 ## Choosing where a rule lives
 
 Claude Code already has three places for instructions, and noonsight is a fourth.
-The delivery benchmark put every model's rules in each of them and read every request of the same 60 sessions ([experiments/delivery](../experiments/delivery/README.md)):
+The delivery benchmark put every model's rules in each of them and read every request, for the alternatives on the first 60 sequences of the run and for noonsight on all its sessions, which include those 60 ([experiments/delivery](../experiments/delivery/README.md), Claude Code 2.1.330):
 
 | Where the rules live | Requests with their rules | Subagent requests with their rules | Rule text that is the model's own | Characters added per request |
 | --- | --- | --- | --- | --- |
-| noonsight | [100%](evidence.md#d5) | [100%](evidence.md#d9) | [79.0%](evidence.md#d12) | [1,155](evidence.md#d13) |
-| A user `CLAUDE.md` | [87.3% (565 of 647)](evidence.md#d6), and [100% (526 of 526)](evidence.md#d17) of the main conversation's | [32.2% (39 of 121)](evidence.md#d10) | [31.5%](evidence.md#d12) | [4,415](evidence.md#d13) |
-| `.claude/rules`, one file per model | [70.6% (459 of 650)](evidence.md#d7) | [32.2% (39 of 121)](evidence.md#d10) | [27.0%](evidence.md#d12) | [3,987](evidence.md#d13) |
-| A skill per model | [0% (0 of 654)](evidence.md#d8) | [0 of 121](evidence.md#d11) | No rule text | None |
+| noonsight | [100% (3,090 of 3,090)](evidence.md#d19) | [100% (763 of 763)](evidence.md#d20) | [78.6%](evidence.md#d30) | [1,343](evidence.md#d31) |
+| A user `CLAUDE.md` | [88.2% (508 of 576)](evidence.md#d25), and [100% (448 of 448)](evidence.md#d34) of the main conversation's | [46.9% (60 of 128)](evidence.md#d28) | [32.6%](evidence.md#d30) | [4,472](evidence.md#d31) |
+| `.claude/rules`, one file per model | [76.3% (441 of 578)](evidence.md#d26) | [46.9% (60 of 128)](evidence.md#d28) | [27.9%](evidence.md#d30) | [3,889](evidence.md#d31) |
+| A skill per model | [0% (0 of 579)](evidence.md#d27) | [0 of 128](evidence.md#d29) | No rule text | None |
 
 What the table says:
 
@@ -22,7 +22,7 @@ What the table says:
   It does not reach the built-in Explore and Plan subagents ([S4](sources.md#s4)), and it cannot choose by model, so every model reads every other model's rules.
 - `.claude/rules` without `paths` loads like a `CLAUDE.md`, and with `paths` only once the session touches a matching file ([S3](sources.md#s3)).
 - A skill puts only its description in the context until the model opens it ([S5](sources.md#s5)); the benchmark's stand-in never opens one, so the table shows what a skill guarantees, not what a real model does with it.
-- noonsight gives each request only its model's rules, including subagents, at the cost of its hooks: a fraction of a second at each event, 50 to 90 ms of processor time per hook run at the median ([D15](evidence.md#d15)).
+- noonsight gives each request only its model's rules, including subagents, at the cost of its hooks: a fraction of a second at each event, 80 to 150 ms of processor time per hook run at the median, measured on a laptop busy with other work, so a high reading, of which a Node.js process that does nothing takes a quarter or less ([D33](evidence.md#d33), Claude Code 2.1.330).
 
 So:
 
@@ -40,15 +40,15 @@ So:
 
 **Give the model a check to pass.**
 Anthropic's best practices say a check to pass is still worth giving, while telling a current model to keep going mostly is not ([S7](sources.md#s7)).
-Our data agrees: `verify-changes`, which asks for a real check before reporting a change as done, made Sonnet 5.5 and Haiku 5.5 run the tests after a precise fix in 29 of 30 and 27 of 30 runs, where `carry-through` alone did it in 0 of 30 and 0 of 30 ([R3](evidence.md#r3)).
+Our data agrees: `verify-changes`, which asks for a real check before reporting a change as done, made Sonnet 5.5 and Haiku 5.5 run the tests after a precise fix in 29 of 30 and 27 of 30 runs, where `carry-through` alone did it in 0 of 30 and 0 of 30 ([R3](evidence.md#r3), Claude Code 2.1.329).
 
 **Aim the rule at a habit the model has, on the tasks you run.**
-Where the model already did the work, the rule changed nothing: without any rule, Sonnet 5.5 and Haiku 5.5 ran the tests after a feature across several files in 30 of 30 and 29 of 30 runs ([R13](evidence.md#r13)), and did every part of two long tasks in 19 of 20 pilot runs as recorded ([R12](evidence.md#r12)).
+Where the model already did the work, the rule changed nothing: without any rule, Sonnet 5.5 and Haiku 5.5 ran the tests after a feature across several files in 30 of 30 and 29 of 30 runs ([R13](evidence.md#r13), Claude Code 2.1.328), and did every part of two long tasks in 19 of 20 pilot runs as recorded ([R12](evidence.md#r12), Claude Code 2.1.329).
 The per-model guides describe such habits ([S1](sources.md#s1), [S2](sources.md#s2)), and the preset's rules come from them ([presets/claude/SOURCES.md](../presets/claude/SOURCES.md)).
 
 **Say what to do when the work holds a choice.**
-On a backlog with a decision left open, `sonnet-5-5/carry-through` made Sonnet 5.5 settle it instead of handing it back, and the runs that did every part went from 9 of 40 to 32 of 40 ([R10](evidence.md#r10)).
-The same rule for Haiku 5.5 showed nothing there: 6 of 40 against 2 of 40 ([R11](evidence.md#r11)).
+On a backlog with a decision left open, `sonnet-5-5/carry-through` made Sonnet 5.5 settle it instead of handing it back, and the runs that did every part went from 9 of 40 to 32 of 40 ([R10](evidence.md#r10), Claude Code 2.1.329).
+The same rule for Haiku 5.5 showed nothing there: 6 of 40 against 2 of 40 ([R11](evidence.md#r11), Claude Code 2.1.329).
 
 **Keep it short, plain and specific.**
 Claude Code's documentation says the more specific and concise an instruction, the more consistently Claude follows it ([S3](sources.md#s3)), and that current models follow a plainly worded line without emphasis ([S7](sources.md#s7)).
@@ -62,7 +62,7 @@ A rule that reads as an out-of-band command to obey can trip the model's prompt-
 ### A pointer to a file
 
 A rule can be one sentence that names a file holding its text and says to read it, through a user rule that `replaces` the preset rule.
-Delivered that way, `verify-changes` was read in 120 of 120 runs, at the first tool call, and gave the same tests as the rule inline ([R4](evidence.md#r4), [R5](evidence.md#r5)); on Sonnet's fix it cost $0.0440 per run against $0.0505 inline ([R6](evidence.md#r6)).
+Delivered that way, `verify-changes` was read in 120 of 120 runs, at the first tool call, and gave the same tests as the rule inline ([R4](evidence.md#r4), [R5](evidence.md#r5)); on Sonnet's fix it cost $0.0440 per run against $0.0505 inline ([R6](evidence.md#r6), Claude Code 2.1.329).
 This is the "just in time" approach of Anthropic's context engineering article ([S8](sources.md#s8)).
 Those sessions were short: a pointer read at the start and then compacted away was not measured, so for long sessions keep rules that must hold to the end inline, or give them a trigger.
 
@@ -70,7 +70,7 @@ Those sessions were short: a pointer read at the start and then compacted away w
 
 A rule costs its characters in every request it reaches, and whatever extra work it makes the model do.
 The second part dominates where the rule changes behavior.
-On the precise fix, mean cost per run as Claude Code reports it at list price ([experiments/rules/results/2026-11-20](../experiments/rules/results/2026-11-20/README.md)):
+On the precise fix, mean cost per run as Claude Code reports it at list price ([experiments/rules/results/2026-11-20](../experiments/rules/results/2026-11-20/README.md), Claude Code 2.1.329):
 
 | Model | Without rules | `carry-through` alone | `verify-changes` alone | `verify-changes` as a pointer | The preset's rules there |
 | --- | --- | --- | --- | --- | --- |
@@ -79,7 +79,7 @@ On the precise fix, mean cost per run as Claude Code reports it at list price ([
 
 - `carry-through` changed nothing on that task and cost almost nothing.
 - `verify-changes` made the model run the tests, which roughly doubled the cost of a cheap task; on Sonnet the three preset rules together cost less than `verify-changes` alone, which the result's README reads as `stay-in-scope` keeping the runs short, a direction it did not test.
-- The added characters themselves are small: noonsight added 1,155, 4,415 and 3,987 characters per request in the delivery benchmark under noonsight, a `CLAUDE.md` and `.claude/rules` ([D13](evidence.md#d13)).
+- The added characters themselves are small: 1,343, 4,472 and 3,889 characters per request in the delivery benchmark under noonsight, a `CLAUDE.md` and `.claude/rules` ([D31](evidence.md#d31), Claude Code 2.1.330).
 
 `noonsight models` lists each preset rule with the cost its source reports, and `noonsight report` gives the length of each rule's text, so a rule that is long and never changes anything you can see is the first to drop.
 
@@ -142,7 +142,7 @@ For sessions started with `claude -p` where the hooks cannot read the model, `no
 
 ## When not to use noonsight
 
-- **Every session runs one model with fixed rules.** A `CLAUDE.md` delivers them to every request of the conversation ([D17](evidence.md#d17)), with nothing to install.
+- **Every session runs one model with fixed rules.** A `CLAUDE.md` delivers them to every request of the conversation ([D34](evidence.md#d34), Claude Code 2.1.330), with nothing to install; Explore and Plan subagents do not get them ([S4](sources.md#s4)).
 - **The rule must never be broken.** A delivered rule is context; use a hook or a permission rule ([S3](sources.md#s3)).
 - **The model already does what the rule asks on your tasks.** The rule then changes nothing and still costs its characters; measure first, with `noonsight report` and your own runs.
 - **You cannot install hooks**, for example where an organization's managed settings forbid user hooks; `noonsight check` says when the hooks will not run ([docs/install.md](install.md#check)).
