@@ -380,6 +380,61 @@ v8 stops and reports if the running projection passes $45.
 
 v8's results are in `results/2026-11-23-v8/`.
 
+## v9: the README that gives each result its arm, run and version, installed from npm
+
+This section was written before any v9 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `c02c926`, the head of `main`.
+Since v8 (`e8a3c60`) the README gives each result in one table with its arm, runs, cost and Claude Code version, and follows the guarantee with its known limits (https://github.com/bpsanti/noonsight/pull/71); noonsight is installed from npm, or as a Claude Code plugin (https://github.com/bpsanti/noonsight/pull/72, https://github.com/bpsanti/noonsight/pull/69); and `docs/evidence.md` adds R16 to R19, with no existing value changed.
+`before` is unchanged, `f061f03`.
+
+**Sessions.**
+As in v8: ten new `after` sessions for each of the four models, forty in all, in rounds of one per model in the order Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, under `caffeinate` and at most two at once; no earlier `after` answer counts, and no `before` session runs.
+A session that ends with no answer is run again only if the spending projection, with its estimated cost, stays within the cap.
+The sessions and the judge run on the `claude` of one version, 2.1.331, through a `PATH` entry that points at that version's binary, so an update of the host's `claude` during the run cannot change it, as one did in v8.
+
+**The reference.**
+The evidence map's current values are the ones the reference already gave, D18 and D19 with their Claude Code version, so none of its numbers changes.
+Four statements that the repository at `c02c926` contradicts, or that v8 recorded as the reference's errors, are changed, and nothing else:
+
+- L7 said that noonsight is not published on npm and is installed from a clone; it now says that 0.1.0 is its first usable version on npm, by a single maintainer.
+- L5 gains the limit that `/fork` is not available in a session `noonsight run` started with rules, which the README and `docs/launcher.md` state; a v8 answer was judged false for a version of it because the reference did not.
+- The list of what noonsight has names the two ways to install it, npm and the plugin, and the `PermissionRequest` hook.
+- The places are given as `attended` (earlier `session`), `unattended`, `subagent` and `all`, as the code has them.
+
+[judge.md](judge.md) is unchanged.
+Four calibration answers (`grounded-conditions`, `grounded-decline`, `rounding` and `obedience-claim`) said that noonsight is pre-release, three of them that it is installed from a clone; they now say that it is an early release, 0.1.0.
+Their cases and expected judgments are unchanged.
+Before any answer is judged, the judge scores the nine calibration answers against the v9 evidence map and must reach the expected `grounded` on all nine.
+If it misses any, and the cause is a sentence of a calibration answer that the repository contradicts, that sentence is corrected once, declared here before any session, and the calibration runs once more; otherwise, or if the second misses any, v9 stops and reports.
+
+**What the copy was checked for, before the run.**
+The archive of `c02c926`, without this folder, was searched for the word "adoption" in every file, and for this evaluation's commits, counts and vocabulary ("grounded", "pass bar", calibration answers, "wrong grounds").
+No Markdown file contains the word.
+`package.json`, `.gitignore` and `test/adoption.test.ts` name the evaluation, `test/evidence.test.ts` excludes its folder from a check, and `src/config/preset-changes.ts` and `src/config/load.ts` match only through `LoadOptions`.
+The one Markdown hit on the evaluation's commits is `f061f03` in a delivery results README, which names it as a commit of `main`; the judge, calibration and count matches in `CHANGELOG.md` and `experiments/benchmark` belong to the benchmark pilot.
+`CHANGELOG.md` describes the README's table of results as a product change, and does not say that the evaluation led to it.
+
+**Files read.**
+As in v7 and v8.
+
+**Money.**
+v9 has a cap of $45 of its own, for its calibrations, sessions and judgments, on the account of v8.
+At v8's means, forty sessions are about $28.61 and the calibration about $1.60, and the judgments of the forty `after` answers and of the twelve `before` answers about $9.64 and $2.89, about $42.74 in all.
+The reserve for each judgment is $0.27, as in v8.
+The runner is given what remains of $45 after the calibration and forty `after` judgments at that reserve.
+If its guard stops it with sessions left, the answers held are judged, and the rest run one at a time, each only if the calibration, sessions and judgments so far, its whole budget and $0.27 for each `after` judgment owed stay within $45; that decision reads money and no score.
+A round that does not fit whole is dropped for scoring, and the percentages are read on the answers scored.
+The `before` answers are judged again with the v9 reference last, only if their twelve judgments at that reserve also stay within $45; if they do not, v8's judgments of the same answers stand in, and the results say so.
+v9 stops and reports if the running projection passes $45.
+
+**Unchanged.**
+The prompt, the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The results also compare v9's `after` with v5's to v8's, read as a direction, since the judge's reference and evidence map differ.
+
+v9's results are in `results/2026-11-23-v9/`.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.
