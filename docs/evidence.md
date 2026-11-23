@@ -24,16 +24,16 @@ No run of this table, and so no entry, covers a version that is not in it; `docs
 | [delivery/results/claude-code-2.1.328/2026-11-20-4e18c43](../experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/README.md) | 2026-11-20 | 2.1.328 | superseded | D4, D5, D9 |
 | [delivery/results/claude-code-2.1.328/2026-11-19-f02ccf0](../experiments/delivery/results/claude-code-2.1.328/2026-11-19-f02ccf0/README.md) | 2026-11-19 | 2.1.328 | superseded | none |
 | [delivery/results/claude-code-2.1.328/2026-11-19-467d465](../experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465/README.md) | 2026-11-19 | 2.1.328 | superseded | D4 |
-| [rules/results/2026-11-20-harder](../experiments/rules/results/2026-11-20-harder/README.md) | 2026-11-20 | 2.1.329 | current | R10, R11 |
+| [rules/results/2026-11-20-harder](../experiments/rules/results/2026-11-20-harder/README.md) | 2026-11-20 | 2.1.329 | current | R10, R11, R18 |
 | [rules/results/2026-11-20-long](../experiments/rules/results/2026-11-20-long/README.md) | 2026-11-20 | 2.1.329 | current | R12 |
-| [rules/results/2026-11-20](../experiments/rules/results/2026-11-20/README.md) | 2026-11-20 | 2.1.329 | current | R3 to R8, R14, R15 |
-| [rules/results/2026-11-19](../experiments/rules/results/2026-11-19/README.md) | 2026-11-19 | 2.1.328 | superseded in part | R1, R2, R9, R13 |
+| [rules/results/2026-11-20](../experiments/rules/results/2026-11-20/README.md) | 2026-11-20 | 2.1.329 | current | R3 to R8, R14 to R17 |
+| [rules/results/2026-11-19](../experiments/rules/results/2026-11-19/README.md) | 2026-11-19 | 2.1.328 | superseded in part | R1, R2, R9, R13, R19 |
 | [rules/results/2026-11-18](../experiments/rules/results/2026-11-18/README.md) | 2026-11-18 | 2.1.327 | current | none |
 | [rules/results/2026-11-16](../experiments/rules/results/2026-11-16/README.md) | 2026-11-16 | 2.1.326 | superseded in part | none |
 | [benchmark/results/2026-11-19](../experiments/benchmark/results/2026-11-19/README.md) | 2026-11-19 | 2.1.326 | current | B1, B2 |
 
 A run is superseded when a later run measured everything it did, and superseded in part when a later run measured some of its cells (a task, model and arm) again.
-Of the rules run of 2026-11-19, the run of 2026-11-20 measured `fix` and `bug` again for Sonnet 5.5 and Haiku 5.5, so R1 and R2 are superseded, while R9 and R13 are still the latest.
+Of the rules run of 2026-11-19, the run of 2026-11-20 measured `fix` and `bug` again for Sonnet 5.5 and Haiku 5.5, so R1 and R2 are superseded, while R9, R13 and R19 are still the latest.
 The rules run of 2026-11-18 committed no raw file, so nothing in it is an entry.
 
 ## Delivery
@@ -202,7 +202,7 @@ The native alternatives ran the first sequences of the same seed, which noonsigh
 
 The rule effect experiment ([experiments/rules](../experiments/rules/README.md)) runs one small task on a model with its preset rules delivered by noonsight and without, and reads what the session did.
 Each run is a line of the result's `runs.jsonl`; "tests after the last edit" is `signals.verified` among the runs whose `signals.edited` is true, and cost is `cost_usd`, as Claude Code reports it at list price.
-These entries ran on Claude Code 2.1.329, but for R9 and R13, which ran on 2.1.328.
+These entries ran on Claude Code 2.1.329, but for R9, R13 and R19, which ran on 2.1.328.
 
 ### R3
 
@@ -319,6 +319,42 @@ These entries ran on Claude Code 2.1.329, but for R9 and R13, which ran on 2.1.3
 - **Source:** `experiments/rules/results/2026-11-20/runs.jsonl`.
 - **Measurement:** task `bug`, model `sonnet`; tests after the last edit for `rules`, then `none`.
 - **Date:** 2026-11-20. **Claude Code:** 2.1.329.
+- **Status:** current.
+
+### R16
+
+- **Claim:** Sonnet 5.5 ran the tests after a bug fix known only by its symptom, with `verify-changes` alone and with `carry-through` alone; R15 gives the runs without rules and with the preset's two rules together.
+- **Value:** `30 of 30 and 30 of 30`
+- **Source:** `experiments/rules/results/2026-11-20/runs.jsonl`.
+- **Measurement:** task `bug`, model `sonnet`; tests after the last edit for `verify`, then `carry`.
+- **Date:** 2026-11-20. **Claude Code:** 2.1.329.
+- **Status:** current.
+
+### R17
+
+- **Claim:** mean cost per run of Sonnet 5.5 on that bug, without rules, with `carry-through` alone, with `verify-changes` alone, and with the two rules the preset delivers there.
+- **Value:** `$0.0321, $0.0461, $0.0494 and $0.0513`
+- **Source:** `experiments/rules/results/2026-11-20/runs.jsonl`.
+- **Measurement:** task `bug`, model `sonnet`; mean `cost_usd` of arms `none`, `carry`, `verify` and `rules`, to four decimals.
+- **Date:** 2026-11-20. **Claude Code:** 2.1.329.
+- **Status:** current.
+
+### R18
+
+- **Claim:** mean cost per run on the backlog of R10, with `carry-through` alone and without rules, for Sonnet 5.5 and Haiku 5.5.
+- **Value:** `$0.2848 against $0.2920, and $0.0204 against $0.0179`
+- **Source:** `experiments/rules/results/2026-11-20-harder/runs.jsonl`.
+- **Measurement:** task `triage`; mean `cost_usd` of arm `carry`, then `none`, for `sonnet`, then `haiku`, to four decimals.
+- **Date:** 2026-11-20. **Claude Code:** 2.1.329.
+- **Status:** current.
+
+### R19
+
+- **Claim:** mean cost per run of Fable 5.2 on the question, the bug and the feature of R9, with `fable-5-2/low-context-report`, the one rule the preset delivers there, and without. The differences were not tested.
+- **Value:** `$0.3088 against $0.3005, $0.2061 against $0.2007, $0.4642 against $0.5465`
+- **Source:** `experiments/rules/results/2026-11-19/runs.jsonl`.
+- **Measurement:** model `fable`; mean `cost_usd` of arm `rules`, then `none`, for tasks `question`, `bug` and `feature`, to four decimals.
+- **Date:** 2026-11-19. **Claude Code:** 2.1.328.
 - **Status:** current.
 
 ## Benchmark pilot
