@@ -1,0 +1,21 @@
+Verdict: **Adopt with conditions.** Pilot it on a few people's machines first, and don't roll it out team-wide until the conditions below hold.
+
+Reasons:
+1. **Delivery is well measured on the paths you use.** The latest run (Claude Code 2.1.330, `docs/evidence.md` D18 to D22) had 0 of 299 completed sessions break the invariant, with 100% of 3,090 rule-due requests holding their rules and 100% of 763 subagent requests covered. Your mix of model switches, `/compact`, resumes, and subagents is what that harness exercises.
+2. **It addresses the gap that native options leave.** Under the same sequences, a user `CLAUDE.md` covered 32.2% of subagent requests and `.claude/rules` covered 32.2%, against 100% for noonsight (README table, D6, D7, D9, D10). Since many of your sessions start subagents, this is the main reason to consider it.
+3. **Behavioral benefit is real but narrow.** `verify-changes` moved Sonnet 5.5 and Haiku 5.5 from 0 of 30 to 29 and 27 of 30 test runs after a one-file fix (R1, R3). `carry-through` raised Sonnet's full completion on a 13-ticket backlog from 9 of 40 to 32 of 40 (R10). Haiku's `carry-through` showed no effect (R11). The samples are 30 to 40 runs on small tasks, and the project's authors ran them.
+4. **Costs are small but not zero.** On Sonnet's fix, `verify-changes` raised mean cost per run from $0.0240 to $0.0505 (R6). Hook time is 50 to 90 ms per run (D15).
+5. **The mechanism is local and conservative.** I found no network calls in `src/` apart from the classifier, which is off by default and goes through the user's own `claude` CLI. The hooks never block tool calls (README, "Features").
+
+Conditions and risks:
+- **Subagent gaps in the default config.** The preset's Opus 5.5 rules are scoped to `unattended` only, so Opus subagents receive no preset rules. Attended Opus and Fable sessions receive nothing by default, because their attended rules ship off. Decide per model whether to `enable` a rule or add your own with `where: ["subagent"]`, and check with `noonsight models` and `noonsight report`.
+- **Known subagent limits.** Workflow agents get nothing. Foreground calls of one type that need different rules leave their subagents without rules until their first edit or agent call. Plugin-synced subagents stay on their parent's model (`docs/hooks.md`, "What the prediction does not see"). If your team uses any of these patterns, test them before relying on coverage.
+- **Version drift.** Results cover Claude Code 2.1.328 and 2.1.330 only. Pin each machine's Claude Code version or re-run `noonsight check` after upgrades, since `check` reports a Claude Code that is too old.
+- **Install scope.** `noonsight install` writes hooks into every Claude Code login of the account, personal ones included, and there is no npm release yet, so you install from a clone. Pin a reviewed commit and have one person audit it before rollout.
+- **Interactive sessions nobody watches.** Set `session.unattended_when_env` to your CI or orchestrator variable; otherwise those sessions are treated as attended.
+- **Repository rules are a trust surface.** A committed `.noonsight/noonsight.json` changes what a model is told. Require `noonsight trust` per person, review rule files like `CLAUDE.md`, and treat a repo you don't trust as you would its `CLAUDE.md`.
+- **Delivery is not behavior.** The benchmark uses a local stand-in for the API, so no real model was called. A delivered rule is context, not a guarantee of compliance. Measure effects on your own tasks; `noonsight report` shows deliveries only.
+- **Not measured:** agent teams, routing, and the classifier (`experiments/delivery/README.md`, "Limits").
+- **Provenance.** This directory is not a git repo, and the evidence is self-reported by the project's maintainers. I did not run `npm test` or re-run the benchmark; I verified the claims by reading the docs and source. If you adopt it, run `npm test` on your pinned commit.
+
+What it guarantees: On the measured Claude Code versions and session paths, noonsight delivers each session's and subagent's model-specific rules and retires another model's rules after a model change, as shown by a stub-API benchmark in which 0 of 299 completed sessions broke that invariant, and this rests on the project's own hook-based harness, not on any guarantee that the model will follow the rules.
