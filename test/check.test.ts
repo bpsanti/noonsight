@@ -45,7 +45,7 @@ test('after an account install, check reports every part as ok and exits 0', () 
   assert.ok(out.every((l) => l.startsWith('ok: ')), r.stdout);
   assert.match(r.stdout, /ok: config .*noonsight\.json: valid \(3 model entries; subagents: rules when each subagent starts, permission allow for a routed call, on mismatch warn\)/);
   assert.match(r.stdout, /^ok: triggers: code-edit, which no rule lists$/m);
-  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, SubagentStart, PostToolUse on Agent\\|Task, PostToolUse on Edit\\|Write\\)`));
+  assert.match(r.stdout, new RegExp(`ok: account install ${claudeDir}: hooks in .*settings\\.json \\(SessionStart, PostModelSwitch, PreToolUse on Agent\\|Task, SubagentStart, PostToolUse on Agent\\|Task, PostToolUse on Edit\\|Write, PermissionRequest on Agent\\|Task\\)`));
   // The version comes from package.json, in check and in every line of the decision log.
   const version = (JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { version: string }).version;
   assert.equal(version, '0.0.1');

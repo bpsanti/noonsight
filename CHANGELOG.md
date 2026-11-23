@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- The agent call hook now reads subagent definitions everywhere Claude Code reads them, in Claude Code's order: managed definitions in `.claude/agents/` of the managed settings directory, `--agents` on the `claude` command line (inline JSON, or a JSON file in `claude -p`), the project's `.claude/agents/` and those of `--add-dir` directories, the user's, and plugins given with `--plugin-dir`, `--plugin-dir-no-mcp` or `CLAUDE_CODE_PLUGIN_DIRS` or installed from a marketplace and enabled for the project; `--setting-sources` leaves out the folders it does not list.
+  A plugin's or an `--agents` subagent that sets its own model was predicted on its parent's model before, so it received the parent model's rules and its result showed `MISMATCH`; it now gets its own model's rules.
+  On macOS the hook runs `ps` once per agent call whose model depends on a definition, to read those options.
+  The decision log records where a definition came from (`definition_source`), and why one could not be read (`definition_why`), with `definition: "not-read"` as before; routing's reason for a definition it cannot read is now `definition-not-read` (it was `plugin-definition`).
+
+- An agent team teammate that runs in the session's process starts under the name its call gives, not its type, so its start found no call and it received nothing; the hook now matches the call by that name, and the teammate receives its call's rules.
+
+- A new `PermissionRequest` entry on the agent tool marks a call a permission prompt holds, so the call stays open for 24 hours instead of 2 minutes and its subagent still gets its rules when the person allows it later; the hook never answers the request.
+  A call the session's transcript shows refused, such as one rejected at its prompt, is left out when a start has to choose between calls.
+  `noonsight install` adds the entry; run it again after upgrading.
+
+- Foreground calls of one type that need different rules, such as two general-purpose calls with different `model` parameters, still start subagents that cannot be told apart, which get nothing at their start (`calls-differ`); each now gets its own call's rules at its first later `PostToolUse` hook noonsight runs, its first Edit or Write or the result of an agent call it makes, from the call that Claude Code's metadata for the subagent names, logged as a `subagent-rules` line.
+
+- A workflow's agents fire `SubagentStart` but start through no agent call and name no model, so they still get nothing; `docs/hooks.md` says so, and no longer says that teammates do.
+
+- `docs/verification/claude-code.md` records these facts for Claude Code 2.1.330, checked against the installed Claude Code with a local stand-in for the API and no login, and `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` checks the `claude -p` ones again (`test/live/subagent-sources.test.ts`).
+
 - The README no longer names Claude Code versions; it says that each result carries the version it was measured on, in its entry of `docs/evidence.md`, which keeps them with `docs/verification/claude-code.md`.
   It now gives Fable 5.2's measured rule effect (R9, `low-context-report`) beside Sonnet 5.5's and Haiku 5.5's, and says that `noonsight report` counts deliveries from the decision log and does not measure whether a rule changed anything.
   These answer the misses the fourth adoption run found (`experiments/adoption/results/2026-11-21-v4/README.md`).

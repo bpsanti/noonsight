@@ -16,8 +16,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Env } from '../../config/paths.js';
-import { repositoryRoot } from '../../config/project.js';
 import { normalizeModel } from '../../core/normalize.js';
+import type { Lookup } from './definitions.js';
 import { isSet, otherProvider, resolveModelValue } from './launch.js';
 
 /** Where the prediction came from, as the decision log records it. */
@@ -29,17 +29,14 @@ export interface Prediction {
   readonly source: PredictionSource;
   /** What the source named, such as an alias, when it named a model. */
   readonly value?: string;
-  /** The definition file that decided, or "not-read" for a plugin's subagent. */
+  /** The definition file that decided, or "not-read" when a place that may define the subagent cannot be read. */
   readonly definition?: string;
+  /** Where that definition was found: managed, flag, project, user or plugin. */
+  readonly definitionSource?: string;
+  /** Why the definition was not read, when it was not. */
+  readonly definitionWhy?: string;
   /** Why the model could not be told. */
   readonly why?: string;
-}
-
-/** A subagent definition: a Markdown file whose frontmatter names the subagent and may set its model. */
-export interface Definition {
-  readonly file: string;
-  readonly model: string | null;
-  readonly effort: string | null;
 }
 
 export interface PredictInput {
@@ -50,8 +47,8 @@ export interface PredictInput {
   /** The model of whoever starts the subagent, or null when it is not known. */
   readonly parent: string | null;
   readonly env: Env;
-  /** Finds a user or project definition by name; null when there is none. */
-  readonly findDefinition: (name: string) => Definition | null;
+  /** Finds the definition that decides for a name (definitions.ts). */
+  readonly findDefinition: (name: string) => Lookup;
 }
 
 /**
@@ -91,18 +88,17 @@ export function predict(input: PredictInput): Prediction {
 
   if (requested !== null) return fromValue(requested, parent, env, 'parameter');
 
-  if (type.includes(':')) {
-    // A plugin's subagent. Its definition is not read, so a model it sets is not seen; the check
-    // after the subagent starts reports the difference.
-    return subagentModel !== null
-      ? { ...fromValue(subagentModel, parent, env, 'env'), definition: 'not-read' }
-      : { ...fromParent(parent, 'parent'), definition: 'not-read' };
-  }
-
-  const definition = input.findDefinition(type);
-  if (definition !== null) {
-    if (definition.model !== null) return { ...fromValue(definition.model, parent, env, 'definition'), definition: definition.file };
-  } else {
+  const lookup = input.findDefinition(type);
+  if (lookup.kind === 'found') {
+    const { definition } = lookup;
+    if (definition.model !== null)
+      return { ...fromValue(definition.model, parent, env, 'definition'), definition: definition.file, definitionSource: definition.source };
+  } else if (lookup.kind === 'unread') {
+    // A place that may define the subagent cannot be read, so a model it sets is not seen; the check
+    // after the subagent starts reports a difference.
+    const fallback = subagentModel !== null ? fromValue(subagentModel, parent, env, 'env') : fromParent(parent, 'parent');
+    return { ...fallback, definition: 'not-read', definitionWhy: lookup.why };
+  } else if (!type.includes(':')) {
     if (type === 'Explore') return explore(parent, env);
     if (PARENT_BUILT_INS.has(type)) return fromParent(parent, 'built-in');
     if (type === WEB_FETCH) return otherProvider(env) !== undefined ? fromParent(parent, 'built-in') : fromValue('haiku', parent, env, 'built-in');
@@ -144,103 +140,6 @@ function fromValue(value: string, parent: string | null, env: Env, source: Predi
 /** The family of a normalized model identifier, such as sonnet for claude-sonnet-5-5. */
 export function familyOf(model: string): string | null {
   return FAMILIES.find((f) => new RegExp(`(?:^|-)${f}(?:-|$)`).test(model)) ?? null;
-}
-
-// ---------------------------------------------------------------------------------------------
-// Subagent definitions (https://code.claude.com/docs/en/sub-agents, "Choose the subagent scope"):
-// project definitions in every .claude/agents/ from the working directory up to the repository
-// root, the closest first, then the user's in <configuration directory>/agents/. Both are scanned
-// recursively, and a subagent is known by the name in its frontmatter, never by its file name.
-// Managed definitions and those given with --agents are not read.
-
-const MAX_DEPTH = 6;
-const MAX_FILES = 2000;
-const HEAD_BYTES = 8192;
-
-export interface DefinitionPlaces {
-  /** The session's project directory, where the walk up starts. */
-  readonly projectDir: string | null;
-  /** The Claude Code configuration directory of the account. */
-  readonly configDir: string;
-}
-
-export function definitionFinder(places: DefinitionPlaces): (name: string) => Definition | null {
-  return (name) => {
-    for (const dir of definitionDirs(places)) {
-      const found = findIn(dir, name);
-      if (found !== null) return found;
-    }
-    return null;
-  };
-}
-
-function definitionDirs(places: DefinitionPlaces): string[] {
-  const dirs: string[] = [];
-  if (places.projectDir !== null) {
-    const start = path.resolve(places.projectDir);
-    const top = repositoryRoot(start);
-    for (let d = start; ; d = path.dirname(d)) {
-      dirs.push(path.join(d, '.claude', 'agents'));
-      if (d === top) break;
-    }
-  }
-  dirs.push(path.join(places.configDir, 'agents'));
-  return [...new Set(dirs)];
-}
-
-function findIn(root: string, name: string): Definition | null {
-  let seen = 0;
-  const walk = (dir: string, depth: number): Definition | null => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return null;
-    }
-    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    for (const e of entries) {
-      if (++seen > MAX_FILES) return null;
-      const file = path.join(dir, e.name);
-      if (e.isFile() && e.name.endsWith('.md')) {
-        const fm = frontmatter(readHead(file));
-        if (fm !== null && fm.name === name) return { file, model: fm.model ?? null, effort: fm.effort ?? null };
-      } else if (e.isDirectory() && depth < MAX_DEPTH) {
-        const found = walk(file, depth + 1);
-        if (found !== null) return found;
-      }
-    }
-    return null;
-  };
-  return walk(root, 0);
-}
-
-/** The top-level name, model and effort of a definition's YAML frontmatter, or null when it has none. */
-export function frontmatter(text: string): { name?: string; model?: string; effort?: string } | null {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!m) return null;
-  const fields: { name?: string; model?: string; effort?: string } = {};
-  for (const line of (m[1] ?? '').split(/\r?\n/)) {
-    const f = /^(name|model|effort):[ \t]*(.*?)[ \t]*(?:#.*)?$/.exec(line);
-    if (!f) continue;
-    const value = (f[2] ?? '').replace(/^(['"])(.*)\1$/, '$2').trim();
-    if (value) fields[f[1] as 'name' | 'model' | 'effort'] = value;
-  }
-  return fields;
-}
-
-function readHead(file: string): string {
-  try {
-    const fd = fs.openSync(file, 'r');
-    try {
-      const buffer = Buffer.alloc(HEAD_BYTES);
-      const n = fs.readSync(fd, buffer, 0, HEAD_BYTES, 0);
-      return buffer.toString('utf8', 0, n);
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch {
-    return '';
-  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -314,6 +213,39 @@ function lastResponse(file: string | null, ownOnly: boolean, sinceCompaction: bo
   return found;
 }
 
+/**
+ * The calls among `ids` that a transcript shows refused: their tool result is an error, as Claude Code
+ * writes it at once when a person rejects the call at its permission prompt, or a rule or a hook denies
+ * it. A call whose result is not an error, or not written yet, is not among them. The transcript is
+ * read from its end back to the calls themselves.
+ */
+export function refusedCalls(file: string | null, ids: readonly string[]): Set<string> {
+  const refused = new Set<string>();
+  const pending = new Set(ids);
+  if (file === null || pending.size === 0) return refused;
+  const blocks = (line: string): Record<string, unknown>[] => {
+    try {
+      const content = (JSON.parse(line) as { message?: { content?: unknown } }).message?.content;
+      return Array.isArray(content) ? content.filter((b): b is Record<string, unknown> => typeof b === 'object' && b !== null) : [];
+    } catch {
+      return [];
+    }
+  };
+  try {
+    scanLinesBackward(file, (line) => {
+      if (line.includes('"tool_result"'))
+        for (const b of blocks(line))
+          if (b.type === 'tool_result' && b.is_error === true && typeof b.tool_use_id === 'string' && pending.has(b.tool_use_id)) refused.add(b.tool_use_id);
+      if (line.includes('"tool_use"'))
+        for (const b of blocks(line)) if (b.type === 'tool_use' && typeof b.id === 'string') pending.delete(b.id);
+      return pending.size === 0;
+    });
+  } catch {
+    // An unreadable transcript shows nothing refused.
+  }
+  return refused;
+}
+
 /** Each line of a file, the last first, until `visit` returns true or MAX_SCAN_BYTES are read. */
 function scanLinesBackward(file: string, visit: (line: string) => boolean): void {
   const fd = fs.openSync(file, 'r');
@@ -348,4 +280,20 @@ export function subagentTranscript(sessionTranscript: string | null, sessionId: 
   if (sessionTranscript === null || sessionId === null || !/^[A-Za-z0-9_-]+$/.test(agentId) || !/^[A-Za-z0-9_-]+$/.test(sessionId))
     return null;
   return path.join(path.dirname(sessionTranscript), sessionId, 'subagents', `agent-${agentId}.jsonl`);
+}
+
+/**
+ * The call that started a subagent, from the metadata Claude Code writes next to the subagent's
+ * transcript (agent-<agent id>.meta.json, its toolUseId), or null when there is none yet. Claude Code
+ * 2.1.330 writes it after the subagent's SubagentStart hooks have run, so only a later hook finds it.
+ */
+export function subagentCall(sessionTranscript: string | null, sessionId: string | null, agentId: string): string | null {
+  const transcript = subagentTranscript(sessionTranscript, sessionId, agentId);
+  if (transcript === null) return null;
+  try {
+    const meta = JSON.parse(fs.readFileSync(transcript.replace(/\.jsonl$/, '.meta.json'), 'utf8')) as { toolUseId?: unknown };
+    return typeof meta.toolUseId === 'string' && meta.toolUseId !== '' ? meta.toolUseId : null;
+  } catch {
+    return null;
+  }
 }

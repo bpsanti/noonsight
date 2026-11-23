@@ -52,6 +52,7 @@ A skill guarantees only its description until the model decides to open it ([S5]
   [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
 - Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
 - A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
+- Known limits for subagents: a workflow's agents get nothing, foreground calls of one type that need different rules give their subagents nothing until each one's first Edit, Write or agent call, and a plugin noonsight does not read, such as one an organization syncs, leaves its subagents predicted on their parent's model ([docs/hooks.md](docs/hooks.md#what-the-prediction-does-not-see)).
 - It is measured on one Claude Code version at a time, and Claude Code changes how hooks behave; [docs/verification/claude-code.md](docs/verification/claude-code.md) lists each fact noonsight relies on and the version it was checked on.
 
 ## Your first delivered rule

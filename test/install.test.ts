@@ -56,7 +56,7 @@ test('per account: install twice adds one entry per event and keeps every third-
 
   const first = runCli(['install', '--account', claudeDir], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch, PreToolUse, SubagentStart, PostToolUse\)/);
+  assert.match(first.stdout, /hooks .*settings\.json: added \(SessionStart, PostModelSwitch, PreToolUse, SubagentStart, PostToolUse, PermissionRequest\)/);
   assert.match(first.stdout, /hook pointer .*noonsight-hook: written/);
   const once = fs.readFileSync(file, 'utf8');
 
@@ -75,6 +75,7 @@ test('per account: install twice adds one entry per event and keeps every third-
     { event: 'SubagentStart', matcher: undefined, type: 'command', command: pointer, args: ['subagent-start'], timeout: 10 },
     { event: 'PostToolUse', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-result'], timeout: 10 },
     { event: 'PostToolUse', matcher: 'Edit|Write', type: 'command', command: pointer, args: ['file-edit'], timeout: 10 },
+    { event: 'PermissionRequest', matcher: 'Agent|Task', type: 'command', command: pointer, args: ['agent-held'], timeout: 10 },
   ]);
   // The third-party PreToolUse group comes first and is left as it was; noonsight's has its own group.
   assert.deepEqual(settings.hooks.PreToolUse[0], THIRD_PARTY.hooks.PreToolUse[0]);
@@ -102,7 +103,7 @@ test('per account: a missing settings file is created, and a broken one is refus
   const r = runCli(['install', '--account', empty], env);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /settings\.json: created/);
-  assert.equal(noonsightHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 6);
+  assert.equal(noonsightHandlers(JSON.parse(fs.readFileSync(path.join(empty, 'settings.json'), 'utf8'))).length, 7);
 
   for (const [content, message] of [
     ['{ "hooks": ', /is not valid JSON/],
@@ -150,6 +151,7 @@ test('per account: install repairs a moved, duplicated or outdated noonsight ent
     ['SubagentStart', pointer, 'subagent-start'],
     ['PostToolUse', pointer, 'agent-result'],
     ['PostToolUse', pointer, 'file-edit'],
+    ['PermissionRequest', pointer, 'agent-held'],
   ]);
   assert.deepEqual(settings.hooks.SessionStart[0], { matcher: 'startup', hooks: [{ type: 'command', command: 'echo keep' }] });
   assert.equal(settings.hooks.Stop, undefined);
@@ -175,6 +177,7 @@ test('per account: an install from before the subagent hooks gains them, and a n
   // Rewritten events move to the end of the file's hooks object; their order there does not matter.
   const byEvent = (a: unknown[], b: unknown[]): number => String(a[0]).localeCompare(String(b[0]));
   assert.deepEqual(noonsightHandlers(settings).map((h) => [h.event, h.matcher, h.args[0]]).sort(byEvent), [
+    ['PermissionRequest', 'Agent|Task', 'agent-held'],
     ['PostModelSwitch', undefined, 'model-switch'],
     ['PostToolUse', 'Agent|Task', 'agent-result'],
     ['PostToolUse', 'Edit|Write', 'file-edit'],
@@ -197,7 +200,7 @@ test('machine-wide: noonsight writes its own drop-in file and never edits the ma
 
   const first = runCli(['install', '--managed'], env);
   assert.equal(first.status, 0, first.stderr);
-  assert.match(first.stdout, /managed-settings\.d\/noonsight\.json: created \(SessionStart, PostModelSwitch, PreToolUse, SubagentStart, PostToolUse\)/);
+  assert.match(first.stdout, /managed-settings\.d\/noonsight\.json: created \(SessionStart, PostModelSwitch, PreToolUse, SubagentStart, PostToolUse, PermissionRequest\)/);
   assert.match(first.stdout, /built-in guard for the mods users install: https:\/\/code\.claude\.com\/docs\/en\/plugins\/mods\/admin/);
   assert.match(first.stdout, /NOONSIGHT_DISABLE=1/);
   const dropIn = fs.readFileSync(target.settingsFile, 'utf8');
@@ -209,6 +212,7 @@ test('machine-wide: noonsight writes its own drop-in file and never edits the ma
     ['SubagentStart', target.pointer],
     ['PostToolUse', target.pointer],
     ['PostToolUse', target.pointer],
+    ['PermissionRequest', target.pointer],
   ]);
   const hooked = runProgram(target.pointer, ['session-start'], env, hookInput('session-start-print', { model: 'claude-sonnet-5-5' }));
   assert.equal(hooked.status, 0, hooked.stderr);
@@ -467,6 +471,7 @@ test('by default: install reaches every Claude Code configuration directory of t
       ['SubagentStart', pointer],
       ['PostToolUse', pointer],
       ['PostToolUse', pointer],
+      ['PermissionRequest', pointer],
     ]);
   }
   const kept = readJson(path.join(home, '.claude', 'settings.json'));
@@ -519,7 +524,7 @@ test('by default: install creates ~/.claude when Claude Code has not run yet', (
   const home = tempTree({});
   const r = runCli(['install'], { HOME: home });
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(noonsightHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 6);
+  assert.equal(noonsightHandlers(readJson(path.join(home, '.claude', 'settings.json'))).length, 7);
 });
 
 test('by default: one broken settings file refuses the whole install and leaves every directory as it was', () => {

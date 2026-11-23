@@ -34,6 +34,7 @@ export const HOOK_HANDLERS = [
   { event: 'SubagentStart', arg: 'subagent-start', tools: undefined },
   { event: 'PostToolUse', arg: 'agent-result', tools: AGENT_TOOLS },
   { event: 'PostToolUse', arg: 'file-edit', tools: EDIT_TOOLS },
+  { event: 'PermissionRequest', arg: 'agent-held', tools: AGENT_TOOLS },
 ] as const;
 export type HookHandlerSpec = (typeof HOOK_HANDLERS)[number];
 export type HookEvent = HookHandlerSpec['event'];

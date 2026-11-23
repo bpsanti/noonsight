@@ -350,7 +350,7 @@ test('explicit-model: a definition\'s model and a built-in subagent\'s own model
     ['Explore', 'built-in-model'],
     ['claude-code-guide', 'built-in-model'],
     ['web-fetch', 'built-in-model'],
-    ['kit:helper', 'plugin-definition'],
+    ['kit:helper', 'definition-not-read'],
     ['fork', 'fork'],
   ] as const) {
     const { input, line } = run(config, type);
