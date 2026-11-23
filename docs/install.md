@@ -7,14 +7,14 @@ This is the recommended install; [As a Claude Code plugin](#as-a-claude-code-plu
 
 ## The one command
 
-From a clone of this repository, until the package is published:
-
 ```bash
-npm install && npm run build && npm link   # puts `noonsight` on PATH
+npm install -g noonsight   # puts `noonsight` on PATH
 noonsight install
 ```
 
-Once version 0.1 is published, `npx noonsight install` becomes the whole route.
+`npx noonsight install` does the same with nothing installed first, but the hooks then run the copy in npm's cache: once that cache is cleared they deliver nothing, and `noonsight check` reports the missing copy.
+From a clone of this repository, `npm install && npm run build && npm link` puts `noonsight` on PATH instead.
+
 On a clean machine `noonsight install` is all of the setup.
 It takes these steps in order, and a step with a command named in brackets does what that command does, with no logic of its own:
 
@@ -254,7 +254,7 @@ With both a machine-wide install and an install in a configuration directory, Cl
 
 `noonsight install`, from npm, is the recommended install.
 If you prefer installing a Claude Code plugin, the npm package is one too, and the repository is its marketplace.
-It is available once 0.1 is published, since Claude Code downloads the plugin from npm.
+Claude Code downloads the plugin from npm.
 
 ```text
 /plugin install noonsight --marketplace bpsanti/noonsight

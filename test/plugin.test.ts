@@ -49,6 +49,29 @@ test('the npm package carries everything the plugin runs', () => {
   assert.ok(fs.statSync(path.join(PACKAGE_ROOT, LAUNCHER)).mode & 0o100);
 });
 
+test('npm would publish the package, with the files the command line, the hooks, the presets and the plugin read, and no others', () => {
+  const pkg = JSON.parse(read('package.json')) as { private?: boolean; publishConfig: { access: string }; bin: Record<string, string> };
+  assert.equal(pkg.private, undefined);
+  assert.equal(pkg.publishConfig.access, 'public');
+  // --ignore-scripts: prepack would rebuild the dist/ the tests are running from.
+  const r = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: PACKAGE_ROOT, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  // An array up to npm 11, and an object by package name after it.
+  const out = JSON.parse(r.stdout) as Record<string, { files: { path: string }[] }>;
+  const packed = (Object.values(out)[0]?.files ?? []).map((f) => f.path);
+  const under = (dir: string): string[] =>
+    fs.readdirSync(path.join(PACKAGE_ROOT, dir), { recursive: true, encoding: 'utf8' })
+      .map((f) => path.join(dir, f))
+      .filter((f) => fs.statSync(path.join(PACKAGE_ROOT, f)).isFile());
+  const expected = [
+    'LICENSE', 'README.md', 'package.json', LAUNCHER,
+    ...['.claude-plugin', 'hooks', 'presets', 'schema', 'skills'].flatMap(under),
+    ...under('src').map((f) => `dist/${f.replace(/\.ts$/, '.js')}`),
+  ];
+  assert.deepEqual(packed.sort(), expected.sort(), 'dist/ left over from a removed source file? Run `npm run clean`');
+  for (const bin of Object.values(pkg.bin)) assert.ok(packed.includes(bin), bin);
+});
+
 test('messages name the commands a plugin has: its skills, and npx for the rest', () => {
   assert.equal(forPlugin('Run `noonsight check` now, or `noonsight trust` there.'), 'Run `/noonsight:check` now, or `/noonsight:trust` there.');
   assert.equal(forPlugin('`noonsight init`, `noonsight install --account /x`'), '`/noonsight:setup`, `npx noonsight install --account /x`');

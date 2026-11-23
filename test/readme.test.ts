@@ -38,13 +38,13 @@ export function codeBlocks(text: string): Block[] {
 }
 
 /**
- * The shell blocks this test does not run, each with why. The install from a clone is what `npm
- * test` has already done to this checkout: the sandbox puts the built `noonsight` on PATH in its
- * place, and the package check below covers what `npm link` would expose.
+ * The shell blocks this test does not run, each with why. The install from npm would
+ * download the published version: the sandbox puts the `noonsight` built from this checkout on PATH
+ * in its place, and the package check below covers what the package exposes.
  */
 const NOT_RUN: Record<string, string> = {
-  'git clone https://github.com/bpsanti/noonsight.git\ncd noonsight\nnpm install && npm run build && npm link   # puts `noonsight` on PATH':
-    'the install from a clone; this checkout is that clone, already built',
+  'npm install -g noonsight':
+    'the install from npm; the sandbox runs this checkout, already built',
   'npm test             # builds, then runs every test with node --test\nnpm run test:live    # real interactive Claude Code sessions; needs claude and expect, sends no prompt':
     'the development commands; this test runs inside the first of them',
 };

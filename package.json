@@ -1,8 +1,18 @@
 {
   "name": "noonsight",
   "version": "0.1.0",
-  "private": true,
   "description": "Every model has its own north. Hand every Claude Code session and subagent the rules for the model it actually runs on.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "hooks",
+    "agents",
+    "subagents",
+    "rules",
+    "prompting"
+  ],
+  "author": "Bruno Santi",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -18,6 +28,7 @@
   },
   "files": [
     "dist/src",
+    "!dist/src/**/*.map",
     "schema",
     "presets",
     ".claude-plugin",
@@ -25,11 +36,17 @@
     "scripts",
     "skills"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run clean && npm test",
     "plugin-files": "npm run build && node dist/src/adapters/claude-code/plugin-files.js",
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:live": "npm run build && node --test dist/test/live/*.test.js",

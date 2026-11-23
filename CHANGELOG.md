@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.1.0
+
+The first published version.
+
+- `noonsight install` adds the hooks to every Claude Code login of your account, writes the configuration from the preset when there is none, and checks the result; `--account` covers one login, `--managed` the whole machine, and `noonsight uninstall` takes the hooks out (`docs/install.md`).
+- Each Claude Code session and subagent receives the rules of the model it runs on, and receives them again when that model changes: at the start, after `/model`, compactions, `/clear`, resumes and forks (`docs/hooks.md`).
+- The preset ships sourced rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, on or off by default, and a new preset version is reported, or held until accepted (`presets/claude/SOURCES.md`, `docs/configuration.md`).
+- Rules of your own, for one model or every model, limited by scope, place or trigger, for the machine or for one repository that each person trusts.
+- `noonsight check`, `models`, `resolve` and `report` say what is installed, what each model receives and what was delivered.
+- `noonsight run` starts sessions the hooks do not reach; routing, the classifier and the watcher for new logins are optional and off.
+- The same package is a Claude Code plugin, with the repository as its marketplace.
+- The package has no runtime dependencies and needs Node.js 20 or newer.
+  It holds the compiled code without source maps, the preset, the schemas and the plugin's files; a publication builds from an empty `dist/` and runs `npm test` first, and a test holds the package to its list of files.
+
+### Changes during development
 
 - The README says what each result belongs to.
   One table of rule effects separates a rule delivered alone from the preset's rules together, each row with its result, runs per arm, cost, Claude Code version and evidence, and takes the place of the numbers scattered over the page; it names every rule with a measured effect alone, `fable-5-2/low-context-report` included.
@@ -8,7 +22,7 @@
   `docs/evidence.md` gains R16 to R19, computed from results already committed: the tests of each rule alone on Sonnet 5.5's bug, and the mean costs of the bug, the backlog and Fable 5.2's tasks; no existing entry's value changes.
 
 - noonsight can be installed as a Claude Code plugin, as an alternative to `noonsight install` from npm, which stays the recommended install.
-  The npm package is the plugin, the repository its marketplace, and each install covers one Claude Code login; it becomes available with the publication of 0.1 (`docs/install.md`, "As a Claude Code plugin").
+  The npm package is the plugin, the repository its marketplace, and each install covers one Claude Code login (`docs/install.md`, "As a Claude Code plugin").
   The plugin's first session start writes the configuration from the preset when there is none, its launcher (`scripts/noonsight`) finds Node.js where Claude Code has none on `PATH`, and its commands are skills, such as `/noonsight:check`.
   `hooks/hooks.json`, the manifests and the skills are generated from the code (`npm run plugin-files`), a test holds them and the version to it, and CI runs `claude plugin validate --strict`.
 
