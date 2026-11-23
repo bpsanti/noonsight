@@ -1,0 +1,27 @@
+{
+  "name": "f9-resume-repeats-startup-delivery",
+  "about": "A /model switch to a model with no rules here delivers a note alone, which retires the starting model's rules; a resume back to the starting model delivers its rules again, the very text of the startup, which Claude Code leaves out as a repeat of an earlier start's context (F9, fixed).",
+  "model": "sonnet",
+  "scope": "routine",
+  "unattended": false,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "sonnet"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

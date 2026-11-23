@@ -181,7 +181,7 @@ export function retiredBy(from: string, to: string): (model: string) => boolean 
   return (m) => names.has(m);
 }
 
-const NOTE = /<noonsight-rules-change from="([^"]+)" to="([^"]+)">[\s\S]*?<\/noonsight-rules-change>/g;
+const NOTE = /<noonsight-rules-change from="([^"]+)" to="([^"]+)"[^>]*>[\s\S]*?<\/noonsight-rules-change>/g;
 const ENVELOPE_HEAD = /<noonsight-rules model="[^"]*"[^>]*>\n[^\n]*\n/g;
 const ENVELOPE_TAIL = /<\/noonsight-rules>/g;
 

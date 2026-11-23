@@ -80,8 +80,9 @@ A `--model` or `ANTHROPIC_MODEL` value noonsight cannot pin down outranks the se
 With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides.
 After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
 One exception comes first: Claude Code can run another model in place of the one the person chose, and in plan mode it runs Sonnet for Haiku.
-It says so with a `PostModelSwitch`: `source: "auto"` as plan mode starts and ends, and `to_model` Sonnet with `requested_model: "haiku"` for a `/model haiku` typed in plan mode; but the start of a compaction in plan mode still reports Haiku, while the requests go on to Sonnet ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
-So the record keeps the model the person chose while another runs in its place, and a compaction or `/clear` whose start reports that chosen model, or none, takes the model the process runs from the record; the log line names the chosen model in `chosen_model` and the reported one in `reported_model`.
+It says so with a `PostModelSwitch`: `source: "auto"` as plan mode starts and ends, and `to_model` Sonnet with `requested_model: "haiku"` for a `/model haiku` typed in plan mode; but the start of a compaction, or of a `/resume` typed in the session, in plan mode still reports Haiku, while the requests go on to Sonnet ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+So the record keeps the model the person chose while another runs in its place, and a start in the same process, a compaction, `/clear`, or a `/resume` or `/branch` typed in the session, whose input reports that chosen model, or none, takes the model the process runs from the process's record; the log line names the chosen model in `chosen_model` and the reported one in `reported_model`.
+A resume or fork in a new process reports no model and starts on the model it is given, as above.
 `/resume` typed inside a running session reports the model in the input.
 When the resumed conversation's record holds the rules of another model, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
 
@@ -114,6 +115,10 @@ So the record of a resume that delivered keeps every model whose rules the conve
 Unlike a switch, a resume runs before its process sends any request, so a response of the conversation after it shows that its delivery arrived: when the transcript holds one, from the session's own messages since the last compaction and later than the delivery, the next resume takes the delivery as received, and with it its note, and delivers again only what changed.
 A transcript that cannot be read, or a response with no time, confirms nothing.
 The deliveries of a startup, `/clear` and compaction are part of the conversation from its start, and a later resume finds them ([recorded on 2.1.328](verification/claude-code.md)).
+
+Claude Code leaves out a `SessionStart` context whose text an earlier start already added to the same conversation, at a resume, a fork or a `/resume` typed in the session; contexts of other events, such as a switch's note, are not compared ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+A resume that delivers again rules a later note retired would repeat an earlier start's text, such as the startup's, and reach no request.
+So a resume's or a fork's delivery carries the time it was made in the opening tag of its note and of its rules, `<noonsight-rules model="claude-sonnet-5-5" at="2026-11-23T14:12:50.665Z">`, and never repeats an earlier one.
 
 A session started by `noonsight run` already holds its rules in the system prompt.
 At `startup`, `clear` and `compact`, when the Claude Code process was started with the launcher's file and the file holds exactly the rules decided here, the hook delivers nothing and logs `delivered: "launcher"`.

@@ -67,10 +67,14 @@ test('generator: version 2 draws every path version 1 does not have', () => {
     steps.every((s) => s.k !== 'spawn' || s.calls.every((c) => !c.edit || c.type === 'general-purpose')),
     'only general-purpose subagents edit',
   );
-  assert.ok(
-    seqs.every((s) => !s.steps.some((x, i) => x.k === 'plan' && x.on && !s.steps.slice(i + 1).some((y) => (y.k === 'plan' && !y.on) || y.k === 'resume'))),
-    'a sequence never ends in plan mode',
-  );
+  for (const s of seqs) {
+    let plan = false;
+    for (const x of s.steps) {
+      if (plan) assert.ok(['turn', 'model', 'compact', 'plan'].includes(x.k), `${show(s)}: ${x.k} in plan mode`);
+      if (x.k === 'plan') plan = x.on;
+    }
+    assert.equal(plan, false, `${show(s)} ends in plan mode`);
+  }
 });
 
 test('generator: valid() follows the conversations, plan mode and the subagents that can edit', () => {
@@ -121,6 +125,11 @@ test('stub: answers each directive from the request alone', () => {
   const edit = reply({ tools: TOOLS, messages: [{ role: 'user', content: 'DB 5 edit code' }, { role: 'assistant', content: read.content }, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: 'file' }] }] }, '/p');
   assert.equal(edit.content[0]?.name, 'Edit');
   assert.equal(reply(user('DB 6 edit new'), '/p').content[0]?.name, 'Write');
+  // A prompt in the same message as an earlier tool result, as a copied conversation can hold it, is answered as a prompt.
+  const merged = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: 'file' }, { type: 'text', text: 'DB 8 turn' }] };
+  assert.deepEqual(reply({ tools: TOOLS, messages: [{ role: 'user', content: 'DB 5 edit code' }, { role: 'assistant', content: read.content }, merged] }, '/p').content, [{ type: 'text', text: 'ok' }]);
+  const quoted = { role: 'user', content: [{ type: 'text', text: '<local-command-stdout>Branched session. Back to the original: /resume x ("DB 3 edit doc (Branch)")</local-command-stdout>' }, { type: 'text', text: 'DB 8 turn' }] };
+  assert.deepEqual(reply({ tools: TOOLS, messages: [quoted] }, '/p').content, [{ type: 'text', text: 'ok' }], 'an earlier prompt quoted by a command is not the prompt');
   assert.deepEqual(reply(user('DB-SUB 4 0 Explore: reply with the word done.'), '/p').content, [{ type: 'text', text: 'done' }]);
   // A subagent whose task says it edits reads the tracked code file, edits it, then answers.
   const editing = reply(user('DB 7 spawn general-purpose.-.edit'), '/p').content[0]?.input as Record<string, unknown>;

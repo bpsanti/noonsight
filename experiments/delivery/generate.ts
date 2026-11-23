@@ -183,8 +183,8 @@ export function valid(spec: Sequence): boolean {
  * Version 2 draws from a second stream of the same seed whether the session starts through `noonsight
  * run` (one in five) and in a project with a trusted configuration (one in four), and draws the steps
  * version 1 does not have: forks, /resume in the session, plan mode, and subagent calls that edit
- * (one general-purpose call in three). Plan mode keeps spawns and edits out until it is turned off, and
- * a sequence never ends in plan mode, so its last turn is the session's own.
+ * (one general-purpose call in three). In plan mode it draws only turns, /model, /compact and leaving
+ * plan mode, and a sequence never ends in plan mode, so no conversation is left in it.
  */
 export function generate(seed: number, index: number, version: Generator = GENERATOR): Sequence {
   return version === 1 ? generateV1(seed, index) : generateV2(seed, index);
@@ -239,13 +239,20 @@ function generateV2(seed: number, index: number): Sequence {
   const n = 3 + Math.floor(r() * 10);
   const w: Walk = { conversations: [0], model: start.model, plan: false };
   for (let tries = 0; steps.length < n && tries < 1000; tries++) {
-    const step = draw(r, weighted(r, WEIGHTS[2]), w);
+    const k = weighted(r, WEIGHTS[2]);
+    // Plan mode stays in its conversation: a conversation left in plan mode comes back in plan mode
+    // when another process resumes it, which the sequence would not know.
+    if (w.plan && !IN_PLAN_MODE.has(k)) continue;
+    const step = draw(r, k, w);
     if (step !== null && walk(w, step) === null) steps.push(step);
   }
   if (w.plan) steps.push({ k: 'plan', on: false });
   if (steps.at(-1)?.k !== 'turn') steps.push({ k: 'turn' });
   return { ...start, ...how, steps };
 }
+
+/** The steps version 2 draws in plan mode. */
+const IN_PLAN_MODE: ReadonlySet<Step['k']> = new Set(['turn', 'model', 'compact', 'plan']);
 
 /** One step of kind `k` with its parameters drawn, or null for one that cannot follow here. */
 function draw(r: () => number, k: Step['k'], w: Walk): Step | null {

@@ -133,7 +133,7 @@ test('input that is not this Claude Code event is ignored silently, with exit 0'
 
 test('SessionStart by start type: resume and fork skip rules the session already holds; clear and compact deliver again', () => {
   const h = home();
-  const words = (r: { out: Record<string, any> | null }): string | undefined => r.out?.hookSpecificOutput?.additionalContext;
+  const words = (r: { out: Record<string, any> | null }): string => context(r);
   assert.match(words(h.hook('session-start', start('claude-sonnet-5-5'))) ?? '', /SONNET-GEN/);
   assert.equal(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume' })).raw, '');
   assert.equal(h.hook('session-start', start('claude-sonnet-5-5', { source: 'fork' })).raw, '');
@@ -309,7 +309,8 @@ test('the documented resume input, cost fields and all, finds the rules already 
 
 const FAKE_CLAUDE = path.join(FIXTURES, 'fake-claude.cjs');
 const print = (id: string): string => hookInput('session-start-print', { session_id: id });
-const context = (r: { out: Record<string, any> | null }): string => r.out?.hookSpecificOutput?.additionalContext ?? '';
+/** What a hook returned for the model, without the time a resume's or a fork's delivery carries (see the test on it). */
+const context = (r: { out: Record<string, any> | null }): string => (r.out?.hookSpecificOutput?.additionalContext ?? '').replace(/ at="[^"]*"/g, '');
 
 function underClaude(h: Home, claudeArgs: readonly string[], input: string, extra: Record<string, string> = {}) {
   const hook = [process.execPath, ...NO_NETWORK, CLI, 'hook', 'session-start'];
@@ -845,10 +846,30 @@ test('a compaction or /clear in plan mode on Haiku keeps Sonnet, the model Claud
     [
       ['session-start', 'startup', 'claude-haiku-5-5', 'hook-input', null, null],
       ['model-switch', 'auto', 'claude-sonnet-5-5', 'hook-input', 'claude-haiku-5-5', null],
-      ['session-start', 'compact', 'claude-sonnet-5-5', 'session-record', 'claude-haiku-5-5', 'claude-haiku-5-5'],
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'process-record', 'claude-haiku-5-5', 'claude-haiku-5-5'],
       ['session-start', 'clear', 'claude-sonnet-5-5', 'process-record', 'claude-haiku-5-5', null],
       ['model-switch', 'auto', 'claude-haiku-5-5', 'hook-input', null, null],
       ['session-start', 'compact', 'claude-haiku-5-5', 'hook-input', null, null],
+    ],
+  );
+});
+
+test('/resume or /branch typed in plan mode on Haiku keeps Sonnet, which the process runs, though the start reports Haiku', () => {
+  const h = home(forkConfig());
+  // A Haiku conversation, /clear, plan mode in the new one: Claude Code runs Sonnet.
+  h.hook('session-start', start('claude-haiku-5-5', { session_id: 'first' }));
+  h.hook('session-start', hookInput('session-start-clear', { session_id: 'second' }));
+  h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5', { session_id: 'second', source: 'auto', requested_model: null }));
+  // /resume first, still in plan mode: the input reports Haiku, the process runs Sonnet.
+  const resumed = context(h.hook('session-start', hookInput('session-start-resume-command', { session_id: 'first', model: 'claude-haiku-5-5' })));
+  assert.match(resumed, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5">[\s\S]*SONNET-WORD/);
+  // A resume in a new process reports no model and starts on the model it is given, whatever the last process ran.
+  assert.match(context(underClaude(h, ['--continue', '--model', 'haiku'], resumeOf('first'))), /HAIKU-WORD/);
+  assert.deepEqual(
+    h.log().slice(3).map((l) => [l.source, l.model, l.model_source, l.chosen_model ?? null]),
+    [
+      ['resume', 'claude-sonnet-5-5', 'process-record', 'claude-haiku-5-5'],
+      ['resume', 'claude-haiku-5-5', 'claude-args', null],
     ],
   );
 });
@@ -871,6 +892,25 @@ test('/model haiku in plan mode, which Claude Code runs as Sonnet, keeps Sonnet 
       ['claude-fable-5-2', null],
     ],
   );
+});
+
+// Claude Code leaves out a SessionStart context identical to one an earlier SessionStart added to the
+// same conversation (recorded on 2.1.330, docs/verification/claude-code.md): Sonnet, /model opus with no
+// rules for Opus (a note alone), then `claude --continue --model sonnet` delivered Sonnet's rules again,
+// the very text of the startup, and the request held them only before the note that retired them (F9).
+
+test('a resume\'s or a fork\'s delivery carries its time, so it never repeats an earlier start\'s text', () => {
+  const h = home(forkConfig());
+  const first = h.hook('session-start', start('claude-sonnet-5-5', { session_id: ORIGINAL })).out?.hookSpecificOutput.additionalContext as string;
+  assert.doesNotMatch(first, / at="/, 'a startup is a new conversation');
+  const raw = (r: { out: Record<string, any> | null }): string => r.out?.hookSpecificOutput?.additionalContext ?? '';
+  assert.doesNotMatch(raw(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { session_id: ORIGINAL }))), / at="/, 'a switch is not compared');
+  const resumed = raw(underClaude(h, ['--continue', '--model', 'sonnet'], resumeOf(ORIGINAL)));
+  assert.match(resumed, /^<noonsight-rules-change from="claude-haiku-5-5" to="claude-sonnet-5-5" at="\d{4}-\d\d-\d\dT[\d:.]+Z">\n/);
+  assert.match(resumed, /<noonsight-rules model="claude-sonnet-5-5" at="[^"]+">\n[\s\S]*SONNET-WORD/);
+  assert.notEqual(resumed.replace(/^[\s\S]*?(?=<noonsight-rules model)/, ''), first, 'the rules differ from the startup\'s by their time');
+  const { fork } = forkFolder('claude-sonnet-5-5');
+  assert.match(raw(underClaude(h, ['--model', 'haiku'], fork('session-start-fork-session'))), /<noonsight-rules model="claude-haiku-5-5" at="/);
 });
 
 test('a note that names more retired models than fit its room retires every model but the session\'s own', () => {

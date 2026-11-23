@@ -84,9 +84,15 @@ export function reply(body: Body, project: string): Answer {
     return editRead() ?? say('done');
   }
   if (isCompaction(body)) return say('<summary>\nThe user asked for short replies and got them.\n</summary>');
-  if (answered) return editRead() ?? say('done');
-  const d = /DB (\d+) (\w+)([^\n]*)/.exec(text(last));
-  if (!d) return say('ok');
+  // A prompt the driver typed comes first: a copied conversation can put it in the same message as an
+  // earlier tool result, and after the output of commands such as /branch, which quotes the
+  // conversation's title, an earlier prompt. The prompt is the message's last text that is one.
+  const prompts = blocks(last)
+    .filter((b) => b.type === 'text')
+    .map((b) => /^DB (\d+) (\w+)([^\n]*)/.exec(String(b.text).trim()))
+    .filter((m): m is RegExpExecArray => m !== null);
+  const d = prompts.at(-1);
+  if (!d) return answered ? (editRead() ?? say('done')) : say('ok');
   const [, n, kind, rest = ''] = d;
   if (kind === 'spawn') {
     const names = ((body.tools ?? []) as { name?: string }[]).map((t) => t.name);

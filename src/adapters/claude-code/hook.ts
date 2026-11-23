@@ -23,7 +23,7 @@ import { changesDelivery, comparePresets, describeChanges } from '../../config/p
 import { configPath, stateDir, type Env } from '../../config/paths.js';
 import { projectFields, projectFor, projectWarning } from '../../config/project.js';
 import { normalizeModel } from '../../core/normalize.js';
-import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '../../core/resolve.js';
+import { joinDelivery, launcherNote, resolve, resolveAdded, stampDelivery, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import { ANY_MODEL, type Config, type Decision, type Trigger } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
@@ -232,9 +232,13 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
         // Without the record, a later resume delivers again: the safe direction.
       }
     }
+    // Claude Code leaves out a resume's or a fork's context when an earlier start of the conversation
+    // added the same text, so each such delivery carries its time (docs/hooks.md, "SessionStart").
+    const resumedStart = event === 'SessionStart' && (input.source === 'resume' || input.source === 'fork');
+    const context = result.context !== null && resumedStart ? stampDelivery(result.context, ctx.now.toISOString()) : result.context;
     return output(
       [...result.messages, ...(update !== null ? [update.message] : []), ...(projectNote !== null ? [projectNote] : [])],
-      result.context ? { hookEventName: event, additionalContext: result.context } : null,
+      context ? { hookEventName: event, additionalContext: context } : null,
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -355,12 +359,15 @@ function sessionStart(
   const reported = normalizeModel(str(input.model));
   const recorded = known?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
   // Claude Code may run another model in place of the one the person chose, as it runs Sonnet in plan
-  // mode for Haiku; a compaction's start then reports the chosen model, and the process keeps running
-  // the other, so the record of the same process, which the switch to it wrote, decides.
-  const carried = source === 'compact' ? (known ?? process) : source === 'clear' ? process : null;
+  // mode for Haiku; the start of a compaction, /resume or /branch in that process then reports the
+  // chosen model, and the process keeps running the other, so the record of the same process, which
+  // the switch to it wrote, decides. A resume or fork that reports a model runs in the same process;
+  // one in a new process reports none, and a new process starts on the model it is given.
+  const sameProcess = source === 'compact' || source === 'clear' || (resumed && !!reported);
+  const carried = sameProcess ? (process ?? (source === 'compact' ? known : null)) : null;
   const substituted = carried?.chosen !== undefined && carried.model !== null && (!reported || reported === carried.chosen) ? carried : null;
   const chosen: ModelChoice = substituted
-    ? { model: substituted.model, source: substituted === known ? 'session-record' : 'process-record', launch: null }
+    ? { model: substituted.model, source: substituted === process ? 'process-record' : 'session-record', launch: null }
     : reported
       ? { model: reported, source: 'hook-input', launch: null }
       : resumed

@@ -23,7 +23,7 @@ A session starts on one of the four models (`--model`), with or without a task s
 | `/branch` | Goes on in a copy of the conversation under a new session id, in the same process |
 | `/fork` | Runs a copy of the conversation as a background session, with a prompt it answers; the session goes on as it was |
 | `/resume` in the session | `/resume <id>`, back to the conversation the session was in before the current one, the one `/clear`, `/branch` or a forking resume left |
-| `/plan`, plan off | Turns plan mode on with `/plan`, and off with shift+tab; in plan mode an agent call or an edit waits for approval, so none is drawn there |
+| `/plan`, plan off | Turns plan mode on with `/plan`, and off with shift+tab; in plan mode only turns, `/model` and `/compact` are drawn: an agent call or an edit waits for approval there, and a conversation left in plan mode comes back in plan mode when another process resumes it |
 
 A session that starts through `noonsight run` goes through it at every launch, resumes included.
 A session in a project has the configuration in [project/](project) as its `.noonsight/noonsight.json`, which the session's account trusts (`noonsight trust`): a rule for every model, one for subagents only, and one each for Sonnet 5.5 and Fable 5.2 in some scopes.
@@ -210,8 +210,8 @@ The folder for one version holds what was measured on that version; comparing tw
 
 ## Failures found, and a limit
 
-The corpus entries that start with `f1-` to `f7-` are the shortest reproductions of seven failures of noonsight: F1 to F4 the fuzzer found, F5 to F7 the paths generator 2 added.
-All seven are fixed, and their entries must pass.
+The corpus entries that start with `f1-` to `f9-` are the shortest reproductions of nine failures of noonsight: F1 to F4 the fuzzer found, F5 to F9 the paths generator 2 added.
+All nine are fixed, and their entries must pass.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
@@ -243,8 +243,16 @@ The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5
 - **F7, the chosen model reported in plan mode.**
   In plan mode, Claude Code runs Sonnet for a session whose chosen model is Haiku, and says so with a model switch, but a compaction's start in plan mode reports Haiku, and `/clear` then took Haiku from the process's record: Haiku's rules went to Sonnet's requests (`f7-compact-in-plan-mode-on-haiku`, `f7-model-haiku-in-plan-mode`).
   noonsight now records the chosen model while Claude Code runs another in its place, and a compaction or `/clear` that reports the chosen model keeps the one that runs (`docs/hooks.md`, "SessionStart").
+- **F8, the chosen model reported by `/resume` in plan mode.**
+  The same as F7 for `/resume` typed in the session, whose start reports the model of the process, but in plan mode on Haiku the chosen one (`f8-resume-in-plan-mode-on-haiku`).
+  noonsight now takes the process's record for every start in the same process that reports the chosen model.
+- **F9, a resume's delivery dropped as a repeat.**
+  Claude Code leaves out a `SessionStart` context identical to one an earlier start added to the same conversation.
+  After a `/model` switch to a model with no rules there, whose note alone retired the starting model's rules, a resume or a fork back to the starting model delivered its rules again, the startup's very text, and no request held them (`f9-resume-repeats-startup-delivery`; in the fuzz run, a forking resume, `s1-0182`).
+  It holds for any resume, not only the paths generator 2 added, which drew it first.
+  A resume's or a fork's delivery now carries the time it was made in its opening tags (`docs/hooks.md`, "SessionStart").
 
-F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 in a fuzz run of generator 2 that was stopped to fix it: on the build before their fix, all six entries break the invariant (`foreign-unretired` in the session's own requests, and `missing-own` for F7), and on the fixed build they pass.
+F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 to F9 in fuzz runs of generator 2 (`s1-0088`, `s1-0138` and `s1-0182` of seed 1) before their fixes: on the build before their fix, every one of these entries breaks the invariant (`foreign-unretired` in the session's own requests, with `missing-own` for F7 and F8, and `own-retired` for F9), and on the fixed build they pass.
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 
