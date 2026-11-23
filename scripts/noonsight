@@ -1,0 +1,68 @@
+#!/bin/sh
+# The launcher of noonsight's Claude Code plugin: it finds a Node.js 20 or newer and runs the copy of
+# noonsight this plugin holds. The hooks run it as `noonsight hook <event>`, and the plugin's skills as
+# `noonsight <command>`. A Claude Code started from a desktop app may have no `node` on its PATH, so the
+# order is: $NOONSIGHT_NODE, the one an earlier hook recorded, PATH, then the folders Node.js is usually in.
+# A hook never holds or fails the session: without Node.js, only the session's start says so.
+
+if [ "$1" = hook ] && [ "${NOONSIGHT_DISABLE:-}" = 1 ]; then
+  exit 0
+fi
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd) || exit 0
+cli=$root/dist/src/cli.js
+home=${HOME:-}
+
+node=
+# Node.js that ran noonsight before, or that the person named: taken without starting it to ask its version.
+trusted() {
+  if [ -z "$node" ] && [ -n "$1" ] && [ -x "$1" ] && [ ! -d "$1" ]; then node=$1; fi
+}
+found() {
+  if [ -z "$node" ] && [ -n "$1" ] && [ -x "$1" ] && [ ! -d "$1" ] &&
+    "$1" -e 'process.exit(parseInt(process.versions.node, 10) >= 20 ? 0 : 1)' </dev/null >/dev/null 2>&1; then
+    node=$1
+  fi
+}
+
+trusted "${NOONSIGHT_NODE:-}"
+if [ -z "$node" ] && [ -r "$home/.local/share/noonsight/node" ]; then
+  IFS= read -r recorded <"$home/.local/share/noonsight/node" || :
+  trusted "${recorded:-}"
+fi
+if [ -z "$node" ]; then
+  found "$(command -v node 2>/dev/null || :)"
+  for dir in /opt/homebrew/bin /usr/local/bin /usr/bin "$home/.local/bin" "$home/.volta/bin" /snap/bin; do
+    found "$dir/node"
+  done
+  for dir in \
+    "$home/.nvm/versions/node"/*/bin \
+    "$home/.asdf/installs/nodejs"/*/bin \
+    "$home/.local/share/mise/installs/node"/*/bin \
+    "$home/.local/share/fnm/node-versions"/*/installation/bin \
+    "$home/Library/Application Support/fnm/node-versions"/*/installation/bin \
+    "$home/.nodenv/versions"/*/bin; do
+    found "$dir/node"
+  done
+fi
+
+if [ -z "$node" ]; then
+  if [ "$1" != hook ]; then
+    echo 'noonsight: no Node.js 20 or newer was found. Install it, or set NOONSIGHT_NODE to its path in "env" of the Claude Code settings.' >&2
+    exit 1
+  fi
+  if [ "${2:-}" = session-start ]; then
+    printf '%s\n' '{"systemMessage":"noonsight: the plugin found no Node.js 20 or newer, so it delivered no rules. Install Node.js, or set NOONSIGHT_NODE to its path in \"env\" of the Claude Code settings, then start a new session."}'
+  fi
+  exit 0
+fi
+
+if [ "$1" = hook ]; then
+  shift
+  # The copy can be deleted under a running session; the session then goes on without it.
+  [ -f "$cli" ] || exit 0
+  exec "$node" "$cli" hook --install plugin "$@"
+fi
+CLAUDE_PLUGIN_ROOT=$root
+export CLAUDE_PLUGIN_ROOT
+exec "$node" "$cli" "$@"

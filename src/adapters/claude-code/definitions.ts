@@ -25,17 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Env } from '../../config/paths.js';
 import { repositoryRoot } from '../../config/project.js';
-import {
-  NO_BOUNDARIES,
-  optionValues,
-  readObject,
-  remoteSettingsApply,
-  safeManagedDir,
-  settingSources,
-  settingsArgument,
-  type CommandLine,
-} from './launch.js';
-import { managedFilesApply, readManagedFiles, readRemoteSettings } from './managed.js';
+import { NO_BOUNDARIES, optionValues, readObject, safeManagedDir, settingSources, type CommandLine } from './launch.js';
+import { enabledPlugins, installedPlugins } from './plugins.js';
 import { isObject } from './settings.js';
 
 /** Where a definition was found, as the decision log records it. */
@@ -235,7 +226,8 @@ function pluginRoots(places: DefinitionPlaces, cmd: CommandLine | null): PluginR
     .filter((d) => d !== '')
     .map((d) => path.resolve(cwd ?? '/', d));
   const roots: PluginRoot[] = inline.map((dir) => ({ dir, name: manifestOf(dir)?.name ?? path.basename(dir) }));
-  return [...roots, ...installedPlugins(places, cmd)];
+  const enabled = enabledPlugins(places, cmd);
+  return [...roots, ...installedPlugins(places).filter((p) => enabled.get(p.id) === true).map((p) => ({ name: p.name, dir: p.dir }))];
 }
 
 interface Manifest {
@@ -249,56 +241,6 @@ function manifestOf(dir: string): Manifest | null {
   if (m === null) return null;
   const agents = typeof m.agents === 'string' ? [m.agents] : Array.isArray(m.agents) ? m.agents.filter((a): a is string => typeof a === 'string') : undefined;
   return { ...(typeof m.name === 'string' && m.name !== '' ? { name: m.name } : {}), ...(agents !== undefined ? { agents } : {}) };
-}
-
-/**
- * The plugins installed from a marketplace that apply to the project and that the settings enable.
- * installed_plugins.json lists each install as plugin@marketplace with its scope and folder; a project
- * or local install applies only to its own project. enabledPlugins is read from the managed settings,
- * the user's, the project's, its local settings and --settings, in that order, a later value winning.
- */
-function installedPlugins(places: DefinitionPlaces, cmd: CommandLine | null): PluginRoot[] {
-  const registry = readObject(path.join(places.configDir, 'plugins', 'installed_plugins.json'));
-  const plugins = registry !== null && isObject(registry.plugins) ? registry.plugins : null;
-  if (plugins === null) return [];
-  const enabled = enabledPlugins(places, cmd);
-  const project = places.projectDir === null ? null : realpath(path.resolve(places.projectDir));
-  const roots: PluginRoot[] = [];
-  for (const [id, installs] of Object.entries(plugins)) {
-    if (enabled.get(id) !== true || !Array.isArray(installs)) continue;
-    const name = id.split('@')[0] ?? id;
-    for (const install of installs) {
-      if (!isObject(install) || typeof install.installPath !== 'string') continue;
-      const scope = install.scope;
-      if ((scope === 'project' || scope === 'local') && (typeof install.projectPath !== 'string' || realpath(install.projectPath) !== project)) continue;
-      roots.push({ name, dir: install.installPath });
-    }
-  }
-  return roots;
-}
-
-function enabledPlugins(places: DefinitionPlaces, cmd: CommandLine | null): Map<string, boolean> {
-  const layers: (Record<string, unknown> | null)[] = [];
-  const remote = remoteSettingsApply(places.env) ? readRemoteSettings(places.configDir) : null;
-  if (remote?.deliversPolicy) layers.push(remote.settings);
-  if (managedFilesApply(remote)) {
-    const dir = safeManagedDir(places.env);
-    if (dir !== null) layers.push(readManagedFiles(dir).merged);
-  }
-  const s = settingSources(cmd);
-  const reads = (source: string): boolean => s.kind !== 'listed' || s.sources.has(source);
-  if (reads('user')) layers.push(readObject(path.join(places.configDir, 'settings.json')));
-  if (places.projectDir !== null) {
-    if (reads('project')) layers.push(readObject(path.join(places.projectDir, '.claude', 'settings.json')));
-    if (reads('local')) layers.push(readObject(path.join(places.projectDir, '.claude', 'settings.local.json')));
-  }
-  if (cmd !== null) for (const v of optionValues(cmd, '--settings').slice(-1)) layers.push(settingsArgument(v));
-  const enabled = new Map<string, boolean>();
-  for (const layer of layers) {
-    const e = layer !== null && isObject(layer.enabledPlugins) ? layer.enabledPlugins : null;
-    if (e !== null) for (const [id, on] of Object.entries(e)) if (typeof on === 'boolean') enabled.set(id, on);
-  }
-  return enabled;
 }
 
 /**
@@ -413,14 +355,6 @@ function readHead(file: string): string {
     }
   } catch {
     return '';
-  }
-}
-
-function realpath(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p;
   }
 }
 

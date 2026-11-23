@@ -1,0 +1,19 @@
+{
+  "name": "noonsight",
+  "owner": {
+    "name": "Bruno Santi"
+  },
+  "description": "The rules for the model each session runs on.",
+  "plugins": [
+    {
+      "name": "noonsight",
+      "source": {
+        "source": "npm",
+        "package": "noonsight",
+        "version": "0.1.0"
+      },
+      "description": "Hands every Claude Code session and subagent the rules for the model it actually runs on.",
+      "category": "productivity"
+    }
+  ]
+}

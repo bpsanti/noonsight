@@ -22,8 +22,10 @@ import { runTrust, TRUST_USAGE } from './commands/trust.js';
 import { UsageError } from './commands/usage.js';
 import { runWatch, WATCH_USAGE } from './commands/watch.js';
 import { ConfigError } from './config/load.js';
+import { runsFromPlugin } from './adapters/claude-code/plugins.js';
 import type { Env } from './config/paths.js';
 import { packageVersion } from './version.js';
+import { forPlugin } from './wording.js';
 
 const USAGE = `usage: noonsight <command>
 
@@ -79,8 +81,15 @@ const COMMAND_USAGE: Record<string, string> = {
   hook: HOOK_USAGE,
 };
 
-export function main(argv: readonly string[], env: Env, io: Io): number | Promise<number> {
+/** The commands whose whole output is data, rule text included, which is never reworded. */
+const DATA_COMMANDS = new Set(['hook', 'resolve', 'run']);
+
+export function main(argv: readonly string[], env: Env, stdio: Io): number | Promise<number> {
   const [command, ...rest] = argv;
+  const io =
+    command !== undefined && !DATA_COMMANDS.has(command) && !rest.includes('--json') && runsFromPlugin(env)
+      ? { out: (t: string) => stdio.out(forPlugin(t)), err: (t: string) => stdio.err(forPlugin(t)) }
+      : stdio;
   // The hook never prints usage or fails: Claude Code would show it as a hook error.
   if (command === 'hook') return runHookCommand(rest, env, io.out);
   try {

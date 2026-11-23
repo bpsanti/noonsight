@@ -17,6 +17,7 @@ import type { Trigger } from '../../src/core/types.js';
 import { armMarker, writeArm } from './arms.js';
 import type { Alias, Sequence, Step } from './generate.js';
 import { configFor, flatten, inspect, kindOf, sessionIdOf, UNATTENDED_ENV, writeProject, type Arm, type Fact, type Reference } from './oracle.js';
+import { installPlugin, marketplaceFor, type Install } from './plugin.js';
 import { ANCHOR, FILES, startStub, type Body } from './stub.js';
 
 const BRIDGE = path.join(PACKAGE_ROOT, 'experiments', 'delivery', 'pty-bridge.py');
@@ -42,6 +43,8 @@ export interface RunOptions {
   readonly claudeCode: string;
   /** The noonsight package the session installs: this checkout, or a planted copy of it. */
   readonly noonsightRoot: string;
+  /** What delivers in the session; the settings hooks when absent. */
+  readonly install?: Install;
   /** Keep the session's directory, with every request body in requests.json. */
   readonly keep?: boolean;
 }
@@ -188,8 +191,12 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
   if (inProject) writeProject(project);
   if (spec.arm !== 'off') {
     const nsEnv = { PATH: process.env.PATH ?? '', HOME: home, NOONSIGHT_CONFIG: config };
-    const installed = spawnSync(process.execPath, [cli, 'install', '--account', claudeDir], { env: nsEnv, encoding: 'utf8' });
-    if (installed.status !== 0) throw new Error(`noonsight install failed: ${installed.stderr}`);
+    const install = opts.install ?? 'settings';
+    if (install !== 'plugin') {
+      const installed = spawnSync(process.execPath, [cli, 'install', '--account', claudeDir], { env: nsEnv, encoding: 'utf8' });
+      if (installed.status !== 0) throw new Error(`noonsight install failed: ${installed.stderr}`);
+    }
+    if (install !== 'settings') installPlugin(opts.claude, marketplaceFor(opts.noonsightRoot, opts.workRoot), { home, claudeDir, cwd: project });
     if (inProject) {
       const trusted = spawnSync(process.execPath, [cli, 'trust', project], { env: nsEnv, encoding: 'utf8' });
       if (trusted.status !== 0) throw new Error(`noonsight trust failed: ${trusted.stdout}${trusted.stderr}`);

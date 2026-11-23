@@ -2,6 +2,7 @@
 
 noonsight gives each Claude Code session, and each subagent it starts, the rules for the model it actually runs on.
 Seven hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`, when the session's model changes, and `PostToolUse` on Edit and Write, when the session's edits reveal a trigger; `PreToolUse` on the agent tool, before a subagent starts, `PermissionRequest` on the agent tool, when a permission prompt holds the call, `SubagentStart`, as the subagent starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
+The same entries come from a settings file or from the Claude Code plugin.
 [install.md](install.md) covers putting them in place; this page is the contract they keep.
 
 ## Rules every hook follows
@@ -22,6 +23,19 @@ Seven hook entries do it: `SessionStart`, when a session starts, `PostModelSwitc
   The decision log names the source every time.
 - **It leaves foreign input alone.**
   Input that is not the expected Claude Code event, such as another tool reading the same settings, gets no output and no log line.
+
+## One delivery per event
+
+Claude Code runs the hooks of every place noonsight is installed in: a login reached by the plugin and by `noonsight install`, or by a machine-wide install and one of its own, runs two copies of each hook.
+Both copies get the same bytes on standard input from the same Claude Code process, which identifies the occurrence, so before it does anything a copy claims `sha256(event, parent process, input)` in `~/.local/state/noonsight/claims/`, under a short lock:
+
+- nothing claimed it, or the claim is 60 seconds old: the copy claims it and runs;
+- another kind of install claimed it: the copy does nothing and logs nothing;
+- this kind of install claimed it: the same input came again, so the copy claims it again and runs.
+
+A copy that would do nothing, under `NOONSIGHT_DISABLE=1` or with no configuration for the account, claims nothing, and neither does one whose program is gone, so the other install delivers.
+When a claim cannot be read, written or locked within half a second, the copy runs: delivering twice costs little, a missed delivery is the defect.
+A copy from before claims existed always runs, so a login that has one receives the rules twice.
 
 ## What the hooks print
 
@@ -426,7 +440,8 @@ The report names that project and what became of it on its second line, and the 
 | `route_effort_kept`, `route_effort_overridden_by` | `true` when the caller's own effort was kept; `CLAUDE_CODE_EFFORT_LEVEL` when that variable wins over the routed effort |
 | `route_from`, `route_skipped` | For a route that consulted a row: whether it was the scope's row (`table`) or `default`, and the options passed over, with why |
 | `subagent_id`, `predicted`, `models_used`, `result` | For `agent-result`: the subagent's agent id, the model predicted for it, the models it switched between, and the check's `result` |
-| `install` | `managed` or `account`: which install ran the hook |
+| `install` | `managed`, `account` or `plugin`: which install ran the hook |
+| `config_written` | `true` for the session start under the plugin that wrote the first configuration file |
 | `project`, `project_status` | When the session's directory has a project configuration: the project directory, and what became of the project: `applied`, `untrusted`, `declined`, `ignored` (`"projects.allow": "none"`) or `refused` ([Project configuration](configuration.md#project-configuration)) |
 | `model`, `from_model` | The normalized model identifiers; on a session start, `from_model` is the model of the resumed conversation's record when the session runs on another one |
 | `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `session-transcript` (a resumed conversation's last response), `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
@@ -463,7 +478,8 @@ The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-
 | `NOONSIGHT_DISABLE=1` in the environment that starts Claude Code | That session and everything it starts; no output and no log line. The classifier's own session runs with it, so noonsight's hooks never act there |
 | `NOONSIGHT_ROUTING=off` in the environment that starts Claude Code or `noonsight run` | Routing only, for that session and its subagents; the rules are still delivered |
 | `"subagents": { "delivery": "off" }` in the configuration | Subagents only: they get no rules, calls are left alone unless routing changes them, and their results are not checked; each call still gets a log line |
-| No configuration file for the account | Every session of that account, silently |
+| No configuration file for the account | Every session of that account, silently; under the plugin the next session start writes one |
 | `noonsight uninstall` | Every new session reached by that install |
+| `claude plugin disable noonsight@noonsight`, or `claude plugin uninstall` | Every new session of that login, when the plugin reached it |
 
-`disableAllHooks` in a person's own settings turns off a per-account install, but not the machine-wide one: Claude Code does not let it reach managed hooks.
+`disableAllHooks` in a person's own settings turns off a per-account install and the plugin, but not the machine-wide one: Claude Code does not let it reach managed hooks.

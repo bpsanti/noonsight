@@ -121,10 +121,11 @@ npm run delivery -- agree                       # the decision log against the s
 npm run delivery -- hooktime                    # the time of each hook
 npm run delivery -- compare --design after-f1-f2 --results <results>  # a design's comparisons against an earlier run
 npm run delivery -- all                         # all of the above but shrink, for one Claude Code version
+npm run delivery -- corpus --install plugin     # the corpus, with noonsight installed as a Claude Code plugin
 npm run delivery -- fuzz --generator 1 --n 300  # the sequences of the runs up to 2026-11-21
 ```
 
-`--claude <binary>` runs another Claude Code version; `--noonsight <dir>` installs another build of noonsight in the sessions, such as one from before a fix, while the harness and the reference stay this checkout's; `--concurrency` sets how many sessions run at once.
+`--claude <binary>` runs another Claude Code version; `--noonsight <dir>` installs another build of noonsight in the sessions, such as one from before a fix, while the harness and the reference stay this checkout's; `--install plugin` installs the same build as a Claude Code plugin (`npm pack`, a local marketplace, `claude plugin install`; `plugin.ts`) in place of the settings hooks, and `--install both` adds it to them; `--concurrency` sets how many sessions run at once.
 An interrupted fuzz run continues where it stopped when run again with the same arm, seed and size; `--fresh` starts it over.
 `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` runs the corpus as a test (`test/live/delivery-corpus.test.ts`), next to the delivery probe of the benchmark pilot.
 Nothing in this folder installs anything machine-wide, and it refuses to run where noonsight is installed machine-wide, since those hooks would run in its sessions too.
@@ -196,7 +197,7 @@ results/
   claude-code-<version>/
     <date>-<commit>/
       run.json        the Claude Code version, commit, preset version, platform, and each command run
-      corpus.json     the outcome of each corpus entry
+      corpus.json     the outcome of each corpus entry (corpus-plugin.json and corpus-both.json under --install)
       summary.json    the four measures of each run, by arm or plant (summary.md renders them)
       selfcheck.json  whether each plant was caught, and the sequence it shrank to
       agree.json      the decision log against the stub
@@ -208,6 +209,8 @@ results/
 
 The current run is the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)); every run on 2.1.328 is superseded by it, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
 The folder for one version holds what was measured on that version; comparing two versions is comparing their `summary.json` and `corpus.json`.
+
+[install-check](install-check/README.md) holds a smaller check, the corpus and 20 sequences under the settings hooks, the plugin and both, which is not a run of the benchmark.
 
 ## Failures found, and a limit
 

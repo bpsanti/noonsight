@@ -72,7 +72,17 @@ cd noonsight
 npm install && npm run build && npm link   # puts `noonsight` on PATH
 ```
 
-Once 0.1 is published, `npx noonsight install` replaces all of this.
+Once 0.1 is published, `npx noonsight install` replaces all of this, and is the recommended install: it reaches every Claude Code login of your account.
+
+If you prefer installing noonsight as a Claude Code plugin, that works too, once 0.1 is published (Claude Code 2.1.275 or later, and `npm` for the download):
+
+```text
+/plugin install noonsight --marketplace bpsanti/noonsight
+```
+
+Then start a new session, whose start writes the configuration from the preset when there is none.
+Each plugin install covers one Claude Code login, so a second login needs its own.
+Having both the plugin and `noonsight install` is safe: each event is delivered once, by whichever copy runs first, and one of the two is enough ([docs/install.md](docs/install.md#as-a-claude-code-plugin)).
 
 Then set it up.
 This writes `~/.config/noonsight/noonsight.json` when there is none, adds the hooks to every Claude Code login of your account, keeping every other setting, and checks the result:

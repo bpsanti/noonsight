@@ -273,12 +273,12 @@ test('machine-wide without administrator rights: says so plainly, offers the ins
   }
 });
 
-test('a per-account install next to a machine-wide one warns that the rules would arrive twice', { skip: !supported }, () => {
+test('a per-account install next to a machine-wide one says that one is enough', { skip: !supported }, () => {
   const { env } = machine();
   assert.equal(runCli(['install', '--managed'], env).status, 0);
   const r = runCli(['install', '--account', tempTree({})], env);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /warning: noonsight is also installed for the whole machine .*sessions that use .* receive the rules twice/);
+  assert.match(r.stdout, /warning: noonsight is also installed for the whole machine .*each event is delivered once, so one of the two is enough/);
 });
 
 test('a refused configuration: install keeps the file, exits 2, and does not say it is done', () => {
@@ -581,11 +581,11 @@ test('--managed warns about each login whose server-managed settings make Claude
   assert.equal(warned.length, 1, r.stdout);
   assert.ok(warned[0]?.includes(path.join(home, '.claude')) && /Run `noonsight install`, without --managed/.test(warned[0] ?? ''), r.stdout);
 
-  // The default install next to it: only logins the machine-wide install still reaches get the rules twice.
+  // The default install next to it: only logins the machine-wide install still reaches have both.
   const both = runCli(['install'], env);
   assert.equal(both.status, 0, both.stderr);
-  const twice = /sessions that use (.*) receive the rules twice/.exec(both.stdout)?.[1] ?? '';
-  assert.ok(!twice.split(', ').includes(path.join(home, '.claude')) && twice.includes(path.join(home, '.claude-work')), both.stdout);
+  const shared = /whole machine \(.*?\), which reaches (.*) too; each event/.exec(both.stdout)?.[1] ?? '';
+  assert.ok(!shared.split(', ').includes(path.join(home, '.claude')) && shared.includes(path.join(home, '.claude-work')), both.stdout);
 });
 
 test('by default under sudo for another account\'s home: refused, nothing written', { skip: process.getuid?.() !== 0 }, () => {

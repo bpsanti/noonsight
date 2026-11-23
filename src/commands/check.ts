@@ -1,4 +1,4 @@
-// noonsight check: the configuration, every install this account can see, the watcher, the Claude
+// noonsight check: the configuration, every install this account can see, the plugin included, the watcher, the Claude
 // Code version and the last decision, one line each. It reads local files, runs `claude --version`,
 // and, when the watcher is on, asks the service manager whether it runs; it never uses the network
 // and never changes anything.
@@ -11,6 +11,7 @@ import { CLAUDE_CODE_FLOORS, MODEL_ALIASES } from '../adapters/claude-code/compa
 import { readSettings } from '../adapters/claude-code/install.js';
 import { accountTarget, discoverConfigDirs, managedTarget, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readManagedFiles, readRemoteSettings, type RemoteSettings } from '../adapters/claude-code/managed.js';
+import { noonsightPlugins, type NoonsightPlugin } from '../adapters/claude-code/plugins.js';
 import { readPointer } from '../adapters/claude-code/pointer.js';
 import { findNoonsightHandlers, handlersFor, HOOK_HANDLERS, matcherOf, type HookHandlerSpec } from '../adapters/claude-code/settings.js';
 import { ConfigError, loadConfigDetails, type ConfigDetails } from '../config/load.js';
@@ -102,15 +103,20 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     const remote = readRemoteSettings(dir);
     const managedReaches = managedInstalled && managedFilesApply(remote);
     const hasAccountHooks = hasHooks(target.settingsFile);
-    if (recorded.includes(dir) || hasAccountHooks) {
+    const plugins = noonsightPlugins({ projectDir: env.CLAUDE_PROJECT_DIR || process.cwd(), configDir: dir, env });
+    const pluginRuns = checkPlugins(dir, plugins, target.settingsFile, add);
+    if (pluginRuns !== null) installs++;
+    // With the plugin there, a recorded install whose hooks are gone was replaced by it.
+    if (hasAccountHooks || (recorded.includes(dir) && pluginRuns === null)) {
       if (checkInstall(target, version, cli, add, true)) installs++;
       if (hasAccountHooks && managedReaches)
-        add('warning', `account install ${dir}: the machine-wide install reaches this login too, so its sessions receive the rules twice; remove one with \`noonsight uninstall\``);
-    } else if (managedReaches) add('ok', `Claude Code configuration ${dir}: reached by the machine-wide install`);
-    else uncovered.push(dir);
-    checkRemotePolicy(dir, remote, hasAccountHooks, managedInstalled, add);
+        add('warning', `account install ${dir}: the machine-wide install reaches this login too; each event is delivered once, by whichever copy runs first, so one of the two is enough: remove one with \`noonsight uninstall\``);
+    } else if (pluginRuns === null && managedReaches) add('ok', `Claude Code configuration ${dir}: reached by the machine-wide install`);
+    else if (pluginRuns === null) uncovered.push(dir);
+    if (pluginRuns !== null && (hasAccountHooks || managedReaches)) checkBoth(dir, pluginRuns, hasAccountHooks ? target : managed, add);
+    checkRemotePolicy(dir, remote, hasAccountHooks || pluginRuns !== null, managedInstalled, add);
   }
-  if (installs === 0) add('problem', 'noonsight is not installed: run `noonsight install`');
+  if (installs === 0) add('problem', 'noonsight is not installed: run `noonsight install`, or install the Claude Code plugin');
   else
     for (const dir of uncovered)
       add(
@@ -376,6 +382,44 @@ function checkInstall(
   return true;
 }
 
+/** Report noonsight's plugin in one login; returns the one whose hooks run there, or null. */
+function checkPlugins(dir: string, plugins: readonly NoonsightPlugin[], settingsFile: string, add: (level: Level, text: string) => void): NoonsightPlugin | null {
+  let runs: NoonsightPlugin | null = null;
+  for (const p of plugins) {
+    const label = `plugin ${p.id} in ${dir}`;
+    if (!p.enabled) add('ok', `${label}: installed and turned off; \`claude plugin enable ${p.id}\` turns it on`);
+    else if (p.dir === null) add('problem', `${label}: turned on in the settings and not installed, so it delivers nothing; run \`claude plugin install ${p.id}\``);
+    else if (p.version === null) add('problem', `${label}: its folder ${p.dir} holds no noonsight that can run, so it delivers nothing; run \`claude plugin install ${p.id}\` again`);
+    else {
+      add('ok', `${label}: runs noonsight ${p.version} (${p.dir})` + (p.scope === 'project' || p.scope === 'local' ? `, in this project only (${p.scope} scope)` : ''));
+      runs ??= p;
+    }
+  }
+  if (runs !== null) {
+    let settings: Record<string, unknown> | null = null;
+    try {
+      settings = readSettings(settingsFile);
+    } catch {
+      // Reported with the login's other findings, or by Claude Code itself.
+    }
+    if (settings?.disableAllHooks === true) add('problem', `plugin ${runs.id} in ${dir}: ${settingsFile} sets disableAllHooks, so Claude Code runs none of its hooks`);
+  }
+  return runs;
+}
+
+/** A login the plugin and an install of the hooks both reach: safe, but the copy that runs first decides the version. */
+function checkBoth(dir: string, plugin: NoonsightPlugin, target: InstallTarget | null, add: (level: Level, text: string) => void): void {
+  const pointer = target === null ? null : readPointer(target.pointer);
+  const other = pointer === null ? null : versionOf(pointer.node, pointer.cli);
+  const label = target?.kind === 'managed' ? 'the machine-wide install' : 'the account install';
+  add(
+    'warning',
+    `Claude Code configuration ${dir}: both the plugin ${plugin.id} and ${label} reach this login; each event is delivered once, by whichever copy runs first` +
+      (other !== null && plugin.version !== null && other !== plugin.version ? `, and they run different versions (the plugin ${plugin.version}, ${label} ${other})` : '') +
+      `. One is enough: remove the plugin with \`claude plugin uninstall ${plugin.id}\`, or the hooks with \`noonsight uninstall${target?.kind === 'managed' ? ' --managed' : ` --account ${dir}`}\``,
+  );
+}
+
 /**
  * Machine-wide settings that decide whether the installed hooks run at all. Claude Code merges the
  * managed settings file and every drop-in file in alphabetical order; a later value wins.
@@ -386,7 +430,7 @@ function checkManagedPolicy(managed: InstallTarget, env: Env, add: (level: Level
     add('problem', `managed settings ${p.file} cannot be read as a JSON object (${p.message}); Claude Code refuses to start while it is so`);
   if (policy.disableAllHooks === true) add('problem', 'managed settings set disableAllHooks: Claude Code runs no hooks at all, noonsight included');
   if (policy.allowManagedHooksOnly === true)
-    add('warning', 'managed settings set allowManagedHooksOnly: only the machine-wide install runs; account installs are ignored');
+    add('warning', 'managed settings set allowManagedHooksOnly: only the machine-wide install runs; account installs are ignored, and so is the plugin unless managed settings enable it');
 
   // An MDM profile ranks above managed settings files, and Claude Code then ignores the files by default.
   if (installed && process.platform === 'darwin') {

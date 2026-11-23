@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- noonsight can be installed as a Claude Code plugin, as an alternative to `noonsight install` from npm, which stays the recommended install.
+  The npm package is the plugin, the repository its marketplace, and each install covers one Claude Code login; it becomes available with the publication of 0.1 (`docs/install.md`, "As a Claude Code plugin").
+  The plugin's first session start writes the configuration from the preset when there is none, its launcher (`scripts/noonsight`) finds Node.js where Claude Code has none on `PATH`, and its commands are skills, such as `/noonsight:check`.
+  `hooks/hooks.json`, the manifests and the skills are generated from the code (`npm run plugin-files`), a test holds them and the version to it, and CI runs `claude plugin validate --strict`.
+
+- Two installs that reach the same session deliver each event once: each copy of a hook claims the occurrence, and another kind of install that finds it claimed does nothing (`docs/hooks.md`, "One delivery per event").
+  Before, a machine-wide install next to one in a configuration directory delivered the rules twice.
+
+- `noonsight check` reports the plugin in each login and warns when an install reaches the same login; `noonsight install` and `noonsight watch enable` refuse to run from the copy a plugin holds; the decision log's `install` can be `plugin`, and `config_written` marks the start that wrote the configuration.
+
+- The delivery benchmark runs through the plugin (`--install plugin`) or with both installs at once (`--install both`).
+
+- The version is 0.1.0.
+
 - Each measured fact has one current value, stated the same in every page, with the Claude Code version it ran on.
   `docs/evidence.md` starts with a table of every committed run, its version and whether a later run superseded it; its delivery entries come from the run of 2026-11-23 on Claude Code 2.1.330 (D18 to D34, with D25 to D34 new), R14 and R15 take the place of R1 and R2, which the run of 2026-11-20 on 2.1.329 measured again, and B1 and B2 give the paid pilot's outcomes and cost.
   D1 to D17, R1 and R2 keep their values under "Superseded results", each with the entry that replaced it, and the README of each superseded run says so at its top.
