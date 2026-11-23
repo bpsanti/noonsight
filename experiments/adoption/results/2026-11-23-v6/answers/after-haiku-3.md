@@ -1,0 +1,21 @@
+Verdict: **Adopt with conditions.** Pilot it on one or two repositories first, pinned to one Claude Code version, before rolling it out to the team.
+
+Reasons:
+1. **It targets your mix of models.** It delivers each model's own rules to each session and subagent, based on the model that session or subagent actually runs on, and re-delivers them after `/model`, `/compact`, `/clear`, and resumes. Your Opus, Sonnet, Haiku, and Fable sessions would each get rules written for that model.
+2. **The subagent coverage is the strongest case.** In the committed benchmark, every subagent request that had rules due held them (668 of 668, D3). Native `CLAUDE.md` covered 32.2% of subagent requests (D10), and a skill per model covered 0% (D11). Many of your sessions start subagents, so this matters most.
+3. **It is local and cheap by design.** Per the README and my grep, the hooks read local files and make no network calls. The one exception is an optional classifier, which is off by default. Hook runs take about 50–90 ms of CPU each (D15).
+4. **It is not a black box.** `noonsight check`, `resolve`, `models`, and `report` show exactly what each model receives, and what was delivered.
+5. **The data is the author's, and it is narrow.** The 300-session benchmark used a local stand-in for the API, so no request reached a model. The rule-effect samples are 30–40 runs on small tasks. The README says so itself.
+
+Conditions and risks:
+- **Pin one Claude Code version and check it.** The main evidence is on 2.1.328 and 2.1.330. CI pins 2.1.325 for its live tests, so the pin and the measured versions disagree. Run `npm run test:live` on whatever version your team uses, and confirm the delivery results still hold.
+- **Set up attended sessions deliberately.** The Opus and Fable rules for attended sessions ship off, so an attended Opus or Fable session gets nothing from the preset until you `enable` one. Set `session.unattended_when_env` to your CI or orchestrator variable, or headless runs may be classed as attended.
+- **Known gaps.** Workflow subagents get no rules. Foreground subagents of one type that need different rules get none until their first edit or agent call. Plugin subagents the tool does not read stay on their parent's model. Agent teams are not measured. `/fork` is unavailable in sessions started with `noonsight run` and rules. A resume with no model named may run on a model the tool cannot identify.
+- **Install is per account.** A plain install writes hooks into every Claude Code login on that account. For a team-wide setup, use `--managed`, which the docs say is not checked live. Test that on a disposable machine first.
+- **Rules are prompt text.** Rules, both the preset's and any committed in a repository, are delivered to the model as instructions. Repository rules only take effect after each person runs `noonsight trust`. Review each rule before adoption, and keep a repo's rules to what the team has read.
+- **Cost can rise.** On a small Sonnet fix, `verify-changes` raised cost per run from $0.0240 to $0.0505 (R6). Measure cost on your own tasks before enabling the rules that add work.
+- **Delivery is not obedience.** The docs say so: a delivered rule is context and may not change behaviour. Measure what the rules change on your work.
+- **Provenance.** It is a single-author project. The package is not on npm (version 0.1 is a placeholder), and it was renamed from `sextant`. Pin to a reviewed commit.
+- **What I did not do.** I read the README, the evidence and verification docs, the CI config, and the repo layout. I grepped for network calls. I did not run `npm test` to recompute the figures, install the tool, or read the hook source in detail. The claims above are the docs' claims, and the recompute step is the way to check them.
+
+What it guarantees: each Claude Code session and subagent receives the rules written for the model it actually runs on, and receives them again when that model changes, so long as the Claude Code hooks behave as the version-specific checks in `docs/verification/claude-code.md` record. That rests on those hook checks, the noonsight decision log, and the benchmark run on Claude Code 2.1.330, which covered 100% of requests on the paths it tested. It does not guarantee that a model follows a rule.
