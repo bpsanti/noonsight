@@ -58,17 +58,15 @@ Your own rules reach every place unless their `where` limits them.
 ## Your first delivered rule
 
 noonsight needs Node.js 20 or newer and Claude Code.
-Version 0.1 is not on npm yet (the name holds an empty placeholder), so install it from a clone:
+Install it from npm, which puts `noonsight` on PATH; this is the recommended install, since `noonsight install` then reaches every Claude Code login of your account:
 
 ```bash
-git clone https://github.com/bpsanti/noonsight.git
-cd noonsight
-npm install && npm run build && npm link   # puts `noonsight` on PATH
+npm install -g noonsight
 ```
 
-Once 0.1 is published, `npx noonsight install` replaces all of this, and is the recommended install: it reaches every Claude Code login of your account.
+`npx noonsight install` works with nothing installed first, but the hooks then run the copy in npm's cache, and deliver nothing once that cache is cleared ([docs/install.md](docs/install.md#the-one-command)).
 
-If you prefer installing noonsight as a Claude Code plugin, that works too, once 0.1 is published (Claude Code 2.1.275 or later, and `npm` for the download):
+If you prefer installing noonsight as a Claude Code plugin, that works too (Claude Code 2.1.275 or later, and `npm` for the download):
 
 ```text
 /plugin install noonsight --marketplace bpsanti/noonsight

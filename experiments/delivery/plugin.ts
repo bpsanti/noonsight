@@ -20,7 +20,8 @@ export function marketplaceFor(noonsightRoot: string, workRoot: string): string 
   const known = built.get(key);
   if (known !== undefined) return known;
   const dir = fs.mkdtempSync(path.join(workRoot, 'marketplace-'));
-  const packed = spawnSync('npm', ['pack', '--silent', '--pack-destination', dir, noonsightRoot], { cwd: dir, encoding: 'utf8' });
+  // The build is already there; `prepack` would rebuild the dist/ this process and other tests run from.
+  const packed = spawnSync('npm', ['pack', '--ignore-scripts', '--silent', '--pack-destination', dir, noonsightRoot], { cwd: dir, encoding: 'utf8' });
   const tarball = fs.readdirSync(dir).find((f) => f.endsWith('.tgz'));
   if (packed.status !== 0 || tarball === undefined) throw new Error(`npm pack ${noonsightRoot} failed: ${packed.stderr}`);
   const plugin = path.join(dir, 'plugin');
