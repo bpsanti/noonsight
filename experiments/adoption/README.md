@@ -219,6 +219,48 @@ Five v5 sessions read that text, and all five were grounded; without them 13 of 
 
 The runner refuses a commit whose CHANGELOG has those entries, as the `after` commits of v2 to v5 do; to reproduce those runs, use the runner of their own commit.
 
+## v6: the same README, with no account of the evaluation in the copy
+
+This section was written before any v6 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `6342101`, the head of `main`, which removed the evaluation from `CHANGELOG.md` under the rule above.
+Outside this folder it differs from v5's `516914f` only in `CHANGELOG.md` and `test/adoption.test.ts`: the README and `docs/evidence.md` are the same, byte for byte.
+So v6 asks whether v5's result holds when no session can read what earlier runs found.
+`before` is unchanged, `f061f03`.
+
+**What the copy was checked for, before the run.**
+The archive of `6342101`, without this folder, was searched for the word "adoption" in every file and for this evaluation's numbers, commits and vocabulary ("grounded", "pass bar", the judge, the earlier runs) in any wording.
+No Markdown file mentions the evaluation.
+`package.json` and `.gitignore` name its folder, and `test/adoption.test.ts` names it and holds the scoring's shape, with no result of a run.
+`CHANGELOG.md` still says that the README's section on rule effects gives one arm per number and that the README names R9, as product changes; it does not say that the evaluation led to them.
+
+**Sessions.**
+Five new `after` sessions for each of the four models, twenty in all; no earlier `after` answer counts.
+No `before` session runs: the twelve `before` answers of v3 to v5 are reused as they are, and judged again, as v5 did.
+The order is Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, so that the per-session budgets the runner holds back do not stop the dearer sessions; if the runner stops for a budget in flight, the sessions left run once those in flight have ended, under the same cap.
+The sessions run under `caffeinate`, at most two at once.
+A session that ends with no answer is run again only if the spending projection, with its estimated cost, stays within the cap.
+
+**Files read.**
+The results list the files each session read, with its Grep and Glob calls, from its stream.
+If a session reads `test/adoption.test.ts`, or any text that describes this evaluation, the pass bar is still read on all twenty answers, and the results also give the counts without those sessions.
+
+**The reference and the judge.**
+[rubric.md](rubric.md), [judge.md](judge.md) and [calibration.json](calibration.json) are those of v5, unchanged, and the evidence map is the same.
+The two statements of the reference that v5 declared stale (the delivery claim's numbers, and L5) are still stale, and v5's rule for them applies: the judgment stays as made and the pass bar is read on it, and the results also give the reading without the judgments that failed an answer only for agreeing with the evidence map against one of them.
+Before any answer is judged, the judge scores the nine calibration answers and must reach the expected `grounded` on all nine; if it does not, v6 stops and reports, with no revision.
+
+**Unchanged.**
+The prompt, the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The comparison with `before` is Fisher's exact test, two-sided; the results also compare v6's `after` with v3's, v4's and v5's, of which only v5's was judged with the same reference and evidence map.
+
+**Money.**
+v6 has a cap of $25 of its own, for its calibration, sessions and judgments.
+The runner is given what remains after the calibration, less a reserve for the 32 judgments at the highest judgment cost measured so far ($0.246); v6 stops and reports if the measured costs project past the cap.
+
+v6's results are in `results/2026-11-23-v6/`.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.

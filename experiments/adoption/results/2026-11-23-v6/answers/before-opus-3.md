@@ -1,0 +1,25 @@
+**Verdict: adopt with conditions.** Run it as a pilot on a few machines first. It's version 0.0.1, `"private": true`, and its README says "early development. Nothing is published yet."
+
+**Reasons**
+
+1. **It covers subagents, where the usual approaches fall short, and you use many of them.** In its delivery benchmark on Claude Code 2.1.328, rules reached 100% of subagent requests (121 of 121). A shared `CLAUDE.md` or `.claude/rules` reached 32.2%. That's because neither one reaches the built-in Explore and Plan subagents, and skills reached 0% (`experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/README.md`). Those subagent numbers come from a local stand-in for the API, and the paid runs started no subagents at all.
+2. **Each model gets only its own rules.** With one `CLAUDE.md` holding rules for all four models, only 18–29% of the rule text a model read was meant for it. With noonsight it was 100%. In the paid pilot, a run cost about 7% more with noonsight against about 19% more with the shared `CLAUDE.md` (`experiments/benchmark/results/2026-11-19/README.md`).
+3. **Some rules have measured effects, but outcomes didn't improve.** With the verify rule, Sonnet 5.5 ran the tests after a one-file fix in 30 of 30 runs and Haiku 5.5 in 27 of 30, against 0 of 30 without it. Sonnet's carry-through rule raised complete runs on a hard backlog from 9 of 40 to 32 of 40. But every run passed its hidden check with or without rules, and the benchmark found "no measurable difference" in resolved tasks. Treat it as a way to shape behavior, not proof of better results.
+4. **By default it does little in normal interactive sessions.** Out of the box, a session with no scope gets only rules marked for every scope, and the preset has none. Opus gets nothing interactively (its one default rule is for unattended runs). Fable's two default rules apply only to subagents and unattended runs. Sonnet and Haiku get their verify rule once they first edit a code file that git already tracks. Most of the value goes to subagents, unattended runs, and sessions that set `NOONSIGHT_SCOPE`.
+5. **The engineering is careful and open about its limits.** Hooks always exit 0, never block or deny anything, and need no network. A config with any problem is refused whole, with a warning. Every decision is logged and can be audited with `noonsight report`. Known failures are written up instead of hidden.
+
+**Conditions and risks**
+
+- **Version pinning:** Pin your Claude Code version and rerun `npm run test:live` and `npm run delivery -- all` before every upgrade. The tool depends on dozens of hook-input details checked on 2.1.325–2.1.328 (`docs/verification/claude-code.md`), and some facts are taken from the docs without being tested. An upgrade can break delivery without any warning.
+- **Known open defects:**
+  - **F3:** two resumes in a row can leave Haiku reading Sonnet's rules with no note saying they no longer apply.
+  - **F4:** after `/model haiku` then a resume, noonsight delivered Sonnet's rules to a session running on Haiku, for the rest of the session. That session lost 15 requests' worth of correct rules.
+
+  If your team often resumes after switching models, expect this.
+- **Wrong model guesses for subagents:** Rules for a subagent are chosen from a predicted model. If the guess is wrong, the subagent keeps the wrong rules and you only get a warning afterwards. This happens with plugin subagents, `--agents` definitions, managed definitions, and mods that set the model. Agent-team teammates and workflow agents get nothing. A call held on a permission prompt past about 5 seconds also gets no rules.
+- **Provider and model settings:** On Bedrock, Vertex or Foundry, you need to set the `ANTHROPIC_DEFAULT_*_MODEL` variables, or the hook only warns. `default`, `opusplan` and models set by MDM can't be resolved.
+- **Install footprint:** `noonsight install` writes hooks into every Claude Code config directory it finds in the home directory. `--managed` writes system-wide, and the authors haven't tested that path live. Try `--account <dir>` on one login first.
+- **Optional features:** Keep routing off at first. In auto mode, each routed call makes Claude Code refuse the other agent calls in the same response, which Claude then has to make again. Keep the classifier off too unless you accept sending the first 4,000 characters of each task to Haiku. Nothing else leaves the machine.
+- **Content and cost:** Some rules raise output tokens. For Sonnet, about 46% more per run in one experiment. Have someone own the configuration and review the preset's changes (`noonsight accept`, `on_preset_change: "hold"`).
+
+**What it guarantees:** It guarantees that each session and subagent gets the declared rules for the model it is predicted to run on, with a note when earlier rules no longer apply. That rests on hook behavior verified only on Claude Code 2.1.325–2.1.328, on correctly predicting each model, and on Claude Code adding hook output to the next request. It doesn't guarantee better results, and the known resume defects (F3, F4) show the delivery itself can be wrong.
