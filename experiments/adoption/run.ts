@@ -140,6 +140,28 @@ export function asJudgment(value: unknown): Judgment | null {
 
 // --- The sandbox -------------------------------------------------------------------------------
 
+/** The Markdown files of a copy of the repository that mention this evaluation, which a session must not read. */
+export function evaluationMentions(dir: string): string[] {
+  return fs
+    .readdirSync(dir, { recursive: true, encoding: 'utf8' })
+    .filter((f) => f.endsWith('.md') && /adoption/i.test(fs.readFileSync(path.join(dir, f), 'utf8')))
+    .sort();
+}
+
+/** Prepares a copy of each commit and refuses any whose Markdown mentions this evaluation, before a session is paid for. */
+function checkTrees(refs: readonly string[], exclude: readonly string[]): void {
+  for (const ref of refs) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));
+    try {
+      prepareTree(ref, dir, exclude);
+      const files = evaluationMentions(dir);
+      if (files.length) throw new Error(`${ref}: ${files.join(', ')} mention the adoption evaluation, so a session could read its results; run on a commit where they do not (experiments/adoption/README.md)`);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
 /** A clean copy of the repository at a commit, without the excluded paths; returns the commit and its tree. */
 export function prepareTree(ref: string, dest: string, exclude: readonly string[]): { commit: string; tree: string } {
   const git = (...args: string[]): string => {
@@ -351,6 +373,7 @@ async function runAll(p: Plan, cells: readonly Cell[], refs: Readonly<Record<str
   let spent = previous.reduce((s, r) => s + r.cost_usd, 0);
   let reserved = 0;
   let stopped = false;
+  checkTrees([...new Set(queue.map((c) => refs[c.condition] as string))], p.exclude);
   log(`${queue.length} sessions to run, $${spent.toFixed(2)} already spent, cap $${cap}`);
   const worker = async (): Promise<void> => {
     while (!stopped) {
