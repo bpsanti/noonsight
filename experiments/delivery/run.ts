@@ -16,7 +16,9 @@
 //
 // Common options: --claude <binary> (default `claude`), --results <dir> (default
 // results/claude-code-<version>/<date>-<commit>/), --work <dir> (default a new folder in the system's
-// temporary directory, which must not be inside a Claude Code scratchpad folder). A fuzz run continues the
+// temporary directory, which must not be inside a Claude Code scratchpad folder), --noonsight <dir> (the
+// built noonsight package the sessions install, default this checkout; the harness and the reference
+// stay this checkout's, so a build from before a fix runs the corpus that reproduces its failure). A fuzz run continues the
 // sessions file an interrupted run of the same arm, seed and size left, unless --fresh. --generator 1
 // draws the sequences of the runs up to 2026-11-21 (generate.ts); its sessions files keep the names they
 // had, and a later generator's carry `g<version>-` before the seed.
@@ -118,7 +120,9 @@ function context(args: Args): Context {
     `${JSON.stringify({ claudeCode: version, commit: prior.commit ?? head, preset: ref.presetVersion, node: process.version, platform: `${process.platform}-${process.arch}`, commands: prior.commands ?? [] }, null, 1)}\n`,
   );
   process.stderr.write(`Claude Code ${version}; results in ${results}; sessions in ${work}\n`);
-  return { args, results, work, commit: head, opts: { ref, projectRef, workRoot: work, claude, claudeCode: version, noonsightRoot: PACKAGE_ROOT } };
+  const noonsightRoot = path.resolve(str(args, 'noonsight', PACKAGE_ROOT));
+  if (!fs.existsSync(path.join(noonsightRoot, 'dist', 'src', 'cli.js'))) throw new Error(`--noonsight: no built noonsight in ${noonsightRoot}`);
+  return { args, results, work, commit: head, opts: { ref, projectRef, workRoot: work, claude, claudeCode: version, noonsightRoot } };
 }
 
 /** Record a command in run.json, with how long it took. */
@@ -126,7 +130,9 @@ function logCommand(ctx: Context, command: string, started: number): void {
   const meta = path.join(ctx.results, 'run.json');
   const m = JSON.parse(fs.readFileSync(meta, 'utf8')) as { commands: unknown[] };
   // The options that name a path of this machine are left out.
-  const args = Object.fromEntries(Object.entries(ctx.args).filter(([k]) => !['results', 'work', 'claude', 'sessions'].includes(k)));
+  const args: Args = Object.fromEntries(Object.entries(ctx.args).filter(([k]) => !['results', 'work', 'claude', 'sessions', 'noonsight'].includes(k)));
+  // Another build is named without its path; the results' README says which one it was.
+  if (ctx.args.noonsight) args.noonsight = 'another build';
   m.commands.push({ command, args, commit: ctx.commit, at: new Date(started).toISOString(), seconds: Math.round((Date.now() - started) / 1000) });
   fs.writeFileSync(meta, `${JSON.stringify(m, null, 1)}\n`);
 }

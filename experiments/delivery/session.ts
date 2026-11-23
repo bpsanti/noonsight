@@ -96,6 +96,12 @@ export function directive(step: Step, n: number): string | null {
   return null;
 }
 
+/** The last permission mode a terminal footer names in some printed text: `plan`, `auto`, `accept`, `manual`, `bypass`, or null. */
+export function footerMode(printed: string): string | null {
+  const found = [...printed.matchAll(/(plan|auto|manual|bypass\s*permissions)\s*mode\s*on|(accept)\s*edits\s*on/g)].at(-1);
+  return found ? (found[1] ?? found[2] ?? '').replace(/\s.*$/, '') || null : null;
+}
+
 /** The tool_use ids of every successful tool result in a request's user messages. */
 function toolResults(body: Body): string[] {
   const out: string[] = [];
@@ -278,6 +284,19 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
     }
   };
   const screen = path.join(root, 'screen.log');
+  const screenSize = (): number => (fs.existsSync(screen) ? fs.statSync(screen).size : 0);
+  /** What the terminal printed since `at`, without its control sequences. */
+  const printedSince = (at: number): string => {
+    const fd = fs.openSync(screen, 'r');
+    try {
+      const size = fs.fstatSync(fd).size;
+      const buffer = Buffer.alloc(Math.max(0, size - at));
+      fs.readSync(fd, buffer, 0, buffer.length, at);
+      return buffer.toString('utf8').replace(/\u001b\[[0-9;?]*[A-Za-z]|\u001b\][^\u0007]*\u0007/g, '');
+    } finally {
+      fs.closeSync(fd);
+    }
+  };
   const tools = ['--permission-mode', 'default', '--allowedTools', 'Agent Read Edit Write'];
 
   let child: ChildProcess | null = null;
@@ -359,13 +378,24 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
         else {
           await quiet(step.k === 'spawn' ? 1800 : 500, 30000);
           // The answer's Stop hook names the permission mode: a session not in the mode the sequence says was not driven as written.
-          if ((lastMode() === 'plan') !== plan) outcome = 'wrong-mode';
+          if (lastMode() !== (plan ? 'plan' : 'default')) outcome = 'wrong-mode';
         }
       } else if (step.k === 'plan') {
-        if (step.on) await type('/plan');
-        else send({ send: '\u001b[Z' });
+        // The footer names the mode. /plan turns plan mode on; shift+tab goes on to the next mode, which
+        // after plan mode is auto mode on some models and the default ("manual") mode on others, so it
+        // is pressed until the footer names the default mode.
         plan = step.on;
-        await sleep(1500);
+        const want = step.on ? 'plan' : 'manual';
+        let mode: string | null = null;
+        for (let press = 0; press < (step.on ? 1 : 4) && mode !== want; press++) {
+          const at = screenSize();
+          if (step.on) await type('/plan');
+          else send({ send: '\u001b[Z' });
+          mode = null;
+          await waitFor(() => (mode = footerMode(printedSince(at))) !== null, 15000);
+        }
+        if (mode !== want) outcome = 'wrong-mode';
+        await sleep(500);
       } else if (step.k === 'branch') {
         const before = starts('fork');
         await type('/branch');
@@ -375,7 +405,9 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
         const before = stops();
         await type(`/fork DB ${i} turn`);
         // The background session answers its prompt, and its Stop hook writes a file as the session's does.
-        if (!(await waitFor(() => stops() > before, 60000))) outcome = 'no-fork-answer';
+        // A session whose fork has not answered is not measured: a late request of the fork could not be
+        // told from one of the session's own conversation.
+        if (!(await waitFor(() => stops() > before, 120000))) outcome = 'no-fork-answer';
         await quiet(1500, 30000);
       } else if (step.k === 'back') {
         const to = conversations.find((c) => c !== conversation) ?? null;
@@ -421,6 +453,7 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
       stepLog.push({ i, k: step.k, ms: Date.now() - t0, requests: facts.length - requestsBefore, outcome });
       if (outcome === 'no-answer') harness = `step-timeout:${i}`;
       if (outcome === 'wrong-mode') harness = `wrong-mode:${i}`;
+      if (outcome === 'no-fork-answer') harness = `fork-timeout:${i}`;
     }
   } catch (e) {
     harness = `error:${e instanceof Error ? e.message : String(e)}`;

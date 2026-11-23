@@ -15,7 +15,7 @@ import { agree, aggregate, replay, ruleLibrary } from '../experiments/delivery/l
 import { measure, pathOf, renderMarkdown, startOf } from '../experiments/delivery/measure.js';
 import { configFor, inspect, kindOf, loadReference, MODELS, type Fact } from '../experiments/delivery/oracle.js';
 import { comparePlant, occurrences, plantNamed, PLANTS } from '../experiments/delivery/plants.js';
-import type { RequestFact, Run } from '../experiments/delivery/session.js';
+import { footerMode, type RequestFact, type Run } from '../experiments/delivery/session.js';
 import { shrink } from '../experiments/delivery/shrink.js';
 import { reply, SUB_EDITS } from '../experiments/delivery/stub.js';
 import { PACKAGE_ROOT } from '../src/config/paths.js';
@@ -133,6 +133,14 @@ test('stub: answers each directive from the request alone', () => {
   assert.equal(subEdit.content[0]?.name, 'Edit');
   assert.deepEqual(reply({ tools: TOOLS, messages: [task, { role: 'assistant', content: subRead.content }, result, { role: 'assistant', content: subEdit.content }, result] }, '/p').content, [{ type: 'text', text: 'done' }]);
   assert.match(String(reply(user('Summarize. Respond with TEXT ONLY.'), '/p').content[0]?.text), /<summary>/);
+});
+
+test('driver: the mode a terminal footer names last', () => {
+  assert.equal(footerMode('Turnedonplanmode\r⏸ plan mode on (shift+tab to cycle) · ← for agents'), 'plan');
+  assert.equal(footerMode('⏸ plan mode on\r⏵⏵ auto mode on (shift+tab to cycle)'), 'auto');
+  assert.equal(footerMode('⏸ manual mode on · ? for shortcuts'), 'manual');
+  assert.equal(footerMode('⏵⏵ accept edits on'), 'accept');
+  assert.equal(footerMode('? for shortcuts'), null);
 });
 
 test('oracle: kinds of request', () => {

@@ -29,7 +29,8 @@ A session that starts through `noonsight run` goes through it at every launch, r
 A session in a project has the configuration in [project/](project) as its `.noonsight/noonsight.json`, which the session's account trusts (`noonsight trust`): a rule for every model, one for subagents only, and one each for Sonnet 5.5 and Fable 5.2 in some scopes.
 
 The driver ([session.ts](session.ts), [pty-bridge.py](pty-bridge.py)) types into a pseudo-terminal and waits for a signal, not for a fixed time: the file a `Stop` hook writes, the decision log line the step causes, or a quiet spell with no request.
-A turn's `Stop` hook also names the permission mode, so a session that is not in plan mode when its sequence says it is, or the other way round, is recorded as one the driver could not run (`wrong-mode`).
+A plan step waits for the footer to name the mode: "plan mode on" after `/plan`, and "manual mode on" after shift+tab, which it presses again while the footer names another mode, since after plan mode the cycle goes to auto mode on some models.
+A turn's `Stop` hook names the permission mode too, so a session that is not in plan mode when its sequence says it is, or not in the default mode otherwise, is recorded as one the driver could not run (`wrong-mode`).
 A `/fork` session runs in a daemon Claude Code starts for the configuration directory, which outlives the session; the driver stops it when the session ends.
 
 ### Two generators
@@ -122,7 +123,7 @@ npm run delivery -- all                         # all of the above but shrink, f
 npm run delivery -- fuzz --generator 1 --n 300  # the sequences of the runs up to 2026-11-21
 ```
 
-`--claude <binary>` runs another Claude Code version; `--concurrency` sets how many sessions run at once.
+`--claude <binary>` runs another Claude Code version; `--noonsight <dir>` installs another build of noonsight in the sessions, such as one from before a fix, while the harness and the reference stay this checkout's; `--concurrency` sets how many sessions run at once.
 An interrupted fuzz run continues where it stopped when run again with the same arm, seed and size; `--fresh` starts it over.
 `NOONSIGHT_LIVE_DELIVERY=1 npm run test:live` runs the corpus as a test (`test/live/delivery-corpus.test.ts`), next to the delivery probe of the benchmark pilot.
 Nothing in this folder installs anything machine-wide, and it refuses to run where noonsight is installed machine-wide, since those hooks would run in its sessions too.
