@@ -368,6 +368,16 @@ The sentence now says "delivery benchmark"; nothing else of the answer, its case
 The calibration runs once more on all nine, and the first one is kept as `results/2026-11-23-v8/calibration-first.json`; if the judge again misses any of the nine, v8 stops and reports.
 Both calibrations count toward the cap.
 
+**Revision of the money rule.**
+This paragraph was written after the second calibration, nine of nine, and before any v8 session or judgment of a real answer; where it differs from "Money" above, it replaces it.
+The cap is $45, since the two calibrations cost $3.19 and a judgment now costs more than in v7.
+The plan is whole: ten `after` sessions per model, and the twelve `before` answers judged again.
+The reserve for each judgment is $0.27, above the $0.21 the rule above gives, because real answers cost more to judge than calibration answers.
+The runner is given $27.77 for sessions, which is $45 less the calibrations and 52 judgments at that reserve.
+If its guard stops it with sessions left, the answers held and the twelve `before` answers are judged, and then the sessions left run one at a time, each only if calibrations, sessions, judgments so far, its whole budget and $0.27 for each judgment owed stay within $45; that decision reads money and no score.
+A round that does not fit whole is dropped for scoring.
+v8 stops and reports if the running projection passes $45.
+
 v8's results are in `results/2026-11-23-v8/`.
 
 ## Limits
