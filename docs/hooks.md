@@ -101,7 +101,7 @@ Reading the launch settings has limits, and the hook prefers saying so to guessi
   A `model` set only in an MDM profile is not read.
 
 The session's task scope is the value of `NOONSIGHT_SCOPE` in the environment Claude Code runs in, which its hooks inherit, so whoever starts the session (a person, a script, an orchestrator) can name it; without it, the session receives only the rules for every scope.
-Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, or when Claude Code runs it headless, as `claude -p` and the Agent SDK do, and `session.headless_is_unattended` is on, as it is by default; it is `session` otherwise ([Scopes](configuration.md#scopes)).
+Its place is `unattended` when a variable listed in `session.unattended_when_env` is set and not empty, or when Claude Code runs it headless, as `claude -p` and the Agent SDK do, and `session.headless_is_unattended` is on, as it is by default; it is `attended` otherwise ([Scopes](configuration.md#scopes)).
 Claude Code tells a hook that its session runs headless with `CLAUDE_CODE_SESSION_ATTENDED=0` in the hook's environment; the variable is not documented, so the hook reads only `0` as headless, and a session whose environment lacks it is in the place it would have without this check ([verification](verification/claude-code.md)).
 A resumed session gets the rules again when a change of scope or place changed which rules apply.
 The rules are resolved with the triggers the session has revealed ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)), which belong to its session id: after compaction the session gets the rules its triggers added again, with the others, and a resumed session that already holds them gets nothing again; after `/clear`, the new session has revealed none.
@@ -336,7 +336,7 @@ The report names that project and what became of it on its second line, and the 
 `--log <file>` reads another log, such as one copied from another machine (a file it cannot read is a usage error), and `--json` prints the same as JSON, with the project as `project`.
 
 ```json
-{"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/noonsight/noonsight.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"session","scope_source":null,"model_source":"hook-input","delivered":"rules","warned":false}
+{"ts":"2026-11-14T20:31:50.901Z","version":"0.1.0","event":"session-start","session_id":"ea13c26f-…","source":"startup","install":"managed","config":"/home/me/.config/noonsight/noonsight.json","model":"claude-sonnet-5-5","status":"matched","key":"claude-sonnet-5-5","rules":["team/commit-style"],"sha256":"1334c8f061b15357","scope":null,"place":"attended","scope_source":null,"model_source":"hook-input","delivered":"rules","warned":false}
 ```
 
 | Field | Values |
@@ -369,7 +369,7 @@ The report names that project and what became of it on its second line, and the 
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model noonsight cannot tell: the value, and why |
 | `status` | `matched`, `none`, `undeclared`, `config-invalid`, `error` |
 | `reason`, `key`, `rules`, `sha256` | As in `noonsight resolve` ([configuration.md](configuration.md)) |
-| `scope`, `place`, `unknown_scope` | The declared scope and the place the rules were resolved for, and a scope that was asked for but is not declared |
+| `scope`, `place`, `unknown_scope` | The declared scope and the place the rules were resolved for (`attended`, `unattended` or `subagent`), and a scope that was asked for but is not declared. Lines written before the place was named `attended` say `session` for it; `noonsight report` and the experiments' readers count both as `attended` |
 | `scope_source` | `env` (`NOONSIGHT_SCOPE`), `task-text`, `classifier`, or null when there was no scope |
 | `scope_matcher` | For a scope taken from the task text: the matcher that decided, as the configuration writes it |
 | `classifier` | With `classifier.mode` on, for a task the classifier was meant to place: `scoped` (it gave a declared scope), `none` (it found that no scope fits), `failed`, `timeout`, `invalid` (it answered outside the declared scopes), `not-needed` (the scope could change neither the rules nor the route, so it was not asked) or `no-task` (a launch with no task text). Absent when no classification was due ([The classifier](configuration.md#the-classifier)) |

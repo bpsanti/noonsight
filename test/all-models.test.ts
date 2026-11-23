@@ -49,13 +49,13 @@ test('the rules go after the preset\'s and before the model\'s own, and reach a 
     }),
     { presetsDir: LAB_PRESETS },
   );
-  const sonnet = resolve(config, { model: 'claude-sonnet-5-5', place: 'session' });
+  const sonnet = resolve(config, { model: 'claude-sonnet-5-5', place: 'attended' });
   assert.equal(sonnet.status, 'matched');
   if (sonnet.status !== 'matched') return;
   assert.deepEqual(sonnet.rules, ['sonnet/general', 'team/commits', 'user/own']);
   assert.ok(sonnet.text.indexOf('SONNET-GEN-3306') < sonnet.text.indexOf(TEAM) && sonnet.text.indexOf(TEAM) < sonnet.text.indexOf(OWN));
 
-  const haiku = resolve(config, { model: 'claude-haiku-5-5', place: 'session' });
+  const haiku = resolve(config, { model: 'claude-haiku-5-5', place: 'attended' });
   assert.equal(haiku.status === 'matched' && haiku.rules.join(' '), 'team/commits user/own');
   assert.deepEqual(config.allModels.map((r) => r.id), ['team/commits']);
 });
@@ -69,28 +69,28 @@ test('a model declared with "use": "none", by an exact key or a wildcard, receiv
     { presetsDir: LAB_PRESETS },
   );
   for (const model of ['claude-opus-5-5', 'claude-opus-4-1']) {
-    const d = resolve(config, { model, place: 'session' });
+    const d = resolve(config, { model, place: 'attended' });
     assert.equal(d.status, 'none', model);
     assert.equal(d.status === 'none' && d.reason, 'declared-none');
   }
-  assert.equal(resolve(config, { model: 'claude-sonnet-5-5', place: 'session' }).status, 'matched');
+  assert.equal(resolve(config, { model: 'claude-sonnet-5-5', place: 'attended' }).status, 'matched');
   // A model that is not declared stays undeclared; the block declares nothing.
-  assert.equal(resolve(config, { model: 'claude-haiku-5-5', place: 'session' }).status, 'undeclared');
+  assert.equal(resolve(config, { model: 'claude-haiku-5-5', place: 'attended' }).status, 'undeclared');
   assert.equal(config.exact.get('claude-opus-5-5')?.use, 'none');
 });
 
 test('the rules keep their own scopes and places', () => {
   const config = loadConfig(
     configTree({
-      all_models: { add: [{ id: 'team/commits', file: 'team.md', scopes: ['investigate'], where: ['session'] }] },
+      all_models: { add: [{ id: 'team/commits', file: 'team.md', scopes: ['investigate'], where: ['attended'] }] },
       models: { 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'user/own', file: 'own.md' }] } },
     }),
     { presetsDir: LAB_PRESETS },
   );
-  const ids = (scope: string | null, place: 'session' | 'subagent'): string =>
+  const ids = (scope: string | null, place: 'attended' | 'subagent'): string =>
     String((resolve(config, { model: 'claude-haiku-5-5', scope, place }) as { rules?: string[] }).rules);
-  assert.equal(ids(null, 'session'), 'user/own');
-  assert.equal(ids('investigate', 'session'), 'team/commits,user/own');
+  assert.equal(ids(null, 'attended'), 'user/own');
+  assert.equal(ids('investigate', 'attended'), 'team/commits,user/own');
   assert.equal(ids('investigate', 'subagent'), 'user/own');
 });
 
@@ -145,19 +145,19 @@ test('the delivery limit counts the block for every model, and names the model i
   const none = loadConfig(configTree({ all_models: all, models: { 'claude-haiku-5-5': { use: 'preset' }, 'claude-sonnet-5-5': { use: 'none' } } }, big), { presetsDir: LAB_PRESETS });
   assert.equal(none.exact.get('claude-sonnet-5-5')?.use, 'none');
   const alone = problemsOf({ all_models: { add: [{ id: 'team/huge', file: 'huge.md' }] }, models: { 'claude-haiku-5-5': { use: 'preset' } } }, { 'huge.md': 'x'.repeat(RULES_TEXT_LIMIT) });
-  assert.match(alone.join('\n'), /^\/models\/claude-haiku-5-5: the rules delivered for no scope in place "session"/);
+  assert.match(alone.join('\n'), /^\/models\/claude-haiku-5-5: the rules delivered for no scope in place "attended"/);
 });
 
 test('triggers on a rule of the block deliver it to a session of another scope after its first tracked edit', () => {
   const config = loadConfig(
     configTree({
-      all_models: { add: [{ id: 'team/verify', file: 'verify.md', scopes: ['investigate'], where: ['session'], triggers: ['code-edit'] }] },
+      all_models: { add: [{ id: 'team/verify', file: 'verify.md', scopes: ['investigate'], where: ['attended'], triggers: ['code-edit'] }] },
       models: { 'claude-sonnet-5-5': { use: 'preset' }, 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'user/own', file: 'own.md' }] } },
     }),
     { presetsDir: LAB_PRESETS },
   );
   for (const model of ['claude-sonnet-5-5', 'claude-haiku-5-5']) {
-    const base = { model, scope: null, place: 'session' } as const;
+    const base = { model, scope: null, place: 'attended' } as const;
     const before = resolve(config, base);
     assert.ok(before.status !== 'matched' || !before.rules.includes('team/verify'), model);
 
@@ -196,7 +196,7 @@ test('models lists the block, and each model\'s rules in delivery order with tho
   const r = cli(['models'], config);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^all_models: 1 rule for every model declared with "use": "preset" or "use": "custom", after the preset's rules and before the model's own$/m);
-  assert.match(r.stdout, /^ {2}on {3}team\/commits {2}\(scopes: every scope; places: session, unattended, subagent; from all_models\)\n {7}file: team\.md$/m);
+  assert.match(r.stdout, /^ {2}on {3}team\/commits {2}\(scopes: every scope; places: attended, unattended, subagent; from all_models\)\n {7}file: team\.md$/m);
 
   const sonnet = r.stdout.slice(r.stdout.indexOf('claude-sonnet-5-5: '), r.stdout.indexOf('claude-opus-5-5: '));
   const order = ['sonnet/general', 'team/commits', 'user/own'].map((id) => sonnet.indexOf(`  ${id}  (`));

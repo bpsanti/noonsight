@@ -76,7 +76,7 @@ const KNOWN_OVERLAPS: Readonly<Record<string, Readonly<Record<'main' | 'subagent
   'claude-haiku-5-5': { main: [], subagent: [] },
 };
 
-const PLACE_READER: Readonly<Record<Place, 'main' | 'subagent'>> = { session: 'main', unattended: 'main', subagent: 'subagent' };
+const PLACE_READER: Readonly<Record<Place, 'main' | 'subagent'>> = { attended: 'main', unattended: 'main', subagent: 'subagent' };
 
 interface SystemPrompt {
   readonly model: string;

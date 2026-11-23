@@ -26,6 +26,7 @@ import { readSettings } from '../../src/adapters/claude-code/install.js';
 import { managedTarget } from '../../src/adapters/claude-code/locations.js';
 import { findNoonsightHandlers } from '../../src/adapters/claude-code/settings.js';
 import { PACKAGE_ROOT, stateDir } from '../../src/config/paths.js';
+import { placeName } from '../../src/core/types.js';
 import { evaluate, folderAt, readDesign, renderComparison } from './compare.js';
 import { check, readCorpus, type Checked } from './corpus.js';
 import { failed, fuzzRuns, readLines, runMany, sessionKey, signature, violationsOf, type Line } from './fuzz.js';
@@ -280,10 +281,11 @@ function logCommandMeasure(args: Args): void {
   const all = readLog(file);
   // Aggregates only, by the place each session started in: no session id, path, rule text or prompt.
   const place = new Map<string, string>();
-  for (const d of all) if (d.event === 'session-start' && d.place && !place.has(d.session_id)) place.set(d.session_id, String(d.place));
+  // A log written before the place was named "attended" says "session" for it.
+  for (const d of all) if (d.event === 'session-start' && d.place && !place.has(d.session_id)) place.set(d.session_id, placeName(String(d.place)) ?? String(d.place));
   const lib = ruleLibrary();
   const groups: Record<string, Record<string, any>[]> = { all };
-  for (const p of ['session', 'unattended']) groups[`place ${p}`] = all.filter((d) => place.get(d.session_id) === p);
+  for (const p of ['attended', 'unattended']) groups[`place ${p}`] = all.filter((d) => place.get(d.session_id) === p);
   groups['place not recorded'] = all.filter((d) => !place.has(d.session_id));
   const out = Object.fromEntries(
     Object.entries(groups).map(([k, rows]) => [k, { decisions: rows.length, from: String(rows[0]?.ts ?? '').slice(0, 10), to: String(rows.at(-1)?.ts ?? '').slice(0, 10), ...aggregate(replay(rows, lib)) }]),

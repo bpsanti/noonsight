@@ -57,7 +57,7 @@ function load(machine: string, dir: string, trusted: boolean | null = true): Con
 }
 
 function rulesOf(details: ConfigDetails, model: string, scope: string | null = null): readonly string[] {
-  const d: Decision = resolve(details.config, { model, scope, place: 'session' });
+  const d: Decision = resolve(details.config, { model, scope, place: 'attended' });
   return d.status === 'matched' ? d.rules : [];
 }
 
@@ -128,8 +128,8 @@ test('"add", the default: the project\'s rules follow the machine\'s in each lis
   assert.deepEqual(rulesOf(d, 'claude-sonnet-5-5'), ['sonnet/general', 'user/all', 'team/commits', 'user/own', 'team/sonnet']);
   assert.deepEqual(rulesOf(d, 'claude-haiku-5-5'), ['haiku/general', 'user/all', 'team/commits']);
   // A model the person declared "none" stays without rules.
-  assert.equal(resolve(d.config, { model: 'claude-opus-5-5', place: 'session' }).status, 'none');
-  const sonnet = resolve(d.config, { model: 'claude-sonnet-5-5', place: 'session' });
+  assert.equal(resolve(d.config, { model: 'claude-opus-5-5', place: 'attended' }).status, 'none');
+  const sonnet = resolve(d.config, { model: 'claude-sonnet-5-5', place: 'attended' });
   assert.match(sonnet.status === 'matched' ? sonnet.text : '', new RegExp(`${OWN}[\\s\\S]*${TEAM_SONNET}`));
   // Commands show the project's rules with the file as the project writes it.
   assert.deepEqual(d.allModels, [{ id: 'user/all', file: 'own.md' }, { id: 'team/commits', file: 'team.md', project: true }]);
@@ -142,7 +142,7 @@ test('"add": an entry for a model the machine leaves undeclared or declares "non
   assert.equal(d.project?.notes.length, 2);
   assert.match(d.project?.notes.join('\n') ?? '', /claude-opus-5-5 with "use": "none"/);
   assert.match(d.project?.notes.join('\n') ?? '', /does not declare claude-fable-5-2/);
-  assert.equal(resolve(d.config, { model: 'claude-fable-5-2', place: 'session' }).status, 'undeclared');
+  assert.equal(resolve(d.config, { model: 'claude-fable-5-2', place: 'attended' }).status, 'undeclared');
   // What became of the project lists only the rules that reach a model.
   assert.deepEqual(d.project?.rules, []);
   assert.equal(describeProject(d.project as ProjectLayer), `applied over the machine's configuration ("projects.allow": "add"), trusted for this account`);
@@ -231,7 +231,7 @@ test('a project rule file must stay inside the project directory, symlinks follo
   fs.symlinkSync(path.join(inside, 'docs', 'team.md'), path.join(inside, '.noonsight', 'inside.md'));
   const ok = load(machine, inside);
   assert.equal(ok.project?.status, 'applied');
-  const text = resolve(ok.config, { model: 'claude-sonnet-5-5', place: 'session' });
+  const text = resolve(ok.config, { model: 'claude-sonnet-5-5', place: 'attended' });
   assert.match(text.status === 'matched' ? text.text : '', new RegExp(TEAM));
 });
 
@@ -248,7 +248,7 @@ test('"replaces": a project needs "rules" to replace a preset rule, and a preset
 
   const rules = (add: unknown[]) =>
     machineTree({ projects: { allow: 'rules' }, models: { 'claude-sonnet-5-5': { use: 'preset', add }, 'claude-haiku-5-5': { use: 'preset' } } });
-  const investigating = (d: ConfigDetails) => resolve(d.config, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' });
+  const investigating = (d: ConfigDetails) => resolve(d.config, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'attended' });
 
   // Under "rules", the project's rule is delivered in the preset rule's place, with its scopes.
   const own = load(rules([{ id: 'user/own', file: 'own.md' }]), projectTree({ models: { 'claude-sonnet-5-5': { add: [finish] } } }));
@@ -414,7 +414,7 @@ test('"rules": a project changes how a model is declared, turns preset rules on 
   assert.deepEqual(sonnet.status === 'matched' && sonnet.rules, ['sonnet/general', 'sonnet/carry-through', 'user/own', 'user/two']);
   assert.match(sonnet.status === 'matched' ? sonnet.text : '', new RegExp(TEAM_SONNET));
   assert.doesNotMatch(sonnet.status === 'matched' ? sonnet.text : '', new RegExp(OWN));
-  assert.equal(resolve(d.config, { model: 'claude-haiku-5-5', place: 'session' }).status, 'none');
+  assert.equal(resolve(d.config, { model: 'claude-haiku-5-5', place: 'attended' }).status, 'none');
   assert.deepEqual(rulesOf(d, 'claude-opus-5-5'), ['team/commits']);
   assert.ok(d.config.scopes.has('review'));
   assert.equal(d.config.onUndeclared, 'ignore');
@@ -532,10 +532,10 @@ test('`noonsight models`, `check` and `resolve` read the project of the director
   assert.match(cli(['check'], env).stdout, /^ok: project .*: applied over the machine's configuration/m);
   const models = cli(['models'], env).stdout;
   assert.match(models, /^project .*noonsight\.json: applied/m);
-  assert.match(models, /team\/commits {2}\(scopes: every scope; places: session, unattended, subagent; from all_models; from the project\)\n {7}file: team\.md/);
+  assert.match(models, /team\/commits {2}\(scopes: every scope; places: attended, unattended, subagent; from all_models; from the project\)\n {7}file: team\.md/);
   const json = JSON.parse(cli(['models', '--json'], env).stdout);
   assert.equal(json.project.status, 'applied');
-  assert.deepEqual(json.all_models[0], { id: 'team/commits', origin: 'user', on: true, scopes: ['*'], where: ['session', 'unattended', 'subagent'], triggers: [], from: 'all_models', project: true, file: 'team.md' });
+  assert.deepEqual(json.all_models[0], { id: 'team/commits', origin: 'user', on: true, scopes: ['*'], where: ['attended', 'unattended', 'subagent'], triggers: [], from: 'all_models', project: true, file: 'team.md' });
   const resolved = JSON.parse(cli(['resolve', 'claude-sonnet-5-5'], env).stdout);
   assert.deepEqual(resolved.rules, ['sonnet/general', 'team/commits', 'user/own']);
   // Outside the project, the machine's configuration alone.

@@ -53,20 +53,20 @@ test('the preset ships 16 rules for the four current models and the five scopes'
   assert.deepEqual(table, {
     'fable-5-2/finish-work': ['investigate build', 'subagent', true],
     'fable-5-2/low-context-report': ['*', 'unattended subagent', true],
-    'fable-5-2/code-ownership': ['build', 'session unattended', false],
-    'fable-5-2/progress-updates': ['*', 'session', false],
+    'fable-5-2/code-ownership': ['build', 'attended unattended', false],
+    'fable-5-2/progress-updates': ['*', 'attended', false],
     'opus-5-5/unattended-run': ['*', 'unattended', true],
-    'opus-5-5/progress-updates': ['*', 'session', false],
-    'opus-5-5/explore-before-acting': ['*', 'session unattended', false],
+    'opus-5-5/progress-updates': ['*', 'attended', false],
+    'opus-5-5/explore-before-acting': ['*', 'attended unattended', false],
     'sonnet-5-5/carry-through': ['*', 'unattended subagent', true],
-    'sonnet-5-5/stay-in-scope': ['routine', 'session unattended subagent', true],
-    'sonnet-5-5/verify-changes': ['investigate build routine', 'session unattended subagent', true],
-    'sonnet-5-5/no-self-review-rounds': ['build routine', 'session unattended subagent', false],
-    'sonnet-5-5/ideas-first': ['*', 'session', false],
-    'sonnet-5-5/check-current-facts': ['investigate digest', 'session unattended subagent', false],
+    'sonnet-5-5/stay-in-scope': ['routine', 'attended unattended subagent', true],
+    'sonnet-5-5/verify-changes': ['investigate build routine', 'attended unattended subagent', true],
+    'sonnet-5-5/no-self-review-rounds': ['build routine', 'attended unattended subagent', false],
+    'sonnet-5-5/ideas-first': ['*', 'attended', false],
+    'sonnet-5-5/check-current-facts': ['investigate digest', 'attended unattended subagent', false],
     'haiku-5-5/carry-through': ['*', 'unattended subagent', true],
-    'haiku-5-5/verify-changes': ['investigate build routine', 'session unattended subagent', true],
-    'haiku-5-5/search-recent-facts': ['investigate digest', 'session unattended subagent', false],
+    'haiku-5-5/verify-changes': ['investigate build routine', 'attended unattended subagent', true],
+    'haiku-5-5/search-recent-facts': ['investigate digest', 'attended unattended subagent', false],
   });
   for (const [model, list] of preset.models) assert.ok(list.some((r) => r.enabled && r.scopes.includes('*')), `${model} has a rule on for every scope`);
 });
@@ -164,7 +164,7 @@ test('with every rule on, every model, scope and place fits the delivery limit',
   );
   for (const model of preset.models.keys())
     for (const scope of [null, ...preset.scopes.keys()])
-      for (const place of ['session', 'unattended', 'subagent'] as const) {
+      for (const place of ['attended', 'unattended', 'subagent'] as const) {
         const d = resolve(everyRule, { model, scope, place });
         if (d.status === 'matched') assert.ok(d.text.length <= RULES_TEXT_LIMIT, `${model} ${scope} ${place}: ${d.text.length}`);
       }
@@ -172,22 +172,22 @@ test('with every rule on, every model, scope and place fits the delivery limit',
 
 test('as shipped, a model receives only the rules on by default, filtered by scope and place', () => {
   const config = loadConfig(allPreset(), { presetsDir: PRESETS });
-  const ids = (model: string, scope: string | null, place: 'session' | 'unattended' | 'subagent'): readonly string[] => {
+  const ids = (model: string, scope: string | null, place: 'attended' | 'unattended' | 'subagent'): readonly string[] => {
     const d = resolve(config, { model, scope, place });
     return d.status === 'matched' ? d.rules : [];
   };
-  assert.deepEqual(ids('claude-fable-5-2', null, 'session'), []);
+  assert.deepEqual(ids('claude-fable-5-2', null, 'attended'), []);
   assert.deepEqual(ids('claude-fable-5-2', null, 'subagent'), ['fable-5-2/low-context-report']);
   assert.deepEqual(ids('claude-fable-5-2', 'investigate', 'subagent'), ['fable-5-2/finish-work', 'fable-5-2/low-context-report']);
   assert.deepEqual(ids('claude-fable-5-2', 'review', 'subagent'), ['fable-5-2/low-context-report']);
   assert.deepEqual(ids('claude-fable-5-2', 'build', 'unattended'), ['fable-5-2/low-context-report']);
   assert.deepEqual(ids('claude-opus-5-5', null, 'unattended'), ['opus-5-5/unattended-run']);
   assert.deepEqual(ids('claude-opus-5-5', 'review', 'subagent'), []);
-  assert.deepEqual(ids('claude-sonnet-5-5', 'routine', 'session'), ['sonnet-5-5/stay-in-scope', 'sonnet-5-5/verify-changes']);
+  assert.deepEqual(ids('claude-sonnet-5-5', 'routine', 'attended'), ['sonnet-5-5/stay-in-scope', 'sonnet-5-5/verify-changes']);
   assert.deepEqual(ids('claude-sonnet-5-5', 'build', 'subagent'), ['sonnet-5-5/carry-through', 'sonnet-5-5/verify-changes']);
-  assert.deepEqual(ids('claude-sonnet-5-5', 'digest', 'session'), []);
+  assert.deepEqual(ids('claude-sonnet-5-5', 'digest', 'attended'), []);
   assert.deepEqual(ids('claude-haiku-5-5', 'digest', 'subagent'), ['haiku-5-5/carry-through']);
-  assert.deepEqual(ids('claude-haiku-5-5', 'routine', 'session'), ['haiku-5-5/verify-changes']);
+  assert.deepEqual(ids('claude-haiku-5-5', 'routine', 'attended'), ['haiku-5-5/verify-changes']);
   assert.deepEqual(ids('claude-haiku-5-5', 'investigate', 'subagent'), ['haiku-5-5/carry-through', 'haiku-5-5/verify-changes']);
   assert.deepEqual(ids('claude-haiku-5-5', null, 'subagent'), ['haiku-5-5/carry-through']);
 });
@@ -234,7 +234,7 @@ test('each rule, turned on, reaches exactly its scopes in each of its places, an
   );
   for (const [model, list] of preset.models)
     for (const rule of list)
-      for (const place of ['session', 'unattended', 'subagent'] as const) {
+      for (const place of ['attended', 'unattended', 'subagent'] as const) {
         const reached = EVERY.filter((scope) => {
           const d = resolve(everyRule, { model, scope, place });
           return d.status === 'matched' && d.rules.includes(rule.id);
@@ -289,7 +289,7 @@ test('a preset rule over the size limit is refused even while it is off, and so 
     fs.writeFileSync(path.join(together, 'claude', 'rules', 'opus-5-5', `${name}.md`), 'y'.repeat(5000));
   const both = problemsOf(together);
   assert.ok(
-    both.some((p) => /\/models\/claude-opus-5-5: with every rule on, the rules delivered for no scope in place "session" come to \d+ characters; the limit is 9500/.test(p)),
+    both.some((p) => /\/models\/claude-opus-5-5: with every rule on, the rules delivered for no scope in place "attended" come to \d+ characters; the limit is 9500/.test(p)),
     both.join('\n'),
   );
 });

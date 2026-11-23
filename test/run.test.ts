@@ -99,7 +99,7 @@ test('launcher route: an explicit --model gets its rules in the system prompt fi
 test('launcher: a session it starts without -p is a watched one, and so is a -p run with session.headless_is_unattended false', () => {
   const l = lab();
   const watched = l.run(['--model', 'sonnet']);
-  assert.equal(fs.readFileSync(fileArg(watched.started), 'utf8'), `${rulesFor('claude-sonnet-5-5', null, 'session')}\n`);
+  assert.equal(fs.readFileSync(fileArg(watched.started), 'utf8'), `${rulesFor('claude-sonnet-5-5', null, 'attended')}\n`);
   // A -p after "--" is a prompt, not the option.
   l.run(['--model', 'sonnet', '--', '-p']);
 
@@ -108,15 +108,15 @@ test('launcher: a session it starts without -p is a watched one, and so is a -p 
   fs.cpSync(path.join(path.dirname(LAB_CONFIG), 'rules'), path.join(off, 'rules'), { recursive: true });
   const kept = lab(path.join(off, 'noonsight.json'));
   const print = kept.run(['--model', 'sonnet', '-p', 'hi'], { FAKE_HOOK_INPUT: hookInput('session-start-print', { session_id: 'kept' }) });
-  assert.equal(fs.readFileSync(fileArg(print.started), 'utf8'), `${rulesFor('claude-sonnet-5-5', null, 'session')}\n`);
+  assert.equal(fs.readFileSync(fileArg(print.started), 'utf8'), `${rulesFor('claude-sonnet-5-5', null, 'attended')}\n`);
   assert.equal(print.stdout, '', 'the hook agrees with the launcher, so it delivers nothing again');
   assert.deepEqual(
     [...launches(l.h), ...kept.h.log()].map((d) => [d.event, d.place, d.unattended_because ?? null]),
     [
-      ['launch', 'session', null],
-      ['launch', 'session', null],
-      ['launch', 'session', null],
-      ['session-start', 'session', null],
+      ['launch', 'attended', null],
+      ['launch', 'attended', null],
+      ['launch', 'attended', null],
+      ['session-start', 'attended', null],
     ],
   );
 });

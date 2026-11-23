@@ -10,7 +10,7 @@ The stub answers every request from the request alone and hands each one to the 
 
 ## What a session is
 
-A session starts on one of the four models (`--model`), with or without a task scope (`NOONSIGHT_SCOPE`), watched or unattended, and then runs a sequence of steps ([generate.ts](generate.ts)):
+A session starts on one of the four models (`--model`), with or without a task scope (`NOONSIGHT_SCOPE`), attended or unattended, and then runs a sequence of steps ([generate.ts](generate.ts)):
 
 | Step | What the driver does |
 | --- | --- |

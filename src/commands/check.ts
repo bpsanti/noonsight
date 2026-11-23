@@ -26,7 +26,7 @@ import { accountInstalls } from '../state/installs.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { lastDecision } from '../state/log.js';
 import { compareVersions, packageVersion } from '../version.js';
-import { changeLines, receivesLines } from './receives.js';
+import { changeLines, receivesLines, type ReceivesInput } from './receives.js';
 import { UsageError } from './usage.js';
 
 export const CHECK_USAGE = `usage: noonsight check
@@ -71,7 +71,7 @@ export function runCheck(args: readonly string[], env: Env, out: (text: string) 
     checkProject(details, add);
     checkPreset(details, env, add);
     checkAllModels(config, add);
-    if (options.receives !== false) checkReceives(config, add);
+    if (options.receives !== false) checkReceives(details, add);
     checkScopes(config, env, add);
     checkTriggers(config, add);
     checkRouting(config, env, add);
@@ -217,9 +217,9 @@ function checkAllModels(config: Config, add: (level: Level, text: string) => voi
 }
 
 /** What each declared model receives in each place with no scope, then how to change it. */
-function checkReceives(config: Config, add: (level: Level, text: string) => void): void {
-  for (const line of receivesLines(config)) add('ok', `receives with no scope, ${line}`);
-  add('ok', `places and scopes: ${changeLines(config).join(' ')}`);
+function checkReceives(details: ReceivesInput, add: (level: Level, text: string) => void): void {
+  for (const line of receivesLines(details)) add('ok', `receives with no scope, ${line}`);
+  add('ok', `places and scopes: ${changeLines(details).join(' ')}`);
 }
 
 /**

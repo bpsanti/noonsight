@@ -337,14 +337,14 @@ test('under "warn", a "replaces" for a rule the update removed is reported, and 
 test('a change to the scopes, places or triggers of a replaced rule reaches the rule that takes them, and is reported', () => {
   const presets = updatedPresets((p) => {
     const follow = (p.models[SONNET].rules as Record<string, any>[]).find((r) => r.id === 'sonnet/follow-through');
-    if (follow) follow.where = ['session', 'unattended', 'subagent'];
+    if (follow) follow.where = ['attended', 'unattended', 'subagent'];
   });
   const file = replacingConfig({ replaces: 'sonnet/carry-through' });
   const details = loadConfigDetails(file, { presetsDir: presets });
   const c = comparePresets(details.presetVersions, details.declared, { presetsDir: presets });
   assert.deepEqual(c?.models[0]?.inherited, [{ id: 'sonnet/follow-through', by: 'user/mine', what: ['places'] }]);
   assert.ok(!c?.models[0]?.changed.some((r) => r.id === 'sonnet/follow-through'), 'the preset rule itself is not delivered');
-  const session = resolve(details.config, { model: SONNET, scope: null, place: 'session' });
+  const session = resolve(details.config, { model: SONNET, scope: null, place: 'attended' });
   assert.ok(session.status === 'matched' && session.rules.includes('user/mine'));
 
   const h = hookHome(file, { NOONSIGHT_PRESETS_DIR: presets });

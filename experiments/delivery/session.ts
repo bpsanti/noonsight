@@ -127,7 +127,7 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
     if (installed.status !== 0) throw new Error(`noonsight install failed: ${installed.stderr}`);
   }
 
-  const where = { scope: spec.scope, place: spec.unattended ? ('unattended' as const) : ('session' as const) };
+  const where = { scope: spec.scope, place: spec.unattended ? ('unattended' as const) : ('attended' as const) };
   const marker = armMarker(spec.arm);
   const seen: { marker: boolean | null } = { marker: null };
   const facts: RequestFact[] = [];

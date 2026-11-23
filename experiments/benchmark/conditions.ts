@@ -65,7 +65,9 @@ export function modelName(id: string): string {
   return `${cap(vendor)} ${cap(family)} ${version.join('.')}`;
 }
 
-const PLACES: Readonly<Record<string, string>> = { session: 'when someone is watching', unattended: 'when nobody is watching', subagent: 'in subagents' };
+/** How the rules file names each place; "session", the earlier name of "attended", reads the same, so a preset written either way gives the same file. */
+const PLACES: Readonly<Record<string, string>> = { attended: 'when someone is watching', unattended: 'when nobody is watching', subagent: 'in subagents' };
+const PLACE_TEXT: Readonly<Record<string, string>> = { ...PLACES, session: PLACES.attended! };
 
 /**
  * Every default-on rule of the given models as one Markdown file: a heading per model, and under it
@@ -77,7 +79,7 @@ export function unionRules(models: readonly string[]): string {
     out.push(`## For ${modelName(model)}`, '');
     for (const r of defaultOnRules(model)) {
       const scopes = !r.scopes || r.scopes.includes('*') ? 'every kind of task' : `tasks of kind ${r.scopes.join(', ')}`;
-      const places = (r.where ?? Object.keys(PLACES)).map((w) => PLACES[w] ?? w).join(', ');
+      const places = (r.where ?? Object.keys(PLACES)).map((w) => PLACE_TEXT[w] ?? w).join(', ');
       out.push(`### ${r.id.split('/')[1] ?? r.id}`, '', `Applies to: ${scopes}; ${places}.`, '', presetText(r).trim(), '');
     }
   }

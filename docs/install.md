@@ -24,9 +24,10 @@ It takes these steps in order, and a step with a command named in brackets does 
 2. **The hooks.**
    They go into every Claude Code configuration directory of your account, as [described below](#every-login-of-your-account-the-default).
 3. **What each model receives.**
-   One line per declared model, with what it receives with no scope in each place: a watched session, an unattended session and a subagent, with `nothing` written out where it receives nothing, and the rules a trigger adds once the session does what the trigger names.
-   With the preset, a watched Opus 5.5 or Fable 5.2 session receives nothing in any scope: every rule of theirs that ships on is for unattended sessions or subagents.
-   A watched Sonnet 5.5 or Haiku 5.5 session receives `verify-changes` once it edits a code file its git repository tracks, and their other session rules only with a scope.
+   One line per declared model, with what it receives with no scope in each place: an attended session, an unattended session and a subagent, with `nothing` written out where it receives nothing, and the rules a trigger adds once the session does what the trigger names.
+   Where a place receives nothing, the line names the preset rules that are off there, and ends by saying that your own rules without `where` are delivered there too and that `enable` turns on a rule that is off.
+   With the preset, an attended Opus 5.5 or Fable 5.2 session receives nothing in any scope: their rules for that place, such as `opus-5-5/progress-updates`, ship off, and every rule of theirs that ships on is for unattended sessions or subagents.
+   An attended Sonnet 5.5 or Haiku 5.5 session receives `verify-changes` once it edits a code file its git repository tracks, and their other attended rules only with a scope.
    Two lines follow with the two ways to change that.
    The place: a session is unattended when it runs headless, as `claude -p` and the Agent SDK do, or when a variable of `session.unattended_when_env` is set, which a CI or an orchestrator whose interactive sessions nobody watches can name ([configuration.md](configuration.md#keys)).
    The scope: a rule limited to scopes reaches a session only when it has one of them, set with `NOONSIGHT_SCOPE` or `noonsight run --scope`; a subagent gets the scope its task matches, or the one the classifier gives it when the classifier is on.
@@ -41,7 +42,7 @@ A problem the check reports elsewhere on the machine, such as another login with
 
 Running it again changes nothing: the existing configuration is kept, the hooks are already in place, and the summary says so.
 After it, the first Claude Code session already receives what the configuration gives its model in that scope and place, and `noonsight report` lists each rule delivered with its model, scope and place.
-With the preset, a watched Sonnet session with no scope gets no rule at its start, the same session with `NOONSIGHT_SCOPE=build` gets `verify-changes`, and a `claude -p` run on Sonnet, which is unattended, gets `carry-through`.
+With the preset, an attended Sonnet session with no scope gets no rule at its start, the same session with `NOONSIGHT_SCOPE=build` gets `verify-changes`, and a `claude -p` run on Sonnet, which is unattended, gets `carry-through`.
 
 `--account <dir>` runs the same steps for one directory.
 `--managed` only installs the hooks, because it runs as an administrator and the configuration belongs to each account.

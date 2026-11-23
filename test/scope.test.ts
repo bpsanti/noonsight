@@ -50,12 +50,12 @@ const scopeOf = (cfg: Config, prompt: string, description: string | null = null)
 
 test('scope: two scopes on the same model deliver different rules, and no scope delivers only the general ones', () => {
   const cfg = scoped();
-  const rules = (scope: string | null): readonly string[] => matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope, place: 'session' })).rules;
+  const rules = (scope: string | null): readonly string[] => matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope, place: 'attended' })).rules;
   assert.deepEqual(rules('investigate'), ['general', 'investigate']);
   assert.deepEqual(rules('summarize'), ['general', 'summarize']);
   assert.deepEqual(rules(null), ['general']);
-  const a = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' }));
-  const b = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'summarize', place: 'session' }));
+  const a = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'attended' }));
+  const b = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'summarize', place: 'attended' }));
   assert.notEqual(a.sha256, b.sha256);
   assert.match(a.text, /INVESTIGATE-2000/);
   assert.doesNotMatch(a.text, /SUMMARIZE-3000/);
@@ -70,7 +70,7 @@ test('session scope: NOONSIGHT_SCOPE names it, trimmed; unset or empty means non
 
 test('session scope: an undeclared NOONSIGHT_SCOPE only means the general rules, never a warning', () => {
   const cfg = scoped();
-  const d = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: sessionScope({ NOONSIGHT_SCOPE: 'release' }).scope, place: 'session' }));
+  const d = matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: sessionScope({ NOONSIGHT_SCOPE: 'release' }).scope, place: 'attended' }));
   assert.equal(d.scope, null);
   assert.deepEqual(d.rules, ['general']);
   assert.equal(d.unknown_scope, 'release');
@@ -78,11 +78,11 @@ test('session scope: an undeclared NOONSIGHT_SCOPE only means the general rules,
 
 test('session place: unattended when a variable of session.unattended_when_env is set and not empty', () => {
   const cfg = scoped({ session: { unattended_when_env: ['CI', 'FM_TASK_ID'] } });
-  assert.deepEqual(sessionPlace(cfg, {}), { place: 'session' });
-  assert.deepEqual(sessionPlace(cfg, { CI: '' }), { place: 'session' });
+  assert.deepEqual(sessionPlace(cfg, {}), { place: 'attended' });
+  assert.deepEqual(sessionPlace(cfg, { CI: '' }), { place: 'attended' });
   assert.deepEqual(sessionPlace(cfg, { FM_TASK_ID: 'task-7' }), { place: 'unattended', because: 'env', env: 'FM_TASK_ID' });
   assert.deepEqual(sessionPlace(cfg, { CI: 'true', FM_TASK_ID: 'x' }), { place: 'unattended', because: 'env', env: 'CI' }, 'the first one listed is named');
-  assert.deepEqual(sessionPlace(scoped(), { CI: 'true' }), { place: 'session' }, 'no variable is listed by default');
+  assert.deepEqual(sessionPlace(scoped(), { CI: 'true' }), { place: 'attended' }, 'no variable is listed by default');
 
   const rules = (env: Record<string, string>): readonly string[] =>
     matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: null, place: sessionPlace(cfg, env).place })).rules;
@@ -97,19 +97,19 @@ test('session place: a headless run, which Claude Code marks with CLAUDE_CODE_SE
   // Anything but "0", the variable missing included, is not headless: a Claude Code that drops or renames
   // the variable leaves every session where it was before noonsight read it.
   for (const value of [undefined, '1', '', 'false', 'no', ' 0', '00'])
-    assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_SESSION_ATTENDED: value }), { place: 'session' }, `CLAUDE_CODE_SESSION_ATTENDED=${String(value)}`);
+    assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_SESSION_ATTENDED: value }), { place: 'attended' }, `CLAUDE_CODE_SESSION_ATTENDED=${String(value)}`);
   // The entry point alone says nothing: an IDE or the desktop app reports another one for a watched session.
-  assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_ENTRYPOINT: 'sdk-cli' }), { place: 'session' });
-  assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode', CLAUDE_CODE_SESSION_ATTENDED: '1' }), { place: 'session' });
+  assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_ENTRYPOINT: 'sdk-cli' }), { place: 'attended' });
+  assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_ENTRYPOINT: 'claude-vscode', CLAUDE_CODE_SESSION_ATTENDED: '1' }), { place: 'attended' });
   // The caller may know better than the environment, as the launcher does for the session it starts.
   assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_SESSION_ATTENDED: '1' }, true), { place: 'unattended', because: 'headless' });
-  assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_SESSION_ATTENDED: '0' }, false), { place: 'session' });
+  assert.deepEqual(sessionPlace(cfg, { CLAUDE_CODE_SESSION_ATTENDED: '0' }, false), { place: 'attended' });
 
   const both = scoped({ session: { unattended_when_env: ['CI'] } });
   assert.deepEqual(sessionPlace(both, { CI: '1', CLAUDE_CODE_SESSION_ATTENDED: '0' }), { place: 'unattended', because: 'env', env: 'CI' }, 'a variable of the configuration is named first');
 
   const off = scoped({ session: { unattended_when_env: ['CI'], headless_is_unattended: false } });
-  assert.deepEqual(sessionPlace(off, { CLAUDE_CODE_SESSION_ATTENDED: '0' }), { place: 'session' });
+  assert.deepEqual(sessionPlace(off, { CLAUDE_CODE_SESSION_ATTENDED: '0' }), { place: 'attended' });
   assert.deepEqual(sessionPlace(off, { CI: '1', CLAUDE_CODE_SESSION_ATTENDED: '0' }), { place: 'unattended', because: 'env', env: 'CI' }, 'unattended_when_env still works');
 
   const rules = (c: Config, env: Record<string, string>): readonly string[] =>

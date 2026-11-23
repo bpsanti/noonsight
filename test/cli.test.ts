@@ -16,7 +16,7 @@ test('resolve prints the decision as JSON and exits 0 for each status', () => {
   const d = JSON.parse(m.stdout);
   assert.equal(d.status, 'matched');
   assert.equal(d.model, 'claude-sonnet-5-5');
-  assert.equal(d.place, 'session');
+  assert.equal(d.place, 'attended');
   assert.deepEqual(d.rules, ['sonnet/general', 'sonnet/investigate']);
   assert.match(d.text, /^<noonsight-rules model="claude-sonnet-5-5" scope="investigate">\n/);
 
@@ -47,6 +47,10 @@ test('resolve: scope and place are positional, as in noonsight resolve <model> [
   assert.equal(both.scope, 'investigate');
   assert.equal(both.place, 'subagent');
   assert.deepEqual(both.rules, ['sonnet/general', 'sonnet/investigate', 'sonnet/carry-through']);
+  // "session", the earlier name of the place "attended", is still read, and the decision names the place by its name.
+  const old = JSON.parse(runCli(['resolve', 'claude-sonnet-5-5', '', 'session'], LAB_ENV).stdout);
+  assert.equal(old.place, 'attended');
+  assert.deepEqual(old.rules, JSON.parse(runCli(['resolve', 'claude-sonnet-5-5', '', 'attended'], LAB_ENV).stdout).rules);
 });
 
 test('a refused configuration exits 2, prints its problems and no decision', () => {
@@ -80,7 +84,7 @@ test('--version prints only the package version, --help the usage', () => {
   assert.match(h.stdout, /resolve <model>/);
   const rh = runCli(['resolve', '--help']);
   assert.equal(rh.status, 0);
-  assert.match(rh.stdout, /resolve <model> \[scope\] \[session\|unattended\|subagent\]/);
+  assert.match(rh.stdout, /resolve <model> \[scope\] \[attended\|unattended\|subagent\]/);
 });
 
 test('one configuration serves the whole machine: it never comes from a Claude Code config directory', () => {

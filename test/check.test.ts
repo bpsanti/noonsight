@@ -332,6 +332,40 @@ test('check says which scope and place sessions started from its environment get
   assert.match(unknown.stdout, /^warning: NOONSIGHT_SCOPE is "release" here, which is not a declared scope, so sessions started from this environment get only the rules for every scope$/m);
 });
 
+test('check names, for a place with nothing, the preset rules that are off there: those that ship off or are disabled, and not one a rule replaces', () => {
+  const { env } = setup();
+  assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
+  const preset = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'presets', 'claude', 'preset.json'), 'utf8')) as { version: string };
+  const dir = tempTree({
+    'noonsight.json': {
+      version: 1,
+      preset_version: preset.version,
+      models: {
+        'claude-opus-5-5': {
+          use: 'preset',
+          disable: ['opus-5-5/unattended-run'],
+          add: [{ id: 'my/explore', file: 'r.md', replaces: 'opus-5-5/explore-before-acting', where: ['subagent'] }],
+        },
+        'claude-fable-5-2': { use: 'preset', enable: ['fable-5-2/progress-updates'] },
+      },
+    },
+    'r.md': '- A rule.',
+  });
+  const r = runCli(['check'], { ...env, NOONSIGHT_PRESETS_DIR: path.join(PACKAGE_ROOT, 'presets'), NOONSIGHT_CONFIG: path.join(dir, 'noonsight.json') });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(
+    lines(r.stdout).filter((l) => l.startsWith('ok: receives with no scope')),
+    [
+      'ok: receives with no scope, claude-opus-5-5: attended session: nothing (off: opus-5-5/progress-updates); ' +
+        'unattended session: nothing (off: opus-5-5/unattended-run); subagent: my/explore. ' +
+        'Your own rules without "where" are delivered in every place, the attended session and unattended session included; "enable" turns on a rule that is off.',
+      // A rule enabled for the place is received there, so the place names no off rule.
+      'ok: receives with no scope, claude-fable-5-2: attended session: fable-5-2/progress-updates; ' +
+        'unattended session: fable-5-2/low-context-report; subagent: fable-5-2/low-context-report',
+    ],
+  );
+});
+
 test('check writes out what each declared model receives in each place with no scope, "nothing" included, then how to change it', () => {
   const { env } = setup();
   assert.equal(runCli(['install', '--account', tempTree({})], env).status, 0);
@@ -363,9 +397,10 @@ test('check writes out what each declared model receives in each place with no s
   assert.deepEqual(
     lines(r.stdout).filter((l) => l.startsWith('ok: receives with no scope')),
     [
-      'ok: receives with no scope, claude-sonnet-5-5: watched session: t/general, then t/verify once it edits tracked code (code-edit); ' +
+      'ok: receives with no scope, claude-sonnet-5-5: attended session: t/general, then t/verify once it edits tracked code (code-edit); ' +
         'unattended session: t/general, t/away, then t/verify once it edits tracked code (code-edit); subagent: t/general, t/sub',
-      'ok: receives with no scope, claude-opus-5-5: watched session: nothing; unattended session: t/opus-away; subagent: nothing',
+      'ok: receives with no scope, claude-opus-5-5: attended session: nothing; unattended session: t/opus-away; subagent: nothing. ' +
+        'Your own rules without "where" are delivered in every place, the attended session and subagent included.',
       'ok: receives with no scope, claude-haiku-5-5: nothing in any place, by decision ("use": "none")',
       'ok: receives with no scope, claude-*-4-*: nothing in any place, by decision ("use": "none" for every model it matches)',
     ],

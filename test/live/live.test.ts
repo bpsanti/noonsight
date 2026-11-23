@@ -163,10 +163,10 @@ test('live, no tokens: startup, /model and /clear run the hooks with the inputs 
   ]);
   // An interactive session is a watched one: Claude Code gives its hooks CLAUDE_CODE_SESSION_ATTENDED=1.
   assert.deepEqual(places(l.log()), [
-    ['session-start', 'session', null],
-    ['model-switch', 'session', null],
-    ['model-switch', 'session', null],
-    ['session-start', 'session', null],
+    ['session-start', 'attended', null],
+    ['model-switch', 'attended', null],
+    ['model-switch', 'attended', null],
+    ['session-start', 'attended', null],
   ]);
 });
 

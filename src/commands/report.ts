@@ -12,7 +12,7 @@ import path from 'node:path';
 import { ConfigError, loadConfigDetails, type ProjectLayer } from '../config/load.js';
 import { configPath, stateDir, type Env } from '../config/paths.js';
 import { describeProject, projectFor } from '../config/project.js';
-import { ANY_SCOPE, type Config, type Place } from '../core/types.js';
+import { ANY_SCOPE, placeName, type Config, type Place } from '../core/types.js';
 import { LOG_FILE, readDecisionFile, readDecisions, ROTATED_LOG_FILE } from '../state/log.js';
 import { UsageError } from './usage.js';
 
@@ -246,7 +246,9 @@ export function buildReport(env: Env, options: Pick<Options, 'log' | 'project'>,
       count(rule.models, text(r.model) ?? NOT_RECORDED);
       // Lines older than scopes carry no scope field; a null scope is a task with no scope.
       count(rule.scopes, 'scope' in r ? (text(r.scope) ?? NO_SCOPE) : NOT_RECORDED);
-      count(rule.places, text(r.place) ?? NOT_RECORDED);
+      // Lines written before "attended" was the place's name say "session"; both count as "attended".
+      const place = text(r.place);
+      count(rule.places, place === null ? NOT_RECORDED : (placeName(place) ?? place));
       count(rule.events, event);
       count(rule.brought_by, triggered.includes(id) ? by : BY_SCOPE);
     }

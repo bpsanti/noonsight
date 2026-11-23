@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The place of a session someone is watching is now named `attended`, and a rule's `where` takes `all` alone for every place.
+  `session` is still read as the earlier name of `attended`, in `where`, in `noonsight resolve` and in the decision log, so existing configurations and logs keep their meaning; a `where` that names a place twice, under either name, or lists `all` beside another place is refused.
+  The decision log now writes `"place": "attended"`; `noonsight report` and the delivery and benchmark experiments count lines with `session` as `attended`.
+  The preset, the schemas, `noonsight models` and the docs use the new name, and the preset's places are otherwise unchanged.
+
+- The README has a table of every preset rule with its scopes, places and triggers and whether it ships on, which `npm test` keeps in step with `presets/claude/preset.json` (`test/readme.test.ts`).
+  It says that most preset rules apply to attended sessions, that Opus 5.5's and Fable 5.2's rules for that place ship off and why, and how to turn one on with `enable`, where it said before that an attended Opus 5.5 or Fable 5.2 session receives nothing.
+  In the lines `noonsight install` and `noonsight check` print for each model, a place that receives nothing names the preset rules that are off there, and the line says that your own rules without `where` are delivered there too and that `enable` turns on a rule that is off.
+
 - The README presents noonsight as a way to deliver instructions by model, with the preset as a starting set taken from Anthropic's guides, and a new section, "Your own rules", shows a machine configuration with rules for one model and for every model, and a repository's `.noonsight/noonsight.json` with `noonsight trust`.
   A table there gives the values of a rule's `scopes`, `where` and `triggers`, and how a session or a subagent gets each.
   It says that the delivery claim covers any rule, since noonsight picks a rule by its model, scope, place and trigger and never by its text, while the measured rule effects are for the preset's rules alone.

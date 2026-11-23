@@ -98,12 +98,12 @@ test('models lists each declared model with its rules on and off, their source, 
   assert.match(out, /^preset claude 1\.3\.1: its rules were compared with the system prompts of Claude Code 2\.1\.325 on \d{4}-\d{2}-\d{2}/m);
   assert.match(out, /^claude-sonnet-5-5: preset, 4 of 7 rules on; seen in 3 decisions, last 2026-11-16T11:00:00\.000Z$/m);
   assert.match(out, /^ {2}on {3}sonnet-5-5\/carry-through {2}\(scopes: every scope; places: unattended, subagent\)$/m);
-  assert.match(out, /^ {2}off {2}sonnet-5-5\/stay-in-scope {2}\(scopes: routine; places: session, unattended, subagent\)$/m);
-  assert.match(out, /^ {2}on {3}sonnet-5-5\/ideas-first {2}\(scopes: every scope; places: session\)$/m);
-  assert.match(out, /^ {2}on {3}sonnet-5-5\/verify-changes {2}\(scopes: investigate, build, routine; places: session, unattended, subagent; triggers: code-edit\)$/m);
+  assert.match(out, /^ {2}off {2}sonnet-5-5\/stay-in-scope {2}\(scopes: routine; places: attended, unattended, subagent\)$/m);
+  assert.match(out, /^ {2}on {3}sonnet-5-5\/ideas-first {2}\(scopes: every scope; places: attended\)$/m);
+  assert.match(out, /^ {2}on {3}sonnet-5-5\/verify-changes {2}\(scopes: investigate, build, routine; places: attended, unattended, subagent; triggers: code-edit\)$/m);
   assert.match(out, /^ {7}source: https:\/\/platform\.claude\.com\/docs\/en\/build-with-claude\/prompt-engineering\/prompting-claude-sonnet-5-5, "Verification on coding tasks", read \d{4}-\d{2}-\d{2}$/m);
   assert.match(out, /^ {7}cost: Slightly higher cost per task\.$/m);
-  assert.match(out, /^ {2}on {3}team\/style {2}\(scopes: routine; places: session, unattended, subagent\)\n {7}file: style\.md$/m);
+  assert.match(out, /^ {2}on {3}team\/style {2}\(scopes: routine; places: attended, unattended, subagent\)\n {7}file: style\.md$/m);
   assert.match(out, /^claude-haiku-5-5: custom, 1 rule; not seen in the decision log\n {2}on {3}team\/haiku {2}\(scopes: every scope; places: subagent\)$/m);
   assert.match(out, /^claude-opus-5-5: none, by decision; not seen in the decision log$/m);
   assert.match(out, /^claude-opus-4-\*: none, a wildcard; covers claude-opus-4-1 \(1 decision\) from the decision log$/m);
