@@ -1,0 +1,815 @@
+{
+ "on-both-g2-s7-n20": {
+  "claudeCode": "2.1.330",
+  "arm": "on",
+  "plant": null,
+  "sessions": 20,
+  "harness": {
+   "ok": 20
+  },
+  "stepOutcomes": {
+   "model:ok": 25,
+   "turn:ok": 59,
+   "compact:ok": 7,
+   "edit:ok": 23,
+   "spawn:ok": 35,
+   "branch:ok": 6,
+   "plan:ok": 16,
+   "clear:ok": 11,
+   "resume:ok": 6,
+   "fork:ok": 1,
+   "fork:fork-refused": 1
+  },
+  "steps": 190,
+  "lifecycleEvents": 131,
+  "secondsPerSession": 29,
+  "requests": 313,
+  "byKind": {
+   "main": 232,
+   "compact": 7,
+   "subagent": 72,
+   "other": 2
+  },
+  "coverage": {
+   "requests": 304,
+   "due": 275,
+   "covered": 275,
+   "coverage": 1,
+   "rules": {
+    "due": 555,
+    "present": 555,
+    "share": 1
+   },
+   "subagents": {
+    "requests": 72,
+    "due": 60,
+    "covered": 60,
+    "coverage": 1
+   }
+  },
+  "precision": {
+   "ownShare": 0.7225,
+   "rightShare": 0.4591,
+   "meanOwnSharePerRequest": 0.8394,
+   "parts": {
+    "ownFirst": 269574,
+    "ownDuplicate": 49732,
+    "ownUnexpected": 0,
+    "foreignRetired": 122656,
+    "foreignUnretired": 0,
+    "overhead": 145210
+   }
+  },
+  "cost": {
+   "addedCharsPerAgentRequest": 1931,
+   "approxTokensPerAgentRequest": 483,
+   "shareOfRequestText": 0.074,
+   "addedCharsPerSession": 29359,
+   "agentRequestsPerSession": 15.2
+  },
+  "robustness": {
+   "requestsWithViolation": {
+    "missing-own": 0,
+    "own-retired": 0,
+    "foreign-unretired": 0
+   },
+   "sessionsFailed": 0,
+   "knownViolations": {},
+   "classes": {},
+   "byLength": {
+    "0-2 events": {
+     "sessions": 1,
+     "requests": 3,
+     "due": 3,
+     "covered": 3,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "3-5 events": {
+     "sessions": 6,
+     "requests": 53,
+     "due": 45,
+     "covered": 45,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "6-8 events": {
+     "sessions": 7,
+     "requests": 125,
+     "due": 122,
+     "covered": 122,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "9+ events": {
+     "sessions": 6,
+     "requests": 123,
+     "due": 105,
+     "covered": 105,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   },
+   "byQuietPair": {
+    "every quiet step followed by a request": {
+     "sessions": 9,
+     "requests": 159,
+     "due": 149,
+     "covered": 149,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "two quiet steps in a row": {
+     "sessions": 11,
+     "requests": 145,
+     "due": 126,
+     "covered": 126,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   },
+   "byStart": {
+    "claude, in a project": {
+     "sessions": 5,
+     "requests": 93,
+     "due": 93,
+     "covered": 93,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "claude": {
+     "sessions": 13,
+     "requests": 167,
+     "due": 138,
+     "covered": 138,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "noonsight run, in a project": {
+     "sessions": 2,
+     "requests": 44,
+     "due": 44,
+     "covered": 44,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   }
+  },
+  "byPath": {
+   "a /fork session": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 0.7362,
+    "foreignUnretired": 0
+   },
+   "after /branch": {
+    "requests": 2,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after /clear": {
+    "requests": 4,
+    "due": 4,
+    "coverage": 1,
+    "ownShare": 0.8509,
+    "foreignUnretired": 0
+   },
+   "after /compact": {
+    "requests": 3,
+    "due": 3,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after /model": {
+    "requests": 9,
+    "due": 7,
+    "coverage": 1,
+    "ownShare": 0.4646,
+    "foreignUnretired": 0
+   },
+   "after a forking resume": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 0.5633,
+    "foreignUnretired": 0
+   },
+   "after a resume with --model": {
+    "requests": 2,
+    "due": 2,
+    "coverage": 1,
+    "ownShare": 0.4402,
+    "foreignUnretired": 0
+   },
+   "after a resume": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after an edit of tracked code": {
+    "requests": 36,
+    "due": 33,
+    "coverage": 1,
+    "ownShare": 0.6754,
+    "foreignUnretired": 0
+   },
+   "after another edit": {
+    "requests": 34,
+    "due": 31,
+    "coverage": 1,
+    "ownShare": 0.8455,
+    "foreignUnretired": 0
+   },
+   "after leaving plan mode": {
+    "requests": 4,
+    "due": 2,
+    "coverage": 1,
+    "ownShare": 0.601,
+    "foreignUnretired": 0
+   },
+   "after starting subagents that edit": {
+    "requests": 23,
+    "due": 23,
+    "coverage": 1,
+    "ownShare": 0.6833,
+    "foreignUnretired": 0
+   },
+   "after starting subagents": {
+    "requests": 99,
+    "due": 94,
+    "coverage": 1,
+    "ownShare": 0.6527,
+    "foreignUnretired": 0
+   },
+   "in plan mode": {
+    "requests": 9,
+    "due": 8,
+    "coverage": 1,
+    "ownShare": 0.8864,
+    "foreignUnretired": 0
+   },
+   "start": {
+    "requests": 4,
+    "due": 4,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "subagent": {
+    "requests": 72,
+    "due": 60,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   }
+  }
+ },
+ "on-g2-s7-n20": {
+  "claudeCode": "2.1.330",
+  "arm": "on",
+  "plant": null,
+  "sessions": 20,
+  "harness": {
+   "ok": 20
+  },
+  "stepOutcomes": {
+   "model:ok": 25,
+   "turn:ok": 59,
+   "compact:ok": 7,
+   "edit:ok": 23,
+   "spawn:ok": 35,
+   "branch:ok": 6,
+   "plan:ok": 16,
+   "clear:ok": 11,
+   "resume:ok": 6,
+   "fork:ok": 1,
+   "fork:fork-refused": 1
+  },
+  "steps": 190,
+  "lifecycleEvents": 131,
+  "secondsPerSession": 28,
+  "requests": 313,
+  "byKind": {
+   "main": 232,
+   "compact": 7,
+   "subagent": 72,
+   "other": 2
+  },
+  "coverage": {
+   "requests": 304,
+   "due": 274,
+   "covered": 274,
+   "coverage": 1,
+   "rules": {
+    "due": 551,
+    "present": 551,
+    "share": 1
+   },
+   "subagents": {
+    "requests": 72,
+    "due": 60,
+    "covered": 60,
+    "coverage": 1
+   }
+  },
+  "precision": {
+   "ownShare": 0.7242,
+   "rightShare": 0.4622,
+   "meanOwnSharePerRequest": 0.8413,
+   "parts": {
+    "ownFirst": 268099,
+    "ownDuplicate": 48214,
+    "ownUnexpected": 0,
+    "foreignRetired": 120482,
+    "foreignUnretired": 0,
+    "overhead": 143246
+   }
+  },
+  "cost": {
+   "addedCharsPerAgentRequest": 1908,
+   "approxTokensPerAgentRequest": 477,
+   "shareOfRequestText": 0.0734,
+   "addedCharsPerSession": 29002,
+   "agentRequestsPerSession": 15.2
+  },
+  "robustness": {
+   "requestsWithViolation": {
+    "missing-own": 0,
+    "own-retired": 0,
+    "foreign-unretired": 0
+   },
+   "sessionsFailed": 0,
+   "knownViolations": {},
+   "classes": {},
+   "byLength": {
+    "0-2 events": {
+     "sessions": 1,
+     "requests": 3,
+     "due": 3,
+     "covered": 3,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "3-5 events": {
+     "sessions": 6,
+     "requests": 54,
+     "due": 45,
+     "covered": 45,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "6-8 events": {
+     "sessions": 7,
+     "requests": 126,
+     "due": 123,
+     "covered": 123,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "9+ events": {
+     "sessions": 6,
+     "requests": 121,
+     "due": 103,
+     "covered": 103,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   },
+   "byQuietPair": {
+    "every quiet step followed by a request": {
+     "sessions": 9,
+     "requests": 158,
+     "due": 147,
+     "covered": 147,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "two quiet steps in a row": {
+     "sessions": 11,
+     "requests": 146,
+     "due": 127,
+     "covered": 127,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   },
+   "byStart": {
+    "claude, in a project": {
+     "sessions": 5,
+     "requests": 92,
+     "due": 92,
+     "covered": 92,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "claude": {
+     "sessions": 13,
+     "requests": 169,
+     "due": 139,
+     "covered": 139,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "noonsight run, in a project": {
+     "sessions": 2,
+     "requests": 43,
+     "due": 43,
+     "covered": 43,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   }
+  },
+  "byPath": {
+   "a /fork session": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 0.7362,
+    "foreignUnretired": 0
+   },
+   "after /branch": {
+    "requests": 2,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after /clear": {
+    "requests": 4,
+    "due": 4,
+    "coverage": 1,
+    "ownShare": 0.8509,
+    "foreignUnretired": 0
+   },
+   "after /compact": {
+    "requests": 3,
+    "due": 3,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after /model": {
+    "requests": 9,
+    "due": 7,
+    "coverage": 1,
+    "ownShare": 0.4646,
+    "foreignUnretired": 0
+   },
+   "after a forking resume": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 0.5633,
+    "foreignUnretired": 0
+   },
+   "after a resume with --model": {
+    "requests": 2,
+    "due": 2,
+    "coverage": 1,
+    "ownShare": 0.4402,
+    "foreignUnretired": 0
+   },
+   "after a resume": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after an edit of tracked code": {
+    "requests": 36,
+    "due": 33,
+    "coverage": 1,
+    "ownShare": 0.6754,
+    "foreignUnretired": 0
+   },
+   "after another edit": {
+    "requests": 34,
+    "due": 31,
+    "coverage": 1,
+    "ownShare": 0.8455,
+    "foreignUnretired": 0
+   },
+   "after leaving plan mode": {
+    "requests": 4,
+    "due": 2,
+    "coverage": 1,
+    "ownShare": 0.601,
+    "foreignUnretired": 0
+   },
+   "after starting subagents that edit": {
+    "requests": 23,
+    "due": 23,
+    "coverage": 1,
+    "ownShare": 0.6833,
+    "foreignUnretired": 0
+   },
+   "after starting subagents": {
+    "requests": 99,
+    "due": 93,
+    "coverage": 1,
+    "ownShare": 0.6549,
+    "foreignUnretired": 0
+   },
+   "in plan mode": {
+    "requests": 9,
+    "due": 8,
+    "coverage": 1,
+    "ownShare": 0.8864,
+    "foreignUnretired": 0
+   },
+   "start": {
+    "requests": 4,
+    "due": 4,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "subagent": {
+    "requests": 72,
+    "due": 60,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   }
+  }
+ },
+ "on-plugin-g2-s7-n20": {
+  "claudeCode": "2.1.330",
+  "arm": "on",
+  "plant": null,
+  "sessions": 20,
+  "harness": {
+   "ok": 20
+  },
+  "stepOutcomes": {
+   "model:ok": 25,
+   "turn:ok": 59,
+   "compact:ok": 7,
+   "edit:ok": 23,
+   "spawn:ok": 35,
+   "branch:ok": 6,
+   "plan:ok": 16,
+   "clear:ok": 11,
+   "resume:ok": 6,
+   "fork:ok": 1,
+   "fork:fork-refused": 1
+  },
+  "steps": 190,
+  "lifecycleEvents": 131,
+  "secondsPerSession": 25,
+  "requests": 319,
+  "byKind": {
+   "main": 238,
+   "compact": 7,
+   "subagent": 72,
+   "other": 2
+  },
+  "coverage": {
+   "requests": 310,
+   "due": 280,
+   "covered": 280,
+   "coverage": 1,
+   "rules": {
+    "due": 561,
+    "present": 561,
+    "share": 1
+   },
+   "subagents": {
+    "requests": 72,
+    "due": 60,
+    "covered": 60,
+    "coverage": 1
+   }
+  },
+  "precision": {
+   "ownShare": 0.719,
+   "rightShare": 0.4593,
+   "meanOwnSharePerRequest": 0.8389,
+   "parts": {
+    "ownFirst": 273567,
+    "ownDuplicate": 48756,
+    "ownUnexpected": 0,
+    "foreignRetired": 125954,
+    "foreignUnretired": 0,
+    "overhead": 147349
+   }
+  },
+  "cost": {
+   "addedCharsPerAgentRequest": 1921,
+   "approxTokensPerAgentRequest": 480,
+   "shareOfRequestText": 0.0735,
+   "addedCharsPerSession": 29781,
+   "agentRequestsPerSession": 15.5
+  },
+  "robustness": {
+   "requestsWithViolation": {
+    "missing-own": 0,
+    "own-retired": 0,
+    "foreign-unretired": 0
+   },
+   "sessionsFailed": 0,
+   "knownViolations": {},
+   "classes": {},
+   "byLength": {
+    "0-2 events": {
+     "sessions": 1,
+     "requests": 3,
+     "due": 3,
+     "covered": 3,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "3-5 events": {
+     "sessions": 6,
+     "requests": 55,
+     "due": 46,
+     "covered": 46,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "6-8 events": {
+     "sessions": 7,
+     "requests": 127,
+     "due": 124,
+     "covered": 124,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "9+ events": {
+     "sessions": 6,
+     "requests": 125,
+     "due": 107,
+     "covered": 107,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   },
+   "byQuietPair": {
+    "every quiet step followed by a request": {
+     "sessions": 9,
+     "requests": 163,
+     "due": 152,
+     "covered": 152,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "two quiet steps in a row": {
+     "sessions": 11,
+     "requests": 147,
+     "due": 128,
+     "covered": 128,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   },
+   "byStart": {
+    "claude, in a project": {
+     "sessions": 5,
+     "requests": 95,
+     "due": 95,
+     "covered": 95,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "claude": {
+     "sessions": 13,
+     "requests": 171,
+     "due": 141,
+     "covered": 141,
+     "coverage": 1,
+     "sessionsFailed": 0
+    },
+    "noonsight run, in a project": {
+     "sessions": 2,
+     "requests": 44,
+     "due": 44,
+     "covered": 44,
+     "coverage": 1,
+     "sessionsFailed": 0
+    }
+   }
+  },
+  "byPath": {
+   "a /fork session": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 0.7362,
+    "foreignUnretired": 0
+   },
+   "after /branch": {
+    "requests": 2,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after /clear": {
+    "requests": 4,
+    "due": 4,
+    "coverage": 1,
+    "ownShare": 0.8509,
+    "foreignUnretired": 0
+   },
+   "after /compact": {
+    "requests": 3,
+    "due": 3,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after /model": {
+    "requests": 9,
+    "due": 7,
+    "coverage": 1,
+    "ownShare": 0.4646,
+    "foreignUnretired": 0
+   },
+   "after a forking resume": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 0.5633,
+    "foreignUnretired": 0
+   },
+   "after a resume with --model": {
+    "requests": 2,
+    "due": 2,
+    "coverage": 1,
+    "ownShare": 0.4402,
+    "foreignUnretired": 0
+   },
+   "after a resume": {
+    "requests": 1,
+    "due": 1,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "after an edit of tracked code": {
+    "requests": 36,
+    "due": 33,
+    "coverage": 1,
+    "ownShare": 0.6754,
+    "foreignUnretired": 0
+   },
+   "after another edit": {
+    "requests": 34,
+    "due": 31,
+    "coverage": 1,
+    "ownShare": 0.8455,
+    "foreignUnretired": 0
+   },
+   "after leaving plan mode": {
+    "requests": 4,
+    "due": 2,
+    "coverage": 1,
+    "ownShare": 0.601,
+    "foreignUnretired": 0
+   },
+   "after starting subagents that edit": {
+    "requests": 23,
+    "due": 23,
+    "coverage": 1,
+    "ownShare": 0.6833,
+    "foreignUnretired": 0
+   },
+   "after starting subagents": {
+    "requests": 105,
+    "due": 99,
+    "coverage": 1,
+    "ownShare": 0.6467,
+    "foreignUnretired": 0
+   },
+   "in plan mode": {
+    "requests": 9,
+    "due": 8,
+    "coverage": 1,
+    "ownShare": 0.8864,
+    "foreignUnretired": 0
+   },
+   "start": {
+    "requests": 4,
+    "due": 4,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   },
+   "subagent": {
+    "requests": 72,
+    "due": 60,
+    "coverage": 1,
+    "ownShare": 1,
+    "foreignUnretired": 0
+   }
+  }
+ }
+}

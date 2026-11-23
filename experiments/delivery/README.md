@@ -210,6 +210,8 @@ results/
 The current run is the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)); every run on 2.1.328 is superseded by it, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
 The folder for one version holds what was measured on that version; comparing two versions is comparing their `summary.json` and `corpus.json`.
 
+[install-check](install-check/README.md) holds a smaller check, the corpus and 20 sequences under the settings hooks, the plugin and both, which is not a run of the benchmark.
+
 ## Failures found, and a limit
 
 The corpus entries that start with `f1-` to `f9-` are the shortest reproductions of nine failures of noonsight: F1 to F4 the fuzzer found, F5 to F9 the paths generator 2 added.

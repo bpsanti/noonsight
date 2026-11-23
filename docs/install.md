@@ -296,7 +296,7 @@ The order does not matter.
 
 ### Node.js
 
-The plugin's hooks need Node.js 20 or newer on the machine.
+The plugin's hooks need Node.js 20 or newer on the machine, and macOS or Linux, since the launcher is a POSIX shell script that has not been verified on Windows.
 A Claude Code started from a desktop app may have no `node` on its `PATH`, so the plugin's launcher looks in this order: the path in `NOONSIGHT_NODE`, which can be set under `env` in the Claude Code settings; the Node.js an earlier hook ran on, kept in `~/.local/share/noonsight/node`; `PATH`; and the folders Homebrew, Volta, nvm, asdf, mise, fnm and nodenv use.
 With none, a session goes on without rules and its start says so.
 
