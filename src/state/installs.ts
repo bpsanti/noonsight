@@ -8,6 +8,16 @@ import { writeFileAtomic } from './files.js';
 
 const FILE = 'installs.json';
 
+/**
+ * What runs a hook, as the decision log records it: a machine-wide install, an install in a configuration
+ * directory, or the Claude Code plugin.
+ */
+export const INSTALL_KINDS = ['managed', 'account', 'plugin'] as const;
+export type InstallKind = (typeof INSTALL_KINDS)[number];
+
+/** The installs `noonsight install` writes to a settings file; Claude Code itself installs the plugin. */
+export type SettingsInstallKind = Exclude<InstallKind, 'plugin'>;
+
 export function accountInstalls(stateDir: string): string[] {
   try {
     const value = JSON.parse(fs.readFileSync(path.join(stateDir, FILE), 'utf8')) as { accounts?: unknown };

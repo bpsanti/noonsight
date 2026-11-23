@@ -7,12 +7,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { dataDir, type Env } from '../../config/paths.js';
+import type { SettingsInstallKind } from '../../state/installs.js';
 import { POINTER_NAME } from './settings.js';
 
-export type InstallKind = 'managed' | 'account';
-
 export interface InstallTarget {
-  readonly kind: InstallKind;
+  readonly kind: SettingsInstallKind;
   /** The settings file noonsight writes its hook entries to. */
   readonly settingsFile: string;
   /** The hook pointer those entries run. */

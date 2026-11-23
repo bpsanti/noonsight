@@ -108,6 +108,9 @@ export function writeState(file: string | null, state: DeliveryState): void {
  */
 const AGENT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+/** A claim (claims.ts) serves only while the copies of one event run. */
+const CLAIM_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 /** Remove records nobody has written for a long time. */
 export function pruneState(stateDir: string, now: number): void {
   for (const [sub, maxAge] of [
@@ -123,6 +126,7 @@ export function pruneState(stateDir: string, now: number): void {
     ['agent-links', AGENT_MAX_AGE_MS],
     ['agent-pending', AGENT_MAX_AGE_MS],
     ['agents', AGENT_MAX_AGE_MS],
+    ['claims', CLAIM_MAX_AGE_MS],
   ] as const) {
     const dir = path.join(stateDir, sub);
     let names: string[];

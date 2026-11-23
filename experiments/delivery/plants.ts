@@ -107,7 +107,7 @@ export function buildPlant(plant: Plant, dir: string): string {
   const n = occurrences(plant);
   if (n !== 1) throw new Error(`plant ${plant.name}: its line is in ${plant.file} ${n} times, not once; update the plant to the hook as it is now`);
   fs.rmSync(dir, { recursive: true, force: true });
-  for (const part of ['dist/src', 'presets', 'schema', 'package.json']) fs.cpSync(path.join(PACKAGE_ROOT, part), path.join(dir, part), { recursive: true });
+  for (const part of ['dist/src', 'presets', 'schema', 'package.json', '.claude-plugin', 'hooks', 'scripts', 'skills']) fs.cpSync(path.join(PACKAGE_ROOT, part), path.join(dir, part), { recursive: true });
   const file = path.join(dir, plant.file);
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(plant.find, plant.replace));
   return dir;

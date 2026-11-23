@@ -4,11 +4,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runsFromPlugin } from '../adapters/claude-code/plugins.js';
 import { CLI_FILE, stateDir, type Env } from '../config/paths.js';
 import { writeFileAtomic } from '../state/files.js';
 import { isLoaded, isOurs, manager, readServiceFile, serviceContent, watchService, WatchUnsupported, type WatchService } from '../watch/service.js';
 import { startWatcher } from '../watch/watcher.js';
-import { runInstall } from './install.js';
+import { PLUGIN_COPY_REFUSED, runInstall } from './install.js';
 import { UsageError } from './usage.js';
 
 export const WATCH_USAGE = `usage: noonsight watch enable
@@ -34,6 +35,10 @@ export function runWatch(args: readonly string[], env: Env, io: Io): number {
   switch (action) {
     case 'enable':
     case 'disable': {
+      if (action === 'enable' && runsFromPlugin(env)) {
+        io.err(`noonsight: ${PLUGIN_COPY_REFUSED}`);
+        return 1;
+      }
       let service: WatchService;
       try {
         service = watchService(env, os.homedir());

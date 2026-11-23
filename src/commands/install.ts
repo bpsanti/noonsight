@@ -4,7 +4,9 @@ import path from 'node:path';
 import { checkInstallable, checkUninstallable, install, InstallRefused, NeedsPermission, readSettings, uninstall, type Runtime } from '../adapters/claude-code/install.js';
 import { accountTarget, defaultAccountDir, discoverConfigDirs, managedTarget, UnsupportedPlatformError, type InstallTarget } from '../adapters/claude-code/locations.js';
 import { managedFilesApply, readRemoteSettings } from '../adapters/claude-code/managed.js';
+import { noonsightPlugins, runsFromPlugin } from '../adapters/claude-code/plugins.js';
 import { findNoonsightHandlers } from '../adapters/claude-code/settings.js';
+import { writeConfig } from '../config/create.js';
 import { ConfigError, loadConfig, loadConfigDetails } from '../config/load.js';
 import { CLI_FILE, configPath, stateDir, type Env } from '../config/paths.js';
 import { projectFor } from '../config/project.js';
@@ -12,7 +14,6 @@ import { isPermissionError } from '../state/files.js';
 import { accountInstalls, recordAccountInstall } from '../state/installs.js';
 import { packageVersion } from '../version.js';
 import { runCheck } from './check.js';
-import { writeConfig } from './init.js';
 import { changeLines, receivesLines } from './receives.js';
 import { UsageError } from './usage.js';
 
@@ -44,6 +45,11 @@ Running install again changes nothing; uninstall removes only noonsight's own en
 /** The page that explains the guard Claude Code loads on every machine with managed settings. */
 export const MOD_GUARD_URL = 'https://code.claude.com/docs/en/plugins/mods/admin#know-what-happens-by-default';
 
+/** Why nothing that stays may point at the copy of noonsight a plugin runs. */
+export const PLUGIN_COPY_REFUSED =
+  'this copy of noonsight is the one a Claude Code plugin runs, in a folder Claude Code deletes some time after an update, so hooks and the watcher cannot point at it; nothing was changed. ' +
+  'The plugin already delivers in its own login. To install the hooks, run noonsight from npm: `npx noonsight install`.';
+
 export interface Io {
   readonly out: (text: string) => void;
   readonly err: (text: string) => void;
@@ -61,6 +67,10 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
   const home = os.homedir();
   const runtime: Runtime = { node: process.execPath, cli: fs.realpathSync(CLI_FILE), version: packageVersion() };
 
+  if (command === 'install' && runsFromPlugin(env)) {
+    io.err(`noonsight: ${PLUGIN_COPY_REFUSED}`);
+    return 1;
+  }
   let targets: InstallTarget[];
   try {
     if (mode.kind === 'managed') targets = [managedTarget(env)];
@@ -146,7 +156,10 @@ export function runInstall(command: 'install' | 'uninstall', args: readonly stri
 
   if (setup) return finishSetup(lines, wrote !== null, targets, env, home, io);
   if (command === 'install') lines.push(...installNotes(targets, env, home, true));
-  else if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
+  else {
+    if (targets.length === 0) lines.push('no Claude Code configuration directory found; nothing to remove');
+    lines.push(...pluginNotes(targets, env, (id) => `still delivers there; to remove it too: \`claude plugin uninstall ${id}\``));
+  }
   io.out(lines.join('\n'));
   return 0;
 }
@@ -298,20 +311,31 @@ function installNotes(targets: readonly InstallTarget[], env: Env, home: string,
     }
   } else {
     if (targets.length === 0) notes.push('no Claude Code configuration directory found');
+    notes.push(...pluginNotes(targets, env, (id) => `reaches this login too; each event is delivered once, and one of the two is enough: \`claude plugin uninstall ${id}\` removes the plugin`));
     const managed = safeManaged(env);
     if (managed && hasNoonsightHooks(managed.settingsFile)) {
-      const twice = targets.filter((t) => t.configDir !== undefined && managedFilesApply(readRemoteSettings(t.configDir)));
-      if (twice.length)
+      const both = targets.filter((t) => t.configDir !== undefined && managedFilesApply(readRemoteSettings(t.configDir)));
+      if (both.length)
         notes.push(
-          `warning: noonsight is also installed for the whole machine (${managed.settingsFile}); while both installs are in place, ` +
-            `sessions that use ${twice.map((t) => t.configDir).join(', ')} receive the rules twice. ` +
-            'Remove one of them with `noonsight uninstall`.',
+          `warning: noonsight is also installed for the whole machine (${managed.settingsFile}), which reaches ${both.map((t) => t.configDir).join(', ')} too; ` +
+            'each event is delivered once, so one of the two is enough: remove one with `noonsight uninstall`.',
         );
     }
   }
   if (process.getuid?.() === 0) notes.push('next: run `noonsight check` as yourself, without administrator rights, to check your configuration.');
   else if (withConfigLine) notes.push(configLine(env, home));
   return notes;
+}
+
+/** A line for each login of the targets where noonsight's plugin is on. */
+function pluginNotes(targets: readonly InstallTarget[], env: Env, what: (id: string) => string): string[] {
+  return targets.flatMap((t) =>
+    t.configDir === undefined
+      ? []
+      : noonsightPlugins({ projectDir: null, configDir: t.configDir, env })
+          .filter((p) => p.enabled && p.version !== null)
+          .map((p) => `note: the plugin ${p.id} in ${t.configDir} ${what(p.id)}`),
+  );
 }
 
 function configLine(env: Env, home: string): string {

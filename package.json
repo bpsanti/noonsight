@@ -1,6 +1,6 @@
 {
   "name": "noonsight",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Every model has its own north. Hand every Claude Code session and subagent the rules for the model it actually runs on.",
   "license": "MIT",
@@ -19,13 +19,18 @@
   "files": [
     "dist/src",
     "schema",
-    "presets"
+    "presets",
+    ".claude-plugin",
+    "hooks",
+    "scripts",
+    "skills"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "plugin-files": "npm run build && node dist/src/adapters/claude-code/plugin-files.js",
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:live": "npm run build && node --test dist/test/live/*.test.js",
     "experiment": "npm run build && node dist/experiments/rules/run.js",

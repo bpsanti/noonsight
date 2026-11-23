@@ -4,14 +4,14 @@
 // settings entries that call it never change.
 
 import fs from 'node:fs';
-import type { InstallKind } from './locations.js';
+import type { SettingsInstallKind } from '../../state/installs.js';
 
 export interface PointerTarget {
   /** The Node.js executable. */
   readonly node: string;
   /** noonsight's command line entry point. */
   readonly cli: string;
-  readonly kind: InstallKind;
+  readonly kind: SettingsInstallKind;
   /** The noonsight version that wrote the pointer. */
   readonly version: string;
 }
@@ -49,7 +49,7 @@ export function readPointer(file: string): PointerTarget | null {
   const kind = field(/^# kind: (managed|account)$/m);
   const version = field(/^# version: (\S+)$/m);
   if (!node || !cli || !kind || !version) return null;
-  return { node: shellUnquote(node), cli: shellUnquote(cli), kind: kind as InstallKind, version };
+  return { node: shellUnquote(node), cli: shellUnquote(cli), kind: kind as SettingsInstallKind, version };
 }
 
 function shellQuote(s: string): string {

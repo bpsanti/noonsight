@@ -18,6 +18,7 @@
 //     and the log records config-invalid.
 
 import fs from 'node:fs';
+import { writeConfig } from '../../config/create.js';
 import { ConfigError, loadConfigDetails, type ConfigDetails } from '../../config/load.js';
 import { changesDelivery, comparePresets, describeChanges } from '../../config/preset-changes.js';
 import { configPath, stateDir, type Env } from '../../config/paths.js';
@@ -26,13 +27,15 @@ import { normalizeModel } from '../../core/normalize.js';
 import { joinDelivery, launcherNote, resolve, resolveAdded, stampDelivery, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
 import { ANY_MODEL, type Config, type Decision, type Trigger } from '../../core/types.js';
+import { claimOccurrence } from '../../state/claims.js';
+import type { InstallKind } from '../../state/installs.js';
 import { appendDecision } from '../../state/log.js';
 import { heldModels, processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
+import { forPlugin } from '../../wording.js';
 import { inheritTriggers, sessionTriggers } from '../../state/triggers.js';
 import { forkOrigin, type ForkOrigin } from './fork.js';
 import { launchFields, launchModel, readCommandLine, resolveModelValue, resolveValue, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
-import type { InstallKind } from './locations.js';
 import { conversationResponse, type Response } from './predict.js';
 import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
@@ -45,17 +48,23 @@ export interface HookContext {
   readonly now: Date;
   /** The noonsight version, recorded in the log. */
   readonly version: string;
-  /** Which install ran the hook, as the hook pointer reports it. */
+  /** Which install ran the hook, as the hook pointer or the plugin's launcher reports it. */
   readonly install: InstallKind | null;
   /** The process that started the hook: the Claude Code process running the session. */
   readonly parentPid: number;
 }
 
 /**
- * Run one hook event. Returns what to print on stdout (possibly nothing). Never throws. `late` is false
- * only for the event's own run after rules a subagent was owed have been given (see below).
+ * Run one hook event. Returns what to print on stdout (possibly nothing). Never throws. When another
+ * kind of install runs the same event, only the copy that claims it runs (state/claims.ts).
  */
-export function runHook(arg: string, rawInput: string, ctx: HookContext, late = true): string {
+export function runHook(arg: string, rawInput: string, ctx: HookContext): string {
+  const out = runEvent(arg, rawInput, ctx, true);
+  return ctx.install === 'plugin' ? withMessages(out, forPlugin) : out;
+}
+
+/** `late` is false only for the event's own run after rules a subagent was owed have been given (see below). */
+function runEvent(arg: string, rawInput: string, ctx: HookContext, late: boolean): string {
   if (ctx.env.NOONSIGHT_DISABLE === '1') return '';
   const spec = HOOK_HANDLERS.find((h) => h.arg === arg);
   if (!spec) return '';
@@ -96,10 +105,19 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
     }
   };
 
+  // A machine-wide install reaches every account; an account that never set noonsight up is left alone.
+  // Installing the plugin is setting it up, so the first session that starts under it writes the
+  // configuration, as `noonsight install` does.
+  const unset = isUnset(ctx);
+  if (unset && !(ctx.install === 'plugin' && event === 'SessionStart')) return '';
+  // Claimed only by a copy that will run: one that returned above left the event to another install.
+  const claimed = once(() => !late || ctx.install === null || claimOccurrence(state, ctx.install, { event: arg, parentPid: ctx.parentPid, input: rawInput }, ctx.now.getTime()));
+
   // A result or an edit inside a subagent whose start could not tell its call: the subagent's own call is
   // known by now, and its rules ride on this hook's context. The event itself then runs as usual, and
   // its own output is added.
   if (late && (arg === 'agent-result' || editEvent) && str(input.agent_id) !== null) {
+    if (!claimed()) return '';
     let owed: ReturnType<typeof lateRules> = null;
     try {
       owed = lateRules(input, { state, now: ctx.now });
@@ -108,17 +126,18 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
     }
     if (owed !== null) {
       log(owed.record);
-      return withContext(runHook(arg, rawInput, ctx, false), event, String(owed.specific?.additionalContext ?? ''));
+      return withContext(runEvent(arg, rawInput, ctx, false), event, String(owed.specific?.additionalContext ?? ''));
     }
   }
   // Every edit runs this hook; one that cannot reveal a trigger ends here, before the configuration is read.
   if (editEvent && !mayReveal(input, state)) return '';
+  if (!claimed()) return '';
 
   try {
     const file = configPath(ctx.env, ctx.home);
-    // A machine-wide install reaches every account; an account that never set noonsight up is left alone.
-    if (!ctx.env.NOONSIGHT_CONFIG && !fs.existsSync(file)) return '';
     record.config = file;
+    const wrote = unset ? writeConfig(ctx.env, ctx.home) : null;
+    if (wrote !== null) record.config_written = true;
     // The session's project: the directory Claude Code names for its hooks, else the input's cwd.
     const project = projectFor(ctx.env.CLAUDE_PROJECT_DIR || str(input.cwd), file, state);
     let details: ConfigDetails;
@@ -221,6 +240,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
     // A project left out is reported once, as the session starts.
     const projectNote = startup ? projectWarning(details.project) : null;
     if (projectNote !== null) result.record.warned = true;
+    if (wrote !== null) result.record.warned = true;
     log(result.record);
     if (result.state) {
       const saved: DeliveryState = { ...result.state, at: ctx.now.toISOString() };
@@ -237,7 +257,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
     const resumedStart = event === 'SessionStart' && (input.source === 'resume' || input.source === 'fork');
     const context = result.context !== null && resumedStart ? stampDelivery(result.context, ctx.now.toISOString()) : result.context;
     return output(
-      [...result.messages, ...(update !== null ? [update.message] : []), ...(projectNote !== null ? [projectNote] : [])],
+      [...(wrote !== null ? [firstConfigMessage(file)] : []), ...result.messages, ...(update !== null ? [update.message] : []), ...(projectNote !== null ? [projectNote] : [])],
       context ? { hookEventName: event, additionalContext: context } : null,
     );
   } catch (e) {
@@ -641,6 +661,31 @@ function output(messages: readonly string[], specific: Record<string, unknown> |
     ...(messages.length ? { systemMessage: messages.join('\n') } : {}),
     ...(specific ? { hookSpecificOutput: specific } : {}),
   });
+}
+
+/** Whether the account never set noonsight up: no configuration at the default path, and none named. */
+function isUnset(ctx: HookContext): boolean {
+  try {
+    return !ctx.env.NOONSIGHT_CONFIG && !fs.existsSync(configPath(ctx.env, ctx.home));
+  } catch {
+    // The event's own run meets the failure, and reports it.
+    return false;
+  }
+}
+
+/** What the plugin's first session says once it has written the configuration. */
+function firstConfigMessage(file: string): string {
+  return (
+    `noonsight: no configuration was found, so ${file} was written from the preset, and sessions and subagents now receive its rules for their model. ` +
+    'Run `noonsight check` to see what each model receives and how to change it.'
+  );
+}
+
+/** A hook's output with each message for the person reworded; its context is left as it is. */
+function withMessages(out: string, word: (text: string) => string): string {
+  if (out === '') return out;
+  const parsed = JSON.parse(out) as Record<string, unknown>;
+  return typeof parsed.systemMessage === 'string' ? JSON.stringify({ ...parsed, systemMessage: word(parsed.systemMessage) }) : out;
 }
 
 /** A hook's output with more context added to it, for the event given. */

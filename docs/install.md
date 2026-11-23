@@ -3,6 +3,7 @@
 noonsight reaches Claude Code through seven official settings hook entries: `SessionStart`, `PostModelSwitch` and `PostToolUse` on Edit and Write for the session itself, and `PreToolUse`, `PermissionRequest` and `PostToolUse` on the agent tool and `SubagentStart` for the subagents it starts.
 `noonsight install` puts them in place, `noonsight uninstall` takes them out, and `noonsight check` says whether they will run.
 [hooks.md](hooks.md) describes what the hooks do once they run.
+This is the recommended install; [As a Claude Code plugin](#as-a-claude-code-plugin) describes the alternative.
 
 ## The one command
 
@@ -62,6 +63,8 @@ There are three ways to install the hooks:
 | `sudo ... noonsight install --managed` | Every account on the machine, except logins whose organization delivers server-managed settings | Administrator |
 
 An optional watcher, off unless you turn it on, adds the per-account hooks to each new login as it appears; see [New logins as they appear](#new-logins-as-they-appear-optional).
+
+If you prefer installing noonsight as a Claude Code plugin, Claude Code itself can install the same hooks; see [As a Claude Code plugin](#as-a-claude-code-plugin).
 
 ## Every login of your account (the default)
 
@@ -245,7 +248,63 @@ Running `noonsight install --managed` again changes nothing.
   An account with no configuration gets nothing and sees no warning.
   The hook pointer runs the Node.js and the copy of noonsight that ran `install`; an account that cannot read them gets nothing either, so install noonsight where every account that should get rules can read it.
 
-With both a machine-wide install and an install in a configuration directory, sessions of that login receive the rules twice whenever Claude Code applies the managed settings files; `install` and `check` name the logins where that happens.
+With both a machine-wide install and an install in a configuration directory, Claude Code runs both in that login whenever it applies the managed settings files; each event is still delivered once ([hooks.md](hooks.md#one-delivery-per-event)), and `install` and `check` name the logins where one of the two is enough.
+
+## As a Claude Code plugin
+
+`noonsight install`, from npm, is the recommended install.
+If you prefer installing a Claude Code plugin, the npm package is one too, and the repository is its marketplace.
+It is available once 0.1 is published, since Claude Code downloads the plugin from npm.
+
+```text
+/plugin install noonsight --marketplace bpsanti/noonsight
+```
+
+The one-line form needs Claude Code 2.1.275 or later, and the download needs `npm`; from a shell, `claude plugin marketplace add bpsanti/noonsight` and `claude plugin install noonsight@noonsight` do the same.
+Then start a new session: `/reload-plugins` registers the hooks in a running one, but the rules come with its next start, such as `/clear`.
+
+| | `noonsight install` (npm, recommended) | Plugin |
+| --- | --- | --- |
+| Reach | Every Claude Code login of your account, and new ones with `noonsight watch` | The one login it was installed in; a login added later needs its own install |
+| Machine-wide | `--managed` | Not covered here |
+| `noonsight` in a shell, `noonsight run` | Yes | No: the commands are skills, such as `/noonsight:check` |
+| Node.js | The one that ran `install`, by absolute path | Found when a hook runs, as described below |
+| Updates | Update the package, then run `noonsight install` again | `claude plugin update noonsight@noonsight`, or auto-update for the marketplace under `/plugin`; a marketplace that is not Anthropic's does not update by itself |
+| `strictPluginOnlyCustomization` with `hooks` (managed) | Claude Code stops the account hooks | Runs, as Claude Code's documentation says; not tested |
+| `allowManagedHooksOnly` (managed) | Only `--managed` runs | Runs only when managed settings enable this plugin |
+| Remove | `noonsight uninstall` | `claude plugin uninstall noonsight@noonsight` |
+
+Both use the same configuration, `~/.config/noonsight/noonsight.json`, the same decision log and the same trust in projects, so moving from one to the other changes none of them.
+The plugin is for a login, not for a repository: install it in user scope, and share a repository's rules with [`.noonsight/noonsight.json`](configuration.md#project-configuration).
+
+### The first session
+
+With no configuration file, the first session that starts under the plugin writes it from the preset, as `noonsight install` does, and says so once.
+It never replaces a file, and it never creates the file `NOONSIGHT_CONFIG` names: a missing one is reported, as under any install.
+
+### Both at once
+
+Use one of them.
+Having both is safe: Claude Code runs both copies of each hook, and the first to claim an event delivers it while the other does nothing ([hooks.md](hooks.md#one-delivery-per-event)).
+When the two copies are different versions, the one that runs first decides which preset a session gets, so `noonsight check` warns about both installs in one login and names the versions when they differ.
+
+- To move to the plugin: install it, then run `noonsight uninstall --account <dir>` for that login, and `noonsight watch disable` if the watcher is on.
+- To move back: `claude plugin uninstall noonsight@noonsight`, then `noonsight install`.
+
+The order does not matter.
+`noonsight install` and `noonsight watch enable` refuse to run from the copy a plugin holds, since Claude Code deletes that folder some time after an update and the hook pointer would then run nothing.
+
+### Node.js
+
+The plugin's hooks need Node.js 20 or newer on the machine.
+A Claude Code started from a desktop app may have no `node` on its `PATH`, so the plugin's launcher looks in this order: the path in `NOONSIGHT_NODE`, which can be set under `env` in the Claude Code settings; the Node.js an earlier hook ran on, kept in `~/.local/share/noonsight/node`; `PATH`; and the folders Homebrew, Volta, nvm, asdf, mise, fnm and nodenv use.
+With none, a session goes on without rules and its start says so.
+
+### Commands
+
+`/noonsight:setup` writes the configuration when there is none and checks everything; `/noonsight:check`, `/noonsight:report`, `/noonsight:resolve`, `/noonsight:models`, `/noonsight:accept`, `/noonsight:trust` and `/noonsight:untrust` run the command of the same name.
+Only the person runs them, the model is not offered them, and each costs a turn, since the model repeats the output.
+They need skills to be allowed to run commands: `disableSkillShellExecution` in the settings replaces the output with a placeholder.
 
 ## The hook pointer
 
@@ -266,7 +325,7 @@ They call `noonsight-hook`, a small shell script that runs the Node.js and the c
 `PostModelSwitch` runs it with `model-switch`, `SubagentStart`, with no matcher, with `subagent-start`, and `PostToolUse` twice, in two matcher groups: with the same matcher as `PreToolUse`, with `agent-result`, and with the matcher `Edit|Write`, with `file-edit`.
 An install made before noonsight used `SubagentStart` lacks that entry, so its subagents get no rules, and one made before triggers lacks the `Edit|Write` entry, so its sessions never reveal `code-edit` ([hooks.md](hooks.md#posttooluse-on-edit-and-write-the-triggers)); `noonsight check` reports either, and running `noonsight install` again adds them.
 
-The pointer runs `noonsight hook --install <account|managed> <event>` with that argument (`--install` names the install that ran it, which the decision log records as `install`), the hook adapter, which reads the hook input on stdin, prints at most one JSON object and always exits 0; it is not meant to be run by hand, and unlike every other command it prints no usage, since Claude Code would show it as a hook error.
+The pointer runs `noonsight hook --install <account|managed> <event>` with that argument (`--install` names the install that ran it, which the decision log records as `install`; the [plugin](#as-a-claude-code-plugin)'s launcher passes `plugin`), the hook adapter, which reads the hook input on stdin, prints at most one JSON object and always exits 0; it is not meant to be run by hand, and unlike every other command it prints no usage, since Claude Code would show it as a hook error.
 So the hook does not depend on the `PATH` of whatever started Claude Code, and installing a new copy of noonsight rewrites only the pointer, never a settings file.
 If the copy it points at is removed, the pointer exits quietly and `noonsight check` reports it.
 
@@ -307,7 +366,8 @@ Rules a running session already received stay in that session.
 - each configuration directory no install reaches, including a login whose server-managed settings make Claude Code ignore the machine-wide install;
 - server-managed settings that turn hooks off for a login (`disableAllHooks`, `allowManagedHooksOnly`);
 - managed settings files that stop hooks from running (`disableAllHooks`), that make per-account hooks ignored (`allowManagedHooksOnly`), or that Claude Code cannot read;
-- logins that would receive the rules twice;
+- logins that both a machine-wide install and an install of their own reach;
+- noonsight's plugin in each login: its version and folder, whether it is on, and whether an install reaches the same login;
 - whether the watcher is off or on, whether its service runs, whether it runs this copy of noonsight, and the last line of its log;
 - whether the installed `claude` is recent enough;
 - the last decision in the log.

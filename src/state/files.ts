@@ -20,6 +20,30 @@ export function writeFileAtomic(file: string, content: string, mode: number): vo
   }
 }
 
+/**
+ * Create a file in one step, or return false when it already exists: its content is written to a hidden
+ * temporary file, which is then linked to the name, so no reader sees part of it and nothing is replaced.
+ */
+export function createFileAtomic(file: string, content: string, mode = 0o644): boolean {
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
+  fs.writeFileSync(tmp, content, { mode, flag: 'wx' });
+  try {
+    try {
+      fs.linkSync(tmp, file);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      // A file system without hard links: created in place, still without replacing anything.
+      fs.writeFileSync(file, content, { mode, flag: 'wx' });
+    }
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw e;
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 /** The file's permission bits, or the fallback when the file does not exist. */
 export function modeOf(file: string, fallback: number): number {
   try {
