@@ -203,6 +203,22 @@ The runner is given what remains after the calibration, less a reserve for the 3
 
 v5's results are in `results/2026-11-23-v5/`.
 
+## From v6 on: no account of the evaluation outside this folder
+
+This section was written after v5's results, and applies only to runs after it.
+A session's copy of the repository leaves out this folder but not `CHANGELOG.md`, which described the earlier runs and what their answers got wrong.
+Five v5 sessions read that text, and all five were grounded; without them 13 of 15 are grounded and Haiku 5.5 is at 2 of 4, below its 60% ([results/2026-11-23-v5](results/2026-11-23-v5/README.md)).
+
+- `CHANGELOG.md` no longer has entries on the evaluation, its runs, results, judge or reference, and gains none: this folder is their only record.
+  Where an entry also described a change to the README or the docs, that part stays.
+- Outside this folder, no Markdown file of the repository contains the word "adoption", in any case.
+  `npm test` fails on one, and `run` refuses a commit that has one before it starts any session.
+  The check looks for the word, so it cannot see an account of the evaluation that avoids it.
+- `CHANGELOG.md` stays in the copy, since a team would read it for product changes.
+- `package.json`, `.gitignore` and `test/adoption.test.ts` still name the evaluation in the copy; the test also holds the pass bar's shape and made-up answers for the summary, but no result of a run.
+
+The runner refuses a commit whose CHANGELOG has those entries, as the `after` commits of v2 to v5 do; to reproduce those runs, use the runner of their own commit.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.

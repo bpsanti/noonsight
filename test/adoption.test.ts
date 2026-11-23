@@ -1,9 +1,10 @@
 // The adoption evaluation's fixed parts, without Claude Code: the prompt stays neutral, the scoring
 // gives every calibration answer its expected result, verdicts and judgments parse, the reference
-// lists the commands the CLI has, the allocation follows the rule its README fixes, and a copy of the
-// repository leaves the experiment out.
+// lists the commands the CLI has, the allocation follows the rule its README fixes, a copy of the
+// repository leaves the experiment out, and no Markdown file in it mentions the evaluation.
 
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,7 @@ import {
   asJudgment,
   calibration,
   DIR,
+  evaluationMentions,
   type JudgeRecord,
   lastJson,
   parseVerdict,
@@ -104,6 +106,24 @@ test('adoption: the summary reads the pass bar from the scored answers', () => {
   const text = summarize(p, runs, judgments);
   assert.match(text, /\*\*The README passes: yes\.\*\*/);
   assert.match(summarize(p, runs, judgments.map((j) => (j.key === 'after-haiku-1' || j.key === 'after-haiku-2' ? judged(j.key, false) : j))), /\*\*The README passes: no\.\*\*/);
+});
+
+test('adoption: no tracked Markdown file outside the experiment mentions the evaluation', () => {
+  const root = path.resolve(DIR, '..', '..');
+  const files = spawnSync('git', ['-C', root, 'ls-files', '-z', '*.md'], { encoding: 'utf8' }).stdout.split('\0').filter((f) => f && !f.startsWith('experiments/adoption/'));
+  assert.ok(files.includes('CHANGELOG.md'));
+  const copy = fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-adoption-md-'));
+  try {
+    for (const f of files) {
+      fs.mkdirSync(path.dirname(path.join(copy, f)), { recursive: true });
+      fs.copyFileSync(path.join(root, f), path.join(copy, f));
+    }
+    assert.deepEqual(evaluationMentions(copy), [], 'sessions read these files: record the evaluation in experiments/adoption only (its README, "From v6 on")');
+    fs.writeFileSync(path.join(copy, 'CHANGELOG.md'), '- A sixth run of the Adoption evaluation.');
+    assert.deepEqual(evaluationMentions(copy), ['CHANGELOG.md']);
+  } finally {
+    fs.rmSync(copy, { recursive: true, force: true });
+  }
 });
 
 test('adoption: a session\'s copy of the repository leaves the experiment out', () => {
