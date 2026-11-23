@@ -821,6 +821,58 @@ test('a fork whose original cannot be found retires the rules of every model but
   );
 });
 
+// Plan mode on Haiku runs Sonnet: Claude Code switches by itself (`source: "auto"`) as plan mode
+// starts and ends, and turns `/model haiku` typed in plan mode into Sonnet with `requested_model:
+// "haiku"`; a compaction's start in plan mode still reports Haiku, and the requests keep running Sonnet
+// (recorded on Claude Code 2.1.330, docs/verification/claude-code.md).
+
+test('a compaction or /clear in plan mode on Haiku keeps Sonnet, the model Claude Code runs in its place', () => {
+  const h = home(forkConfig());
+  h.hook('session-start', start('claude-haiku-5-5'));
+  assert.match(context(h.hook('model-switch', switchTo('claude-haiku-5-5', 'claude-sonnet-5-5', { source: 'auto', requested_model: null }))), /SONNET-WORD/);
+  // /compact reports Haiku, while Sonnet still runs: Sonnet's rules go again, not Haiku's.
+  const compacted = context(h.hook('session-start', hookInput('session-start-startup', { session_id: SESSION, source: 'compact', model: 'claude-haiku-5-5' })));
+  assert.match(compacted, /^<noonsight-rules model="claude-sonnet-5-5">[\s\S]*SONNET-WORD/);
+  assert.doesNotMatch(compacted, /HAIKU-WORD/);
+  // /clear reports no model; the process still runs Sonnet.
+  assert.match(context(h.hook('session-start', hookInput('session-start-clear', { session_id: 'cleared' }))), /SONNET-WORD/);
+  // Plan mode ends: Claude Code switches back to Haiku by itself, and Haiku's rules go with a note.
+  assert.match(context(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { session_id: 'cleared', source: 'auto', requested_model: null }))), /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">[\s\S]*HAIKU-WORD/);
+  // Back on the chosen model, a compaction's report decides again.
+  assert.match(context(h.hook('session-start', hookInput('session-start-startup', { session_id: 'cleared', source: 'compact', model: 'claude-haiku-5-5' }))), /HAIKU-WORD/);
+  assert.deepEqual(
+    h.log().map((l) => [l.event, l.source, l.model, l.model_source, l.chosen_model ?? null, l.reported_model ?? null]),
+    [
+      ['session-start', 'startup', 'claude-haiku-5-5', 'hook-input', null, null],
+      ['model-switch', 'auto', 'claude-sonnet-5-5', 'hook-input', 'claude-haiku-5-5', null],
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'session-record', 'claude-haiku-5-5', 'claude-haiku-5-5'],
+      ['session-start', 'clear', 'claude-sonnet-5-5', 'process-record', 'claude-haiku-5-5', null],
+      ['model-switch', 'auto', 'claude-haiku-5-5', 'hook-input', null, null],
+      ['session-start', 'compact', 'claude-haiku-5-5', 'hook-input', null, null],
+    ],
+  );
+});
+
+test('/model haiku in plan mode, which Claude Code runs as Sonnet, keeps Sonnet through a compaction', () => {
+  const h = home(forkConfig());
+  h.hook('session-start', start('claude-fable-5-2'));
+  assert.match(context(h.hook('model-switch', switchTo('claude-fable-5-2', 'claude-sonnet-5-5', { requested_model: 'haiku' }))), /SONNET-WORD/);
+  assert.match(context(h.hook('session-start', hookInput('session-start-startup', { session_id: SESSION, source: 'compact', model: 'claude-haiku-5-5' }))), /SONNET-WORD/);
+  // A /model whose request is the model it switched to chose that model: no substitution.
+  h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-fable-5-2', { requested_model: 'fable' }));
+  assert.match(context(h.hook('session-start', hookInput('session-start-startup', { session_id: SESSION, source: 'compact', model: 'claude-fable-5-2' }))), /FABLE-WORD/);
+  assert.deepEqual(
+    h.log().map((l) => [l.model, l.chosen_model ?? null]),
+    [
+      ['claude-fable-5-2', null],
+      ['claude-sonnet-5-5', 'claude-haiku-5-5'],
+      ['claude-sonnet-5-5', 'claude-haiku-5-5'],
+      ['claude-fable-5-2', null],
+      ['claude-fable-5-2', null],
+    ],
+  );
+});
+
 test('a note that names more retired models than fit its room retires every model but the session\'s own', () => {
   const name = (c: string) => `claude-${c.repeat(30)}-5-5`;
   const models = ['a', 'b', 'c', 'd'].map(name);

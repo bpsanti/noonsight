@@ -403,11 +403,16 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
         await quiet(600, 15000);
       } else if (step.k === 'fork') {
         const before = stops();
+        const at = screenSize();
         await type(`/fork DB ${i} turn`);
         // The background session answers its prompt, and its Stop hook writes a file as the session's does.
+        // Claude Code refuses to fork a session started with a system prompt of its own, as `noonsight run`
+        // starts one with rules, and says so: nothing is forked, and the session goes on.
         // A session whose fork has not answered is not measured: a late request of the fork could not be
         // told from one of the session's own conversation.
-        if (!(await waitFor(() => stops() > before, 120000))) outcome = 'no-fork-answer';
+        const refused = (): boolean => /Can'?t\s*fork/.test(printedSince(at));
+        if (!(await waitFor(() => stops() > before || refused(), 120000))) outcome = 'no-fork-answer';
+        else if (refused()) outcome = 'fork-refused';
         await quiet(1500, 30000);
       } else if (step.k === 'back') {
         const to = conversations.find((c) => c !== conversation) ?? null;

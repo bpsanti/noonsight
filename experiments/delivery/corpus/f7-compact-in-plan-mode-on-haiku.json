@@ -1,0 +1,39 @@
+{
+  "name": "f7-compact-in-plan-mode-on-haiku",
+  "about": "Plan mode on Haiku runs Sonnet, then /compact and /clear in plan mode: their starts report Haiku, or no model, while Sonnet still runs, so they delivered Haiku's rules to Sonnet's requests (F7, fixed).",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

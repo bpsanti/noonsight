@@ -101,6 +101,8 @@ So:
 
 `--system-prompt` and `--system-prompt-file` replace Claude Code's own system prompt and keep the appended text; the launcher leaves them alone.
 
+Claude Code refuses `/fork` in a session started with a system prompt of its own, so a session the launcher started with rules cannot use `/fork`; `/branch` and `--fork-session` work as without the launcher ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+
 ## With the hooks
 
 When `SessionStart` runs in a session the launcher started, it checks that the Claude Code process was started with `--append-system-prompt-file` naming the file in `NOONSIGHT_LAUNCH_FILE`, and that the file holds exactly the rules the hook decided on.

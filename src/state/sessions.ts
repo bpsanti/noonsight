@@ -33,6 +33,12 @@ export interface DeliveryState {
    * Absent when the last delivery reached the conversation or nothing was delivered.
    */
   readonly unconfirmed?: Unconfirmed;
+  /**
+   * The model the person chose, when Claude Code runs `model` in its place: it runs Sonnet in plan mode
+   * for Haiku, and says so with a model switch, while a compaction's start still reports the chosen
+   * model. Absent when Claude Code runs the chosen model.
+   */
+  readonly chosen?: string;
   readonly at: string;
 }
 
@@ -75,6 +81,7 @@ export function readState(file: string | null): DeliveryState | null {
           : value.unconfirmed === 'resume'
             ? { unconfirmed: 'resume' as const }
             : {}),
+        ...(typeof value.chosen === 'string' && value.chosen !== '' ? { chosen: value.chosen } : {}),
         at: String(value.at),
       };
   } catch {

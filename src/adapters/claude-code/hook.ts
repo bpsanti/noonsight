@@ -30,7 +30,7 @@ import { appendDecision } from '../../state/log.js';
 import { heldModels, processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
 import { inheritTriggers, sessionTriggers } from '../../state/triggers.js';
 import { forkOrigin, type ForkOrigin } from './fork.js';
-import { launchFields, launchModel, readCommandLine, resolveValue, type LaunchModel, type LaunchSources } from './launch.js';
+import { launchFields, launchModel, readCommandLine, resolveModelValue, resolveValue, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { conversationResponse, type Response } from './predict.js';
@@ -175,6 +175,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
             ...outcome.state,
             held,
             ...(before?.unconfirmed !== undefined ? { unconfirmed: before.unconfirmed } : {}),
+            ...(before?.chosen !== undefined ? { chosen: before.chosen } : {}),
             // A resume's delivery is confirmed by a response after it, so its time is kept.
             at: before?.unconfirmed === 'resume' ? before.at : ctx.now.toISOString(),
           });
@@ -210,7 +211,7 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
             () => launcherPrompt(ctx.env, commandLine),
             fork,
           )
-        : modelSwitch(input, config, file, where, readState(sessionState));
+        : modelSwitch(input, config, file, where, readState(sessionState), ctx.env);
     const startup = event === 'SessionStart' && input.source === 'startup';
     const update = startup ? presetUpdate(details, result.state?.model ?? null, file, ctx.env) : null;
     if (update !== null) {
@@ -353,9 +354,16 @@ function sessionStart(
   const readStart: typeof readLaunch = fork?.launch ? (sources) => (sources === 'settings' ? readLaunch(sources) : (fork.launch as LaunchModel)) : readLaunch;
   const reported = normalizeModel(str(input.model));
   const recorded = known?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
-  const chosen: ModelChoice = reported
-    ? { model: reported, source: 'hook-input', launch: null }
-    : resumed
+  // Claude Code may run another model in place of the one the person chose, as it runs Sonnet in plan
+  // mode for Haiku; a compaction's start then reports the chosen model, and the process keeps running
+  // the other, so the record of the same process, which the switch to it wrote, decides.
+  const carried = source === 'compact' ? (known ?? process) : source === 'clear' ? process : null;
+  const substituted = carried?.chosen !== undefined && carried.model !== null && (!reported || reported === carried.chosen) ? carried : null;
+  const chosen: ModelChoice = substituted
+    ? { model: substituted.model, source: substituted === known ? 'session-record' : 'process-record', launch: null }
+    : reported
+      ? { model: reported, source: 'hook-input', launch: null }
+      : resumed
       ? resumedModel(recorded, readStart, () => readConversation()?.model ?? null)
       : recorded
         ? { model: recorded, source: session?.model ? 'session-record' : 'process-record', launch: null }
@@ -415,6 +423,7 @@ function sessionStart(
       ...choiceFields(where.scope, where.place),
       ...triggerFields(where.triggers),
       model_source: chosen.source,
+      ...(substituted !== null ? { chosen_model: substituted.chosen, ...(reported ? { reported_model: reported } : {}) } : {}),
       ...(fork !== null ? { fork_origin: fork.origin?.via ?? 'unknown', ...(fork.origin !== null ? { forked_from: fork.origin.sessionId } : {}) } : {}),
       ...(changedFrom !== null ? { from_model: changedFrom } : {}),
       ...launchFields(launch),
@@ -424,7 +433,10 @@ function sessionStart(
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}) },
+    state:
+      decision.model === null
+        ? null
+        : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}), ...(substituted?.chosen ? { chosen: substituted.chosen } : {}) },
   };
 }
 
@@ -493,9 +505,10 @@ function keepsHaikuSetting(settings: LaunchModel, conversation: string): boolean
  * of the session comes first, so a switch's delivery stays unconfirmed: the next switch's note again
  * names every model whose rules the conversation may hold, and the next resume delivers again.
  */
-function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null): Outcome {
+function modelSwitch(input: Record<string, unknown>, config: Config, file: string, where: Where, session: DeliveryState | null, env: Env): Outcome {
   const to = normalizeModel(str(input.to_model));
   const from = normalizeModel(str(input.from_model));
+  const chosen = chosenModel(input, from, to, session, env);
   const request = { scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
@@ -507,6 +520,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     ...triggerFields(where.triggers),
     model_source: 'hook-input',
     from_model: from || null,
+    ...(chosen !== null ? { chosen_model: chosen } : {}),
   };
   // Without a record, the previous model's rules are those the conversation may hold.
   const kept = session
@@ -522,7 +536,7 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
       record: { ...base, delivered: 'already-delivered', warned: false },
       context: null,
       messages: [],
-      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held },
+      state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(chosen !== null ? { chosen } : {}) },
     };
 
   const retired = kept.filter((m) => m !== decision.model);
@@ -537,8 +551,27 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
     },
     context: parts.length ? joinDelivery(parts) : null,
     messages,
-    state: decision.model === null ? null : { model: decision.model, status: decision.status, sha256: sha, held, ...(parts.length ? { unconfirmed: 'switch' as const } : {}) },
+    state:
+      decision.model === null
+        ? null
+        : { model: decision.model, status: decision.status, sha256: sha, held, ...(parts.length ? { unconfirmed: 'switch' as const } : {}), ...(chosen !== null ? { chosen } : {}) },
   };
+}
+
+/**
+ * The model the person chose, when the switch leaves Claude Code running another in its place, else
+ * null. A switch Claude Code makes by itself (`source: "auto"`, as when plan mode on Haiku runs Sonnet)
+ * keeps the model chosen before it, until a switch back to that model; a `/model` whose
+ * `requested_model` selects another model than the one it switched to was substituted the same way.
+ */
+function chosenModel(input: Record<string, unknown>, from: string, to: string, session: DeliveryState | null, env: Env): string | null {
+  if (str(input.source) === 'auto') {
+    const before = session?.chosen ?? (from || null);
+    return before !== null && before !== to ? before : null;
+  }
+  const requested = str(input.requested_model);
+  const asked = requested !== null ? resolveModelValue(requested, env) : null;
+  return asked?.kind === 'found' && asked.model !== to ? asked.model : null;
 }
 
 /**

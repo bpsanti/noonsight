@@ -32,6 +32,7 @@ The driver ([session.ts](session.ts), [pty-bridge.py](pty-bridge.py)) types into
 A plan step waits for the footer to name the mode: "plan mode on" after `/plan`, and "manual mode on" after shift+tab, which it presses again while the footer names another mode, since after plan mode the cycle goes to auto mode on some models.
 A turn's `Stop` hook names the permission mode too, so a session that is not in plan mode when its sequence says it is, or not in the default mode otherwise, is recorded as one the driver could not run (`wrong-mode`).
 A `/fork` session runs in a daemon Claude Code starts for the configuration directory, which outlives the session; the driver stops it when the session ends.
+Claude Code refuses `/fork` in a session started with a system prompt of its own, as `noonsight run` starts one with rules; the step is then recorded as `fork-refused` and the session goes on, and a `/fork` that neither answers nor is refused within two minutes ends the session as not driven.
 
 ### Two generators
 
@@ -209,8 +210,8 @@ The folder for one version holds what was measured on that version; comparing tw
 
 ## Failures found, and a limit
 
-The corpus entries that start with `f1-` to `f6-` are the shortest reproductions of six failures of noonsight: F1 to F4 the fuzzer found, F5 and F6 the paths generator 2 added.
-All six are fixed, and their entries must pass.
+The corpus entries that start with `f1-` to `f7-` are the shortest reproductions of seven failures of noonsight: F1 to F4 the fuzzer found, F5 to F7 the paths generator 2 added.
+All seven are fixed, and their entries must pass.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
@@ -239,7 +240,11 @@ The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5
   `claude --continue --fork-session` without `--model` runs on the model of the conversation's last response, as a resume does, but the fork's transcript is not written when its hook runs, so the hook took the `model` setting, which a `/model` since had changed (`f6-fork-session-after-switch`).
   It is F2 for a fork; noonsight now reads the last response from the original's transcript.
 
-F5 and F6 showed in the corpus entries written for the paths generator 2 added, before any fuzz run of it: on the build before their fix, all four entries break the invariant (`foreign-unretired` in the session's own requests), and on the fixed build they pass.
+- **F7, the chosen model reported in plan mode.**
+  In plan mode, Claude Code runs Sonnet for a session whose chosen model is Haiku, and says so with a model switch, but a compaction's start in plan mode reports Haiku, and `/clear` then took Haiku from the process's record: Haiku's rules went to Sonnet's requests (`f7-compact-in-plan-mode-on-haiku`, `f7-model-haiku-in-plan-mode`).
+  noonsight now records the chosen model while Claude Code runs another in its place, and a compaction or `/clear` that reports the chosen model keeps the one that runs (`docs/hooks.md`, "SessionStart").
+
+F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 in a fuzz run of generator 2 that was stopped to fix it: on the build before their fix, all six entries break the invariant (`foreign-unretired` in the session's own requests, and `missing-own` for F7), and on the fixed build they pass.
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 

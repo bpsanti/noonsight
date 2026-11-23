@@ -79,6 +79,9 @@ One setting outranks the conversation: under `"model": "haiku"`, written exactly
 A `--model` or `ANTHROPIC_MODEL` value noonsight cannot pin down outranks the setting, as in Claude Code, so the conversation, then the record, decides, and the log line records the value.
 With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides.
 After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
+One exception comes first: Claude Code can run another model in place of the one the person chose, and in plan mode it runs Sonnet for Haiku.
+It says so with a `PostModelSwitch`: `source: "auto"` as plan mode starts and ends, and `to_model` Sonnet with `requested_model: "haiku"` for a `/model haiku` typed in plan mode; but the start of a compaction in plan mode still reports Haiku, while the requests go on to Sonnet ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+So the record keeps the model the person chose while another runs in its place, and a compaction or `/clear` whose start reports that chosen model, or none, takes the model the process runs from the record; the log line names the chosen model in `chosen_model` and the reported one in `reported_model`.
 `/resume` typed inside a running session reports the model in the input.
 When the resumed conversation's record holds the rules of another model, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
 
@@ -423,6 +426,7 @@ The report names that project and what became of it on its second line, and the 
 | `model`, `from_model` | The normalized model identifiers; on a session start, `from_model` is the model of the resumed conversation's record when the session runs on another one |
 | `model_source` | For the session: `hook-input`, `session-record`, `process-record`, `session-transcript` (a resumed conversation's last response), `claude-args` (the `--model` argument), `env` (`ANTHROPIC_MODEL`), `settings`, or null when no model was known. For a subagent: the prediction's source (see [Subagents](#subagents)) |
 | `model_from` | For a model taken from the launch settings: `--model`, `ANTHROPIC_MODEL`, `--settings`, the settings file that set it, or `--model of the background job` for a `/fork` session |
+| `chosen_model`, `reported_model` | When Claude Code runs another model in place of the one the person chose, as in plan mode on Haiku: on a switch and a session start, the chosen model; on a session start, the model its input reported ([SessionStart](#sessionstart)) |
 | `fork_origin`, `forked_from` | For a fork's start: how the conversation it copied was found (`fork-transcript`, `background-job`, `resume-argument`, `continue`, or `unknown`), and that conversation's session id ([Forks](#forks)) |
 | `model_alias`, `alias_from` | When that source named an alias: the alias, and what resolved it (`built-in` or the `ANTHROPIC_DEFAULT_*_MODEL` variable) |
 | `model_unresolved`, `unresolved_why` | When a launch setting names a model noonsight cannot tell: the value, and why |
