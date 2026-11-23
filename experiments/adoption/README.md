@@ -261,6 +261,57 @@ The runner is given what remains after the calibration, less a reserve for the 3
 
 v6's results are in `results/2026-11-23-v6/`.
 
+## v7: consistent delivery denominators, ten sessions per model
+
+This section was written before any v7 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `bf929c2`, the head of `main`.
+Since v6 (`6342101`), the README and `docs/evidence.md` state how many delivery sessions were generated, how many ran to the end and how many failed: D18 is now `0 of 299`, of 300 generated.
+Two v6 answers failed only for saying 299 against the evidence map's former 300.
+`before` is unchanged, `f061f03`.
+
+**Sessions.**
+Ten new `after` sessions for each of the four models, forty in all, because v5 (18 of 20) and v6 (10 of 20) differed widely at five per model; no earlier `after` answer counts.
+No `before` session runs: the twelve `before` answers of v3 to v6 are reused as they are, and judged again, as v5 and v6 did.
+Sessions run in rounds of one per model, in the order Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, so that a stop for money leaves the models balanced.
+The sessions run under `caffeinate`, at most two at once.
+A session that ends with no answer is run again only if the spending projection, with its estimated cost, stays within the cap.
+
+**How ten sessions change the reading of the bar.**
+The thresholds are unchanged.
+For each model, 60% is now 6 of 10 grounded, and overall, 80% is 32 of 40.
+The per-model reading is still coarse: 6 of 10 has a 95% Wilson interval of 31-83%, and 32 of 40 has 65-90%.
+If a stop for money leaves fewer than ten answers for a model, the same percentages are read on the answers scored.
+
+**What the copy was checked for, before the run.**
+The archive of `bf929c2`, without this folder, was searched for the word "adoption" in every file, and for this evaluation's commits, counts and vocabulary ("grounded", "pass bar", calibration answers).
+No Markdown file contains the word.
+`package.json`, `.gitignore` and `test/adoption.test.ts` name the evaluation, and the test holds the scoring's shape with no result of a run.
+`src/config/preset-changes.ts` and `src/config/load.ts` match only through the identifier `LoadOptions`, which contains those letters.
+The one Markdown hit on the evaluation's commits is `f061f03` in a delivery results README, which names it as a commit of `main`.
+
+**Files read.**
+The results list the files each session read, with its Grep and Glob calls, from its stream.
+If a session reads `test/adoption.test.ts`, or any text that describes this evaluation, the pass bar is still read on all the answers, and the results also give the counts without those sessions.
+
+**The reference and the judge.**
+[rubric.md](rubric.md), [judge.md](judge.md) and [calibration.json](calibration.json) are those of v6, unchanged; the evidence map is that of `bf929c2`.
+The two statements of the reference that v5 declared stale (the delivery claim's numbers, and L5) are still stale, and v5's rule for them applies.
+Before any answer is judged, the judge scores the nine calibration answers against the v7 evidence map and must reach the expected `grounded` on all nine; if it does not, v7 stops and reports, with no revision.
+
+**Unchanged.**
+The prompt, the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The comparison with `before` is Fisher's exact test, two-sided; the results also compare v7's `after` with v3's to v6's, which were judged with other evidence maps, so that comparison is read as a direction.
+
+**Money.**
+v7 has a cap of $40 of its own, for its calibration, sessions and judgments.
+At v6's mean costs, the forty sessions come to about $26.74, the 52 judgments to about $10.30 and the calibration to about $1.16, about $38.20 in all.
+The runner is given what remains after the calibration, less a reserve of $0.22 for each of the 52 judgments, a little above v6's mean of $0.198; the highest judgment so far, $0.256, would not fit for all 52 alongside the sessions.
+v7 stops and reports if the measured costs project past the cap.
+
+v7's results are in `results/2026-11-23-v7/`.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.
