@@ -227,6 +227,16 @@ const COMPUTE: Record<string, () => string> = {
     return `${t('sonnet', 'rules')} against ${t('sonnet', 'none')}, and ${t('haiku', 'rules')} against ${t('haiku', 'none')}`;
   },
   R15: () => `${tested(cell('2026-11-20', { task: 'bug', model: 'sonnet', arm: 'rules' }))} against ${tested(cell('2026-11-20', { task: 'bug', model: 'sonnet', arm: 'none' }))}`,
+  R16: () => and(['verify', 'carry'].map((arm) => tested(cell('2026-11-20', { task: 'bug', model: 'sonnet', arm })))),
+  R17: () => and(['none', 'carry', 'verify', 'rules'].map((arm) => cost(cell('2026-11-20', { task: 'bug', model: 'sonnet', arm })))),
+  R18: () => {
+    const c = (model: string, arm: string): string => cost(cell('2026-11-20-harder', { task: 'triage', model, arm }));
+    return `${c('sonnet', 'carry')} against ${c('sonnet', 'none')}, and ${c('haiku', 'carry')} against ${c('haiku', 'none')}`;
+  },
+  R19: () =>
+    ['question', 'bug', 'feature']
+      .map((task) => `${cost(cell('2026-11-19', { task, model: 'fable', arm: 'rules' }))} against ${cost(cell('2026-11-19', { task, model: 'fable', arm: 'none' }))}`)
+      .join(', '),
   R13: () => `${tested(cell('2026-11-19', { task: 'feature', model: 'sonnet', arm: 'none' }))} and ${tested(cell('2026-11-19', { task: 'feature', model: 'haiku', arm: 'none' }))}`,
 };
 

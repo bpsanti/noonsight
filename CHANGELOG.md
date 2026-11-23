@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The README says what each result belongs to.
+  One table of rule effects separates a rule delivered alone from the preset's rules together, each row with its result, runs per arm, cost, Claude Code version and evidence, and takes the place of the numbers scattered over the page; it names every rule with a measured effect alone, `fable-5-2/low-context-report` included.
+  The guarantee is followed by its known limits; the benchmark's sessions are said to be real Claude Code sessions against a stand-in API; and the classifier is named as the one exception wherever the hooks' use of the network is (`docs/hooks.md` too).
+  `docs/evidence.md` gains R16 to R19, computed from results already committed: the tests of each rule alone on Sonnet 5.5's bug, and the mean costs of the bug, the backlog and Fable 5.2's tasks; no existing entry's value changes.
+
 - noonsight can be installed as a Claude Code plugin, as an alternative to `noonsight install` from npm, which stays the recommended install.
   The npm package is the plugin, the repository its marketplace, and each install covers one Claude Code login; it becomes available with the publication of 0.1 (`docs/install.md`, "As a Claude Code plugin").
   The plugin's first session start writes the configuration from the preset when there is none, its launcher (`scripts/noonsight`) finds Node.js where Claude Code has none on `PATH`, and its commands are skills, such as `/noonsight:check`.

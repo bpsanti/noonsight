@@ -11,55 +11,49 @@ Anthropic publishes a prompting guide for each Claude model, and their advice di
 noonsight delivers instructions by model: each Claude Code session, and each subagent it starts, receives the rules written for the model it actually runs on, and receives them again when that model changes.
 The rules are yours to write, for one model or for every model, for the whole machine or for one repository ([Your own rules](#your-own-rules)).
 It ships a preset as a starting set, for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each rule taken from that model's guide with its source.
-It works through Claude Code's own hooks, reads only local files, and records every delivery so you can check it.
+It works through Claude Code's own hooks, reads only local files (the optional classifier, off by default, is the one thing that uses the network), and records every delivery so you can check it.
 
 ## What it guarantees, and what it does not
 
-**The claim.** In the current run of the delivery benchmark (2026-11-23, Claude Code 2.1.330), 0 of 299 sessions that ran to the end broke the invariant ([D18](docs/evidence.md#d18)): every request with rules due held its model's rules, and no other model's rules left unretired.
-Those sessions had rules due on 3,090 requests and held them on 100% (3,090 of 3,090), the subagents' 100% (763 of 763) among them ([D19](docs/evidence.md#d19), [D20](docs/evidence.md#d20), Claude Code 2.1.330).
-The run generated 300 random sessions on the four models; the other one, `s1-0123`, stopped on a turn that got no answer and is not measured.
-The sessions are real, interactive Claude Code; only the API is a local stand-in, so every request was read and no model answered ([experiments/delivery](experiments/delivery/README.md)).
-They start through `claude` or `noonsight run`, with or without a repository's configuration, and go through `/model`, `/compact`, `/clear`, resumes, forks, `/resume` typed in a session, plan mode, subagents and code edits.
-Forks, `/resume` in a session, plan mode and subagents that edit a file are part of those requests, and held their rules on 100% (453 of 453) of theirs ([D21](docs/evidence.md#d21), Claude Code 2.1.330).
+**The guarantee.** Through Claude Code's hooks, noonsight puts the rules declared for a model into the requests of each session and subagent that runs on it, and again when that model changes or the conversation is compacted, cleared, resumed or forked.
+That is delivery, not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
+Its known limits are part of it:
 
-Earlier runs of the benchmark, on Claude Code 2.1.328 and without those paths, are superseded by this one; [docs/evidence.md](docs/evidence.md#runs-and-versions) lists every run with its version and which are current.
-The benchmark has found nine failures of noonsight, F1 to F9, all fixed before the current run; their shortest reproductions are in the corpus, which passes ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
+- A workflow's agents get nothing, foreground calls of one type that need different rules give their subagents nothing until each one's first Edit, Write or agent call, and a plugin noonsight does not read, such as one an organization syncs, leaves its subagents predicted on their parent's model ([docs/hooks.md](docs/hooks.md#what-the-prediction-does-not-see)).
+- A conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)); the corpus reproduces it, and it broke no session of the current run.
+- In a session `noonsight run` started with rules, and only there, `/fork` is not available: Claude Code refuses to fork a session with a system prompt of its own ([docs/launcher.md](docs/launcher.md#other-text-in-the-system-prompt)).
+- Agent teams, routing and the classifier are not measured ([limits](experiments/delivery/README.md#limits)).
+- Claude Code changes how hooks behave, and each result holds for the version it ran on: delivery 2.1.330; rule effects 2.1.329, except Fable 5.2's, 2.1.328; the paid pilot 2.1.326 ([every run](docs/evidence.md#runs-and-versions)).
+  [docs/verification/claude-code.md](docs/verification/claude-code.md) dates facts about Claude Code, not results.
 
-noonsight picks a rule by its model, scope, place and trigger, never by its text, so this claim covers any rule, yours or the preset's.
-The benchmark's sessions carried the preset's rules from the machine's configuration, and some also had a repository's configuration; those, with the ones started through `noonsight run`, held their rules on 100% (1,308 of 1,308) of their requests ([D22](docs/evidence.md#d22), Claude Code 2.1.330).
+**What was measured.** The delivery benchmark's sessions are real, interactive Claude Code sessions, not simulated ones; only the Messages API is a local stand-in, so every request was read and no model answered ([experiments/delivery](experiments/delivery/README.md)).
+Its current run (2026-11-23) generated 300 random sessions on the four models; 299 ran to the end, and one stopped on an unanswered turn.
+Of these, 0 of 299 broke the invariant ([D18](docs/evidence.md#d18), Claude Code 2.1.330): every request with rules due held its model's rules, and no other model's rules left unretired.
+That is 100% (3,090 of 3,090) of the requests with rules due, the subagents' 100% (763 of 763) among them ([D19](docs/evidence.md#d19), [D20](docs/evidence.md#d20), Claude Code 2.1.330).
+Those requests include every one after a fork, after `/resume` typed in a session, in plan mode and after subagents that edit a file ([D21](docs/evidence.md#d21)), and every one of the sessions with a repository's configuration or started through `noonsight run` ([D22](docs/evidence.md#d22), Claude Code 2.1.330).
+noonsight picks a rule by its model, scope, place and trigger, never by its text, so this covers your own rules too, though the sessions carried the preset's.
+The benchmark found nine failures of noonsight, F1 to F9, on builds before the current run's, all fixed before it ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
 
-The native ways to give a model rules, on the first 60 sequences of that same run, covered fewer requests; noonsight's row is all its sessions, which include those 60 (each number links to its entry, Claude Code 2.1.330):
+The native ways to give a model rules, on the run's first 60 sequences; noonsight's row is all its sessions, those 60 included (Claude Code 2.1.330):
 
-| Every model's rules in | Requests with their rules | Subagent requests with their rules |
+| Every model's rules in | All requests with rules due, the main conversation's and the subagents' | Of those, the subagents' |
 | --- | --- | --- |
 | noonsight | [100% (3,090 of 3,090)](docs/evidence.md#d19) | [100% (763 of 763)](docs/evidence.md#d20) |
 | A user `CLAUDE.md` | [88.2% (508 of 576)](docs/evidence.md#d25) | [46.9% (60 of 128)](docs/evidence.md#d28) |
 | `.claude/rules`, one file per model | [76.3% (441 of 578)](docs/evidence.md#d26) | [46.9% (60 of 128)](docs/evidence.md#d28) |
 | A skill per model | [0% (0 of 579)](docs/evidence.md#d27) | [0 of 128](docs/evidence.md#d29) |
 
-A `CLAUDE.md` reached every request of the session's own conversation, through `/model`, `/compact`, `/clear` and resumes: 100% (448 of 448) ([D34](docs/evidence.md#d34), Claude Code 2.1.330).
-What it missed were subagents: it never reaches the built-in Explore and Plan subagents, which Claude Code's documentation confirms ([S4](docs/sources.md#s4)), and it gives every model the other models' rules too: of the rule text in a request, 78.6%, 32.6% and 27.9% was written for the request's model under noonsight, a `CLAUDE.md` and `.claude/rules` ([D30](docs/evidence.md#d30), Claude Code 2.1.330).
+What a `CLAUDE.md` missed were subagents only: it reached every request of the main conversation ([D34](docs/evidence.md#d34), Claude Code 2.1.330), and never reaches the built-in Explore and Plan subagents, as Claude Code documents ([S4](docs/sources.md#s4)).
+It and `.claude/rules` also give every model the other models' rules, most of the rule text in their requests ([D30](docs/evidence.md#d30), Claude Code 2.1.330).
 A skill guarantees only its description until the model decides to open it ([S5](docs/sources.md#s5)).
 
-**What it does not guarantee.**
-
-- Delivery is not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
-  [What the rules change](#what-the-rules-change) is a separate question, with data for the preset's rules alone.
-- Right after install, what a session receives from the preset depends on its model and its place, and `noonsight install` writes it out for each model.
-  Most preset rules apply to attended sessions, the place where someone is watching: 11 of its 16 rules list `attended` ([The preset's rules](#the-presets-rules)).
-  Opus 5.5's and Fable 5.2's rules for that place all ship off, so an attended session on either receives nothing from the preset until you turn one on with `enable`.
-  A headless run, such as `claude -p` or the Agent SDK, is unattended by default and receives the preset's rules for that place: `unattended-run` on Opus 5.5, `low-context-report` on Fable 5.2, `carry-through` on Sonnet 5.5 and Haiku 5.5.
-  An attended session on Sonnet 5.5 or Haiku 5.5 receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
-  Your own rules reach every place unless their `where` limits them, attended sessions included.
-  noonsight counts an interactive session as attended unless a variable of `session.unattended_when_env` is set, so set it to a CI's or an orchestrator's variable for the interactive sessions nobody watches.
-  [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
-- Not measured: agent teams, routing and the classifier ([limits](experiments/delivery/README.md#limits)).
-- `/fork` is not available in a session `noonsight run` started with rules, since Claude Code refuses to fork a session with a system prompt of its own ([docs/launcher.md](docs/launcher.md#other-text-in-the-system-prompt)).
-- A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
-  The corpus reproduces it; it broke none of the current run's sessions, and 1 of 300 sessions of the superseded run on Claude Code 2.1.328 ([D1](docs/evidence.md#d1)).
-- Known limits for subagents: a workflow's agents get nothing, foreground calls of one type that need different rules give their subagents nothing until each one's first Edit, Write or agent call, and a plugin noonsight does not read, such as one an organization syncs, leaves its subagents predicted on their parent's model ([docs/hooks.md](docs/hooks.md#what-the-prediction-does-not-see)).
-- It is measured on one Claude Code version at a time: the delivery claim is on Claude Code 2.1.330, the rule effects below on 2.1.329 (those of Fable 5.2 on 2.1.328) and the paid pilot on 2.1.326, and Claude Code changes how hooks behave.
-  [docs/evidence.md](docs/evidence.md#runs-and-versions) lists the version of every run, and [docs/verification/claude-code.md](docs/verification/claude-code.md) each fact about Claude Code that noonsight relies on with the version that fact was checked on, which says nothing about where a result was measured.
+**What the preset delivers right after install** depends on the model and the place, and `noonsight install` writes it out for each model.
+Of the preset's rules, 11 of its 16 rules list `attended`, the place where someone is watching ([The preset's rules](#the-presets-rules)).
+Opus 5.5's and Fable 5.2's rules for that place ship off, so an attended session on either receives nothing from the preset until you turn one on with `enable`.
+An attended session on Sonnet 5.5 or Haiku 5.5 receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope, which [Your first delivered rule](#your-first-delivered-rule) shows.
+A headless run, such as `claude -p` or the Agent SDK, is unattended by default and receives at its start `unattended-run` on Opus 5.5, `low-context-report` on Fable 5.2, and `carry-through` on Sonnet 5.5 and Haiku 5.5.
+noonsight counts an interactive session as attended unless a variable of `session.unattended_when_env` is set, so set it to a CI's or an orchestrator's variable for the interactive sessions nobody watches.
+Your own rules reach every place unless their `where` limits them.
 
 ## Your first delivered rule
 
@@ -189,8 +183,7 @@ Each rule of the preset, with the scopes and places it is for, the triggers that
 | `haiku-5-5/search-recent-facts` | `investigate`, `digest` | `attended`, `unattended`, `subagent` | none | off |
 
 Most of these rules list `attended`, the place where someone is watching.
-Opus 5.5's and Fable 5.2's rules for that place ship off, by the preset's rule that a rule with a high cost, a described side effect or a narrow use ships off ([SOURCES.md](presets/claude/SOURCES.md#how-the-rules-were-chosen)): `fable-5-2/code-ownership` raised output tokens by about 70 to 80 percent and made changes nobody asked for, `fable-5-2/progress-updates` raised them by roughly 20 percent, `opus-5-5/progress-updates` adds updates whose cost the source does not report, and `opus-5-5/explore-before-acting` is written for agents that work across connected apps.
-A rule that ships on can still cost something: `verify-changes` ships on for Sonnet 5.5 and Haiku 5.5, and about doubles the cost of a small fix ([What the rules change](#what-the-rules-change)).
+Opus 5.5's and Fable 5.2's rules for that place ship off, by the preset's rule that a rule with a high cost, a described side effect or a narrow use ships off ([SOURCES.md](presets/claude/SOURCES.md#how-the-rules-were-chosen)): by Anthropic's guide, not our data, `fable-5-2/code-ownership` raises output tokens by about 70 to 80 percent and makes changes nobody asked for, and `fable-5-2/progress-updates` raises them by roughly 20 percent; `opus-5-5/progress-updates` adds updates whose cost the guide does not report, and `opus-5-5/explore-before-acting` is written for agents that work across connected apps.
 To turn one on, name it in `enable` in `~/.config/noonsight/noonsight.json`:
 
 ```json
@@ -207,22 +200,33 @@ To turn one on, name it in `enable` in `~/.config/noonsight/noonsight.json`:
 
 ## What the rules change
 
-Delivery is what noonsight guarantees; what a rule then changes depends on the rule, the model and the task.
-These results are for the preset's rules named in them; a rule of your own has no measured effect until you measure it.
-The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without, on Fable 5.2, Sonnet 5.5 and Haiku 5.5 ([experiments/rules](experiments/rules/README.md)).
-Three kinds of rule have a measured effect there: `verify-changes` on Sonnet 5.5 and Haiku 5.5, `carry-through` on Sonnet 5.5, and `low-context-report` on Fable 5.2; `carry-through` on Haiku 5.5 showed none, and no other rule of the preset, Opus 5.5's included, has one in [docs/evidence.md](docs/evidence.md#rule-effects).
+What a delivered rule changes depends on the rule, the model and the task.
+The rule effect experiment ran the same task on the real models with a rule or the preset's rules delivered, and without any rule ([experiments/rules](experiments/rules/README.md)).
+A row is the result of what its first cell names: a result of rules together is not a result of one of them.
+Results and mean costs are with the rules against without; a result is the runs that ran the tests after their last edit, unless its cell says otherwise:
 
+| Delivered | Model and task | Runs per arm | Result | Cost per run | Claude Code | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| `verify-changes`, **alone** | Sonnet 5.5, fix | 30 | 29 of 30 against 0 of 30 | $0.0505 against $0.0240 | 2.1.329 | [R3](docs/evidence.md#r3), [R6](docs/evidence.md#r6); without: [R14](docs/evidence.md#r14) |
+| `verify-changes`, **alone** | Haiku 5.5, fix | 30 | 27 of 30 against 0 of 30 | $0.0033 against $0.0015 | 2.1.329 | [R3](docs/evidence.md#r3), [R7](docs/evidence.md#r7); without: [R14](docs/evidence.md#r14) |
+| `verify-changes`, **alone** | Sonnet 5.5, bug | 30 | 30 of 30 against 11 of 30 | $0.0494 against $0.0321 | 2.1.329 | [R16](docs/evidence.md#r16), [R17](docs/evidence.md#r17); without: [R15](docs/evidence.md#r15) |
+| `carry-through`, **alone** | Sonnet 5.5, bug | 30 | 30 of 30 against 11 of 30 | $0.0461 against $0.0321 | 2.1.329 | [R16](docs/evidence.md#r16), [R17](docs/evidence.md#r17); without: [R15](docs/evidence.md#r15) |
+| `carry-through`, **alone** | Sonnet 5.5, backlog | 40 | 32 of 40 against 9 of 40 did every part | $0.2848 against $0.2920 | 2.1.329 | [R10](docs/evidence.md#r10), [R18](docs/evidence.md#r18) |
+| `low-context-report`, **alone** | Fable 5.2, question, bug and feature | 30 each | 12.3 against 16.4, 17.8 against 20.1 and 12.2 against 16.2 words per sentence of its report | $0.3088 against $0.3005, $0.2061 against $0.2007 and $0.4642 against $0.5465 | 2.1.328 | [R9](docs/evidence.md#r9), [R19](docs/evidence.md#r19) |
+| **The preset's three together**: `carry-through`, `stay-in-scope`, `verify-changes` | Sonnet 5.5, fix | 30 | 30 of 30 against 0 of 30 | $0.0378 against $0.0240 | 2.1.329 | [R14](docs/evidence.md#r14), [R6](docs/evidence.md#r6) |
+| **The preset's two together**: `carry-through`, `verify-changes` | Sonnet 5.5, bug | 30 | 30 of 30 against 11 of 30 | $0.0513 against $0.0321 | 2.1.329 | [R15](docs/evidence.md#r15), [R17](docs/evidence.md#r17) |
+| **The preset's two together**: `carry-through`, `verify-changes` | Haiku 5.5, fix | 30 | 27 of 30 against 0 of 30 | $0.0033 against $0.0015 | 2.1.329 | [R14](docs/evidence.md#r14), [R7](docs/evidence.md#r7) |
 
-- One rule, `verify-changes` delivered alone, made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix in 29 of 30 and 27 of 30 runs, where `carry-through` delivered alone did it in 0 of 30 and 0 of 30 ([R3](docs/evidence.md#r3)); without any rule, each model ran them in 0 of 30 runs ([R14](docs/evidence.md#r14), Claude Code 2.1.329).
-- That extra work has a price: on Sonnet's fix, a run cost $0.0240 without rules and $0.0505 with `verify-changes` alone ([R6](docs/evidence.md#r6), Claude Code 2.1.329).
-- Delivered as one sentence pointing to a file with its text, `verify-changes` was read in 120 of 120 runs and did as well as the rule inline ([R4](docs/evidence.md#r4), Claude Code 2.1.329).
-- On Fable 5.2, `low-context-report` made the sentences of its final reports shorter, in mean words per sentence 12.3 against 16.4, 17.8 against 20.1, 12.2 against 16.2 with the rule and without, on a question, a bug and a feature ([R9](docs/evidence.md#r9), Claude Code 2.1.328).
-- On a 13-ticket backlog with an open decision, `sonnet-5-5/carry-through` raised the runs that did every part from 9 of 40 to 32 of 40 ([R10](docs/evidence.md#r10)); Haiku's `carry-through` showed nothing there ([R11](docs/evidence.md#r11), Claude Code 2.1.329).
-- Where the models already did the work, the rules changed nothing and still cost a little ([R6](docs/evidence.md#r6)); every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8), Claude Code 2.1.329).
-- On public tasks, a paid pilot of the benchmark saw no measurable difference in the runs that passed, 133 of 144, 132 of 144 and 133 of 144 without rules, under noonsight and with a `CLAUDE.md` of every model's rules ([B1](docs/evidence.md#b1), Claude Code 2.1.326).
+The fix is precise and in one file, the bug is known only by its symptom, and the backlog has 13 tickets, one with a decision left open.
 
-The rule effect tasks are small and the samples are 30 or 40 runs per arm, so read these as results on those tasks, not as general effects.
-[docs/usage.md](docs/usage.md#what-a-rule-costs) gives the cost of each rule, and [docs/sources.md](docs/sources.md) where each result confirms, refines or contradicts what Anthropic published.
+- **Rules with a measured effect alone:** `verify-changes` (Sonnet 5.5, Haiku 5.5), `carry-through` (Sonnet 5.5) and `low-context-report` (Fable 5.2).
+  In these runs `stay-in-scope` came only with other rules.
+- **No effect shown:** `carry-through` alone on the fix, for Sonnet 5.5 and Haiku 5.5 ([R3](docs/evidence.md#r3)), and on the backlog for Haiku 5.5 ([R11](docs/evidence.md#r11), Claude Code 2.1.329).
+- No other rule of the preset, Opus 5.5's included, has a measured effect in [docs/evidence.md](docs/evidence.md#rule-effects), and a rule of your own has none until you measure it.
+- **No quality gain shown:** in the run that measured the fix and the bug, every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8), Claude Code 2.1.329), and a paid pilot on public tasks, which delivered rules to the main conversation only, saw no measurable difference in the runs that passed: 133 of 144 without rules, 132 of 144 under noonsight and 133 of 144 with a `CLAUDE.md` of every model's rules ([B1](docs/evidence.md#b1), Claude Code 2.1.326).
+
+The tasks are small: these are results on them, not general effects.
+More on [what a rule costs](docs/usage.md#what-a-rule-costs), and on how each result compares with [what Anthropic published](docs/sources.md).
 
 ## Features
 
@@ -242,14 +246,13 @@ The rule effect tasks are small and the samples are 30 or 40 runs per arm, so re
 | New Claude Code logins (off by default) | `noonsight watch enable` | [docs/install.md](docs/install.md#new-logins-as-they-appear-optional) |
 | Turning it off for a session | `NOONSIGHT_DISABLE=1` | [docs/hooks.md](docs/hooks.md#turning-noonsight-off) |
 
-The hooks never block anything and never use the network.
-The one exception to the network is the classifier, off unless you turn it on, which sends the first 4,000 characters of a task to a small model through your own Claude Code login ([docs/configuration.md](docs/configuration.md#the-classifier)).
+The hooks never block anything, and use the network in one case only: the classifier, off unless you turn it on, sends the first 4,000 characters of a task to a small model through your own Claude Code login ([docs/configuration.md](docs/configuration.md#the-classifier)).
 
 ## Using it well
 
 - Give noonsight what differs by model, by kind of task or by place, and leave in `CLAUDE.md` what every model should always have ([docs/usage.md](docs/usage.md#choosing-where-a-rule-lives)).
 - Tell noonsight when nobody is watching, since the preset rules that ship on for Opus 5.5 and Fable 5.2 are for unattended runs and subagents only: headless runs are unattended by default, and `session.unattended_when_env`, set to your orchestrator's variable, covers the interactive sessions nobody watches; turn on their attended rules with `enable` if you want them; and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
-- Write a rule as a check the model can pass, in plain words; Anthropic's best practices say the same, and the verify rules are where our data shows the largest effect ([docs/usage.md](docs/usage.md#writing-a-rule)).
+- Write a rule as a check the model can pass, in plain words; Anthropic's best practices say the same, and the verify rules are an example ([What the rules change](#what-the-rules-change), [docs/usage.md](docs/usage.md#writing-a-rule)).
 - Keep long rule text in a file and deliver one sentence pointing to it ([docs/usage.md](docs/usage.md#a-pointer-to-a-file)).
 - Check what each model receives with `noonsight models` and what was delivered with `noonsight report`, and drop a rule that never changes anything you can see.
 - Skip noonsight when every session runs one model with fixed rules: a `CLAUDE.md` is simpler, unless Explore or Plan subagents need the rules, which it does not reach ([docs/usage.md](docs/usage.md#when-not-to-use-noonsight)).
@@ -274,7 +277,7 @@ noonsight was called sextant before; [docs/install.md](docs/install.md#moving-fr
 
 ## Acknowledgements
 
-Several ideas here (refuse a bad configuration instead of guessing, keep hooks fast and offline, test through the public interface) come from [firstmate](https://github.com/kunchenguid/firstmate); no code was copied.
+Several ideas here (refuse a bad configuration instead of guessing, keep hooks fast, test through the public interface) come from [firstmate](https://github.com/kunchenguid/firstmate); no code was copied.
 
 ## License
 
