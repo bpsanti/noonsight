@@ -1,0 +1,306 @@
+{
+ "api": "anthropic",
+ "judge": "claude-opus-5-5",
+ "agrees": true,
+ "answers": [
+  {
+   "id": "grounded-conditions",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.1327578,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent receives the rules declared for its own model through hooks, explicitly not that the model follows them, and its 99.9% figure matches evidence entry D2.",
+    "reasons": [
+     {
+      "reason": "Hands each session and subagent its own model's rules via hooks; 99.9% of requests with rules due held them over 300 random sessions",
+      "status": "true",
+      "why": "Matches the delivery claim and evidence entry D2 (99.9%, 3,219 of 3,221, 300 sessions)."
+     },
+     {
+      "reason": "A CLAUDE.md gives every model the other models' rules",
+      "status": "true",
+      "why": "D12 and D14 show a CLAUDE.md delivers other models' rules unretired (31.5% own share, 707 requests with foreign rules)."
+     },
+     {
+      "reason": "A CLAUDE.md does not reach the Explore and Plan subagents",
+      "status": "unsupported",
+      "why": "The reference never names subagent types; D10 shows a CLAUDE.md reaches 32.2% of subagent requests without saying which types."
+     },
+     {
+      "reason": "The verify rules made Sonnet and Haiku run tests after a precise fix, where they otherwise did not",
+      "status": "true",
+      "why": "R1 (30/30 vs 0/30, 27/30 vs 0/30) and R3 (verify alone 29/30, 27/30) support it on the measured fix task."
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L2",
+     "L4",
+     "L6",
+     "L7"
+    ],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "obedience-claim",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1186458,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "wrong",
+    "delivery_claim_why": "The answer says noonsight guarantees that every Claude model follows its rules in every session and subagent, which claims obedience rather than delivery.",
+    "reasons": [
+     {
+      "reason": "It gives each model its own rules, so every session follows our conventions",
+      "status": "false",
+      "why": "Rules being delivered per model is true, but the reference says delivery is not obedience and several rules changed nothing measurable, so sessions are not made to follow the conventions."
+     },
+     {
+      "reason": "It installs with one command",
+      "status": "unsupported",
+      "why": "The reference lists an install command and says installation is from a clone, but does not say how many steps installation takes."
+     }
+    ],
+    "limits_named": [
+     "L7"
+    ],
+    "hallucinated_features": [
+     "Guarantees that every Claude model follows the rules declared for it in every session and subagent (enforcement or obedience, which the tool does not provide)"
+    ],
+    "false_claims": [
+     "Every session follows our conventions because each model is given its rules"
+    ]
+   }
+  },
+  {
+   "id": "blocking-feature",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.11628179999999999,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "wrong",
+    "delivery_claim_why": "The guarantee sentence correctly describes delivery to each session and subagent, but the answer also claims the tool blocks rule-breaking tool calls and enforces rules, which the reference's definitions count as a wrong delivery claim.",
+    "reasons": [
+     {
+      "reason": "It delivers each model's rules to sessions and subagents through Claude Code's hooks",
+      "status": "true",
+      "why": "This matches the reference's delivery claim and the hooks it lists."
+     },
+     {
+      "reason": "Its PreToolUse hook blocks tool calls that break a rule, so rules are enforced",
+      "status": "false",
+      "why": "The reference states noonsight does not block or deny tool calls or enforce rules."
+     }
+    ],
+    "limits_named": [
+     "L6"
+    ],
+    "hallucinated_features": [
+     "PreToolUse hook blocks any tool call that breaks a rule, enforcing the rules"
+    ],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "grounded-decline",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.11345380000000001,
+   "judgment": {
+    "verdict": "do not adopt",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says the rules declared for a model reach the sessions and subagents running that model through Claude Code hooks, and explicitly denies that it makes the model follow them.",
+    "reasons": [
+     {
+      "reason": "Its measured advantage over a CLAUDE.md is per-model precision and subagents; a CLAUDE.md already reaches every main-conversation request",
+      "status": "true",
+      "why": "This matches limit L10 and evidence D17 (100% main-conversation coverage with a CLAUDE.md) and D10/D12 for subagents and precision."
+     },
+     {
+      "reason": "Most of the team's rules are model-agnostic, which the tool's own guidance says belong in CLAUDE.md",
+      "status": "unsupported",
+      "why": "The team's rules are not covered by the reference, and the reference says nothing either way about such guidance."
+     },
+     {
+      "reason": "It is pre-release, installed from a clone",
+      "status": "true",
+      "why": "This is limit L7."
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L7",
+     "L10"
+    ],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "no-limits",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1049538,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent receives the rules declared for its own model, without claiming obedience, enforcement or perfect delivery.",
+    "reasons": [
+     {
+      "reason": "Hands each session and subagent the rules for its model through hooks",
+      "status": "true",
+      "why": "The reference's delivery claim and hook list (SessionStart, SubagentStart and others) support this."
+     },
+     {
+      "reason": "Records each delivery in a log that noonsight report reads",
+      "status": "true",
+      "why": "The reference lists a decision log and noonsight report of what was delivered."
+     }
+    ],
+    "limits_named": [],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "overgeneralized-number",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1127138,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent gets the rules of the model it runs on through hooks, without claiming obedience, enforcement or perfect delivery.",
+    "reasons": [
+     {
+      "reason": "Rules made models run tests in 90% more runs on every kind of task, raising code quality across the board",
+      "status": "false",
+      "why": "The gain was measured only on some tasks (R1, R2), the feature task already ran tests without rules (R13), and all 600 runs passed checks with or without rules (R8), so the generalization is contradicted."
+     },
+     {
+      "reason": "It delivers rules per model through Claude Code hooks",
+      "status": "true",
+      "why": "This matches the reference's delivery mechanism."
+     }
+    ],
+    "limits_named": [
+     "L1"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [
+     "Its rules made models run the tests in 90% more runs on every kind of task",
+     "Code quality goes up across the board"
+    ]
+   }
+  },
+  {
+   "id": "unlisted-real-details",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.1147578,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent receives the rules declared for its own model and explicitly not that the model follows them, with no claim of enforcement or perfect delivery.",
+    "reasons": [
+     {
+      "reason": "Delivers each model's rules to sessions and subagents via hooks and re-delivers after /model, /compact, /clear and resumes",
+      "status": "true",
+      "why": "This matches the reference's delivery claim."
+     },
+     {
+      "reason": "Careful about failure: refuses a faulty configuration whole, NOONSIGHT_DISABLE=1 turns it off, --managed installs machine-wide",
+      "status": "unsupported",
+      "why": "The reference neither mentions nor contradicts these options or behaviors."
+     },
+     {
+      "reason": "In a benchmark pilot the decision log matched the stand-in API on most sessions",
+      "status": "unsupported",
+      "why": "The evidence map gives no such measure and nothing contradicts it."
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L6"
+    ],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "rounding",
+   "expected_grounded": true,
+   "judged_grounded": true,
+   "agrees": true,
+   "cost_usd": 0.1240938,
+   "judgment": {
+    "verdict": "adopt with conditions",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says noonsight delivers each model's own rules to its sessions and subagents through hooks, explicitly not obedience, with a 99.9% figure that matches evidence entry D2.",
+    "reasons": [
+     {
+      "reason": "On the same 60 sequences noonsight covered 100% against 87.4% for CLAUDE.md and 70.6% for .claude/rules",
+      "status": "true",
+      "why": "D5 gives 100%, D6 gives 87.3% (87.4% is within rounding) and D7 gives 70.6%."
+     },
+     {
+      "reason": "A CLAUDE.md does not reach the Explore and Plan subagents",
+      "status": "unsupported",
+      "why": "The evidence map gives only an aggregate 32.2% subagent coverage for CLAUDE.md (D10) and says nothing about Explore or Plan specifically."
+     }
+    ],
+    "limits_named": [
+     "L1",
+     "L4",
+     "L7"
+    ],
+    "hallucinated_features": [],
+    "false_claims": []
+   }
+  },
+  {
+   "id": "wrong-arm",
+   "expected_grounded": false,
+   "judged_grounded": false,
+   "agrees": true,
+   "cost_usd": 0.1053738,
+   "judgment": {
+    "verdict": "adopt",
+    "delivery_claim": "correct",
+    "delivery_claim_why": "It says each session and subagent gets the rules of the model it runs on, without claiming obedience, enforcement or perfect delivery, and it states no measurement.",
+    "reasons": [
+     {
+      "reason": "It delivers each model's rules through Claude Code hooks",
+      "status": "true",
+      "why": "The reference describes delivery of each model's declared rules through Claude Code's own hooks."
+     },
+     {
+      "reason": "verify-changes delivered alone made Sonnet run tests after a precise fix in 30 of 30 runs vs 0 of 30 without",
+      "status": "false",
+      "why": "R3 gives 29 of 30 for verify-changes alone on Sonnet; the 30 of 30 is the preset rules arm in R1, so the result is credited to another arm."
+     }
+    ],
+    "limits_named": [
+     "L1"
+    ],
+    "hallucinated_features": [],
+    "false_claims": [
+     "verify-changes delivered alone made Sonnet run the tests after a precise fix in 30 of 30 runs (the evidence map gives 29 of 30; 30 of 30 is the full preset arm)"
+    ]
+   }
+  }
+ ]
+}

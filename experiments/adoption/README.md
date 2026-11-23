@@ -117,6 +117,42 @@ One failure was the README's: two of the four `after` answers credited the 30 of
 
 The pass bar, the prompt, the sandbox and the scoring formula are unchanged.
 v2's results are in `results/2026-11-20-v2/`.
+v3 ran the same design on later READMEs; its results and their departures are in [results/2026-11-21-v3](results/2026-11-21-v3/README.md).
+
+## v4: the README of your own rules
+
+This section was written before any v4 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `ceecdb2`, the head of `main` once the README presents noonsight as delivery of each model's instructions, with the preset as a starting set and a section, "Your own rules", on writing a rule for one model or for every model.
+That commit also carries a new run of the delivery benchmark, so its `docs/evidence.md`, the evidence map the judge reads, gives new values for several delivery entries.
+`before` is unchanged, `f061f03`.
+
+**Sessions.**
+Five new `after` sessions for each of the four models, Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, twenty in all; no earlier `after` answer counts, since `after` changed.
+No `before` session runs: the twelve `before` answers of v3, three per model, are reused as they are.
+They are judged again with the v4 evidence map, since the plan above scores both conditions against one reference; v3's judgments of the same answers are reported beside them.
+
+**The judge.**
+Before any answer is judged, the judge scores the nine answers of [calibration.json](calibration.json) against the v4 evidence map and must reach the expected `grounded` on all nine; if it does not, v4 stops and reports, with no revision.
+
+**Unchanged.**
+The prompt, [rubric.md](rubric.md) (its limit L4 included, whose error v3 records), [judge.md](judge.md), the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The comparison with `before` is Fisher's exact test, two-sided, as before, and the results also compare v4's `after` with v3's.
+
+**Money.**
+v4 has a cap of $25 of its own, for its calibration, sessions and judgments.
+The runner is given what remains after the calibration, less a reserve for the 32 judgments at the highest judgment cost measured so far; v4 stops and reports if the measured costs project past the cap.
+
+**Revision after the first calibration.**
+This paragraph was written after the first v4 calibration, and before any v4 session or judgment of a real answer; it departs from the rule above that a failed calibration stops v4 with no revision.
+The judge reached the expected `grounded` on eight of the nine calibration answers and disagreed on `rounding`, which it judged false for citing 70.9% for `.claude/rules` and 99.5% for coverage under noonsight.
+Those were the values of the delivery run of 2026-11-20, when the calibration answers were written; the v4 evidence map gives 70.6% (D7) and 99.9% (D2), so by the rubric the judge was right and the answer had gone stale.
+The calibration answers `rounding` and `grounded-conditions` now cite the v4 values, and their cases are unchanged: `rounding` still rounds D6's 87.3% to 87.4%.
+The calibration runs once more, and the first one is kept as `results/2026-11-21-v4/calibration-first.json`; if the judge again misses any of the nine, v4 stops and reports.
+[rubric.md](rubric.md) is left as pre-registered, though its statement of the delivery claim still gives the run of 2026-11-20 (99.5%, 3 of 300); the judge reads the evidence map for numbers.
+
+v4's results are in `results/2026-11-21-v4/`.
 
 ## Limits
 
