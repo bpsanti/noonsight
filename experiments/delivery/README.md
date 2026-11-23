@@ -254,6 +254,8 @@ The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5
 
 F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 to F9 in fuzz runs of generator 2 (`s1-0088`, `s1-0138` and `s1-0182` of seed 1) before their fixes: on the build before their fix, every one of these entries breaks the invariant (`foreign-unretired` in the session's own requests, with `missing-own` for F7 and F8, and `own-retired` for F9), and on the fixed build they pass.
 
+The run [with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md) measured the new paths after the fixes of F5 to F9: no session of 300 under `on` breaks the invariant, and every request with rules due held them.
+
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 
 ## Limits

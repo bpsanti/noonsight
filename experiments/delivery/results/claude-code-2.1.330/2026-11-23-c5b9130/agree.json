@@ -1,0 +1,47 @@
+{
+ "on-g2-s1-n300": {
+  "sessions": 299,
+  "mainRequests": 2804,
+  "model": 2804,
+  "due": 2804,
+  "covered": 2804,
+  "chars": 1973,
+  "all": 1973,
+  "coverage": {
+   "log": 1,
+   "stub": 1
+  },
+  "ownShare": {
+   "log": 0.7074,
+   "stub": 0.7559
+  },
+  "sessionsWhereTheyDiffer": 135,
+  "ofWhichWithoutTwoQuietStepsInARow": [
+   "on-g2-s1-0019",
+   "on-g2-s1-0025",
+   "on-g2-s1-0033",
+   "on-g2-s1-0054",
+   "on-g2-s1-0072",
+   "on-g2-s1-0078",
+   "on-g2-s1-0113",
+   "on-g2-s1-0112",
+   "on-g2-s1-0129",
+   "on-g2-s1-0143",
+   "on-g2-s1-0145",
+   "on-g2-s1-0158",
+   "on-g2-s1-0167",
+   "on-g2-s1-0168",
+   "on-g2-s1-0175",
+   "on-g2-s1-0209",
+   "on-g2-s1-0210",
+   "on-g2-s1-0217",
+   "on-g2-s1-0228",
+   "on-g2-s1-0227",
+   "on-g2-s1-0238",
+   "on-g2-s1-0246",
+   "on-g2-s1-0273",
+   "on-g2-s1-0275",
+   "on-g2-s1-0285"
+  ]
+ }
+}

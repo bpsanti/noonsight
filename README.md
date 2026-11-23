@@ -21,9 +21,11 @@ Each result in this README carries the Claude Code version it was measured on, i
 
 The fuzzer has found four failures of noonsight, F1 to F4, all fixed before that run; their shortest reproductions are in the corpus, which passes.
 The one failing session is the documented limit below.
+A later run on Claude Code 2.1.330 added forks, `/resume` typed in a session, plan mode, `noonsight run`, a repository's configuration and subagents that edit files, which found five more failures, F5 to F9, now fixed ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
+After their fixes, 0 of 300 sessions broke the invariant ([D18](docs/evidence.md#d18)), with 100% (453 of 453) of the requests on those paths holding their rules ([D21](docs/evidence.md#d21)).
 
 noonsight picks a rule by its model, scope, place and trigger, never by its text, so this claim covers any rule, yours or the preset's.
-The benchmark's sessions carried the preset's rules from the machine's configuration; a repository's configuration is among what it did not measure (below).
+The benchmark's sessions carried the preset's rules from the machine's configuration; in the later run, a session in four also had a repository's configuration, and those sessions, with those started through `noonsight run`, held their rules on 100% (1,308 of 1,308) of their requests ([D22](docs/evidence.md#d22)).
 
 On the same first 60 sequences, the native ways to give a model rules covered fewer requests (each number links to its entry):
 
@@ -50,7 +52,8 @@ A skill guarantees only its description until the model decides to open it ([S5]
   Your own rules reach every place unless their `where` limits them, attended sessions included.
   noonsight counts an interactive session as attended unless a variable of `session.unattended_when_env` is set, so set it to a CI's or an orchestrator's variable for the interactive sessions nobody watches.
   [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
-- Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
+- Not measured: agent teams, routing and the classifier ([limits](experiments/delivery/README.md#limits)).
+- `/fork` is not available in a session `noonsight run` started with rules, since Claude Code refuses to fork a session with a system prompt of its own ([docs/launcher.md](docs/launcher.md#other-text-in-the-system-prompt)).
 - A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
 - Known limits for subagents: a workflow's agents get nothing, foreground calls of one type that need different rules give their subagents nothing until each one's first Edit, Write or agent call, and a plugin noonsight does not read, such as one an organization syncs, leaves its subagents predicted on their parent's model ([docs/hooks.md](docs/hooks.md#what-the-prediction-does-not-see)).
 - It is measured on one Claude Code version at a time, and Claude Code changes how hooks behave; [docs/verification/claude-code.md](docs/verification/claude-code.md) lists each fact noonsight relies on and the version it was checked on.

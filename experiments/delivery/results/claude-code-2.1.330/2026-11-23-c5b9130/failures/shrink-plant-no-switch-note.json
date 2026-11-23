@@ -1,0 +1,35 @@
+{
+ "session": "plant-no-switch-note-g2-s1-0001",
+ "target": {
+  "class": "foreign-unretired",
+  "kind": "main"
+ },
+ "originalSteps": 5,
+ "minimalSteps": 4,
+ "runs": 9,
+ "seconds": 134,
+ "original": "start(haiku, scope=none, unattended) > spawn(Explore:sonnet) > resume --fork-session --model sonnet > /model haiku > /compact > turn",
+ "minimal": "start(haiku, scope=none, unattended) > turn > resume --model sonnet > /model haiku > turn",
+ "spec": {
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "resume",
+    "model": "sonnet"
+   },
+   {
+    "k": "model",
+    "to": "haiku"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ },
+ "minimalOnReal": "passes"
+}
