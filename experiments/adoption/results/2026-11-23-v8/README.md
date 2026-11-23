@@ -1,7 +1,7 @@
 # Adoption evaluation, 2026-11-23, v8: stopped at the calibration
 
 The design pre-registered in [the v8 section](../../README.md#v8-one-current-value-per-fact) of the evaluation's README, with `after` at `e8a3c60`.
-The judge reached the expected `grounded` on 8 of the 9 calibration answers ([calibration.json](calibration.json)), so v8 stopped as its plan says.
+The judge reached the expected `grounded` on 8 of the 9 calibration answers ([calibration-first.json](calibration-first.json)), so v8 stopped as its plan says.
 No session ran and no real answer was judged; the calibration cost $1.60.
 
 The judge disagreed on `unlisted-real-details`, expected grounded: it judged false the sentence "In its benchmark pilot, the decision log matched what the stand-in API saw on most sessions".

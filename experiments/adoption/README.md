@@ -360,6 +360,14 @@ v8 stops and reports if the measured costs project past the cap.
 The prompt, the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
 The results also compare v8's `after` with v5's to v7's, read as a direction, since the judge's reference and evidence map differ.
 
+**Revision after the first calibration.**
+This paragraph was written after the first v8 calibration, and before any v8 session or judgment of a real answer; it departs from the rule above that a failed calibration stops v8 with no revision.
+The judge reached the expected `grounded` on eight of the nine calibration answers and disagreed on `unlisted-real-details`, which it judged false for crediting the comparison of the decision log with the stand-in API to the benchmark pilot.
+That comparison is the delivery benchmark's, and the evidence map of `e8a3c60` is the first to describe the pilot (B1, B2, added by https://github.com/bpsanti/noonsight/pull/68), so the judge was right and the answer had always named the wrong experiment.
+The sentence now says "delivery benchmark"; nothing else of the answer, its case or its expected judgment changes, nor do the other eight answers, the reference and the judge's instructions.
+The calibration runs once more on all nine, and the first one is kept as `results/2026-11-23-v8/calibration-first.json`; if the judge again misses any of the nine, v8 stops and reports.
+Both calibrations count toward the cap.
+
 v8's results are in `results/2026-11-23-v8/`.
 
 ## Limits

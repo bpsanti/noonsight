@@ -122,7 +122,7 @@
     },
     {
       "id": "unlisted-real-details",
-      "text": "Verdict: adopt with conditions\nReasons:\n- It hands each session and subagent the rules of the model it runs on, through Claude Code hooks, and re-delivers them after /model, /compact, /clear and resumes.\n- It is careful about failure: a configuration with any problem is refused whole, NOONSIGHT_DISABLE=1 turns it off for a session, and it can be installed machine-wide with --managed.\n- In its benchmark pilot, the decision log matched what the stand-in API saw on most sessions.\nConditions and risks:\n- Delivery is not obedience; rules are context.\n- It depends on Claude Code's hooks across versions.\nWhat it guarantees: that each session and subagent receives the rules declared for its own model, not that the model follows them.",
+      "text": "Verdict: adopt with conditions\nReasons:\n- It hands each session and subagent the rules of the model it runs on, through Claude Code hooks, and re-delivers them after /model, /compact, /clear and resumes.\n- It is careful about failure: a configuration with any problem is refused whole, NOONSIGHT_DISABLE=1 turns it off for a session, and it can be installed machine-wide with --managed.\n- In its delivery benchmark, the decision log matched what the stand-in API saw on most sessions.\nConditions and risks:\n- Delivery is not obedience; rules are context.\n- It depends on Claude Code's hooks across versions.\nWhat it guarantees: that each session and subagent receives the rules declared for its own model, not that the model follows them.",
       "expected": {
         "verdict": "adopt with conditions",
         "delivery_claim": "correct",
