@@ -67,24 +67,24 @@ test('the replaced rule is off, and the rule that replaces it is delivered in it
   assert.match(unattended.text, new RegExp(MINE));
   assert.doesNotMatch(unattended.text, /SONNET-CARRY-4471/);
   // The places of the replaced rule: sonnet/carry-through is not for "session".
-  const session = resolve(c, { model: SONNET, place: 'session' });
+  const session = resolve(c, { model: SONNET, place: 'attended' });
   assert.ok(session.status === 'matched' && !session.rules.includes('user/carry'));
 });
 
 test('a key the rule gives wins over the replaced rule\'s, and the others still come from it', () => {
-  const rules = rulesOf(sonnet({ add: [{ id: 'user/investigate', file: 'investigate.md', replaces: 'sonnet/investigate', where: ['session'] }] }));
+  const rules = rulesOf(sonnet({ add: [{ id: 'user/investigate', file: 'investigate.md', replaces: 'sonnet/investigate', where: ['attended'] }] }));
   const mine = rules.find((r) => r.id === 'user/investigate');
-  assert.deepEqual([mine?.scopes, mine?.where], [['investigate'], ['session']]);
+  assert.deepEqual([mine?.scopes, mine?.where], [['investigate'], ['attended']]);
   assert.ok(!rules.some((r) => r.id === 'sonnet/investigate'));
   // A rule that ships off can be replaced too: the user rule is delivered in its place all the same.
   const off = rulesOf(sonnet({ add: [{ id: 'user/progress', file: 'carry.md', replaces: 'sonnet/progress-updates' }] }));
   assert.deepEqual(
     off.map((r) => [r.id, r.where.join(',')]),
     [
-      ['sonnet/general', 'session,unattended,subagent'],
-      ['sonnet/investigate', 'session,unattended,subagent'],
+      ['sonnet/general', 'attended,unattended,subagent'],
+      ['sonnet/investigate', 'attended,unattended,subagent'],
       ['sonnet/carry-through', 'unattended,subagent'],
-      ['user/progress', 'session'],
+      ['user/progress', 'attended'],
     ],
   );
 });
@@ -96,7 +96,7 @@ test('the rule takes the replaced rule\'s triggers too, unless it gives its own'
   });
   const replace = { id: 'user/investigate', file: 'investigate.md', replaces: 'sonnet/investigate' };
   const c = loadConfig(configTree(sonnet({ add: [replace] })), { presetsDir: presets });
-  const edited = resolve(c, { model: SONNET, place: 'session', triggers: ['code-edit'] });
+  const edited = resolve(c, { model: SONNET, place: 'attended', triggers: ['code-edit'] });
   assert.ok(edited.status === 'matched' && edited.rules.includes('user/investigate') && edited.triggered?.includes('user/investigate'));
 
   const dropped = rulesOf(sonnet({ add: [{ ...replace, triggers: [] }] }), presets);

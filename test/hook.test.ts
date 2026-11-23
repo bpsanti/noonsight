@@ -771,10 +771,10 @@ test('NOONSIGHT_SCOPE gives the session the rules of that scope, and the log say
   assert.deepEqual(
     h.log().map((l) => [l.model, l.scope, l.scope_source, l.place, l.unknown_scope ?? null]),
     [
-      ['claude-sonnet-5-5', 'investigate', 'env', 'session', null],
-      ['claude-haiku-5-5', 'summarize', 'env', 'session', null],
-      ['claude-haiku-5-5', 'investigate', 'env', 'session', null],
-      ['claude-sonnet-5-5', null, null, 'session', null],
+      ['claude-sonnet-5-5', 'investigate', 'env', 'attended', null],
+      ['claude-haiku-5-5', 'summarize', 'env', 'attended', null],
+      ['claude-haiku-5-5', 'investigate', 'env', 'attended', null],
+      ['claude-sonnet-5-5', null, null, 'attended', null],
     ],
   );
 });
@@ -802,7 +802,7 @@ test('a variable of session.unattended_when_env puts the session in the place un
     [
       ['session-start', 'unattended', 'env', 'CI', null],
       ['model-switch', 'unattended', 'env', 'CI', 'investigate'],
-      ['session-start', 'session', null, null, null],
+      ['session-start', 'attended', null, null, null],
     ],
   );
 });
@@ -823,20 +823,20 @@ test('a headless run, which Claude Code marks with CLAUDE_CODE_SESSION_ATTENDED=
     [
       ['session-start', 'unattended', 'headless', null],
       ['model-switch', 'unattended', 'headless', null],
-      ['session-start', 'session', null, null],
+      ['session-start', 'attended', null, null],
       ['session-start', 'unattended', 'env', 'CI'],
     ],
   );
 });
 
-test('session.headless_is_unattended false leaves a headless run in the place session', () => {
+test('session.headless_is_unattended false leaves a headless run in the place attended', () => {
   const file = scopedConfig();
   const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, any>;
   fs.writeFileSync(file, JSON.stringify({ ...raw, session: { ...raw.session, headless_is_unattended: false } }));
   const h = home(file);
   const r = h.hook('session-start', hookInput('session-start-print', { model: 'claude-sonnet-5-5' }), { CLAUDE_CODE_SESSION_ATTENDED: '0' });
   assert.doesNotMatch(r.out?.hookSpecificOutput.additionalContext, /SONNET-CARRY-4471/);
-  assert.deepEqual(h.log().map((l) => [l.place, l.unattended_because ?? null]), [['session', null]]);
+  assert.deepEqual(h.log().map((l) => [l.place, l.unattended_because ?? null]), [['attended', null]]);
 });
 
 test('a resumed session whose scope changed gets the rules of the new scope', () => {

@@ -126,7 +126,8 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "enum": ["session", "unattended", "subagent"] }
+          "description": "attended: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task. session: the earlier name of attended, which copies of earlier versions use.",
+          "items": { "enum": ["attended", "unattended", "subagent", "session"] }
         },
         "triggers": {
           "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes (see the configuration schema). Only for a rule that is cheap when the action was not what the scopes mean; SOURCES.md says why for each.",

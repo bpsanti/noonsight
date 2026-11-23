@@ -48,14 +48,15 @@ const LOG: Record<string, unknown>[] = [
   { ts: '2026-11-14T10:05:00.000Z', event: 'agent-call', session_id: 's1', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'subagent', delivered: 'rules' },
   { ts: '2026-11-14T10:06:00.000Z', event: 'agent-result', session_id: 's1', result: 'match' },
   // Delivered by the launcher; the session start that follows finds them in the system prompt.
-  { ts: '2026-11-15T09:00:00.000Z', event: 'launch', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'session', delivered: 'system-prompt' },
-  { ts: '2026-11-15T09:00:01.000Z', event: 'session-start', session_id: 's2', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'session', delivered: 'launcher' },
+  { ts: '2026-11-15T09:00:00.000Z', event: 'launch', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'attended', delivered: 'system-prompt' },
+  { ts: '2026-11-15T09:00:01.000Z', event: 'session-start', session_id: 's2', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'attended', delivered: 'launcher' },
   // A resumed session that already had them, and a switch that delivered rules with the note.
   { ts: '2026-11-15T10:00:00.000Z', event: 'session-start', session_id: 's1', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general', 'team/investigate'], scope: 'investigate', place: 'unattended', delivered: 'already-delivered' },
+  // A line written before the place was named "attended" says "session", and counts as "attended".
   { ts: '2026-11-15T11:00:00.000Z', event: 'model-switch', session_id: 's3', model: 'claude-sonnet-5-5', from_model: 'claude-opus-5-5', status: 'matched', rules: ['team/general'], scope: null, place: 'session', delivered: 'rules+note' },
   // Nothing delivered, three ways.
-  { ts: '2026-11-15T12:00:00.000Z', event: 'session-start', session_id: 's4', model: 'claude-opus-5-5', status: 'none', reason: 'declared-none', place: 'session', delivered: 'nothing' },
-  { ts: '2026-11-16T08:00:00.000Z', event: 'session-start', session_id: 's5', model: 'claude-fable-5-2', status: 'undeclared', place: 'session', delivered: 'nothing' },
+  { ts: '2026-11-15T12:00:00.000Z', event: 'session-start', session_id: 's4', model: 'claude-opus-5-5', status: 'none', reason: 'declared-none', place: 'attended', delivered: 'nothing' },
+  { ts: '2026-11-16T08:00:00.000Z', event: 'session-start', session_id: 's5', model: 'claude-fable-5-2', status: 'undeclared', place: 'attended', delivered: 'nothing' },
   { ts: '2026-11-16T08:30:00.000Z', event: 'agent-result', session_id: 's5', result: 'MISMATCH' },
   // A line older than scopes and places, and a torn line the reader skips.
   { ts: '2026-11-16T09:00:00.000Z', event: 'session-start', session_id: 's6', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], delivered: 'rules' },
@@ -82,7 +83,7 @@ test('report counts each rule\'s deliveries by model, scope, place and event, an
       '  team/general: 5 deliveries in 3 sessions, last 2026-11-16T09:00:00.000Z',
       '     models: claude-sonnet-5-5 4, claude-haiku-5-5 1',
       '     scopes: (none) 3, (not recorded) 1, investigate 1',
-      '     places: session 2, (not recorded) 1, subagent 1, unattended 1',
+      '     places: attended 2, (not recorded) 1, subagent 1, unattended 1',
       '     events: session-start 2, agent-call 1, launch 1, model-switch 1',
       '     text: 27 characters for claude-sonnet-5-5, 14 characters for claude-haiku-5-5',
       '  team/investigate: 1 delivery in 1 session, last 2026-11-14T10:00:00.000Z',
@@ -173,7 +174,7 @@ test('report counts a subagent\'s rules once, where its start delivered them, an
 test('report does not count as delivered a switch the session\'s next line switches again from', () => {
   const home = tempTree({});
   const line = (n: number, session: string, fields: Record<string, unknown>) => ({ ts: `2026-11-17T12:00:0${n}.000Z`, session_id: session, ...fields });
-  const toSonnet = { event: 'model-switch', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], place: 'session', delivered: 'rules+note' };
+  const toSonnet = { event: 'model-switch', model: 'claude-sonnet-5-5', status: 'matched', rules: ['team/general'], place: 'attended', delivered: 'rules+note' };
   const toHaiku = { ...toSonnet, model: 'claude-haiku-5-5', delivered: 'rules' };
   writeLog(home, [
     // Two switches in a row: the first one's return may never have reached a request.
@@ -186,7 +187,7 @@ test('report does not count as delivered a switch the session\'s next line switc
     line(4, 's1', toSonnet),
     // The session's last switch: counted.
     // A switch that delivered no rules keeps its own reason when another switch follows it.
-    line(5, 's3', { event: 'model-switch', model: 'claude-fable-5-2', status: 'undeclared', place: 'session', delivered: 'note' }),
+    line(5, 's3', { event: 'model-switch', model: 'claude-fable-5-2', status: 'undeclared', place: 'attended', delivered: 'note' }),
     line(6, 's3', toSonnet),
   ]);
   const report = JSON.parse(runCli(['report', '--json'], { HOME: home }).stdout) as Record<string, any>;
@@ -271,7 +272,7 @@ test('report reads the configuration with the project of the directory it runs f
   const projectFile = path.join(repo, '.noonsight', 'noonsight.json');
   // One Haiku session in the project delivered the machine's rule and the project's.
   writeLog(home, [
-    { ts: '2026-11-17T10:00:00.000Z', event: 'session-start', session_id: 'h1', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general', 'team/commits'], scope: null, place: 'session', delivered: 'rules', project: repo, project_status: 'applied' },
+    { ts: '2026-11-17T10:00:00.000Z', event: 'session-start', session_id: 'h1', model: 'claude-haiku-5-5', status: 'matched', rules: ['team/general', 'team/commits'], scope: null, place: 'attended', delivered: 'rules', project: repo, project_status: 'applied' },
   ]);
   const env = { HOME: home, NOONSIGHT_CONFIG: config };
   const report = (dir: string) => runCli(['report'], { ...env, CLAUDE_PROJECT_DIR: dir });
@@ -290,11 +291,11 @@ test('report reads the configuration with the project of the directory it runs f
   const lines = r.stdout.split('\n');
   assert.equal(lines[1], `project ${projectFile}: applied over the machine's configuration ("projects.allow": "add"), trusted for this account; rules: team/commits (all_models)`);
   // The project's rule gets its length, as a machine rule does.
-  assert.ok(r.stdout.includes(`  team/commits: 1 delivery in 1 session, last 2026-11-17T10:00:00.000Z\n     models: claude-haiku-5-5 1\n     scopes: (none) 1\n     places: session 1\n     events: session-start 1\n     text: ${teamText.length} characters for claude-haiku-5-5\n`), r.stdout);
+  assert.ok(r.stdout.includes(`  team/commits: 1 delivery in 1 session, last 2026-11-17T10:00:00.000Z\n     models: claude-haiku-5-5 1\n     scopes: (none) 1\n     places: attended 1\n     events: session-start 1\n     text: ${teamText.length} characters for claude-haiku-5-5\n`), r.stdout);
   // And the models it is on for that no delivery carries are listed, under a heading that names the project.
   const idle = r.stdout.slice(r.stdout.indexOf(neverHeading(`${config}, with the project ${projectFile}`)));
   assert.ok(idle.length > 0 && idle.startsWith('On in'), r.stdout);
-  assert.match(idle, /^ {2}team\/commits for claude-sonnet-5-5 \(scopes: every scope; places: session, unattended, subagent\)$/m);
+  assert.match(idle, /^ {2}team\/commits for claude-sonnet-5-5 \(scopes: every scope; places: attended, unattended, subagent\)$/m);
   assert.doesNotMatch(idle, /team\/commits for claude-haiku-5-5/);
 
   const json = JSON.parse(runCli(['report', '--json'], { ...env, CLAUDE_PROJECT_DIR: repo }).stdout) as Record<string, any>;

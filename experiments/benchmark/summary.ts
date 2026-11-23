@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs';
+import { placeName } from '../../src/core/types.js';
 import { defaultOnRules, ownShare } from './conditions.js';
 import { PROBE, type Delivery } from './delivery.js';
 import type { Grade } from './judge.js';
@@ -50,7 +51,7 @@ export function readResults(dir: string): Results {
 export function expectedRules(model: string, scope: string, place: string): string[] {
   return defaultOnRules(model)
     .filter((r) => !r.scopes || r.scopes.includes('*') || r.scopes.includes(scope))
-    .filter((r) => !r.where || r.where.includes(place))
+    .filter((r) => !r.where || r.where.some((w) => (placeName(w) ?? w) === (placeName(place) ?? place)))
     .map((r) => r.id);
 }
 

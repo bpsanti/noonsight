@@ -184,7 +184,7 @@ The judgment calls with a cost the source measured come first: `fable-5-2/finish
 
 ## Rules
 
-A rule applies to the scopes it lists, or to every scope, and to the places it lists: `session` (a session someone is watching), `unattended` (a session nobody is watching) and `subagent` (the task of a subagent).
+A rule applies to the scopes it lists, or to every scope, and to the places it lists: `attended` (a session someone is watching), `unattended` (a session nobody is watching) and `subagent` (the task of a subagent).
 Each rule below gives its scopes, why, and the basis of that choice, by the principles in [How the rules are scoped](#how-the-rules-are-scoped).
 A rule on by default also says what the rule effect experiment ([experiments/rules](../../experiments/rules/README.md)) measured when noonsight delivered it.
 The 2026-11-16 samples are small, so they give a direction, not a significant result; the 2026-11-19 run tested three rules again with 30 runs per arm and task, against comparisons fixed before it ran.
@@ -224,7 +224,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `fable-5-2/code-ownership`
 
-- Off by default. Places: `session`, `unattended`.
+- Off by default. Places: `attended`, `unattended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Say who owns the code", read 2026-11-16.
 - Effect: On small coding tasks, duplicated code was consolidated into one shared function in about 75 percent of runs, against under 10 percent without the sentence.
 - Cost: Output tokens rose by about 70 to 80 percent, and the model made changes nobody asked for, many of them new tests and documentation, and in some runs changed how an existing feature behaves.
@@ -238,7 +238,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `fable-5-2/progress-updates`
 
-- Off by default. Places: `session`.
+- Off by default. Places: `attended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-fable-5-2, section "Keep users informed during long turns: Signal intent", read 2026-11-16.
 - Effect: On coding tasks, the model wrote a message before its first tool call in every run.
 - Cost: Output tokens per task rose by roughly 20 percent.
@@ -269,7 +269,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `opus-5-5/progress-updates`
 
-- Off by default. Places: `session`.
+- Off by default. Places: `attended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "User-facing progress updates (the third lever)", read 2026-11-16.
 - Effect: More frequent and predictable updates, such as a line of intent before the first tool call and a recap at the end; helps most where a person is in the loop.
 - Cost: Not reported by the source.
@@ -281,7 +281,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `opus-5-5/explore-before-acting`
 
-- Off by default. Places: `session`, `unattended`.
+- Off by default. Places: `attended`, `unattended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-opus-5-5, section "Explore context in multiapp workflows", read 2026-11-16.
 - Effect: On automation tasks across several connected apps, noticeably more tasks were completed correctly, at medium and at max effort.
 - Cost: Slightly more tool calls and tokens. Because the model acts on what it finds, keep untrusted content out of what it searches.
@@ -314,7 +314,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `sonnet-5-5/stay-in-scope`
 
-- On by default. Places: `session`, `unattended`, `subagent`.
+- On by default. Places: `attended`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Unrequested additions when coding", read 2026-11-16.
 - Effect: Fewer tests, documentation and supporting files that nobody asked for; at xhigh and max effort, smaller changes overall. The source notes that most teams welcome these additions, so the rule only applies to well-scoped changes.
 - Cost: Not reported by the source.
@@ -330,7 +330,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `sonnet-5-5/verify-changes`
 
-- On by default. Places: `session`, `unattended`, `subagent`.
+- On by default. Places: `attended`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Verification on coding tasks", read 2026-11-16.
 - Effect: At low effort, skipped or superficial checks became rare, with no measurable change in task quality.
 - Cost: Slightly higher cost per task.
@@ -346,7 +346,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `sonnet-5-5/no-self-review-rounds`
 
-- Off by default. Places: `session`, `unattended`, `subagent`.
+- Off by default. Places: `attended`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Thoroughness at xhigh and max effort", read 2026-11-16.
 - Effect: On coding tasks at max effort, the model stopped launching reviewer subagents, with no change in quality; review rounds the main agent starts itself became less frequent. It only matters at xhigh and max effort.
 - Cost: Session cost fell by about a third: a saving, not a cost.
@@ -361,7 +361,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `sonnet-5-5/ideas-first`
 
-- Off by default. Places: `session`.
+- Off by default. Places: `attended`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Steer initiative and scope: Open-ended requests", read 2026-11-16.
 - Effect: On open-ended requests, the model gives ideas or a plan and stops, instead of starting to build.
 - Cost: Not reported by the source.
@@ -373,7 +373,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `sonnet-5-5/check-current-facts`
 
-- Off by default. Places: `session`, `unattended`, `subagent`.
+- Off by default. Places: `attended`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5-5, section "Tool use in chat and knowledge work", read 2026-11-16.
 - Effect: The model searches for details that may have changed since its training instead of answering from training knowledge; matters most for research and support work.
 - Cost: Not reported by the source.
@@ -406,7 +406,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `haiku-5-5/verify-changes`
 
-- On by default. Places: `session`, `unattended`, `subagent`.
+- On by default. Places: `attended`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Tell coding agents to verify their changes", read 2026-11-16.
 - Effect: The model checked its changes more often, and its performance improved.
 - Cost: More tokens; the source gives no figure.
@@ -421,7 +421,7 @@ The 2026-11-16 samples are small, so they give a direction, not a significant re
 
 #### `haiku-5-5/search-recent-facts`
 
-- Off by default. Places: `session`, `unattended`, `subagent`.
+- Off by default. Places: `attended`, `unattended`, `subagent`.
 - Source: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-haiku-5-5, section "Accurate search results", read 2026-11-16.
 - Effect: More searches on questions whose answers had changed; on prompts that need no search, it added searches in only 0 to 3 percent of tries. The source pairs it with today's date in the context.
 - Cost: Only the extra searches; the source gives no other figure.

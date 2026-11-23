@@ -131,8 +131,8 @@ test('every combination of scope and place must fit the delivery limit, with roo
         'claude-haiku-5-5': {
           use: 'custom',
           add: [
-            { id: 'a', file: 'a.md', where: ['session'] },
-            { id: 'b', file: 'b.md', scopes: ['review'], where: ['session'] },
+            { id: 'a', file: 'a.md', where: ['attended'] },
+            { id: 'b', file: 'b.md', scopes: ['review'], where: ['attended'] },
           ],
         },
       },
@@ -140,7 +140,7 @@ test('every combination of scope and place must fit the delivery limit, with roo
     { 'a.md': big, 'b.md': big },
   );
   assert.equal(problems.length, 1, problems.join('\n'));
-  assertProblem(problems, /^\/models\/claude-haiku-5-5: the rules delivered for scope "review" in place "session" come to \d+ characters; the limit is 9500 \(Claude Code's 10000, less 500 kept for the model-change note\)$/);
+  assertProblem(problems, /^\/models\/claude-haiku-5-5: the rules delivered for scope "review" in place "attended" come to \d+ characters; the limit is 9500 \(Claude Code's 10000, less 500 kept for the model-change note\)$/);
 });
 
 test('a text exactly at the limit is accepted', () => {

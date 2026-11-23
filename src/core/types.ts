@@ -1,9 +1,29 @@
 // Data the core works on. The core never reads files, the network, the clock or any state:
 // the configuration loader builds these values, and the core only computes over them.
 
-/** Where the delivered text will be read. */
-export const PLACES = ['session', 'unattended', 'subagent'] as const;
+/**
+ * Where the delivered text will be read.
+ *   attended    a session someone is watching.
+ *   unattended  a session nobody is watching.
+ *   subagent    a subagent's task.
+ */
+export const PLACES = ['attended', 'unattended', 'subagent'] as const;
 export type Place = (typeof PLACES)[number];
+
+/** The word a rule's "where" may give alone for every place. */
+export const ALL_PLACES = 'all';
+
+/**
+ * Earlier names of places, still read where a place is written: in "where", on the command line, and
+ * in the decision log. "session" is the earlier name of "attended": configurations and logs written
+ * with it keep their meaning.
+ */
+export const PLACE_ALIASES: Readonly<Record<string, Place>> = { session: 'attended' };
+
+/** A place written by its name or an earlier one, as its current name; null when it names no place. */
+export function placeName(value: string): Place | null {
+  return (PLACES as readonly string[]).includes(value) ? (value as Place) : (PLACE_ALIASES[value] ?? null);
+}
 
 /** Scope marker for a rule that applies to every task scope. */
 export const ANY_SCOPE = '*';

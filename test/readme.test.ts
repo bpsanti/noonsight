@@ -228,3 +228,22 @@ test('the package holds what the README\'s commands need once installed from npm
   const pkg = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'package.json'), 'utf8'));
   assert.equal(pkg.bin.noonsight, 'dist/src/cli.js');
 });
+
+/** A preset rule's row in the README's table of the preset's rules, written from preset.json. */
+function presetRow(r: { id: string; scopes: string[]; where: string[]; triggers?: string[]; enabled?: boolean }): string {
+  const code = (xs: readonly string[]): string => xs.map((x) => `\`${x}\``).join(', ');
+  const scopes = r.scopes.includes('*') ? 'every scope' : code(r.scopes);
+  return `| \`${r.id}\` | ${scopes} | ${code(r.where)} | ${r.triggers?.length ? code(r.triggers) : 'none'} | ${r.enabled === false ? 'off' : 'on'} |`;
+}
+
+test('README: the table of the preset\'s rules gives every rule of preset.json, in its order, with its scopes, places, triggers and whether it ships on', () => {
+  const preset = JSON.parse(fs.readFileSync(path.join(PACKAGE_ROOT, 'presets', 'claude', 'preset.json'), 'utf8'));
+  const expected = Object.values<any>(preset.models).flatMap((m) => m.rules.map(presetRow));
+  const section = README.slice(README.indexOf("## The preset's rules"), README.indexOf('\n## ', README.indexOf("## The preset's rules") + 1));
+  const rows = section.split('\n').filter((l) => /^\| `[a-z0-9-]+\/[a-z0-9-]+` \|/.test(l));
+  assert.deepEqual(rows, expected);
+  // The count the README gives of the rules for attended sessions.
+  const rules = Object.values<any>(preset.models).flatMap((m) => m.rules as { where: string[] }[]);
+  const attended = rules.filter((r) => r.where.includes('attended')).length;
+  assert.ok(README.includes(`${attended} of its ${rules.length} rules list \`attended\``), `the README gives ${attended} of ${rules.length} rules for attended sessions`);
+});

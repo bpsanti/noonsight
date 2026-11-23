@@ -335,12 +335,20 @@ test('one command on a clean machine: writes the configuration, installs in ever
   const receives = first.stdout.slice(first.stdout.indexOf('Each declared model receives'), first.stdout.indexOf('\nok: '));
   assert.deepEqual(receives.split('\n'), [
     'Each declared model receives, with no scope:',
-    '  claude-fable-5-2: watched session: nothing; unattended session: fable-5-2/low-context-report; subagent: fable-5-2/low-context-report',
-    '  claude-opus-5-5: watched session: nothing; unattended session: opus-5-5/unattended-run; subagent: nothing',
-    '  claude-sonnet-5-5: watched session: nothing, then sonnet-5-5/verify-changes once it edits tracked code (code-edit); ' +
-      'unattended session: sonnet-5-5/carry-through, then sonnet-5-5/verify-changes once it edits tracked code (code-edit); subagent: sonnet-5-5/carry-through',
-    '  claude-haiku-5-5: watched session: nothing, then haiku-5-5/verify-changes once it edits tracked code (code-edit); ' +
-      'unattended session: haiku-5-5/carry-through, then haiku-5-5/verify-changes once it edits tracked code (code-edit); subagent: haiku-5-5/carry-through',
+    // A place with nothing names the preset rules that are off there, and how such a place gets rules.
+    '  claude-fable-5-2: attended session: nothing (off: fable-5-2/code-ownership, fable-5-2/progress-updates); ' +
+      'unattended session: fable-5-2/low-context-report; subagent: fable-5-2/low-context-report. ' +
+      'Your own rules without "where" are delivered in every place, the attended session included; "enable" turns on a rule that is off.',
+    '  claude-opus-5-5: attended session: nothing (off: opus-5-5/progress-updates, opus-5-5/explore-before-acting); ' +
+      'unattended session: opus-5-5/unattended-run; subagent: nothing. ' +
+      'Your own rules without "where" are delivered in every place, the attended session and subagent included; "enable" turns on a rule that is off.',
+    '  claude-sonnet-5-5: attended session: nothing (off: sonnet-5-5/no-self-review-rounds, sonnet-5-5/ideas-first, sonnet-5-5/check-current-facts), ' +
+      'then sonnet-5-5/verify-changes once it edits tracked code (code-edit); ' +
+      'unattended session: sonnet-5-5/carry-through, then sonnet-5-5/verify-changes once it edits tracked code (code-edit); subagent: sonnet-5-5/carry-through. ' +
+      'Your own rules without "where" are delivered in every place, the attended session included; "enable" turns on a rule that is off.',
+    '  claude-haiku-5-5: attended session: nothing (off: haiku-5-5/search-recent-facts), then haiku-5-5/verify-changes once it edits tracked code (code-edit); ' +
+      'unattended session: haiku-5-5/carry-through, then haiku-5-5/verify-changes once it edits tracked code (code-edit); subagent: haiku-5-5/carry-through. ' +
+      'Your own rules without "where" are delivered in every place, the attended session included; "enable" turns on a rule that is off.',
     '  A session is unattended when it runs headless, as `claude -p` and the Agent SDK do, or when a variable of `session.unattended_when_env` is set; ' +
       "set it to your CI's or orchestrator's variable so the interactive sessions nobody watches are unattended too.",
     '  A rule limited to scopes adds to these only in one of its scopes: a session takes its scope from `NOONSIGHT_SCOPE` or `noonsight run --scope`, ' +

@@ -17,7 +17,10 @@ import {
   DEFAULT_SUBAGENT_SETTINGS,
   DELIVERY_TEXT_LIMIT,
   MATCHER_FLAGS,
+  ALL_PLACES,
+  PLACE_ALIASES,
   PLACES,
+  placeName,
   ROUTE_ALIASES,
   ROUTE_TARGETS,
   RULES_TEXT_LIMIT,
@@ -67,7 +70,8 @@ export interface RawUserRule {
   id: string;
   file: string;
   scopes?: string[];
-  where?: Place[];
+  /** Places, an earlier name of one, or "all" alone; see placesOf. */
+  where?: string[];
   triggers?: Trigger[];
 }
 /** A rule of a model's own "add", which alone may replace a preset rule. */
@@ -119,7 +123,7 @@ interface RawPresetRule {
   id: string;
   file: string;
   scopes: string[];
-  where: Place[];
+  where: string[];
   triggers?: Trigger[];
   renamed_from?: string[];
   enabled?: boolean;
@@ -530,7 +534,7 @@ function build(
       taken.add(u.id);
       const base = replaced.get(i);
       const ruleScopes = u.scopes ?? base?.scopes ?? [ANY_SCOPE];
-      const where = u.where ?? base?.where ?? [...PLACES];
+      const where = placesOf(u.where, `${ruleAt}/where`, report) ?? base?.where ?? [...PLACES];
       const triggers = u.triggers ?? base?.triggers ?? [];
       checkScopes(ruleScopes, scopes, `${ruleAt}/scopes`, report);
       const triggersFrom = u.triggers === undefined && base !== undefined ? base.id : undefined;
@@ -642,7 +646,7 @@ function loadAllModels(
     if (ids.has(u.id)) report(`${at}/id`, `rule id "${u.id}" is used more than once in "all_models"`);
     ids.add(u.id);
     const ruleScopes = u.scopes ?? [ANY_SCOPE];
-    const where = u.where ?? [...PLACES];
+    const where = placesOf(u.where, `${at}/where`, report) ?? [...PLACES];
     const triggers = u.triggers ?? [];
     checkScopes(ruleScopes, scopes, `${at}/scopes`, report);
     checkTriggers(ruleScopes, where, triggers, `${at}/triggers`, report);
@@ -697,14 +701,15 @@ function loadPreset(name: string, presetDir: string, version: string | null, nee
       if (ids.has(r.id)) report(`${ruleAt}/id`, `rule id "${r.id}" is used more than once for ${key}`);
       ids.add(r.id);
       checkScopes(r.scopes, scopes, `${ruleAt}/scopes`, report);
-      checkTriggers(r.scopes, r.where, r.triggers ?? [], `${ruleAt}/triggers`, report);
+      const where = placesOf(r.where, `${ruleAt}/where`, report) ?? [...PLACES];
+      checkTriggers(r.scopes, where, r.triggers ?? [], `${ruleAt}/triggers`, report);
       const text = readRuleText(path.resolve(presetDir, r.file), `${ruleAt}/file`, report);
       if (text !== undefined)
         rules.push({
           id: r.id,
           origin: 'preset',
           scopes: r.scopes,
-          where: r.where,
+          where,
           triggers: r.triggers ?? [],
           text,
           enabled: r.enabled ?? true,
@@ -885,6 +890,29 @@ function checkRouteModels(
     });
 }
 
+/**
+ * A rule's places as "where" writes them: each place by its name or an earlier one, such as
+ * "session" for "attended", or "all" alone for every place. Undefined when "where" is not given.
+ */
+function placesOf(raw: readonly string[] | undefined, at: string, report: (at: string, message: string) => void): Place[] | undefined {
+  if (raw === undefined) return undefined;
+  if (raw.includes(ALL_PLACES)) {
+    if (raw.length > 1) report(at, `"${ALL_PLACES}" already covers every place; list it alone`);
+    return [...PLACES];
+  }
+  const places: Place[] = [];
+  for (const value of raw) {
+    const place = placeName(value);
+    if (place === null) continue; // The schema already refused it.
+    if (!places.includes(place)) places.push(place);
+    else {
+      const earlier = Object.keys(PLACE_ALIASES).find((name) => PLACE_ALIASES[name] === place && raw.includes(name));
+      report(at, `names the place "${place}" twice${earlier === undefined ? '' : ` ("${earlier}" is its earlier name)`}`);
+    }
+  }
+  return places;
+}
+
 function checkScopes(
   ruleScopes: readonly string[],
   declared: { has(name: string): boolean },
@@ -911,7 +939,7 @@ function checkTriggers(
   if (triggers.length === 0) return;
   const from = inheritedFrom === undefined ? '' : ` (the rule takes its triggers from "${inheritedFrom}", which it replaces; give "triggers": [] to drop them)`;
   if (ruleScopes.includes(ANY_SCOPE)) report(at, `the rule is for every scope ("${ANY_SCOPE}"), so it already reaches every session; a trigger adds nothing${from}`);
-  if (!where.some((p) => p !== 'subagent')) report(at, `a trigger acts only in a session, but the rule is only for the place "subagent"; add "session" or "unattended" to "where"${from}`);
+  if (!where.some((p) => p !== 'subagent')) report(at, `a trigger acts only in a session, but the rule is only for the place "subagent"; add "attended" or "unattended" to "where"${from}`);
 }
 
 /** The trigger sets a delivery can be made with: none, and every trigger revealed. */

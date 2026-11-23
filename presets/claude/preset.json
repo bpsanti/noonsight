@@ -146,7 +146,7 @@
             "build"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended"
           ],
           "enabled": false,
@@ -165,7 +165,7 @@
             "*"
           ],
           "where": [
-            "session"
+            "attended"
           ],
           "enabled": false,
           "source": {
@@ -204,7 +204,7 @@
             "*"
           ],
           "where": [
-            "session"
+            "attended"
           ],
           "enabled": false,
           "source": {
@@ -222,7 +222,7 @@
             "*"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended"
           ],
           "enabled": false,
@@ -263,7 +263,7 @@
             "routine"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended",
             "subagent"
           ],
@@ -284,7 +284,7 @@
             "routine"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended",
             "subagent"
           ],
@@ -307,7 +307,7 @@
             "routine"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended",
             "subagent"
           ],
@@ -327,7 +327,7 @@
             "*"
           ],
           "where": [
-            "session"
+            "attended"
           ],
           "enabled": false,
           "source": {
@@ -346,7 +346,7 @@
             "digest"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended",
             "subagent"
           ],
@@ -390,7 +390,7 @@
             "routine"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended",
             "subagent"
           ],
@@ -413,7 +413,7 @@
             "digest"
           ],
           "where": [
-            "session",
+            "attended",
             "unattended",
             "subagent"
           ],

@@ -4,7 +4,7 @@
 //   Session    scope: NOONSIGHT_SCOPE, when whoever starts the session exports it; else none.
 //              place: unattended when a variable named in session.unattended_when_env is set, or when
 //              Claude Code runs headless (claude -p, the Agent SDK) and session.headless_is_unattended
-//              is on, as it is by default; else session.
+//              is on, as it is by default; else attended.
 //   Subagent   scope: the scope whose matcher matches earliest in the task text; else none. Never
 //              inherited from the session.
 //
@@ -66,13 +66,13 @@ export function headlessEnv(env: Readonly<Record<string, string | undefined>>): 
 /**
  * A session's place: unattended when any variable in session.unattended_when_env is set and not empty,
  * which is named first, or when the session runs headless and session.headless_is_unattended is on;
- * else session. Whether it runs headless is read from the environment its hooks get, unless the caller
+ * else attended. Whether it runs headless is read from the environment its hooks get, unless the caller
  * knows better, as the launcher does for the session it is about to start.
  */
 export function sessionPlace(config: Config, env: Readonly<Record<string, string | undefined>>, headless = headlessEnv(env)): PlaceChoice {
   const name = config.session.unattendedWhenEnv.find((n) => (env[n] ?? '') !== '');
   if (name !== undefined) return { place: 'unattended', because: 'env', env: name };
-  return headless && config.session.headlessIsUnattended ? { place: 'unattended', because: 'headless' } : { place: 'session' };
+  return headless && config.session.headlessIsUnattended ? { place: 'unattended', because: 'headless' } : { place: 'attended' };
 }
 
 /**

@@ -198,11 +198,11 @@ function finishSetup(setupLines: readonly string[], wroteConfig: boolean, target
  */
 function receives(env: Env, home: string): string[] {
   const file = configPath(env, home);
-  const { config } = loadConfigDetails(file, { project: projectFor(env.CLAUDE_PROJECT_DIR || process.cwd(), file, stateDir(home)) }, env);
+  const details = loadConfigDetails(file, { project: projectFor(env.CLAUDE_PROJECT_DIR || process.cwd(), file, stateDir(home)) }, env);
   return [
     'Each declared model receives, with no scope:',
-    ...receivesLines(config).map((l) => `  ${l}`),
-    ...changeLines(config).map((l) => `  ${l}`),
+    ...receivesLines(details).map((l) => `  ${l}`),
+    ...changeLines(details).map((l) => `  ${l}`),
   ];
 }
 

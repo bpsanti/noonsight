@@ -46,7 +46,7 @@ The launcher decides as the `SessionStart` hook does for a session that reports 
 2. With routing on for the launcher, the scope may add `--model` and `--effort` to the claude arguments ([Routing](#routing)).
 3. The model is the one Claude Code will start with: the `--model` argument among the claude arguments, else `ANTHROPIC_MODEL`, else the `model` setting of the highest-ranked settings file, with aliases resolved the same way.
    The launcher reads the arguments exactly as it passes them, routed ones included, so the limits of reading a command line on macOS do not apply to it.
-4. The place is `unattended` when a variable of `session.unattended_when_env` is set, or when the command line gives `-p` or `--print` (before a `--`) and `session.headless_is_unattended` is on, since Claude Code runs that session headless and tells its hooks so; else `session`.
+4. The place is `unattended` when a variable of `session.unattended_when_env` is set, or when the command line gives `-p` or `--print` (before a `--`) and `session.headless_is_unattended` is on, since Claude Code runs that session headless and tells its hooks so; else `attended`.
 
 When that decision has rules, the launcher writes them, in the same envelope the hooks use, to a file in `~/.local/state/noonsight/launch/`, and starts:
 

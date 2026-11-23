@@ -78,7 +78,7 @@
       "additionalProperties": false,
       "properties": {
         "unattended_when_env": {
-          "description": "Environment variables that mark a session as unattended (the place \"unattended\") when any of them is set and not empty in the environment Claude Code runs in. With none set, a session is in the place \"session\", unless it runs headless and \"headless_is_unattended\" is true.",
+          "description": "Environment variables that mark a session as unattended (the place \"unattended\") when any of them is set and not empty in the environment Claude Code runs in. With none set, a session is in the place \"attended\", unless it runs headless and \"headless_is_unattended\" is true.",
           "type": "array",
           "uniqueItems": true,
           "items": {
@@ -89,7 +89,7 @@
           "default": []
         },
         "headless_is_unattended": {
-          "description": "Whether a headless run, such as claude -p or the Agent SDK, is in the place \"unattended\": nobody can answer it mid-turn. Claude Code marks such a run in the environment of its hooks. false leaves it in the place \"session\" unless a variable of \"unattended_when_env\" is set.",
+          "description": "Whether a headless run, such as claude -p or the Agent SDK, is in the place \"unattended\": nobody can answer it mid-turn. Claude Code marks such a run in the environment of its hooks. false leaves it in the place \"attended\" unless a variable of \"unattended_when_env\" is set.",
           "type": "boolean",
           "default": true
         }
@@ -308,9 +308,9 @@
           "default": ["*"]
         },
         "where": {
-          "description": "Places the rule applies to.",
+          "description": "Places the rule applies to: \"attended\", \"unattended\" and \"subagent\", or [\"all\"] for every place.",
           "$ref": "#/$defs/ruleWhere",
-          "default": ["session", "unattended", "subagent"]
+          "default": ["all"]
         },
         "triggers": {
           "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes, once the session does one of them. code-edit: the session edited a code file the project's git already tracks. Only for a rule that is cheap when the action was not what the scopes mean, and never for a rule for every scope.",
@@ -418,8 +418,8 @@
       "enum": ["code-edit"]
     },
     "place": {
-      "description": "session: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task.",
-      "enum": ["session", "unattended", "subagent"]
+      "description": "attended: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task. all: every place, listed alone. session: the earlier name of attended, still read.",
+      "enum": ["attended", "unattended", "subagent", "all", "session"]
     }
   }
 }

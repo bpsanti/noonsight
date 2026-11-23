@@ -11,7 +11,7 @@ import type { Decision, MatchedDecision } from '../src/core/types.js';
 import { FIXTURES, LAB_CONFIG, LAB_PRESETS, tempTree } from './helpers.js';
 
 const lab = loadConfig(LAB_CONFIG, { presetsDir: LAB_PRESETS });
-const session = (model: string, scope: string | null = null): Decision => resolve(lab, { model, scope, place: 'session' });
+const session = (model: string, scope: string | null = null): Decision => resolve(lab, { model, scope, place: 'attended' });
 const matched = (d: Decision): MatchedDecision => {
   assert.equal(d.status, 'matched', JSON.stringify(d));
   return d as MatchedDecision;
@@ -62,7 +62,7 @@ test('scope prototype: a model that was not reported', () => {
 
 test('scope prototype: the same request always gives the same text and hash', () => {
   const a = matched(session('claude-sonnet-5-5', 'investigate'));
-  const b = matched(resolve(loadConfig(LAB_CONFIG, { presetsDir: LAB_PRESETS }), { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' }));
+  const b = matched(resolve(loadConfig(LAB_CONFIG, { presetsDir: LAB_PRESETS }), { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'attended' }));
   assert.equal(a.sha256, b.sha256);
   assert.equal(a.text, b.text);
   assert.match(a.sha256, /^[0-9a-f]{16}$/);
@@ -77,10 +77,10 @@ test('scope prototype: disable removes a preset rule; with nothing left the resu
     },
   });
   const cfg = loadConfig(path.join(dir, 'noonsight.json'), { presetsDir: LAB_PRESETS });
-  assert.deepEqual(matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' })).rules, [
+  assert.deepEqual(matched(resolve(cfg, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'attended' })).rules, [
     'sonnet/investigate',
   ]);
-  const d = resolve(cfg, { model: 'claude-sonnet-5-5', place: 'session' });
+  const d = resolve(cfg, { model: 'claude-sonnet-5-5', place: 'attended' });
   assert.equal(d.status, 'none');
   assert.equal(d.status === 'none' && d.reason, 'no-rule-applies');
 });

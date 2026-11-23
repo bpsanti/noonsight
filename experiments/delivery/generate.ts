@@ -165,7 +165,7 @@ export function showStep(s: Step): string {
 
 /** One line a reader can follow: `start(haiku, scope=none, unattended) > /model sonnet > turn`. */
 export function show(spec: Sequence): string {
-  return `start(${spec.model}, scope=${spec.scope ?? 'none'}, ${spec.unattended ? 'unattended' : 'session'}) > ${spec.steps.map(showStep).join(' > ')}`;
+  return `start(${spec.model}, scope=${spec.scope ?? 'none'}, ${spec.unattended ? 'unattended' : 'attended'}) > ${spec.steps.map(showStep).join(' > ')}`;
 }
 
 /** Whether a sequence has two quiet steps in a row: the shape every delivery failure seen so far needs. */

@@ -42,7 +42,7 @@ test('normalize: suffixes, provider paths, Bedrock and Vertex forms, and case', 
 
 test('place: each place gets only the rules declared for it', () => {
   const at = (place: Place): readonly string[] => matched(resolve(lab, { model: 'claude-sonnet-5-5', place })).rules;
-  assert.deepEqual(at('session'), ['sonnet/general']);
+  assert.deepEqual(at('attended'), ['sonnet/general']);
   assert.deepEqual(at('unattended'), ['sonnet/general', 'sonnet/carry-through']);
   assert.deepEqual(at('subagent'), ['sonnet/general', 'sonnet/carry-through']);
 });
@@ -54,17 +54,17 @@ test('place and scope combine: scope rules come in declaration order with place-
 
 test('place: a model whose rules all live elsewhere resolves to none here', () => {
   const cfg = load({ version: 1, preset: 'lab', models: { 'claude-sonnet-5-5': { use: 'preset', disable: ['sonnet/general'] } } });
-  assert.equal(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'session' }).status, 'none');
+  assert.equal(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'attended' }).status, 'none');
   assert.deepEqual(matched(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'unattended' })).rules, ['sonnet/carry-through']);
 });
 
 test('enable turns on a preset rule that ships off', () => {
   const cfg = load({ version: 1, preset: 'lab', models: { 'claude-sonnet-5-5': { use: 'preset', enable: ['sonnet/progress-updates'] } } });
-  assert.deepEqual(matched(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'session' })).rules, [
+  assert.deepEqual(matched(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'attended' })).rules, [
     'sonnet/general',
     'sonnet/progress-updates',
   ]);
-  assert.deepEqual(matched(resolve(lab, { model: 'claude-sonnet-5-5', place: 'session' })).rules, ['sonnet/general']);
+  assert.deepEqual(matched(resolve(lab, { model: 'claude-sonnet-5-5', place: 'attended' })).rules, ['sonnet/general']);
 });
 
 test('user rules default to every scope and every place', () => {
@@ -72,24 +72,68 @@ test('user rules default to every scope and every place', () => {
     { version: 1, models: { 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'mine', file: 'mine.md' }] } } },
     { 'mine.md': 'MINE-1234\r\n' },
   );
-  for (const place of ['session', 'unattended', 'subagent'] as const) {
+  for (const place of ['attended', 'unattended', 'subagent'] as const) {
     const d = matched(resolve(cfg, { model: 'claude-haiku-5-5', scope: null, place }));
     assert.deepEqual(d.rules, ['mine']);
     assert.match(d.text, /\nMINE-1234\n<\/noonsight-rules>$/);
   }
 });
 
+test('a rule\'s "where" takes "all" alone for every place, and "session" as the earlier name of "attended"', () => {
+  const cfg = load(
+    {
+      version: 1,
+      models: {
+        'claude-haiku-5-5': {
+          use: 'custom',
+          add: [
+            { id: 'everywhere', file: 'r.md', where: ['all'] },
+            { id: 'old-name', file: 'r.md', where: ['session'] },
+            { id: 'new-name', file: 'r.md', where: ['attended'] },
+          ],
+        },
+      },
+    },
+    { 'r.md': '- A rule.' },
+  );
+  const entry = cfg.exact.get('claude-haiku-5-5');
+  assert.ok(entry?.use === 'rules');
+  assert.deepEqual(
+    entry.rules.map((r) => [r.id, r.where.join(',')]),
+    [
+      ['everywhere', 'attended,unattended,subagent'],
+      ['old-name', 'attended'],
+      ['new-name', 'attended'],
+    ],
+  );
+  const at = (place: Place): readonly string[] => matched(resolve(cfg, { model: 'claude-haiku-5-5', scope: null, place })).rules;
+  assert.deepEqual(at('attended'), ['everywhere', 'old-name', 'new-name']);
+  assert.deepEqual(at('subagent'), ['everywhere']);
+
+  // "all" beside another place, and one place named twice, under either name, are refused.
+  const refused = (where: string[]): readonly string[] => {
+    try {
+      load({ version: 1, models: { 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'r', file: 'r.md', where }] } } }, { 'r.md': '- A rule.' });
+      return [];
+    } catch (e) {
+      return (e as { problems: readonly string[] }).problems;
+    }
+  };
+  assert.deepEqual(refused(['all', 'subagent']), ['/models/claude-haiku-5-5/add/0/where: "all" already covers every place; list it alone']);
+  assert.deepEqual(refused(['session', 'attended']), ['/models/claude-haiku-5-5/add/0/where: names the place "attended" twice ("session" is its earlier name)']);
+});
+
 test('an undeclared scope means general rules, and the decision says which scope was ignored', () => {
-  const d = matched(resolve(lab, { model: 'claude-sonnet-5-5', scope: 'no-such-scope', place: 'session' }));
+  const d = matched(resolve(lab, { model: 'claude-sonnet-5-5', scope: 'no-such-scope', place: 'attended' }));
   assert.deepEqual(d.rules, ['sonnet/general']);
   assert.equal(d.scope, null);
   assert.equal(d.unknown_scope, 'no-such-scope');
   assert.doesNotMatch(d.text, /no-such-scope/);
-  assert.equal(matched(resolve(lab, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'session' })).unknown_scope, undefined);
+  assert.equal(matched(resolve(lab, { model: 'claude-sonnet-5-5', scope: 'investigate', place: 'attended' })).unknown_scope, undefined);
 });
 
 test('the delivered text is the envelope around the joined rules', () => {
-  const d = matched(resolve(lab, { model: 'claude-sonnet-5-5[1m]', scope: 'investigate', place: 'session' }));
+  const d = matched(resolve(lab, { model: 'claude-sonnet-5-5[1m]', scope: 'investigate', place: 'attended' }));
   const lines = d.text.split('\n');
   assert.equal(lines[0], '<noonsight-rules model="claude-sonnet-5-5" scope="investigate">');
   assert.equal(
@@ -98,7 +142,7 @@ test('the delivered text is the envelope around the joined rules', () => {
   );
   assert.equal(lines.at(-1), '</noonsight-rules>');
   assert.match(d.text, /SONNET-GEN-3306\.\n.*\n\n- The verification word for the Sonnet 5.5 investigation-scope/);
-  const general = matched(resolve(lab, { model: 'claude-sonnet-5-5', place: 'session' }));
+  const general = matched(resolve(lab, { model: 'claude-sonnet-5-5', place: 'attended' }));
   assert.equal(general.text.split('\n')[0], '<noonsight-rules model="claude-sonnet-5-5">');
 });
 
@@ -116,7 +160,7 @@ test('wildcards: an exact key beats any wildcard, and more literal text beats le
     { 'opus.md': 'OPUS-5-5' },
   );
   const key = (model: string): string | undefined => {
-    const d = resolve(cfg, { model, place: 'session' });
+    const d = resolve(cfg, { model, place: 'attended' });
     return d.status === 'undeclared' ? undefined : d.key;
   };
   assert.equal(key('claude-opus-5-5'), 'claude-opus-5-5');
@@ -127,23 +171,23 @@ test('wildcards: an exact key beats any wildcard, and more literal text beats le
 
 test('wildcards: "?" matches exactly one character and ties pick the same key every time', () => {
   const cfg = load({ version: 1, models: { 'claude-opus-?-5': { use: 'none' }, 'claude-opus-5-?': { use: 'none' } } });
-  const d = resolve(cfg, { model: 'claude-opus-5-5', place: 'session' });
+  const d = resolve(cfg, { model: 'claude-opus-5-5', place: 'attended' });
   assert.equal(d.status === 'none' && d.key, 'claude-opus-5-?');
-  assert.equal(resolve(cfg, { model: 'claude-opus-5-55', place: 'session' }).status, 'undeclared');
+  assert.equal(resolve(cfg, { model: 'claude-opus-5-55', place: 'attended' }).status, 'undeclared');
 });
 
 test('undeclared models carry a warning unless the configuration says to ignore them', () => {
   const warn = resolve(lab, { model: 'claude-fable-5-2', place: 'subagent' });
   assert.equal(warn.status === 'undeclared' && warn.warning, 'noonsight: model claude-fable-5-2 has no declared rules (no-entry, subagent)');
   const quiet = load({ version: 1, on_undeclared: 'ignore', models: {} });
-  const d = resolve(quiet, { model: 'claude-fable-5-2', place: 'session' });
+  const d = resolve(quiet, { model: 'claude-fable-5-2', place: 'attended' });
   assert.equal(d.status, 'undeclared');
   assert.equal(d.status === 'undeclared' && d.warning, undefined);
 });
 
 test('a configuration with no models declares nothing', () => {
   const cfg = load({ version: 1 });
-  assert.equal(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'session' }).status, 'undeclared');
+  assert.equal(resolve(cfg, { model: 'claude-sonnet-5-5', place: 'attended' }).status, 'undeclared');
 });
 
 test('the model-change note always fits the room kept for it, whatever the model names', () => {

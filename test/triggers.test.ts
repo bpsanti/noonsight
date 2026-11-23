@@ -158,7 +158,7 @@ function configTree(extra: Record<string, unknown> = {}, models: Record<string, 
             { id: 'user/other', file: 'other.md', scopes: ['investigate'] },
           ],
         },
-        'claude-haiku-5-5': { use: 'custom', add: [{ id: 'user/haiku-verify', file: 'haiku-verify.md', scopes: ['investigate'], where: ['session'], triggers: ['code-edit'] }] },
+        'claude-haiku-5-5': { use: 'custom', add: [{ id: 'user/haiku-verify', file: 'haiku-verify.md', scopes: ['investigate'], where: ['attended'], triggers: ['code-edit'] }] },
         'claude-opus-5-5': { use: 'none' },
         ...models,
       },
@@ -170,7 +170,7 @@ function configTree(extra: Record<string, unknown> = {}, models: Record<string, 
 
 test('the core: a rule that lists a revealed trigger applies whatever the scope, and only the rules a trigger adds are sent', () => {
   const config = loadConfig(configTree(), { presetsDir: LAB_PRESETS });
-  const base = { model: 'claude-sonnet-5-5', scope: null, place: 'session' } as const;
+  const base = { model: 'claude-sonnet-5-5', scope: null, place: 'attended' } as const;
   const without = resolve(config, base);
   assert.equal(without.status, 'matched');
   assert.deepEqual(without.status === 'matched' && without.rules, ['sonnet/general']);
@@ -201,7 +201,7 @@ test('the core: a rule that lists a revealed trigger applies whatever the scope,
     model: 'claude-sonnet-5-5',
     key: 'claude-sonnet-5-5',
     scope: 'investigate',
-    place: 'session',
+    place: 'attended',
   });
   // A rule without a trigger stays with its scopes.
   assert.ok(withTrigger.rules.every((id) => id !== 'user/other'));
@@ -221,7 +221,7 @@ test('the configuration: triggers are refused on a rule for every scope or for s
   const every = refused({ 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'x', file: 'verify.md', triggers: ['code-edit'] }] } });
   assert.deepEqual(every, ['/models/claude-haiku-5-5/add/0/triggers: the rule is for every scope ("*"), so it already reaches every session; a trigger adds nothing']);
   const subagent = refused({ 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'x', file: 'verify.md', scopes: ['investigate'], where: ['subagent'], triggers: ['code-edit'] }] } });
-  assert.deepEqual(subagent, ['/models/claude-haiku-5-5/add/0/triggers: a trigger acts only in a session, but the rule is only for the place "subagent"; add "session" or "unattended" to "where"']);
+  assert.deepEqual(subagent, ['/models/claude-haiku-5-5/add/0/triggers: a trigger acts only in a session, but the rule is only for the place "subagent"; add "attended" or "unattended" to "where"']);
   assert.match(refused({ 'claude-haiku-5-5': { use: 'custom', add: [{ id: 'x', file: 'verify.md', scopes: ['investigate'], triggers: ['deploy'] }] } }).join('\n'), /triggers\/0/);
 });
 
@@ -244,7 +244,7 @@ test('the configuration: a preset rule can list a trigger, and the delivered tex
           use: 'custom',
           add: [
             { id: 'a', file: 'a.md' },
-            { id: 'b', file: 'b.md', scopes: ['investigate'], where: ['session'], triggers: ['code-edit'] },
+            { id: 'b', file: 'b.md', scopes: ['investigate'], where: ['attended'], triggers: ['code-edit'] },
           ],
         },
       },
@@ -252,7 +252,7 @@ test('the configuration: a preset rule can list a trigger, and the delivered tex
   );
   assert.throws(
     () => loadConfig(path.join(big, 'noonsight.json'), { presetsDir: LAB_PRESETS }),
-    (e: unknown) => e instanceof ConfigError && e.problems.some((p) => /for no scope in place "session" once a session reveals code-edit come to \d+ characters/.test(p)),
+    (e: unknown) => e instanceof ConfigError && e.problems.some((p) => /for no scope in place "attended" once a session reveals code-edit come to \d+ characters/.test(p)),
   );
 });
 
@@ -297,7 +297,7 @@ test('a session with no scope gets the code-edit rules with its first edit of a 
   const line = lines[1] ?? {};
   assert.deepEqual(
     [line.event, line.tool_name, line.trigger, line.file, line.model, line.model_source, line.status, line.rules, line.triggered_rules, line.triggers, line.scope, line.place, line.delivered, line.warned],
-    ['file-edit', 'Edit', 'code-edit', 'src/app.ts', 'claude-sonnet-5-5', 'session-record', 'matched', ['user/verify'], ['user/verify'], ['code-edit'], null, 'session', 'rules', false],
+    ['file-edit', 'Edit', 'code-edit', 'src/app.ts', 'claude-sonnet-5-5', 'session-record', 'matched', ['user/verify'], ['user/verify'], ['code-edit'], null, 'attended', 'rules', false],
   );
   const record = JSON.parse(fs.readFileSync(path.join(l.dir, '.local', 'state', 'noonsight', 'triggers', `${SESSION}.code-edit.json`), 'utf8'));
   assert.deepEqual([record.trigger, record.tool, record.file], ['code-edit', 'Edit', 'src/app.ts']);

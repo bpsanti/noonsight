@@ -34,7 +34,10 @@ No rule is delivered in a place where Claude Code already sends the same advice;
 The preset's scopes declare no matchers, so a session takes one of them only from `NOONSIGHT_SCOPE` (which `noonsight run --scope` sets), and a subagent only once the user's file gives that scope a `match`.
 A task whose scope is not known receives only the preset rules for every scope; the rules that list scopes stay dormant until the scope is known, except that `sonnet-5-5/verify-changes` and `haiku-5-5/verify-changes` reach a session once it edits a code file of the project ([Triggers](#triggers)).
 [presets/claude/SOURCES.md](../presets/claude/SOURCES.md#how-the-rules-are-scoped) gives each rule's scopes, why, and whether that choice comes from a source or is a judgment.
-The places matter as much: every rule that ships on for Opus 5.5 and Fable 5.2, and the carry-through rules of Sonnet 5.5 and Haiku 5.5, are for unattended sessions or subagents, so a watched session on Opus or Fable receives nothing from the preset in any scope.
+The places matter as much.
+Most preset rules apply to attended sessions, the place where someone is watching, but the rules of Opus 5.5 and Fable 5.2 for that place ship off: `opus-5-5/progress-updates`, `opus-5-5/explore-before-acting`, `fable-5-2/progress-updates` and `fable-5-2/code-ownership`.
+Every rule that ships on for Opus 5.5 and Fable 5.2, and the carry-through rules of Sonnet 5.5 and Haiku 5.5, are for unattended sessions or subagents, so an attended session on Opus or Fable receives nothing from the preset in any scope until `enable` turns one of those rules on.
+The [README](../README.md#the-presets-rules) has a table of every preset rule with its scopes and places and whether it ships on.
 A headless run (`claude -p`, the Agent SDK) is unattended by default (`session.headless_is_unattended`), and `session.unattended_when_env` marks the other sessions nobody watches; `noonsight install` and `noonsight check` write out, per model, what each place receives.
 
 The preset also suggests a routing table, which applies only when the user turns routing on ([Routing](#routing)).
@@ -84,8 +87,8 @@ The preset also suggests a routing table, which applies only when the user turns
 | `scopes` | Scope name to a scope | Empty | Task scopes, added to the preset's. A scope with a preset scope's name keeps that scope's place in the order and replaces only the keys it gives. See [Scopes](#scopes). |
 | `scopes.<name>.description` | Text | None | What kind of task the scope covers. |
 | `scopes.<name>.match` | Regular expressions | Empty | Matchers run over a subagent's description and task text. A matcher that matches all six probe texts is refused; see [Scopes](#scopes). |
-| `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `session`, unless it runs headless and `session.headless_is_unattended` is `true`. Set it for the interactive sessions nobody watches, such as an orchestrator's workers, which Claude Code does not mark. |
-| `session.headless_is_unattended` | `true`, `false` | `true` | With `true`, a headless run, such as `claude -p` or the Agent SDK, is in the place `unattended`: nobody can answer it mid-turn. Claude Code marks such a run with `CLAUDE_CODE_SESSION_ATTENDED=0` in the environment of its hooks, a variable it does not document ([verification](verification/claude-code.md)); without that mark, a session is not headless. With `false`, a headless run is in the place `session` unless a variable of `session.unattended_when_env` is set. |
+| `session.unattended_when_env` | Environment variable names | Empty | A session is in the place `unattended` when any of these is set and not empty in the environment Claude Code runs in; otherwise it is in the place `attended`, unless it runs headless and `session.headless_is_unattended` is `true`. Set it for the interactive sessions nobody watches, such as an orchestrator's workers, which Claude Code does not mark. |
+| `session.headless_is_unattended` | `true`, `false` | `true` | With `true`, a headless run, such as `claude -p` or the Agent SDK, is in the place `unattended`: nobody can answer it mid-turn. Claude Code marks such a run with `CLAUDE_CODE_SESSION_ATTENDED=0` in the environment of its hooks, a variable it does not document ([verification](verification/claude-code.md)); without that mark, a session is not headless. With `false`, a headless run is in the place `attended` unless a variable of `session.unattended_when_env` is set. |
 | `subagents.delivery` | `prompt`, `off` | `prompt` | `prompt`: each subagent receives the rules for the model it will run on as it starts, without any change to the call that starts it ([hooks.md](hooks.md#subagents)). `off`: subagents are left alone. |
 | `subagents.permission` | `allow`, `ask`, `passthrough` | `allow` | The permission decision returned with a call whose model or effort routing changed; a call routing leaves alone is never changed. `allow` runs it without a prompt, though deny and ask rules still apply; `ask` has the person confirm it; `passthrough` returns none, and in auto mode Claude Code can then deny the changed call. In auto mode a changed call also costs the other calls of the same response their review ([hooks.md](hooks.md#routing)). |
 | `subagents.on_mismatch` | `warn`, `ignore` | `warn` | What to do when a subagent starts on another model than the one its rules were chosen for. The decision log records it either way. |
@@ -108,7 +111,7 @@ A user rule has these keys:
 | `id` | Required | A name for the rule, unique for each model that receives it, such as `team/commit-style`. |
 | `file` | Required | The rule text. |
 | `scopes` | `["*"]`, or the replaced rule's | The scopes the rule applies to, or `["*"]` for every scope. |
-| `where` | All three places, or the replaced rule's | The places the rule applies to: `session` (someone is watching), `unattended` (nobody is watching), `subagent` (a subagent's task, delivered by the subagent hooks). |
+| `where` | Every place, or the replaced rule's | The places the rule applies to: `attended` (a session someone is watching), `unattended` (a session nobody is watching), `subagent` (a subagent's task, delivered by the subagent hooks), or `["all"]` for every place, which is listed alone. `session`, the earlier name of `attended`, is still read, so a configuration written with it keeps its meaning. |
 | `triggers` | None, or the replaced rule's | Actions that also deliver the rule to a session whose scope is not one of the rule's scopes, once the session does one: `code-edit`. See [Triggers](#triggers). |
 | `replaces` | None | The id of a preset rule of the model that this rule replaces. Only in `models.<id>.add` of a model declared with `"use": "preset"`. See [Replacing a preset rule](#replacing-a-preset-rule). |
 
@@ -157,7 +160,7 @@ The limit on the delivered text (9,500 characters, see [Validation](#validation)
 Claude Code loads a `CLAUDE.md` in every session for any model, so a rule written there reaches the context reliably, and so does one delivered by noonsight.
 What noonsight adds is timing and proof.
 
-- **Timing.** A rule can be limited by scope, by place (`session`, `unattended`, `subagent`) and by trigger, so a niche rule arrives when its situation happens instead of sitting in the context all the time beside everything else in a `CLAUDE.md`.
+- **Timing.** A rule can be limited by scope, by place (`attended`, `unattended`, `subagent`) and by trigger, so a niche rule arrives when its situation happens instead of sitting in the context all the time beside everything else in a `CLAUDE.md`.
 - **Subagents.** A subagent receives the rules of the model it will run on, chosen for its own task.
 - **Proof.** The decision log and `noonsight report` show how often each rule was delivered, to which models, and which rules were never delivered ([hooks.md](hooks.md#the-decision-log)), which a `CLAUDE.md` cannot show.
 - **A checked budget.** The limit on the delivered text is checked for each model with the block's rules among its rules ([Validation](#validation)).
@@ -332,7 +335,7 @@ A decision has at most one scope, and where it comes from depends on who reads t
 
 | Reader | Scope | Place |
 | --- | --- | --- |
-| A session | `NOONSIGHT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it, as `noonsight run` does with the scope it finds ([launcher.md](launcher.md#what-it-adds)); else none. Rules that list a trigger the session revealed apply too ([Triggers](#triggers)) | `unattended` when a variable of `session.unattended_when_env` is set and not empty, or when the session runs headless (`claude -p`, the Agent SDK) and `session.headless_is_unattended` is `true`, as it is by default; else `session` |
+| A session | `NOONSIGHT_SCOPE` in the environment Claude Code starts with, when whoever starts the session sets it, as `noonsight run` does with the scope it finds ([launcher.md](launcher.md#what-it-adds)); else none. Rules that list a trigger the session revealed apply too ([Triggers](#triggers)) | `unattended` when a variable of `session.unattended_when_env` is set and not empty, or when the session runs headless (`claude -p`, the Agent SDK) and `session.headless_is_unattended` is `true`, as it is by default; else `attended` |
 | A subagent | The scope whose matcher matches earliest in its description and task text; else, with the classifier on, the scope the classifier gives ([The classifier](#the-classifier)); else none | Always `subagent` |
 
 A subagent's scope comes from its own task and is never taken from the session.
@@ -405,7 +408,7 @@ A rule with a measured cost or a side effect needs a named scope.
 
 - A session's triggers only grow: once revealed, a trigger holds for the rest of the session, after compaction, a resume and a `/model` switch, and the rules it brought stay in the conversation.
   Only the rules a trigger adds are delivered, once.
-- Triggers act only in a session (the places `session` and `unattended`); a subagent's scope comes from its own task, and the edits a subagent makes reveal nothing.
+- Triggers act only in a session (the places `attended` and `unattended`); a subagent's scope comes from its own task, and the edits a subagent makes reveal nothing.
 - The decision log names the trigger behind every rule it brought (`triggered_rules`), and the edit that revealed it, and `noonsight report` counts them, so a trigger that fires on the wrong edits shows there ([hooks.md](hooks.md#the-decision-log)).
 
 A rule takes part in a trigger only by listing it in its own `triggers`: a user rule without `triggers` reaches a session only by its scopes, and `disable` keeps a preset rule that lists one out of every session.
@@ -628,7 +631,7 @@ Beyond the schema, noonsight checks that:
 - every rule file exists and is not empty;
 - rule ids are unique for each model, counting the preset's rules, the rules of `all_models` and the model's own;
 - every scope a rule names is declared;
-- a rule that lists a trigger is not for every scope (`["*"]`, where a trigger adds nothing), and is for the place `session` or `unattended`, where triggers act;
+- a rule that lists a trigger is not for every scope (`["*"]`, where a trigger adds nothing), and is for the place `attended` or `unattended`, where triggers act;
 - every matcher is a valid regular expression, does not match all six probe texts listed under [Scopes](#scopes), and has none of the shapes listed under [Matchers that backtrack](#matchers-that-backtrack);
 - `enable`, `disable` and every `replaces` name rules the preset has for that model, by their id or by an id they had before a rename, and never the same rule twice; under `"on_preset_change": "warn"`, an entry that names a rule the version in `preset_version` had and the installed version dropped is left out and reported instead ([Preset updates](#preset-updates));
 - `replaces` appears only in `add` of a model declared with `"use": "preset"` ([Replacing a preset rule](#replacing-a-preset-rule));
@@ -677,11 +680,11 @@ It exits 0 when the version was written or already was the installed one, 1 when
 ## `noonsight resolve`
 
 ```text
-noonsight resolve <model> [scope] [session|unattended|subagent]
+noonsight resolve <model> [scope] [attended|unattended|subagent]
 ```
 
 Prints the decision as JSON, with the project configuration found from the current directory laid over the machine's, as for a session started there.
-The place defaults to `session`.
+The place defaults to `attended`; `session`, its earlier name, is also read.
 An empty scope (`""`) means no scope, so a place can be given without one, as in `noonsight resolve claude-sonnet-5-5 "" subagent`.
 
 | `status` | Meaning | Other fields |

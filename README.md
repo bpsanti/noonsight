@@ -16,7 +16,8 @@ It works through Claude Code's own hooks, reads only local files, and records ev
 ## What it guarantees, and what it does not
 
 **The claim.** In the delivery benchmark, 300 random Claude Code sessions starting on any of the four models and going through `/model`, `/compact`, `/clear`, resumes, subagents and code edits held their model's rules, and no other model's rules left unretired, on 99.9% (3,219 of 3,221) of the requests that had rules due ([D2](docs/evidence.md#d2)); 1 of 300 sessions broke that somewhere ([D1](docs/evidence.md#d1)).
-That run is Claude Code 2.1.328 against a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
+That run used a local stand-in for the API, so every request was read and none reached a model ([experiments/delivery](experiments/delivery/README.md)).
+Each result in this README carries the Claude Code version it was measured on, in its entry of [docs/evidence.md](docs/evidence.md).
 
 The fuzzer has found four failures of noonsight, F1 to F4, all fixed before that run; their shortest reproductions are in the corpus, which passes.
 The one failing session is the documented limit below.
@@ -42,10 +43,12 @@ A skill guarantees only its description until the model decides to open it ([S5]
 - Delivery is not obedience: a delivered rule is context, and Claude Code says the same of `CLAUDE.md` ([S3](docs/sources.md#s3)).
   [What the rules change](#what-the-rules-change) is a separate question, with data for the preset's rules alone.
 - Right after install, what a session receives from the preset depends on its model and its place, and `noonsight install` writes it out for each model.
+  Most preset rules apply to attended sessions, the place where someone is watching: 11 of its 16 rules list `attended` ([The preset's rules](#the-presets-rules)).
+  Opus 5.5's and Fable 5.2's rules for that place all ship off, so an attended session on either receives nothing from the preset until you turn one on with `enable`.
   A headless run, such as `claude -p` or the Agent SDK, is unattended by default and receives the preset's rules for that place: `unattended-run` on Opus 5.5, `low-context-report` on Fable 5.2, `carry-through` on Sonnet 5.5 and Haiku 5.5.
-  A watched session on Opus 5.5 or Fable 5.2 receives nothing, in any scope: every preset rule of theirs that ships on is for unattended runs or subagents.
-  A watched session on Sonnet 5.5 or Haiku 5.5 receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
-  So for a watched Opus or Fable session the gap is the place, which `session.unattended_when_env` closes for the interactive sessions a CI or an orchestrator runs, and for Sonnet and Haiku it is the scope.
+  An attended session on Sonnet 5.5 or Haiku 5.5 receives `verify-changes` once it edits a code file its git repository tracks, and their other rules only with a scope.
+  Your own rules reach every place unless their `where` limits them, attended sessions included.
+  noonsight counts an interactive session as attended unless a variable of `session.unattended_when_env` is set, so set it to a CI's or an orchestrator's variable for the interactive sessions nobody watches.
   [Your first delivered rule](#your-first-delivered-rule) shows how to give a session a scope.
 - Not measured: `/resume` inside a session, forks, plan mode, agent teams, `noonsight run`, routing, the classifier, project configurations, and subagents that edit files ([limits](experiments/delivery/README.md#limits)).
 - A known limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)).
@@ -71,7 +74,7 @@ This writes `~/.config/noonsight/noonsight.json` when there is none, adds the ho
 noonsight install
 ```
 
-Its output writes out, for each model, what a watched session, an unattended session and a subagent receive with no scope, `nothing` included, and how to change it.
+Its output writes out, for each model, what an attended session, an unattended session and a subagent receive with no scope, `nothing` included with the preset rules that are off there, and how to change it.
 
 See the exact text a model receives in a scope, before any session runs:
 
@@ -94,6 +97,7 @@ noonsight report
 ```
 
 The report lists each rule with how often it was delivered, to which models, scopes and places, and the rules that are on but were never delivered ([docs/hooks.md](docs/hooks.md#the-decision-log)).
+It reads deliveries from noonsight's decision log, which records what the hooks returned to Claude Code; it does not measure whether a rule changed what the model did, which takes an experiment such as those in [What the rules change](#what-the-rules-change).
 `noonsight uninstall` takes the hooks out again; [docs/install.md](docs/install.md) covers every install and how to undo it.
 
 ## Your own rules
@@ -104,7 +108,7 @@ A rule is a Markdown file and an entry that names it: an `id`, the `file`, and, 
 | Key | Values | How a session or subagent gets one |
 | --- | --- | --- |
 | `scopes` | The preset's `investigate`, `build`, `review`, `routine` and `digest`, any scope you declare under `scopes` with a `description` and `match` patterns, or `"*"` for every scope (the default) | A session from `NOONSIGHT_SCOPE` or `noonsight run --scope`; a subagent from the first `match` pattern found in its task, or from the classifier when you turn it on, since the preset's scopes have no patterns ([docs/configuration.md](docs/configuration.md#scopes)) |
-| `where` | `session`, `unattended`, `subagent`; all three by default | `unattended` for a headless run by default, or for a session started with a variable of `session.unattended_when_env` set; `subagent` for every subagent; `session` otherwise |
+| `where` | `attended`, `unattended`, `subagent`, or `all` for every place (the default); `session` is still read as the earlier name of `attended` | `unattended` for a headless run by default, or for a session started with a variable of `session.unattended_when_env` set; `subagent` for every subagent; `attended` otherwise, a session someone is watching |
 | `triggers` | `code-edit`, the only one today; none by default | Once the session edits a code file its git repository already tracks, whatever its scope ([docs/configuration.md](docs/configuration.md#triggers)) |
 
 For the machine, edit `~/.config/noonsight/noonsight.json`, which `noonsight install` wrote; a rule's `file` is relative to it:
@@ -143,15 +147,56 @@ Each person who clones the repository runs `noonsight trust` once in it, and unt
 `noonsight check` validates both files, and `noonsight resolve <model> [scope] [place]` prints the exact text a model receives there.
 [docs/usage.md](docs/usage.md#writing-a-rule) says how to write a rule, where it should live and how a [repository's rules](docs/usage.md#rules-for-one-repository) are shared, and [docs/configuration.md](docs/configuration.md#keys) gives every key.
 
+## The preset's rules
+
+Each rule of the preset, with the scopes and places it is for, the triggers that also deliver it, and whether it ships on.
+`noonsight models` lists the same with each rule's source, effect and cost, and [presets/claude/SOURCES.md](presets/claude/SOURCES.md) says why each has its scopes and places.
+
+| Rule | Scopes | Places | Triggers | Ships |
+| --- | --- | --- | --- | --- |
+| `fable-5-2/finish-work` | `investigate`, `build` | `subagent` | none | on |
+| `fable-5-2/low-context-report` | every scope | `unattended`, `subagent` | none | on |
+| `fable-5-2/code-ownership` | `build` | `attended`, `unattended` | none | off |
+| `fable-5-2/progress-updates` | every scope | `attended` | none | off |
+| `opus-5-5/unattended-run` | every scope | `unattended` | none | on |
+| `opus-5-5/progress-updates` | every scope | `attended` | none | off |
+| `opus-5-5/explore-before-acting` | every scope | `attended`, `unattended` | none | off |
+| `sonnet-5-5/carry-through` | every scope | `unattended`, `subagent` | none | on |
+| `sonnet-5-5/stay-in-scope` | `routine` | `attended`, `unattended`, `subagent` | none | on |
+| `sonnet-5-5/verify-changes` | `investigate`, `build`, `routine` | `attended`, `unattended`, `subagent` | `code-edit` | on |
+| `sonnet-5-5/no-self-review-rounds` | `build`, `routine` | `attended`, `unattended`, `subagent` | none | off |
+| `sonnet-5-5/ideas-first` | every scope | `attended` | none | off |
+| `sonnet-5-5/check-current-facts` | `investigate`, `digest` | `attended`, `unattended`, `subagent` | none | off |
+| `haiku-5-5/carry-through` | every scope | `unattended`, `subagent` | none | on |
+| `haiku-5-5/verify-changes` | `investigate`, `build`, `routine` | `attended`, `unattended`, `subagent` | `code-edit` | on |
+| `haiku-5-5/search-recent-facts` | `investigate`, `digest` | `attended`, `unattended`, `subagent` | none | off |
+
+Most of these rules list `attended`, the place where someone is watching.
+Opus 5.5's and Fable 5.2's rules for that place ship off, by the preset's rule that a rule with a high cost, a described side effect or a narrow use ships off ([SOURCES.md](presets/claude/SOURCES.md#how-the-rules-were-chosen)): `fable-5-2/code-ownership` raised output tokens by about 70 to 80 percent and made changes nobody asked for, `fable-5-2/progress-updates` raised them by roughly 20 percent, `opus-5-5/progress-updates` adds updates whose cost the source does not report, and `opus-5-5/explore-before-acting` is written for agents that work across connected apps.
+To turn one on, name it in `enable` in `~/.config/noonsight/noonsight.json`:
+
+```json
+{
+  "version": 1,
+  "preset_version": "1.3.1",
+  "models": {
+    "claude-opus-5-5": { "use": "preset", "enable": ["opus-5-5/progress-updates"] }
+  }
+}
+```
+
+`noonsight install` and `noonsight check` name, for each place a model receives nothing in, the preset rules that are off there.
+
 ## What the rules change
 
 Delivery is what noonsight guarantees; what a rule then changes depends on the rule, the model and the task.
 These results are for the preset's rules named in them; a rule of your own has no measured effect until you measure it.
-The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without ([experiments/rules](experiments/rules/README.md)):
+The rule effect experiment runs the same task with a model's preset rules, with one of them alone, and without, on Fable 5.2, Sonnet 5.5 and Haiku 5.5 ([experiments/rules](experiments/rules/README.md)):
 
 - One rule, `verify-changes` delivered alone, made Sonnet 5.5 and Haiku 5.5 run the tests after a precisely described one-file fix in 29 of 30 and 27 of 30 runs, where `carry-through` delivered alone did it in 0 of 30 and 0 of 30 ([R3](docs/evidence.md#r3)); without any rule, each model ran them in 0 of 30 runs ([R1](docs/evidence.md#r1)).
 - That extra work has a price: on Sonnet's fix, a run cost $0.0240 without rules and $0.0505 with `verify-changes` alone ([R6](docs/evidence.md#r6)).
 - Delivered as one sentence pointing to a file with its text, `verify-changes` was read in 120 of 120 runs and did as well as the rule inline ([R4](docs/evidence.md#r4)).
+- On Fable 5.2, `low-context-report` made the sentences of its final reports shorter, in mean words per sentence 12.3 against 16.4, 17.8 against 20.1, 12.2 against 16.2 with the rule and without, on a question, a bug and a feature ([R9](docs/evidence.md#r9)).
 - On a 13-ticket backlog with an open decision, `sonnet-5-5/carry-through` raised the runs that did every part from 9 of 40 to 32 of 40 ([R10](docs/evidence.md#r10)); Haiku's `carry-through` showed nothing there ([R11](docs/evidence.md#r11)).
 - Where the models already did the work, the rules changed nothing and still cost a little ([R6](docs/evidence.md#r6)); every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8)).
 
@@ -167,7 +212,7 @@ The tasks are small and the samples are 30 or 40 runs per arm, so read these as 
 | Your own rules, per model or for every model | `models.<id>.add`, `all_models.add` | [docs/configuration.md](docs/configuration.md#rules-for-every-model) |
 | Rules for one repository | `.noonsight/noonsight.json`, `noonsight trust`, `projects.allow` | [docs/configuration.md](docs/configuration.md#project-configuration) |
 | Rules for a kind of task | Scopes: `NOONSIGHT_SCOPE`, matchers, the optional classifier | [docs/configuration.md](docs/configuration.md#scopes) |
-| Rules for a place | `where`: `session`, `unattended`, `subagent` | [docs/configuration.md](docs/configuration.md#keys) |
+| Rules for a place | `where`: `attended`, `unattended`, `subagent`, `all` | [docs/configuration.md](docs/configuration.md#keys) |
 | Rules on an action | Triggers: `code-edit` | [docs/configuration.md](docs/configuration.md#triggers) |
 | Sessions the hooks do not reach | `noonsight run` | [docs/launcher.md](docs/launcher.md) |
 | Model and effort by task (off by default) | `routing` | [docs/configuration.md](docs/configuration.md#routing) |
@@ -182,7 +227,7 @@ The one exception is the classifier, off unless you turn it on, which sends the 
 ## Using it well
 
 - Give noonsight what differs by model, by kind of task or by place, and leave in `CLAUDE.md` what every model should always have ([docs/usage.md](docs/usage.md#choosing-where-a-rule-lives)).
-- Tell noonsight when nobody is watching, since Opus 5.5's and Fable 5.2's preset rules are for unattended runs and subagents only: headless runs are unattended by default, and `session.unattended_when_env`, set to your orchestrator's variable, covers the interactive sessions nobody watches; and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
+- Tell noonsight when nobody is watching, since the preset rules that ship on for Opus 5.5 and Fable 5.2 are for unattended runs and subagents only: headless runs are unattended by default, and `session.unattended_when_env`, set to your orchestrator's variable, covers the interactive sessions nobody watches; turn on their attended rules with `enable` if you want them; and give Sonnet 5.5 and Haiku 5.5 sessions a scope for their scoped rules ([docs/usage.md](docs/usage.md#setting-up-the-machine)).
 - Write a rule as a check the model can pass, in plain words; Anthropic's best practices say the same, and the verify rules are where our data shows the largest effect ([docs/usage.md](docs/usage.md#writing-a-rule)).
 - Keep long rule text in a file and deliver one sentence pointing to it ([docs/usage.md](docs/usage.md#a-pointer-to-a-file)).
 - Check what each model receives with `noonsight models` and what was delivered with `noonsight report`, and drop a rule that never changes anything you can see.
