@@ -46,6 +46,12 @@ export const DELIVERY_TEXT_LIMIT = 10000;
 /** Room kept for the note that says the session's model changed (see switchNote). */
 export const SWITCH_NOTE_RESERVE = 500;
 
+/**
+ * Stands for every model in the models a conversation may hold rules of, when which ones cannot be
+ * told: a model-change note then retires the rules of every model but the session's own.
+ */
+export const ANY_MODEL = '*';
+
 /** The longest rule text, envelope included, a configuration may produce: the note must still fit. */
 export const RULES_TEXT_LIMIT = DELIVERY_TEXT_LIMIT - SWITCH_NOTE_RESERVE;
 

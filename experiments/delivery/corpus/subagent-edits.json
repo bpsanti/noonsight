@@ -1,0 +1,34 @@
+{
+  "name": "subagent-edits",
+  "about": "A subagent edits a tracked code file: its edit reveals no trigger for the session, whose code-edit rules come only with its own edit later. No request holds a rule of its model that is not due there.",
+  "model": "sonnet",
+  "scope": "routine",
+  "unattended": true,
+  "exact": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null,
+          "edit": true
+        }
+      ]
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "edit",
+      "target": "code"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

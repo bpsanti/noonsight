@@ -1,7 +1,7 @@
 // The fuzz level: many random sessions, run in parallel, one result line per session.
 
 import fs from 'node:fs';
-import { generate, type Sequence, type Step } from './generate.js';
+import { generate, GENERATOR, type Generator, type Sequence, type Step } from './generate.js';
 import { isAgent, type ViolationClass } from './oracle.js';
 import { runSession, type RequestFact, type Run, type RunOptions, type SessionResult } from './session.js';
 
@@ -55,14 +55,33 @@ export function signature(line: Pick<Line, 'violations'>): string[] {
   return [...new Set(line.violations.filter((v) => !v.known).map((v) => `${v.class}/${v.kind}`))].sort();
 }
 
-/** The part of a session id that names its sequence, `s<seed>-<index>`, the same under every arm and plant. */
+/**
+ * The part of a session id that names its sequence, the same under every arm and plant: `s<seed>-<index>`
+ * for the first generator, `g<version>-s<seed>-<index>` for a later one, so that sequences of two
+ * generators never pair.
+ */
 export function sessionKey(id: string): string {
-  return id.replace(/^.*-(s\d+-\d+)$/, '$1');
+  return id.replace(/^.*?-((?:g\d+-)?s\d+-\d+)$/, '$1');
+}
+
+/** The index of a session's sequence in its seed. */
+export function sessionIndex(id: string): number {
+  return Number(/-(\d+)$/.exec(id)?.[1] ?? NaN);
+}
+
+/** What names a generator's runs: nothing for the first, as before it had versions, `g<version>-` after. */
+export function generatorTag(version: Generator): string {
+  return version === 1 ? '' : `g${version}-`;
 }
 
 /** The sessions `from` to `from + n - 1` of a seed, under one arm. */
-export function fuzzRuns(seed: number, n: number, arm: Run['arm'], plant: string | null = null, from = 0): Run[] {
-  return Array.from({ length: n }, (_, k) => k + from).map((i) => ({ id: `${plant ? `plant-${plant}` : arm}-s${seed}-${String(i).padStart(4, '0')}`, arm, plant, ...generate(seed, i) }));
+export function fuzzRuns(seed: number, n: number, arm: Run['arm'], plant: string | null = null, from = 0, version: Generator = GENERATOR): Run[] {
+  return Array.from({ length: n }, (_, k) => k + from).map((i) => ({
+    id: `${plant ? `plant-${plant}` : arm}-${generatorTag(version)}s${seed}-${String(i).padStart(4, '0')}`,
+    arm,
+    plant,
+    ...generate(seed, i, version),
+  }));
 }
 
 async function pool<T>(items: readonly T[], size: number, work: (item: T) => Promise<void>): Promise<void> {

@@ -1,0 +1,34 @@
+{
+  "name": "launcher",
+  "about": "A session started through noonsight run, with the rules in its system prompt: a /model switch, /clear, and a resume with --model, each through the launcher.",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "launcher": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "sonnet"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

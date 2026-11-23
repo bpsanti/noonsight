@@ -1,0 +1,23 @@
+{
+  "name": "f5-fork-after-switch",
+  "about": "/fork right after a /model switch: the background session runs on the new model with a copy of a conversation that holds the original model's rules (F5, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "fork"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

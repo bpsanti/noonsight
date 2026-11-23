@@ -10,8 +10,12 @@ These files are replay inputs for the hook adapter tests, like those of [2.1.325
 | `subagent-start-teammate.json` | Recorded: that teammate's start. Its `agent_type` is the call's `name`, not its `subagent_type`. |
 | `post-tool-use-agent-teammate.json` | Recorded: that call's result, at once, with `status: "teammate_spawned"`, the teammate's `agentId` and the model it runs on. |
 | `subagent-start-workflow.json` | Recorded: the start of an agent a workflow script started with `agent()`, in a `claude -p` session. No agent call comes before it, and its `agent_type` is `workflow-subagent`. |
+| `session-start-fork-session.json` | Recorded: `claude --continue --fork-session --model opus`, forking a conversation that ran on Sonnet. Claude Code leaves `model` out, and the transcript the input names is not written yet when the hook runs. |
+| `session-start-fork-branch.json` | Recorded: `/branch` typed in an interactive session running Opus. The input carries `model`, the model the process runs, and the transcript it names already holds the copied conversation, whose entries name the original in `forkedFrom.sessionId`. |
+| `session-start-fork-background.json` | Recorded: `/fork reply with the word done` typed in an interactive session. Claude Code runs the copy as a background session, whose input has no `model` and whose transcript holds no message yet when the hook runs. |
 
 The inputs come from Claude Code 2.1.330 on macOS, on 2026-11-23, from a hook that wrote its stdin to a file, in sessions whose requests went to a local stand-in for the Messages API that answered with those tool calls, so no model wrote them.
+The forks' sessions went to the delivery benchmark's stand-in (`experiments/delivery/stub.ts`).
 Home directory, project path and temporary directory were replaced with neutral paths; nothing else was changed.
 
 The same recordings showed the facts the adapter relies on:
@@ -21,3 +25,4 @@ The same recordings showed the facts the adapter relies on:
   Its tool result in the session's transcript is an error, written at once.
 - A subagent's `.meta.json`, next to its transcript, names the call that started it (`toolUseId`); Claude Code writes it once the subagent's `SubagentStart` hooks have run.
 - A workflow's agents and an in-process teammate each fire `SubagentStart`, and `SubagentStop`; a teammate fires `TeammateIdle` too.
+- A fork's start carries no `model` after `--fork-session` and `/fork`, and its transcript holds the copied conversation only after `/branch`, whose entries name the original in `forkedFrom.sessionId`.

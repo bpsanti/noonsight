@@ -1,0 +1,42 @@
+{
+  "name": "project",
+  "about": "A session in a project whose noonsight configuration this account trusts: the project's rules reach the session, its subagents and a fork, with the preset's.",
+  "model": "sonnet",
+  "scope": "build",
+  "unattended": false,
+  "project": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null
+        },
+        {
+          "type": "Explore",
+          "model": "fable"
+        }
+      ]
+    },
+    {
+      "k": "model",
+      "to": "fable"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "fork": true
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

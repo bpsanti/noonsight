@@ -9,15 +9,15 @@ import path from 'node:path';
 import test from 'node:test';
 import { evaluate, pair, readDesign, renderComparison, type Design, type Folder } from '../experiments/delivery/compare.js';
 import { check, readCorpus, type Entry } from '../experiments/delivery/corpus.js';
-import { failed, fuzzRuns, knownReason, sessionKey, signature, violationsOf, type Line } from '../experiments/delivery/fuzz.js';
-import { generate, hasQuietPair, show, valid, type Sequence } from '../experiments/delivery/generate.js';
+import { failed, fuzzRuns, knownReason, sessionIndex, sessionKey, signature, violationsOf, type Line } from '../experiments/delivery/fuzz.js';
+import { generate, hasQuietPair, sequenceOf, show, valid, type Sequence, type Step } from '../experiments/delivery/generate.js';
 import { agree, aggregate, replay, ruleLibrary } from '../experiments/delivery/log-measure.js';
-import { measure, pathOf, renderMarkdown } from '../experiments/delivery/measure.js';
+import { measure, pathOf, renderMarkdown, startOf } from '../experiments/delivery/measure.js';
 import { configFor, inspect, kindOf, loadReference, MODELS, type Fact } from '../experiments/delivery/oracle.js';
-import { comparePlant, occurrences, PLANTS } from '../experiments/delivery/plants.js';
+import { comparePlant, occurrences, plantNamed, PLANTS } from '../experiments/delivery/plants.js';
 import type { RequestFact, Run } from '../experiments/delivery/session.js';
 import { shrink } from '../experiments/delivery/shrink.js';
-import { reply } from '../experiments/delivery/stub.js';
+import { reply, SUB_EDITS } from '../experiments/delivery/stub.js';
 import { PACKAGE_ROOT } from '../src/config/paths.js';
 import { resolve, switchNote } from '../src/core/resolve.js';
 
@@ -38,17 +38,58 @@ function body(model: string, system: string, user = 'DB 0 turn'): Record<string,
 const where = { scope: null, place: 'unattended' as const, triggers: [] };
 
 test('generator: a seed always gives the same sequences, and every one can be driven', () => {
-  for (let i = 0; i < 300; i++) {
-    const s = generate(1, i);
-    assert.deepEqual(s, generate(1, i));
-    assert.ok(valid(s), show(s));
-    assert.equal(s.steps.at(-1)?.k, 'turn');
-    assert.ok(s.steps.length >= 3 && s.steps.length <= 13);
-  }
+  for (const version of [1, 2] as const)
+    for (let i = 0; i < 300; i++) {
+      const s = generate(1, i, version);
+      assert.deepEqual(s, generate(1, i, version));
+      assert.ok(valid(s), show(s));
+      assert.equal(s.steps.at(-1)?.k, 'turn');
+      assert.ok(s.steps.length >= 3 && s.steps.length <= (version === 1 ? 13 : 14), show(s));
+    }
   // The sequences the published results come from: a change to the generator must not change them.
-  assert.equal(show(generate(1, 170)), 'start(haiku, scope=none, unattended) > edit(code) > /clear > turn > /model sonnet > /model fable > turn');
-  assert.equal(show(generate(1, 96)), 'start(fable, scope=none, unattended) > turn > /compact > resume > turn > turn > /model haiku > turn');
+  assert.equal(show(generate(1, 170, 1)), 'start(haiku, scope=none, unattended) > edit(code) > /clear > turn > /model sonnet > /model fable > turn');
+  assert.equal(show(generate(1, 96, 1)), 'start(fable, scope=none, unattended) > turn > /compact > resume > turn > turn > /model haiku > turn');
   assert.notDeepEqual(generate(1, 0), generate(2, 0));
+  assert.deepEqual(generate(1, 5), generate(1, 5, 2), 'version 2 is the default');
+});
+
+test('generator: version 2 draws every path version 1 does not have', () => {
+  const seqs = Array.from({ length: 300 }, (_, i) => generate(1, i, 2));
+  const steps = seqs.flatMap((s) => s.steps);
+  const has = (f: (s: Step) => boolean): number => steps.filter(f).length;
+  assert.ok(seqs.filter((s) => s.launcher).length > 30, 'sessions started through noonsight run');
+  assert.ok(seqs.filter((s) => s.project).length > 30, 'sessions in a project with its own configuration');
+  assert.ok(has((s) => s.k === 'resume' && s.fork === true) > 20, 'forking resumes');
+  for (const k of ['branch', 'fork', 'back'] as const) assert.ok(has((s) => s.k === k) > 20, k);
+  assert.ok(has((s) => s.k === 'plan' && s.on) > 20, 'plan mode');
+  assert.ok(has((s) => s.k === 'spawn' && s.calls.some((c) => c.edit)) > 20, 'subagents that edit');
+  assert.ok(
+    steps.every((s) => s.k !== 'spawn' || s.calls.every((c) => !c.edit || c.type === 'general-purpose')),
+    'only general-purpose subagents edit',
+  );
+  assert.ok(
+    seqs.every((s) => !s.steps.some((x, i) => x.k === 'plan' && x.on && !s.steps.slice(i + 1).some((y) => (y.k === 'plan' && !y.on) || y.k === 'resume'))),
+    'a sequence never ends in plan mode',
+  );
+});
+
+test('generator: valid() follows the conversations, plan mode and the subagents that can edit', () => {
+  const s = (steps: Sequence['steps']): Sequence => ({ model: 'haiku', scope: null, unattended: true, steps });
+  const t: Step = { k: 'turn' };
+  assert.equal(valid(s([{ k: 'branch' }, t])), false, '/branch needs a turn');
+  assert.equal(valid(s([{ k: 'fork' }, t])), false, '/fork needs a turn');
+  assert.equal(valid(s([t, { k: 'resume', model: null, fork: true }, t])), true);
+  assert.equal(valid(s([t, { k: 'back' }, t])), false, 'no earlier conversation');
+  assert.equal(valid(s([t, { k: 'clear' }, { k: 'back' }, t])), true, 'back to the conversation /clear left');
+  assert.equal(valid(s([{ k: 'clear' }, t, { k: 'back' }])), false, 'the conversation /clear left had no turn');
+  assert.equal(valid(s([t, { k: 'branch' }, { k: 'back' }, { k: 'back' }, t])), true, 'back and forth between a branch and its original');
+  assert.equal(valid(s([{ k: 'plan', on: true }, { k: 'edit', target: 'code' }])), false, 'an edit waits for approval in plan mode');
+  assert.equal(valid(s([{ k: 'plan', on: true }, { k: 'spawn', calls: [{ type: 'Explore', model: null }] }])), false, 'so does an agent call');
+  assert.equal(valid(s([{ k: 'plan', on: true }, t, { k: 'plan', on: false }, { k: 'edit', target: 'code' }])), true);
+  assert.equal(valid(s([t, { k: 'plan', on: true }, { k: 'resume', model: null }, { k: 'edit', target: 'code' }])), true, 'a resume leaves plan mode');
+  assert.equal(valid(s([{ k: 'plan', on: false }, t])), false, 'plan mode is not on');
+  assert.equal(valid(s([{ k: 'spawn', calls: [{ type: 'Explore', model: null, edit: true }] }])), false, 'Explore cannot edit');
+  assert.deepEqual(Object.keys(sequenceOf({ ...s([t]), launcher: true, id: 'x' } as Sequence)).sort(), ['launcher', 'model', 'scope', 'steps', 'unattended']);
 });
 
 test('generator: valid() refuses what cannot be driven', () => {
@@ -81,6 +122,16 @@ test('stub: answers each directive from the request alone', () => {
   assert.equal(edit.content[0]?.name, 'Edit');
   assert.equal(reply(user('DB 6 edit new'), '/p').content[0]?.name, 'Write');
   assert.deepEqual(reply(user('DB-SUB 4 0 Explore: reply with the word done.'), '/p').content, [{ type: 'text', text: 'done' }]);
+  // A subagent whose task says it edits reads the tracked code file, edits it, then answers.
+  const editing = reply(user('DB 7 spawn general-purpose.-.edit'), '/p').content[0]?.input as Record<string, unknown>;
+  assert.match(String(editing.prompt), new RegExp(`^DB-SUB 7 0 general-purpose: ${SUB_EDITS}`));
+  const task = { role: 'user', content: String(editing.prompt) };
+  const subRead = reply({ tools: TOOLS, messages: [task] }, '/p');
+  assert.deepEqual([subRead.content[0]?.name, (subRead.content[0]?.input as Record<string, unknown>).file_path], ['Read', '/p/src/app.ts']);
+  const result = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: 'file' }] };
+  const subEdit = reply({ tools: TOOLS, messages: [task, { role: 'assistant', content: subRead.content }, result] }, '/p');
+  assert.equal(subEdit.content[0]?.name, 'Edit');
+  assert.deepEqual(reply({ tools: TOOLS, messages: [task, { role: 'assistant', content: subRead.content }, result, { role: 'assistant', content: subEdit.content }, result] }, '/p').content, [{ type: 'text', text: 'done' }]);
   assert.match(String(reply(user('Summarize. Respond with TEXT ONLY.'), '/p').content[0]?.text), /<summary>/);
 });
 
@@ -145,6 +196,24 @@ test('oracle: the three parts of the invariant', () => {
   assert.equal(twice.chars.ownDuplicate, twice.chars.ownFirst);
 });
 
+test('oracle: a session in the benchmark\'s project is measured with the project\'s rules laid over the preset', () => {
+  const withProject = loadReference(fs.mkdtempSync(path.join(os.tmpdir(), 'noonsight-delivery-test-')), true);
+  assert.ok(ref.lib.length >= 15, 'every rule of the preset, those it turns off included');
+  assert.ok(!ref.lib.some((e) => e.ids.some((id) => id.startsWith('project/'))));
+  const project = withProject.lib.filter((e) => e.ids.some((id) => id.startsWith('project/')));
+  assert.deepEqual(project.map((e) => e.ids[0]).sort(), ['project/fable-name-the-tests', 'project/record-decisions', 'project/sonnet-small-steps', 'project/subagent-report']);
+  const atBuild = { scope: 'build', place: 'session' as const, triggers: [] };
+  const due = resolve(withProject.config, { model: 'claude-fable-5-2', ...atBuild });
+  assert.ok(due.status === 'matched' && due.rules.includes('project/fable-name-the-tests') && due.rules.includes('project/record-decisions'));
+  const texts = due.status === 'matched' ? due.rules.map((id) => withProject.byId.get(id)?.text ?? '') : [];
+  assert.equal(inspect(withProject, body('claude-fable-5-2', texts.join('\n\n')), atBuild).covered, true);
+  const without = inspect(withProject, body('claude-fable-5-2', texts.filter((t) => !t.includes('test files')).join('\n\n')), atBuild);
+  assert.deepEqual(without.violations, [{ class: 'missing-own', rules: ['project/fable-name-the-tests'] }]);
+  // A subagent gets the project's report rule.
+  const sub = resolve(withProject.config, { model: 'claude-haiku-5-5', scope: null, place: 'subagent' });
+  assert.ok(sub.status === 'matched' && sub.rules.includes('project/subagent-report'));
+});
+
 test('oracle: the reference gives every model the preset under `on` and none under the native arms', () => {
   assert.deepEqual(
     Object.values((configFor('on') as { models: Record<string, { use: string }> }).models).map((m) => m.use),
@@ -178,11 +247,19 @@ test('fuzz: violations, the documented exception, and what counts as a failure',
   assert.deepEqual(signature(bad), ['foreign-unretired/main']);
   assert.equal(failed(line(spec, bad.facts as RequestFact[], 'step-timeout:1')), false, 'a session the driver could not run is not measured');
   assert.deepEqual(
-    fuzzRuns(1, 2, 'claudemd').map((r) => r.id),
+    fuzzRuns(1, 2, 'claudemd', null, 0, 1).map((r) => r.id),
     ['claudemd-s1-0000', 'claudemd-s1-0001'],
+    'the first generator keeps the ids its runs have',
   );
-  assert.equal(fuzzRuns(1, 1, 'on', 'no-switch-note')[0]?.id, 'plant-no-switch-note-s1-0000');
+  assert.deepEqual(
+    fuzzRuns(1, 2, 'claudemd').map((r) => r.id),
+    ['claudemd-g2-s1-0000', 'claudemd-g2-s1-0001'],
+  );
+  assert.equal(fuzzRuns(1, 1, 'on', 'no-switch-note')[0]?.id, 'plant-no-switch-note-g2-s1-0000');
   assert.equal(sessionKey('plant-no-switch-note-s1-0014'), 's1-0014');
+  assert.equal(sessionKey('plant-no-switch-note-g2-s1-0014'), 'g2-s1-0014', 'sequences of two generators never pair');
+  assert.equal(sessionKey('on-g2-s1-0014'), 'g2-s1-0014');
+  assert.deepEqual([sessionIndex('on-s1-0014'), sessionIndex('plant-fork-unknown-g2-s1-0203')], [14, 203]);
 });
 
 test('shrink: delta debugging finds the shortest sequence that still fails, then simplifies it', async () => {
@@ -231,8 +308,28 @@ test('measure: coverage, precision, cost and robustness of a set of sessions', (
   assert.equal(m.robustness.requestsWithViolation['foreign-unretired'], 1);
   assert.equal(m.robustness.sessionsFailed, 1);
   assert.deepEqual(Object.keys(m.robustness.byQuietPair), ['two quiet steps in a row']);
+  assert.deepEqual(Object.keys(m.robustness.byStart), ['claude']);
+  assert.equal(startOf({ ...spec, launcher: true, project: true }), 'noonsight run, in a project');
+  assert.equal(startOf({ ...spec, arm: 'claudemd', launcher: true }), 'claude', 'a native arm starts every session with claude');
   assert.deepEqual(Object.keys(m.byPath), ['after /model', 'start']);
   assert.equal(pathOf(spec, { kind: 'subagent', step: 3 }), 'subagent');
+  const paths: Sequence = {
+    ...spec,
+    steps: [
+      { k: 'resume', model: 'opus', fork: true },
+      { k: 'branch' },
+      { k: 'back' },
+      { k: 'plan', on: true },
+      { k: 'plan', on: false },
+      { k: 'spawn', calls: [{ type: 'general-purpose', model: null, edit: true }] },
+      { k: 'fork' },
+    ],
+  };
+  assert.deepEqual(
+    paths.steps.map((_, i) => pathOf(paths, { kind: 'main', step: i })),
+    ['after a forking resume with --model', 'after /branch', 'after /resume in the session', 'in plan mode', 'after leaving plan mode', 'after starting subagents that edit', 'after /fork'],
+  );
+  assert.equal(pathOf(paths, { kind: 'main', step: 6, background: true }), 'a /fork session');
   assert.match(renderMarkdown({ 'on-s1-n2': m }), /\| Coverage \| 100\.0% \(2 of 2\) \|/);
 });
 
@@ -309,6 +406,11 @@ test('log replay: what the conversation holds after each decision', () => {
   assert.equal(replay([start, sw, back], lib).points[2]?.foreignUnretired, false);
   const clear = { ...start, ts: '2026-11-19T00:00:04Z', source: 'clear' };
   assert.equal(replay([start, sw, clear], lib).points[2]?.chars.foreignRetired, 0, '/clear empties the conversation');
+  // A fork starts with what the conversation it names held; one that names none is not known.
+  const fork = { ...start, ts: '2026-11-19T00:00:05Z', session_id: 'f', source: 'fork', delivered: 'already-delivered', forked_from: 's' };
+  assert.equal(replay([start, fork], lib).points[1]?.covered, true);
+  const { forked_from: _, ...unnamed } = fork;
+  assert.equal(replay([start, { ...unnamed, delivered: 'nothing' }], lib).points[1]?.covered, false);
   const a = aggregate(good);
   assert.deepEqual([a.sessions, a.coverage.points.due, a.coverage.points.covered], [1, 2, 2]);
   assert.ok((a.cost.charsPerDelivery ?? 0) > 0);
@@ -335,6 +437,18 @@ test('plants: each planted line is in the built hook exactly once', () => {
   }
 });
 
+test('plants: fork-unknown is exposed where a fork\'s start found its original and that changed its delivery', () => {
+  const plant = plantNamed('fork-unknown');
+  const spec: Run = { id: 'on-g2-s1-0000', arm: 'on', plant: null, model: 'sonnet', scope: null, unattended: true, steps: [{ k: 'turn' }, { k: 'resume', model: 'opus', fork: true }, { k: 'turn' }] };
+  const start = { ts: '2026-11-19T00:00:01Z', session_id: 'f', event: 'session-start', source: 'fork', forked_from: 's', delivered: 'rules+note' };
+  const after = fact({ kind: 'main', step: 2, session: 'f', at: '2026-11-19T00:00:02Z' });
+  const with_ = (decisions: Record<string, unknown>[], facts = [after]): Line => ({ ...line(spec, facts), decisions });
+  assert.equal(plant.exposed(with_([start])), true);
+  assert.equal(plant.exposed(with_([{ ...start, delivered: 'already-delivered' }])), false, 'nothing the origin changed');
+  assert.equal(plant.exposed(with_([{ ...start, delivered: 'rules', model_source: 'session-transcript' }])), true, 'the model of the original conversation');
+  assert.equal(plant.exposed(with_([start], [])), false, 'no request of the fork came after it');
+});
+
 test('plants: a session is caught when the planted build fails where the real one did not', () => {
   const plant = PLANTS[0] as (typeof PLANTS)[number];
   const spec = (id: string): Run => ({ id, arm: 'on', plant: null, model: 'haiku', scope: null, unattended: true, steps: [{ k: 'model', to: 'sonnet' }, { k: 'turn' }] });
@@ -352,6 +466,12 @@ test('corpus: every entry can be driven, and expects a pass or names the violati
   assert.ok(entries.some((e) => e.name === 'probe-session' && e.expect === 'pass'), 'the delivery probe session is in the corpus');
   for (const prefix of ['f1-', 'f2-']) assert.ok(entries.some((e) => e.name.startsWith(prefix) && e.expect === 'pass'), `the corpus keeps the ${prefix} sequences, which must pass since their fix`);
   for (const e of entries) if (e.expect !== 'pass') for (const s of e.expect.shows) assert.match(s, /^(missing-own|own-retired|foreign-unretired)\/(main|subagent)$/, e.name);
+  // Each path generator 2 added has an entry.
+  const steps = entries.flatMap((e) => e.steps);
+  assert.ok(entries.some((e) => e.launcher) && entries.some((e) => e.project));
+  for (const k of ['branch', 'fork', 'back', 'plan'] as const) assert.ok(steps.some((s) => s.k === k), k);
+  assert.ok(steps.some((s) => s.k === 'resume' && s.fork));
+  assert.ok(steps.some((s) => s.k === 'spawn' && s.calls.some((c) => c.edit)));
 });
 
 test('corpus: the outcome of an entry', () => {
@@ -368,6 +488,10 @@ test('corpus: the outcome of an entry', () => {
   assert.equal(check(entry(f1), clean).outcome, 'fixed');
   assert.equal(check(entry({ failure: 'F1', shows: ['missing-own/main'] }), broken).outcome, 'changed');
   assert.equal(check(entry('pass'), line(spec, [], 'startup-timeout')).outcome, 'harness');
+  // An exact entry also refuses a rule of the request's model that is not due there.
+  const extra = line(spec, [fact({ kind: 'main', step: 0, covered: true, chars: { ...clean.facts[0]!.chars, ownUnexpected: 300 } })]);
+  assert.equal(check(entry('pass'), extra).outcome, 'as-expected');
+  assert.deepEqual([check({ ...entry('pass'), exact: true }, extra).outcome, check({ ...entry('pass'), exact: true }, extra).shows], ['regressed', ['own-unexpected/main']]);
 });
 
 test('oracle facts carry no request text', () => {

@@ -1,0 +1,11 @@
+{
+  "session_id": "fbb6c661-1b85-4460-990f-e962d87c8815",
+  "transcript_path": "/Users/user/.claude/projects/-Users-user-project/fbb6c661-1b85-4460-990f-e962d87c8815.jsonl",
+  "cwd": "/Users/user/project",
+  "hook_event_name": "SessionStart",
+  "source": "fork",
+  "seconds_since_last_response": 5,
+  "context_tokens": 15,
+  "prompt_cache_likely_expired": false,
+  "estimated_cache_write_usd": 0.0001
+}

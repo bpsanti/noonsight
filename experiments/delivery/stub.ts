@@ -4,11 +4,13 @@
 //
 // The last user message of a session's request may carry a directive the driver typed:
 //   DB <n> turn                       a short text that ends the turn
-//   DB <n> spawn <type>.<model> ...   one agent call per item, all in one response ("-" for no model)
+//   DB <n> spawn <type>.<model> ...   one agent call per item, all in one response ("-" for no model);
+//                                     <type>.<model>.edit makes the subagent edit
 //   DB <n> edit code|doc|new          a Read then an Edit of the tracked code file or the tracked
 //                                     document, or a Write of a new code file
-// A subagent's own request (its first user message holds DB-SUB) gets a short text, and so does the
-// summary request of a compaction.
+// A subagent's own request (its first user message holds DB-SUB) gets a short text, or, when its task
+// says it edits, a Read then an Edit of the tracked code file first; the summary request of a
+// compaction gets a short text too.
 
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -18,6 +20,9 @@ export const FILES = { code: 'src/app.ts', doc: 'docs/notes.md', new: 'src/fresh
 
 /** The line every edit replaces, present in both tracked files. */
 export const ANCHOR = 'DB-ANCHOR';
+
+/** What a subagent's task says when the subagent is to edit the tracked code file. */
+export const SUB_EDITS = 'edits the code';
 
 export type Body = Record<string, any>;
 
@@ -63,18 +68,23 @@ export function reply(body: Body, project: string): Answer {
   const users = messages.filter((m) => m.role === 'user');
   const last = users.at(-1);
   const say = (t: string): Answer => ({ content: [{ type: 'text', text: t }], stop: 'end_turn' });
-  if (text(users[0]).includes('DB-SUB')) return say('done');
-  if (isCompaction(body)) return say('<summary>\nThe user asked for short replies and got them.\n</summary>');
-  if (blocks(last).some((b) => b.type === 'tool_result')) {
-    // The second half of an edit: the file was read, now it is edited.
+  const answered = blocks(last).some((b) => b.type === 'tool_result');
+  // The second half of an edit: the file was read, now it is edited.
+  const editRead = (): Answer | null => {
     const lastAssistant = messages.filter((m) => m.role === 'assistant').at(-1);
     const read = blocks(lastAssistant).find((b) => b.type === 'tool_use' && b.name === 'Read');
-    if (read) {
-      const file = String((read.input as Record<string, unknown> | undefined)?.file_path ?? '');
-      return { content: [call('Edit', { file_path: file, old_string: ANCHOR, new_string: `${ANCHOR}\n// edited ${calls}` })], stop: 'tool_use' };
-    }
-    return say('done');
+    if (!read) return null;
+    const file = String((read.input as Record<string, unknown> | undefined)?.file_path ?? '');
+    return { content: [call('Edit', { file_path: file, old_string: ANCHOR, new_string: `${ANCHOR}\n// edited ${calls}` })], stop: 'tool_use' };
+  };
+  const task = text(users[0]);
+  if (task.includes('DB-SUB')) {
+    if (!task.includes(SUB_EDITS)) return say('done');
+    if (!answered) return { content: [call('Read', { file_path: `${project}/${FILES.code}` })], stop: 'tool_use' };
+    return editRead() ?? say('done');
   }
+  if (isCompaction(body)) return say('<summary>\nThe user asked for short replies and got them.\n</summary>');
+  if (answered) return editRead() ?? say('done');
   const d = /DB (\d+) (\w+)([^\n]*)/.exec(text(last));
   if (!d) return say('ok');
   const [, n, kind, rest = ''] = d;
@@ -83,8 +93,9 @@ export function reply(body: Body, project: string): Answer {
     const tool = names.includes('Agent') ? 'Agent' : 'Task';
     const items = rest.trim().split(/\s+/).filter(Boolean);
     const content = items.map((item, i) => {
-      const [type = 'general-purpose', model] = item.split('.');
-      const input: Record<string, unknown> = { description: `db sub ${n} ${i}`, prompt: `DB-SUB ${n} ${i} ${type}: reply with the word done.`, subagent_type: type };
+      const [type = 'general-purpose', model, edit] = item.split('.');
+      const task = edit === 'edit' ? `${SUB_EDITS}: read ${FILES.code}, edit it, then reply with the word done.` : 'reply with the word done.';
+      const input: Record<string, unknown> = { description: `db sub ${n} ${i}`, prompt: `DB-SUB ${n} ${i} ${type}: ${task}`, subagent_type: type };
       if (model && model !== '-') input.model = model;
       return call(tool, input);
     });

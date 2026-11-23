@@ -48,6 +48,21 @@ function exposedToCompaction(r: Line): boolean {
   });
 }
 
+/**
+ * A fork's start found the conversation it copied and that changed what it delivered: a note, or the
+ * model of that conversation's last response or of the background job; and a request of the fork came after it.
+ */
+function exposedToForkOrigin(r: Line): boolean {
+  return (r.decisions as Decision[]).some(
+    (d) =>
+      d.event === 'session-start' &&
+      d.source === 'fork' &&
+      d.forked_from &&
+      (/note/.test(String(d.delivered)) || d.model_source === 'session-transcript' || String(d.model_from ?? '').includes('background job')) &&
+      r.facts.some((f) => f.kind === 'main' && f.session === d.session_id && f.at >= String(d.ts)),
+  );
+}
+
 export const PLANTS: readonly Plant[] = [
   {
     name: 'no-switch-note',
@@ -64,6 +79,14 @@ export const PLANTS: readonly Plant[] = [
     find: "const resumed = source === 'resume' || source === 'fork';",
     replace: "const resumed = source === 'resume' || source === 'fork' || source === 'compact'; /* planted: compaction treated as a resume */",
     exposed: exposedToCompaction,
+  },
+  {
+    name: 'fork-unknown',
+    about: "A fork's start knows nothing of the conversation it copied: no record, no last response, no triggers (F5 and F6 come back).",
+    file: HOOK,
+    find: "const fork = event === 'SessionStart' && str(input.source) === 'fork' && own === null ? forkContext(input, state, ctx.env, commandLine) : null;",
+    replace: "const fork = null; /* planted: a fork's start knows nothing of the conversation it copied */",
+    exposed: exposedToForkOrigin,
   },
 ];
 

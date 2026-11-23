@@ -1,0 +1,21 @@
+{
+  "name": "fork-session",
+  "about": "A conversation forked with --continue --fork-session on its own model holds its rules already; nothing is due again.",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "fork": true
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

@@ -1,0 +1,1 @@
+When you report a change in this repository, name the test files that cover it and the command that runs them, so the person can run them again without searching for them; when no test covers it, say so.

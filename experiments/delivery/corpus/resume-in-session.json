@@ -1,0 +1,29 @@
+{
+  "name": "resume-in-session",
+  "about": "/resume typed in the session goes back to the conversation /clear left, after a /model switch in between: the conversation holds the first model's rules, and the process runs the new model.",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "back"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

@@ -193,6 +193,12 @@ export function replay(decisions: readonly Decision[], lib: Library): Replay {
     }
     if (!SESSION_EVENTS.has(String(d.event))) continue;
     let s = sessions.get(sid);
+    // A fork starts with a copy of the conversation it was forked from, when the log names it.
+    const origin = !s && d.event === 'session-start' && d.source === 'fork' && d.forked_from ? sessions.get(String(d.forked_from)) : undefined;
+    if (origin) {
+      s = { items: [...origin.items], expected: [...origin.expected], model: origin.model, known: origin.known, events: [] };
+      sessions.set(sid, s);
+    }
     const fresh = d.event === 'session-start' && (d.source === 'startup' || d.source === 'clear');
     if (!s || fresh) {
       // A resume of a conversation whose earlier lines are not in the log: what it holds is not known.

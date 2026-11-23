@@ -8,7 +8,8 @@
 // - cost: the characters noonsight or the native alternative adds to each request (rules, envelopes,
 //   notes), whose tokens are estimated at four characters each; the hook's own time is hooktime.ts;
 // - robustness: violations by request and by session, by number of lifecycle events in the session,
-//   by whether two quiet steps follow each other, and by path (the last lifecycle step before the
+//   by whether two quiet steps follow each other, by how the session started (`claude`, `noonsight
+//   run`, in a project with its own configuration), and by path (the last lifecycle step before the
 //   request); every distinct class of violation with an example session.
 
 import { hasQuietPair, LIFECYCLE, type Sequence } from './generate.js';
@@ -31,19 +32,32 @@ function tally(facts: readonly RequestFact[]): Tally {
 
 const withShare = (t: Tally): Tally & { coverage: number | null } => ({ ...t, coverage: ratio(t.covered, t.due) });
 
-/** The path a request stands for: `subagent`, `start`, or the last lifecycle step at or before its step. */
-export function pathOf(spec: Sequence, f: Pick<RequestFact, 'kind' | 'step'>): string {
+/**
+ * The path a request stands for: `subagent`, a request of a session /fork runs in the background,
+ * `start`, or the last lifecycle step at or before its step.
+ */
+export function pathOf(spec: Sequence, f: Pick<RequestFact, 'kind' | 'step' | 'background'>): string {
   if (f.kind === 'subagent') return 'subagent';
+  if (f.background) return 'a /fork session';
   for (let i = Math.min(f.step, spec.steps.length - 1); i >= 0; i--) {
     const s = spec.steps[i];
     if (!s || !LIFECYCLE.has(s.k)) continue;
     if (s.k === 'edit') return s.target === 'code' ? 'after an edit of tracked code' : 'after another edit';
-    if (s.k === 'spawn') return 'after starting subagents';
+    if (s.k === 'spawn') return s.calls.some((c) => c.edit) ? 'after starting subagents that edit' : 'after starting subagents';
     if (s.k === 'model') return 'after /model';
-    if (s.k === 'resume') return s.model ? 'after a resume with --model' : 'after a resume';
+    if (s.k === 'resume') return `after a ${s.fork ? 'forking ' : ''}resume${s.model ? ' with --model' : ''}`;
+    if (s.k === 'back') return 'after /resume in the session';
+    if (s.k === 'plan') return s.on ? 'in plan mode' : 'after leaving plan mode';
     return `after /${s.k}`;
   }
   return 'start';
+}
+
+/** How a session started: through `noonsight run` or `claude`, and whether in the benchmark's project. */
+export function startOf(spec: Sequence & { readonly arm?: string }): string {
+  // Under a native arm, both are left out (session.ts).
+  const on = spec.arm === undefined || spec.arm === 'on';
+  return `${on && spec.launcher ? 'noonsight run' : 'claude'}${on && spec.project ? ', in a project' : ''}`;
 }
 
 function lengthBand(spec: Sequence): string {
@@ -146,6 +160,7 @@ export function measure(lines: readonly Line[]) {
       classes,
       byLength: bySessions(group((r) => lengthBand(r.spec))),
       byQuietPair: bySessions(group((r) => (hasQuietPair(r.spec) ? 'two quiet steps in a row' : 'every quiet step followed by a request'))),
+      byStart: bySessions(group((r) => startOf(r.spec))),
     },
     byPath: Object.fromEntries(
       Object.entries(byPath)
@@ -181,7 +196,8 @@ export function renderMarkdown(runs: Readonly<Record<string, Measures>>): string
     out.push('', `## ${n}`, '', '| Path | Requests | Rules due | Coverage | Own share | Rule of another model, no note |', '| --- | --- | --- | --- | --- | --- |');
     for (const [p, x] of Object.entries(m.byPath)) out.push(`| ${p} | ${x.requests} | ${x.due} | ${pct(x.coverage)} | ${x.ownShare === null ? 'no rule text' : pct(x.ownShare)} | ${x.foreignUnretired} |`);
     out.push('', '| Sessions | Count | Rules due | Coverage | With an unexplained violation |', '| --- | --- | --- | --- | --- |');
-    for (const [k, x] of [...Object.entries(m.robustness.byQuietPair), ...Object.entries(m.robustness.byLength)]) out.push(`| ${k} | ${x.sessions} | ${x.due} | ${pct(x.coverage)} | ${x.sessionsFailed} |`);
+    for (const [k, x] of [...Object.entries(m.robustness.byQuietPair), ...Object.entries(m.robustness.byStart), ...Object.entries(m.robustness.byLength)])
+      out.push(`| ${k} | ${x.sessions} | ${x.due} | ${pct(x.coverage)} | ${x.sessionsFailed} |`);
     const classes = Object.entries(m.robustness.classes);
     if (classes.length) {
       out.push('', '| Violation | Sessions | Example |', '| --- | --- | --- |');

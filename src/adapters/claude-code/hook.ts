@@ -25,11 +25,12 @@ import { projectFields, projectFor, projectWarning } from '../../config/project.
 import { normalizeModel } from '../../core/normalize.js';
 import { joinDelivery, launcherNote, resolve, resolveAdded, switchNote } from '../../core/resolve.js';
 import { sessionPlace, sessionScope, type PlaceChoice, type ScopeChoice } from '../../core/scope.js';
-import type { Config, Decision, Trigger } from '../../core/types.js';
+import { ANY_MODEL, type Config, type Decision, type Trigger } from '../../core/types.js';
 import { appendDecision } from '../../state/log.js';
 import { heldModels, processFile, pruneState, readState, sessionFile, writeState, type DeliveryState } from '../../state/sessions.js';
-import { sessionTriggers } from '../../state/triggers.js';
-import { launchFields, launchModel, readCommandLine, type LaunchModel, type LaunchSources } from './launch.js';
+import { inheritTriggers, sessionTriggers } from '../../state/triggers.js';
+import { forkOrigin, type ForkOrigin } from './fork.js';
+import { launchFields, launchModel, readCommandLine, resolveValue, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
 import type { InstallKind } from './locations.js';
 import { conversationResponse, type Response } from './predict.js';
@@ -183,13 +184,17 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
       return output([], outcome.context ? { hookEventName: event, additionalContext: outcome.context } : null);
     }
     const processState = processFile(state, ctx.parentPid);
+    const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
+    const own = readState(sessionState);
+    // A fork starts with a copy of another conversation under a new id that has no record (fork.ts).
+    const fork = event === 'SessionStart' && str(input.source) === 'fork' && own === null ? forkContext(input, state, ctx.env, commandLine) : null;
+    if (fork?.origin) inheritTriggers(state, fork.origin.sessionId, sessionId);
     // Both come from the environment Claude Code runs in, which its hooks inherit.
     const where: Where = {
       scope: sessionScope(ctx.env),
       place: sessionPlace(config, ctx.env),
       triggers: sessionTriggers(state, str(input.session_id)),
     };
-    const commandLine = once(() => readCommandLine(ctx.parentPid, process.platform));
     const response = once(() => conversationResponse(str(input.transcript_path)));
     const result =
       event === 'SessionStart'
@@ -198,11 +203,12 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
             config,
             file,
             where,
-            readState(sessionState),
+            own,
             readState(processState),
             (sources) => launchModel({ env: ctx.env, home: ctx.home, pid: ctx.parentPid, cwd: str(input.cwd), commandLine }, sources),
             response,
             () => launcherPrompt(ctx.env, commandLine),
+            fork,
           )
         : modelSwitch(input, config, file, where, readState(sessionState));
     const startup = event === 'SessionStart' && input.source === 'startup';
@@ -253,6 +259,33 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext, late = 
     return output([`noonsight: the hook failed (${message}), so no rules were delivered.`], null);
   }
 }
+
+/**
+ * What a fork's start knows of the conversation it copied (fork.ts): the original, when it can be
+ * found, with its record, its last response, and the model a background job was started with.
+ */
+interface ForkContext {
+  readonly origin: ForkOrigin | null;
+  readonly record: DeliveryState | null;
+  readonly response: () => Response | null;
+  readonly launch: LaunchModel | null;
+}
+
+function forkContext(input: Record<string, unknown>, state: string, env: Env, commandLine: () => ReturnType<typeof readCommandLine>): ForkContext {
+  const origin = forkOrigin(str(input.transcript_path), env, commandLine);
+  return {
+    origin,
+    record: origin !== null ? readState(sessionFile(state, origin.sessionId)) : null,
+    response: once(() => conversationResponse(origin?.transcript ?? null)),
+    launch: origin?.model !== undefined ? resolveValue(origin.model, 'claude-args', '--model of the background job', env) : null,
+  };
+}
+
+/**
+ * The record of a conversation nothing is known of: it may hold the rules of any model, so the next
+ * delivery says that those of every model but the session's own no longer apply.
+ */
+const UNKNOWN_HELD: DeliveryState = { model: null, status: 'none', sha256: null, held: [ANY_MODEL], at: new Date(0).toISOString() };
 
 /** A session's scope and place, and the triggers it has revealed. */
 interface Where {
@@ -306,17 +339,24 @@ function sessionStart(
   session: DeliveryState | null,
   process: DeliveryState | null,
   readLaunch: (sources: LaunchSources) => LaunchModel,
-  readConversation: () => Response | null,
+  ownConversation: () => Response | null,
   readLauncher: () => LauncherPrompt | null,
+  fork: ForkContext | null = null,
 ): Outcome {
   const source = str(input.source);
   const resumed = source === 'resume' || source === 'fork';
+  // A fork's own id has no record yet: the conversation it copied stands in for it, as that
+  // conversation's record and last response; with nothing known of it, it may hold any model's rules.
+  const known = fork !== null ? (fork.record ?? UNKNOWN_HELD) : session;
+  const readConversation = fork !== null ? () => ownConversation() ?? fork.response() : ownConversation;
+  // A background job runs on the model it was started with, which its own command line does not show.
+  const readStart: typeof readLaunch = fork?.launch ? (sources) => (sources === 'settings' ? readLaunch(sources) : (fork.launch as LaunchModel)) : readLaunch;
   const reported = normalizeModel(str(input.model));
-  const recorded = session?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
+  const recorded = known?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
   const chosen: ModelChoice = reported
     ? { model: reported, source: 'hook-input', launch: null }
     : resumed
-      ? resumedModel(recorded, readLaunch, () => readConversation()?.model ?? null)
+      ? resumedModel(recorded, readStart, () => readConversation()?.model ?? null)
       : recorded
         ? { model: recorded, source: session?.model ? 'session-record' : 'process-record', launch: null }
         : launchChoice(readLaunch('all'), null);
@@ -324,7 +364,7 @@ function sessionStart(
   const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const record = resumed && session !== null ? confirmed(session, readConversation) : session;
+  const record = resumed && known !== null ? confirmed(known, fork !== null ? fork.response : readConversation) : known;
   // A delivery that may never have reached the conversation is made again.
   const unconfirmed = resumed && record?.unconfirmed !== undefined;
   const repeat = resumed && record !== null && !unconfirmed && record.model === decision.model && record.sha256 === sha;
@@ -375,6 +415,7 @@ function sessionStart(
       ...choiceFields(where.scope, where.place),
       ...triggerFields(where.triggers),
       model_source: chosen.source,
+      ...(fork !== null ? { fork_origin: fork.origin?.via ?? 'unknown', ...(fork.origin !== null ? { forked_from: fork.origin.sessionId } : {}) } : {}),
       ...(changedFrom !== null ? { from_model: changedFrom } : {}),
       ...launchFields(launch),
       ...(launcher !== null ? { launch_file: launcher.file, launch_model: launcher.model } : {}),

@@ -18,7 +18,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { formatP, holm, mcnemar } from '../rules/stats.js';
-import { failed, readLines, sessionKey, type Line } from './fuzz.js';
+import { failed, readLines, sessionIndex, sessionKey, type Line } from './fuzz.js';
 import { measure } from './measure.js';
 import { isAgent } from './oracle.js';
 
@@ -113,7 +113,7 @@ function at(value: unknown, dotted: string): number | null {
   return typeof v === 'number' ? v : null;
 }
 
-const index = (l: Line): number => Number(sessionKey(l.id).split('-')[1]);
+const index = (l: Line): number => sessionIndex(l.id);
 
 function linesOf(folder: Folder, side: Side): Line[] | null {
   const lines = folder.sessions(side.run);

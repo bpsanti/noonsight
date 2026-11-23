@@ -1,0 +1,1 @@
+This repository keeps a record of its design decisions in the docs folder. When a change settles a question that a later reader would ask, such as why a dependency was chosen or why a limit has the value it has, add a short note there with the reason, in the same change.

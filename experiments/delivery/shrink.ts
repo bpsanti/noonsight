@@ -10,7 +10,7 @@
 // shorter sequence that fails the same way for another. After a fix, run the fuzz level again, not
 // only the corpus.
 
-import { show, valid, type Sequence, type Step } from './generate.js';
+import { sequenceOf, show, valid, type Sequence, type Step } from './generate.js';
 import type { ViolationClass } from './oracle.js';
 
 export interface Target {
@@ -33,7 +33,7 @@ export interface Shrunk {
 }
 
 function key(spec: Sequence): string {
-  return JSON.stringify([spec.model, spec.scope, spec.unattended, spec.steps]);
+  return JSON.stringify([spec.model, spec.scope, spec.unattended, spec.launcher ?? false, spec.project ?? false, spec.steps]);
 }
 
 function simpler(spec: Sequence): Sequence[] {
@@ -43,12 +43,23 @@ function simpler(spec: Sequence): Sequence[] {
     if (s.k === 'spawn') {
       if (s.calls.length > 1) s.calls.forEach((_, c) => put({ ...s, calls: s.calls.filter((__, j) => j !== c) }));
       s.calls.forEach((call, c) => call.model && put({ ...s, calls: s.calls.map((x, j) => (j === c ? { ...x, model: null } : x)) }));
-      if (s.calls.length === 1 && !s.calls[0]?.model) put({ k: 'turn' });
+      s.calls.forEach((call, c) => call.edit && put({ ...s, calls: s.calls.map((x, j) => (j === c ? { type: x.type, model: x.model } : x)) }));
+      if (s.calls.length === 1 && !s.calls[0]?.model && !s.calls[0]?.edit) put({ k: 'turn' });
     }
     if (s.k === 'edit') put({ k: 'turn' });
     if (s.k === 'resume' && s.model) put({ ...s, model: null });
+    if (s.k === 'resume' && s.fork) put({ k: 'resume', model: s.model });
+    if (s.k === 'branch' || s.k === 'fork') put({ k: 'turn' });
   });
   if (spec.scope) out.push({ ...spec, scope: null });
+  if (spec.launcher) {
+    const { launcher: _, ...rest } = spec;
+    out.push(rest);
+  }
+  if (spec.project) {
+    const { project: _, ...rest } = spec;
+    out.push(rest);
+  }
   return out;
 }
 
@@ -81,7 +92,7 @@ export async function shrink(base: Sequence, target: Target, check: Check, concu
   };
 
   // Only the sequence: a session id or arm the caller's object carries must not reach the candidates.
-  base = { model: base.model, scope: base.scope, unattended: base.unattended, steps: base.steps };
+  base = sequenceOf(base);
   if (!(await fails(base))) throw new Error(`the failure does not reproduce: ${show(base)}`);
   let spec = base;
   let n = 2;
@@ -105,6 +116,6 @@ export async function shrink(base: Sequence, target: Target, check: Check, concu
     seconds: Math.round((Date.now() - started) / 1000),
     original: show(base),
     minimal: show(spec),
-    spec: { model: spec.model, scope: spec.scope, unattended: spec.unattended, steps: spec.steps },
+    spec: sequenceOf(spec),
   };
 }

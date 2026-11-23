@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizeModel } from './normalize.js';
-import { ANY_SCOPE, SWITCH_NOTE_RESERVE } from './types.js';
+import { ANY_MODEL, ANY_SCOPE, SWITCH_NOTE_RESERVE } from './types.js';
 import type { Config, Decision, ModelEntry, Place, Rule, Trigger } from './types.js';
 
 export interface ResolveRequest {
@@ -159,8 +159,9 @@ export function switchNote(from: string | null, to: string, retired: readonly st
     `The working rules noonsight delivered earlier in this conversation for ${names} no longer apply.\n` +
     `</noonsight-rules-change>`;
   const names = [...new Set(retired.map(noteName))];
-  const listed = build(names.join(' '), listText(names));
-  const note = listed.length + 2 <= SWITCH_NOTE_RESERVE ? listed : build('*', `every model other than ${target}`);
+  const every = build(ANY_MODEL, `every model other than ${target}`);
+  const listed = retired.includes(ANY_MODEL) ? every : build(names.join(' '), listText(names));
+  const note = listed.length + 2 <= SWITCH_NOTE_RESERVE ? listed : every;
   if (note.length + 2 > SWITCH_NOTE_RESERVE) throw new Error('switchNote: the note outgrew its reserve');
   return note;
 }

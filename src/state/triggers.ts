@@ -47,3 +47,19 @@ export function claimTrigger(stateDir: string, sessionId: string, record: Trigge
     throw e;
   }
 }
+
+/**
+ * Give a session the triggers another revealed, as when a fork starts with the conversation that
+ * revealed them. The records are copied as they are; a trigger the session already has stays.
+ */
+export function inheritTriggers(stateDir: string, from: string, to: string): void {
+  for (const trigger of sessionTriggers(stateDir, from)) {
+    const source = triggerFile(stateDir, from, trigger);
+    if (source === null) continue;
+    try {
+      claimTrigger(stateDir, to, JSON.parse(fs.readFileSync(source, 'utf8')) as TriggerRecord);
+    } catch {
+      // Without the record, the fork reveals the trigger again on its next edit of tracked code.
+    }
+  }
+}

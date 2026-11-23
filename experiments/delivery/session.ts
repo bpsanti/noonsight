@@ -4,6 +4,10 @@
 // a signal rather than a fixed time: the file the Stop hook writes, the decision log line the step
 // causes, or no new request for a while. It returns what every request held (oracle.ts), the session's
 // decision log, and whether the driver got through every step.
+//
+// A session that starts through `noonsight run`, or in a project with noonsight's configuration, does
+// so only under the arm `on`: the native arms have no counterpart of either, so under them the session
+// starts as without.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
@@ -12,8 +16,8 @@ import { PACKAGE_ROOT } from '../../src/config/paths.js';
 import type { Trigger } from '../../src/core/types.js';
 import { armMarker, writeArm } from './arms.js';
 import type { Alias, Sequence, Step } from './generate.js';
-import { configFor, flatten, inspect, kindOf, sessionIdOf, UNATTENDED_ENV, type Arm, type Fact, type Reference } from './oracle.js';
-import { ANCHOR, FILES, startStub } from './stub.js';
+import { configFor, flatten, inspect, kindOf, sessionIdOf, UNATTENDED_ENV, writeProject, type Arm, type Fact, type Reference } from './oracle.js';
+import { ANCHOR, FILES, startStub, type Body } from './stub.js';
 
 const BRIDGE = path.join(PACKAGE_ROOT, 'experiments', 'delivery', 'pty-bridge.py');
 
@@ -29,6 +33,8 @@ export interface Run extends Sequence {
 
 export interface RunOptions {
   readonly ref: Reference;
+  /** The reference with the benchmark's project configuration laid over it (loadReference). */
+  readonly projectRef: Reference;
   /** Where each session's home, configuration and project go; outside any Claude Code scratchpad folder. */
   readonly workRoot: string;
   /** The claude binary, and the version it prints. */
@@ -46,6 +52,8 @@ export interface RequestFact extends Omit<Fact, 'present'> {
   /** The step the driver was on when it came; the step count for requests after the last step. */
   readonly step: number;
   readonly at: string;
+  /** A request of a session /fork runs in the background. */
+  readonly background?: true;
 }
 
 export interface StepLog {
@@ -83,9 +91,58 @@ async function waitFor(cond: () => boolean, timeoutMs: number, pollMs = 100): Pr
 /** The prompt that makes the stub answer a step: null for the steps that are commands. */
 export function directive(step: Step, n: number): string | null {
   if (step.k === 'turn') return `DB ${n} turn`;
-  if (step.k === 'spawn') return `DB ${n} spawn ${step.calls.map((c) => `${c.type}.${c.model ?? '-'}`).join(' ')}`;
+  if (step.k === 'spawn') return `DB ${n} spawn ${step.calls.map((c) => `${c.type}.${c.model ?? '-'}${c.edit ? '.edit' : ''}`).join(' ')}`;
   if (step.k === 'edit') return `DB ${n} edit ${step.target}`;
   return null;
+}
+
+/** The tool_use ids of every successful tool result in a request's user messages. */
+function toolResults(body: Body): string[] {
+  const out: string[] = [];
+  for (const m of (body.messages ?? []) as Body[])
+    if (m.role === 'user' && Array.isArray(m.content)) for (const b of m.content as Body[]) if (b.type === 'tool_result' && !b.is_error) out.push(String(b.tool_use_id));
+  return out;
+}
+
+/** The absolute path of a program, as PATH finds it. */
+function which(program: string): string {
+  if (program.includes('/')) return path.resolve(program);
+  const found = spawnSync('/bin/sh', ['-c', 'command -v "$0"', program], { encoding: 'utf8' }).stdout.trim();
+  if (!found) throw new Error(`${program} is not on PATH`);
+  return found;
+}
+
+/**
+ * Stop the background processes a session's /fork left: Claude Code runs a forked conversation in a
+ * daemon it starts for the configuration directory, which outlives the session. The daemon names the
+ * session's project as the directory it was started from; everything below it goes too, and the
+ * daemon's folder in the temporary directory with them.
+ */
+export function stopBackground(projectDirs: readonly string[]): void {
+  const ps = spawnSync('ps', ['-axo', 'pid=,ppid=,args='], { encoding: 'utf8' }).stdout ?? '';
+  const rows = ps
+    .split('\n')
+    .map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] ?? '' }));
+  const ours = new Set(rows.filter((r) => r.args.includes(' daemon run ') && projectDirs.some((d) => r.args.includes(`"cwd":${JSON.stringify(d)}`))).map((r) => r.pid));
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const r of rows)
+      if (!ours.has(r.pid) && ours.has(r.ppid)) {
+        ours.add(r.pid);
+        grew = true;
+      }
+  }
+  const folders = new Set<string>();
+  for (const r of rows) if (ours.has(r.pid)) for (const m of r.args.matchAll(/(\/tmp\/cc-daemon-\d+\/[0-9a-f]+)\//g)) folders.add(m[1] as string);
+  for (const pid of ours)
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      // Already gone.
+    }
+  for (const f of folders) fs.rmSync(f, { recursive: true, force: true });
 }
 
 /** A decision log line without the machine's paths. */
@@ -119,22 +176,42 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
   const config = path.join(root, 'noonsight.json');
   fs.writeFileSync(config, JSON.stringify(configFor(spec.arm)));
   writeArm(spec.arm, claudeDir, project);
+  const cli = path.join(opts.noonsightRoot, 'dist', 'src', 'cli.js');
+  const inProject = spec.arm === 'on' && spec.project === true;
+  const launcher = spec.arm === 'on' && spec.launcher === true;
+  if (inProject) writeProject(project);
   if (spec.arm !== 'off') {
-    const installed = spawnSync(process.execPath, [path.join(opts.noonsightRoot, 'dist', 'src', 'cli.js'), 'install', '--account', claudeDir], {
-      env: { PATH: process.env.PATH ?? '', HOME: home, NOONSIGHT_CONFIG: config },
-      encoding: 'utf8',
-    });
+    const nsEnv = { PATH: process.env.PATH ?? '', HOME: home, NOONSIGHT_CONFIG: config };
+    const installed = spawnSync(process.execPath, [cli, 'install', '--account', claudeDir], { env: nsEnv, encoding: 'utf8' });
     if (installed.status !== 0) throw new Error(`noonsight install failed: ${installed.stderr}`);
+    if (inProject) {
+      const trusted = spawnSync(process.execPath, [cli, 'trust', project], { env: nsEnv, encoding: 'utf8' });
+      if (trusted.status !== 0) throw new Error(`noonsight trust failed: ${trusted.stdout}${trusted.stderr}`);
+    }
+  }
+  // `noonsight run` starts the `claude` on PATH: the one this run measures.
+  const bin = path.join(root, 'bin');
+  if (launcher) {
+    fs.mkdirSync(bin, { recursive: true });
+    fs.symlinkSync(which(opts.claude), path.join(bin, 'claude'));
   }
 
-  const where = { scope: spec.scope, place: spec.unattended ? ('unattended' as const) : ('attended' as const) };
+  const ref = inProject ? opts.projectRef : opts.ref;
+  const place = spec.unattended ? ('unattended' as const) : ('attended' as const);
   const marker = armMarker(spec.arm);
   const seen: { marker: boolean | null } = { marker: null };
   const facts: RequestFact[] = [];
   const bodies: unknown[] = [];
-  // A session reveals the code-edit trigger when an Edit of the tracked code file succeeds.
-  const pendingEdits = new Map<string, string | null>();
+  // A session reveals the code-edit trigger when an Edit of the tracked code file succeeds: from the
+  // request that carries its result on, in that conversation and in every copy of it a fork makes.
+  const pendingEdits = new Set<string>();
   const revealed = new Set<string | null>();
+  // The sessions /fork runs in the background: Claude Code runs them headless, so in the place
+  // `unattended` (docs/hooks.md, "SessionStart").
+  const background = new Set<string | null>();
+  // The conversations the session has been in, the most recent first, for /resume in the session.
+  const conversations: (string | null)[] = [];
+  let conversation: string | null = null;
   let current = -1;
   let lastRequestAt = Date.now();
   const stub = await startStub(real, (body, answer) => {
@@ -142,21 +219,25 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
     const session = sessionIdOf(body);
     const kind = kindOf(body);
     if (kind === 'main') {
-      const lastUser = ((body.messages ?? []) as Record<string, any>[]).filter((m) => m.role === 'user').at(-1);
-      for (const b of Array.isArray(lastUser?.content) ? (lastUser.content as Record<string, any>[]) : [])
-        if (b.type === 'tool_result' && pendingEdits.has(b.tool_use_id) && !b.is_error) revealed.add(pendingEdits.get(b.tool_use_id) ?? null);
+      if (spec.steps[current]?.k === 'fork' && !conversations.includes(session)) background.add(session);
+      if (!background.has(session)) {
+        conversations.splice(0, conversations.length, session, ...conversations.filter((c) => c !== session));
+        conversation = session;
+      }
+      if (toolResults(body).some((id) => pendingEdits.has(id))) revealed.add(session);
       if (marker !== null && seen.marker === null) seen.marker = flatten(body).includes(marker);
     }
     const triggers: Trigger[] = revealed.has(session) ? ['code-edit'] : [];
-    const { present: _present, ...f } = inspect(opts.ref, body, { ...where, triggers });
-    facts.push({ i: facts.length, step: current, at: new Date().toISOString(), ...f });
+    const where = { scope: spec.scope, place: background.has(session) ? ('unattended' as const) : place, triggers };
+    const { present: _present, ...f } = inspect(ref, body, where);
+    facts.push({ i: facts.length, step: current, at: new Date().toISOString(), ...f, ...(background.has(session) ? { background: true as const } : {}) });
     if (opts.keep) bodies.push(body);
     if (kind === 'main')
-      for (const b of answer.content) if (b.type === 'tool_use' && b.name === 'Edit' && String((b.input as Record<string, unknown>).file_path).endsWith(FILES.code)) pendingEdits.set(String(b.id), session);
+      for (const b of answer.content) if (b.type === 'tool_use' && b.name === 'Edit' && String((b.input as Record<string, unknown>).file_path).endsWith(FILES.code)) pendingEdits.add(String(b.id));
   });
 
   const env: Record<string, string> = {
-    PATH: process.env.PATH ?? '',
+    PATH: launcher ? `${bin}${path.delimiter}${process.env.PATH ?? ''}` : (process.env.PATH ?? ''),
     HOME: home,
     TERM: 'xterm-256color',
     LANG: 'en_US.UTF-8',
@@ -183,6 +264,19 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
   };
   const countLog = (pred: (d: Record<string, unknown>) => boolean): number => decisions().filter(pred).length;
   const stops = (): number => fs.readdirSync(probe).length;
+  /** The permission mode the newest Stop hook input names. */
+  const lastMode = (): string | null => {
+    const newest = fs
+      .readdirSync(probe)
+      .map((f) => path.join(probe, f))
+      .sort((a, b) => fs.statSync(a).mtimeMs - fs.statSync(b).mtimeMs)
+      .at(-1);
+    try {
+      return newest ? String((JSON.parse(fs.readFileSync(newest, 'utf8')) as { permission_mode?: unknown }).permission_mode ?? '') : null;
+    } catch {
+      return null;
+    }
+  };
   const screen = path.join(root, 'screen.log');
   const tools = ['--permission-mode', 'default', '--allowedTools', 'Agent Read Edit Write'];
 
@@ -192,8 +286,9 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
   const send = (cmd: Record<string, unknown>): void => {
     if (!exited) child?.stdin?.write(`${JSON.stringify(cmd)}\n`);
   };
+  const program = launcher ? [process.execPath, cli, 'run', '--'] : [opts.claude];
   const launch = (args: readonly string[], extraEnv: Record<string, string> = {}): void => {
-    const c = spawn('python3', [BRIDGE, screen, opts.claude, ...args, ...tools], { cwd: project, env: { ...env, ...extraEnv }, stdio: ['pipe', 'ignore', 'ignore'] });
+    const c = spawn('python3', [BRIDGE, screen, ...program, ...args, ...tools], { cwd: project, env: { ...env, ...extraEnv }, stdio: ['pipe', 'ignore', 'ignore'] });
     child = c;
     c.stdin?.on('error', () => undefined);
     exited = false;
@@ -225,12 +320,22 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
       return Date.now() - Math.max(at, lastRequestAt) >= quietMs;
     }, timeoutMs);
   };
+  const starts = (source: string): number => countLog((d) => d.event === 'session-start' && d.source === source);
   /** Every arm but `off` runs noonsight's hook, whose log line marks that the session is up. */
   const ready = async (source: string, before: number): Promise<boolean> => {
-    const ok = spec.arm === 'off' ? true : await waitFor(() => countLog((d) => d.event === 'session-start' && d.source === source) > before, 20000);
+    const ok = spec.arm === 'off' ? true : await waitFor(() => starts(source) > before, 20000);
     await sleep(spec.arm === 'off' ? 6000 : 2500);
     return ok;
   };
+  /** A command that starts another conversation in the same process: wait for its start, or a while under `off`. */
+  const opened = async (source: string, before: number, timeoutMs = 10000): Promise<boolean> => {
+    if (spec.arm === 'off') {
+      await sleep(3000);
+      return true;
+    }
+    return waitFor(() => starts(source) > before, timeoutMs);
+  };
+  let plan = false;
 
   let harness = 'ok';
   const stepLog: StepLog[] = [];
@@ -251,7 +356,38 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
         const before = stops();
         await type(directive(step, i) as string);
         if (!(await waitFor(() => stops() > before, 60000))) outcome = 'no-answer';
-        else await quiet(step.k === 'spawn' ? 1800 : 500, 30000);
+        else {
+          await quiet(step.k === 'spawn' ? 1800 : 500, 30000);
+          // The answer's Stop hook names the permission mode: a session not in the mode the sequence says was not driven as written.
+          if ((lastMode() === 'plan') !== plan) outcome = 'wrong-mode';
+        }
+      } else if (step.k === 'plan') {
+        if (step.on) await type('/plan');
+        else send({ send: '\u001b[Z' });
+        plan = step.on;
+        await sleep(1500);
+      } else if (step.k === 'branch') {
+        const before = starts('fork');
+        await type('/branch');
+        if (!(await opened('fork', before))) outcome = 'no-branch-seen';
+        await quiet(600, 15000);
+      } else if (step.k === 'fork') {
+        const before = stops();
+        await type(`/fork DB ${i} turn`);
+        // The background session answers its prompt, and its Stop hook writes a file as the session's does.
+        if (!(await waitFor(() => stops() > before, 60000))) outcome = 'no-fork-answer';
+        await quiet(1500, 30000);
+      } else if (step.k === 'back') {
+        const to = conversations.find((c) => c !== conversation) ?? null;
+        if (to === null) outcome = 'no-earlier-conversation';
+        else {
+          const before = starts('resume');
+          await type(`/resume ${to}`);
+          if (!(await opened('resume', before))) outcome = 'no-resume-seen';
+          conversations.splice(0, conversations.length, to, ...conversations.filter((c) => c !== to));
+          conversation = to;
+          await quiet(600, 15000);
+        }
       } else if (step.k === 'model') {
         const switches = (): number => countLog((d) => d.event === 'model-switch');
         const before = switches();
@@ -264,27 +400,34 @@ export async function runSession(spec: Run, opts: RunOptions): Promise<SessionRe
         }
         await sleep(600);
       } else if (step.k === 'compact' || step.k === 'clear') {
-        const starts = (): number => countLog((d) => d.event === 'session-start' && d.source === step.k);
-        const before = starts();
+        const before = starts(step.k);
         await type(`/${step.k}`);
         if (spec.arm === 'off') await sleep(step.k === 'compact' ? 8000 : 3000);
-        else if (!(await waitFor(() => starts() > before, step.k === 'compact' ? 25000 : 8000))) outcome = `no-${step.k}-seen`;
+        else if (!(await waitFor(() => starts(step.k) > before, step.k === 'compact' ? 25000 : 8000))) outcome = `no-${step.k}-seen`;
         await quiet(600, 15000);
+        // The conversation /clear leaves is the one /resume in the session goes back to; the new one has had no request yet.
+        if (step.k === 'clear') conversation = null;
       } else if (step.k === 'resume') {
         await quit();
-        const before = countLog((d) => d.event === 'session-start' && d.source === 'resume');
+        const source = step.fork ? 'fork' : 'resume';
+        const before = starts(source);
         if (step.setting) fs.writeFileSync(settingsFile, JSON.stringify({ ...(JSON.parse(fs.readFileSync(settingsFile, 'utf8')) as object), model: step.setting }));
-        launch(['--continue', ...(step.model ? ['--model', step.model] : [])], step.env ? { ANTHROPIC_MODEL: MODEL_ID[step.env] } : {});
-        if (!(await ready('resume', before))) outcome = 'no-resume-seen';
+        launch(['--continue', ...(step.fork ? ['--fork-session'] : []), ...(step.model ? ['--model', step.model] : [])], step.env ? { ANTHROPIC_MODEL: MODEL_ID[step.env] } : {});
+        plan = false;
+        if (!(await ready(source, before))) outcome = `no-${source}-seen`;
+        if (step.fork) conversation = null;
       }
+      if (step.k === 'branch') conversation = null;
       stepLog.push({ i, k: step.k, ms: Date.now() - t0, requests: facts.length - requestsBefore, outcome });
       if (outcome === 'no-answer') harness = `step-timeout:${i}`;
+      if (outcome === 'wrong-mode') harness = `wrong-mode:${i}`;
     }
   } catch (e) {
     harness = `error:${e instanceof Error ? e.message : String(e)}`;
   } finally {
     current = spec.steps.length;
     await quit().catch(() => undefined);
+    if (spec.steps.some((s) => s.k === 'fork')) stopBackground([project, real]);
     await stub.close();
   }
   if (harness === 'ok' && seen.marker === false) harness = 'arm-not-loaded';
