@@ -115,7 +115,7 @@ export function readCommandLine(pid: number, platform: NodeJS.Platform): Command
 }
 
 /** Every value given to an option, as --name value or --name=value, up to a "--" that ends the options. */
-function optionValues(cmd: CommandLine, name: string): string[] {
+export function optionValues(cmd: CommandLine, name: string): string[] {
   const values: string[] = [];
   for (let i = 0; i < cmd.args.length; i++) {
     const a = cmd.args[i] ?? '';
@@ -140,7 +140,7 @@ export function optionCandidates(cmd: CommandLine, name: string): string[] {
   return [...new Set(values)];
 }
 
-const NO_BOUNDARIES = 'a command line read without argument boundaries cannot tell the option from prompt text';
+export const NO_BOUNDARIES = 'a command line read without argument boundaries cannot tell the option from prompt text';
 
 /** A --setting-sources value: a comma-separated list of the settings files Claude Code may read. */
 const SETTING_SOURCES = /^(?:user|project|local)(?:,(?:user|project|local))*$/;
@@ -194,11 +194,9 @@ function settingsModel(ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>, cmd: Co
   }
 
   // --setting-sources narrows the files below to the ones it lists.
-  const lists = cmd ? optionCandidates(cmd, '--setting-sources') : [];
-  if (lists.length > 1 || (cmd !== null && !cmd.exact && lists.some((l) => !SETTING_SOURCES.test(l))))
-    return { kind: 'unresolved', value: lists.join(' or '), source: 'settings', from: '--setting-sources', why: NO_BOUNDARIES };
-  const listed = lists[0];
-  const sources = listed === undefined ? null : new Set(listed.split(',').map((s) => s.trim()));
+  const listed = settingSources(cmd);
+  if (listed.kind === 'unresolved') return { kind: 'unresolved', value: listed.value, source: 'settings', from: '--setting-sources', why: NO_BOUNDARIES };
+  const sources = listed.kind === 'listed' ? listed.sources : null;
   const project = ctx.env.CLAUDE_PROJECT_DIR || ctx.cwd;
   const files: [string, string | null][] = [
     ['local', project ? path.join(project, '.claude', 'settings.local.json') : null],
@@ -218,7 +216,7 @@ function settingsModel(ctx: Pick<LaunchContext, 'env' | 'home' | 'cwd'>, cmd: Co
  * directly (https://code.claude.com/docs/en/managed-settings, "How Claude Code combines managed
  * sources"); behind another provider or another API address it starts at the next managed source.
  */
-function remoteSettingsApply(env: Env): boolean {
+export function remoteSettingsApply(env: Env): boolean {
   if (PROVIDER_VARS.some((v) => isSet(env[v]))) return false;
   if (!env.ANTHROPIC_BASE_URL) return true;
   try {
@@ -230,18 +228,34 @@ function remoteSettingsApply(env: Env): boolean {
 
 /** The model a --settings value sets: null when it sets none, undefined when it cannot be read. */
 function readSettingsArgument(value: string): string | null | undefined {
-  let parsed: unknown;
-  if (value.trimStart().startsWith('{')) {
-    try {
-      parsed = JSON.parse(value) as unknown;
-    } catch {
-      return undefined;
-    }
-  } else {
-    parsed = readObject(value);
-    if (parsed === null) return undefined;
+  const parsed = settingsArgument(value);
+  return parsed === null ? undefined : modelOf(parsed);
+}
+
+/** The settings a --settings value gives, inline JSON or a file; null when they cannot be read. */
+export function settingsArgument(value: string): Record<string, unknown> | null {
+  if (!value.trimStart().startsWith('{')) return readObject(value);
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isObject(parsed) ? parsed : null;
+  } catch {
+    return null;
   }
-  return modelOf(parsed);
+}
+
+/** The settings files a --setting-sources value lets Claude Code read. */
+export type SettingSources =
+  | { readonly kind: 'all' }
+  | { readonly kind: 'listed'; readonly sources: ReadonlySet<string> }
+  | { readonly kind: 'unresolved'; readonly value: string };
+
+/** What --setting-sources lists on a command line; every source when the option is absent or the command line unknown. */
+export function settingSources(cmd: CommandLine | null): SettingSources {
+  const lists = cmd ? optionCandidates(cmd, '--setting-sources') : [];
+  if (lists.length > 1 || (cmd !== null && !cmd.exact && lists.some((l) => !SETTING_SOURCES.test(l))))
+    return { kind: 'unresolved', value: lists.join(' or ') };
+  const listed = lists[0];
+  return listed === undefined ? { kind: 'all' } : { kind: 'listed', sources: new Set(listed.split(',').map((s) => s.trim())) };
 }
 
 /**
@@ -303,7 +317,7 @@ function modelOf(settings: unknown): string | null {
   return isObject(settings) && typeof settings.model === 'string' && settings.model !== '' ? settings.model : null;
 }
 
-function readObject(file: string): Record<string, unknown> | null {
+export function readObject(file: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown;
     return isObject(value) ? value : null;
@@ -312,7 +326,7 @@ function readObject(file: string): Record<string, unknown> | null {
   }
 }
 
-function safeManagedDir(env: Env): string | null {
+export function safeManagedDir(env: Env): string | null {
   try {
     return managedTarget(env).managedDir ?? null;
   } catch {

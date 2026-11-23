@@ -1,12 +1,13 @@
 // The Claude Code hook adapter: SessionStart and PostModelSwitch for the session itself, PostToolUse
-// on Edit and Write for the triggers the session reveals (triggers.ts), and PreToolUse and PostToolUse
-// on the agent tool and SubagentStart for the subagents it starts (subagents.ts).
+// on Edit and Write for the triggers the session reveals (triggers.ts), and PreToolUse, PermissionRequest
+// and PostToolUse on the agent tool and SubagentStart for the subagents it starts (subagents.ts).
 //
 // Contract (docs/hooks.md has the full table):
 //   - Always exits 0 and never holds the session beyond a bound: it reads local files only and never
 //     the network itself. It starts no process, except `ps` on macOS to read the Claude Code command
 //     line when the input does not name the session's model and, except at a resume, no record does
-//     (launch.ts), or when `noonsight run` started the session (launcher.ts); `git ls-files`, stopped
+//     (launch.ts), when `noonsight run` started the session (launcher.ts), or when an agent call's
+//     subagent may take its model from a definition (definitions.ts); `git ls-files`, stopped
 //     after 3 seconds, for an edit of a code file until the session reveals code-edit (code-edit.ts);
 //     and, with classifier.mode on, the classifier for an agent call, stopped after
 //     classifier.timeout_ms (classifier.ts).
@@ -34,7 +35,7 @@ import type { InstallKind } from './locations.js';
 import { conversationResponse, type Response } from './predict.js';
 import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
-import { agentCall, agentResult, choiceFields, decisionFields, subagentStart } from './subagents.js';
+import { agentCall, agentHeld, agentResult, choiceFields, decisionFields, lateRules, subagentStart } from './subagents.js';
 import { fileEdit, mayReveal } from './triggers.js';
 
 export interface HookContext {
@@ -49,8 +50,11 @@ export interface HookContext {
   readonly parentPid: number;
 }
 
-/** Run one hook event. Returns what to print on stdout (possibly nothing). Never throws. */
-export function runHook(arg: string, rawInput: string, ctx: HookContext): string {
+/**
+ * Run one hook event. Returns what to print on stdout (possibly nothing). Never throws. `late` is false
+ * only for the event's own run after rules a subagent was owed have been given (see below).
+ */
+export function runHook(arg: string, rawInput: string, ctx: HookContext, late = true): string {
   if (ctx.env.NOONSIGHT_DISABLE === '1') return '';
   const spec = HOOK_HANDLERS.find((h) => h.arg === arg);
   if (!spec) return '';
@@ -66,8 +70,6 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
   if (spec.tools !== undefined && !spec.tools.includes(str(input.tool_name) ?? '')) return '';
 
   const state = stateDir(ctx.home);
-  // Every edit runs this hook; one that cannot reveal a trigger ends here, before the configuration is read.
-  if (editEvent && !mayReveal(input, state)) return '';
   const record: Record<string, unknown> = {
     ts: ctx.now.toISOString(),
     version: ctx.version,
@@ -93,6 +95,24 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     }
   };
 
+  // A result or an edit inside a subagent whose start could not tell its call: the subagent's own call is
+  // known by now, and its rules ride on this hook's context. The event itself then runs as usual, and
+  // its own output is added.
+  if (late && (arg === 'agent-result' || editEvent) && str(input.agent_id) !== null) {
+    let owed: ReturnType<typeof lateRules> = null;
+    try {
+      owed = lateRules(input, { state, now: ctx.now });
+    } catch {
+      // The subagent keeps going without them, as it started.
+    }
+    if (owed !== null) {
+      log(owed.record);
+      return withContext(runHook(arg, rawInput, ctx, false), event, String(owed.specific?.additionalContext ?? ''));
+    }
+  }
+  // Every edit runs this hook; one that cannot reveal a trigger ends here, before the configuration is read.
+  if (editEvent && !mayReveal(input, state)) return '';
+
   try {
     const file = configPath(ctx.env, ctx.home);
     // A machine-wide install reaches every account; an account that never set noonsight up is left alone.
@@ -106,8 +126,9 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     } catch (e) {
       if (!(e instanceof ConfigError)) throw e;
       // The call that started the subagent already warned, and logged that nothing was delivered; the
-      // session's start already warned that the session got no rules.
-      if (event === 'SubagentStart' || editEvent) return '';
+      // session's start already warned that the session got no rules; the call a permission prompt holds
+      // already warned.
+      if (event === 'SubagentStart' || event === 'PermissionRequest' || editEvent) return '';
       // The call this result belongs to already warned.
       if (event === 'PostToolUse') {
         log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), warned: false });
@@ -127,7 +148,13 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     if (subagentEvent) {
       const sub = { env: ctx.env, home: ctx.home, now: ctx.now, state, parentPid: ctx.parentPid, file };
       const outcome =
-        event === 'PreToolUse' ? agentCall(input, config, sub) : event === 'SubagentStart' ? subagentStart(input, config, sub) : agentResult(input, config, sub);
+        event === 'PreToolUse'
+          ? agentCall(input, config, sub)
+          : event === 'SubagentStart'
+            ? subagentStart(input, config, sub)
+            : event === 'PermissionRequest'
+              ? agentHeld(input, config, sub)
+              : agentResult(input, config, sub);
       if (outcome === null) return '';
       log(outcome.record);
       return output(outcome.messages, outcome.specific);
@@ -212,6 +239,11 @@ export function runHook(arg: string, rawInput: string, ctx: HookContext): string
     if (event === 'PostToolUse') {
       log({ status: 'error', error: message, ...notRouted('error'), warned: true });
       return output([`noonsight: the hook failed (${message}), so the subagent's model was not checked.`], null);
+    }
+    // A permission request is answered by the person; the call it holds may then start too late for its rules.
+    if (event === 'PermissionRequest') {
+      log({ status: 'error', error: message, warned: false });
+      return '';
     }
     if (event === 'SubagentStart') {
       log({ status: 'error', error: message, delivered: 'nothing', warned: true });
@@ -527,6 +559,23 @@ function output(messages: readonly string[], specific: Record<string, unknown> |
   return JSON.stringify({
     ...(messages.length ? { systemMessage: messages.join('\n') } : {}),
     ...(specific ? { hookSpecificOutput: specific } : {}),
+  });
+}
+
+/** A hook's output with more context added to it, for the event given. */
+function withContext(out: string, event: string, context: string): string {
+  if (context === '') return out;
+  let parsed: Record<string, unknown> = {};
+  try {
+    if (out !== '') parsed = JSON.parse(out) as Record<string, unknown>;
+  } catch {
+    parsed = {};
+  }
+  const specific = (typeof parsed.hookSpecificOutput === 'object' && parsed.hookSpecificOutput !== null ? parsed.hookSpecificOutput : {}) as Record<string, unknown>;
+  const earlier = typeof specific.additionalContext === 'string' && specific.additionalContext !== '' ? specific.additionalContext : null;
+  return JSON.stringify({
+    ...parsed,
+    hookSpecificOutput: { ...specific, hookEventName: event, additionalContext: earlier === null ? context : `${context}\n\n${earlier}` },
   });
 }
 

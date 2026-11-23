@@ -1,0 +1,18 @@
+{
+  "session_id": "35a352f7-a95b-4798-935a-72209ef1a146",
+  "transcript_path": "/home/user/.claude/projects/-home-user-project/35a352f7-a95b-4798-935a-72209ef1a146.jsonl",
+  "cwd": "/home/user/project",
+  "prompt_id": "9068f74d-3910-4a7b-9753-ab2abe327ce5",
+  "permission_mode": "default",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "probe general-purpose",
+    "prompt": "PROBE-SUB general-purpose: reply done",
+    "subagent_type": "general-purpose"
+  },
+  "tool_use_id": "toolu_probe_0_mwt7hxku"
+}

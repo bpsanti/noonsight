@@ -1,20 +1,24 @@
-// The Claude Code hook adapter for subagents: PreToolUse and PostToolUse on the agent tool, and
-// SubagentStart.
+// The Claude Code hook adapter for subagents: PreToolUse, PermissionRequest and PostToolUse on the
+// agent tool, and SubagentStart.
 //
-//   PreToolUse    predicts the model the subagent will run on (predict.ts) and resolves its rules for
-//                 the place "subagent". It records them under the call's tool_use_id, and adds the call
-//                 to its session's pool of calls whose subagent has not started. It returns the call
-//                 changed, with the permission decision the configuration asks for, only when routing
-//                 sets its model or effort; any other call gets no output that touches it, so the auto
-//                 mode classifier's review of the response the call came in still holds. With
+//   PreToolUse    predicts the model the subagent will run on (predict.ts, definitions.ts) and resolves
+//                 its rules for the place "subagent". It records them under the call's tool_use_id, and
+//                 adds the call to its session's pool of calls whose subagent has not started. It returns
+//                 the call changed, with the permission decision the configuration asks for, only when
+//                 routing sets its model or effort; any other call gets no output that touches it, so the
+//                 auto mode classifier's review of the response the call came in still holds. With
 //                 classifier.mode on, a task its matchers did not place may wait for the classifier
 //                 (classifier.ts), up to classifier.timeout_ms.
+//   PermissionRequest marks held the open call a permission prompt holds, so it stays open until the
+//                 person answers; it never answers the request itself.
 //   SubagentStart gives the subagent the rules of the call that started it, as additionalContext. Its
-//                 input names the subagent and its type but not the call, so it takes the one open call
-//                 of that type in the session's pool, or the call whose result already named this
-//                 subagent. When several calls of the type are open, it waits briefly for a result to name
+//                 input names the subagent and its type (a teammate's name, for a teammate) but not the
+//                 call, so it takes the one open call of that type in the session's pool, or the call
+//                 whose result already named this subagent, leaving out calls the transcript shows
+//                 refused. When several calls of the type are open, it waits briefly for a result to name
 //                 it; failing that, the subagent gets only what every one of those calls would give, since
-//                 the subagents of one response's calls start in no fixed order.
+//                 the subagents of one response's calls start in no fixed order, and when that is nothing
+//                 a later hook inside the subagent gives it its own call's rules (lateRules).
 //   PostToolUse   compares the prediction with the model the subagent started on (resolvedModel in the
 //                 tool's response), logs match or MISMATCH, and warns on a mismatch. It records the
 //                 subagent's model under its agent id, for the calls that subagent makes in turn, and
@@ -22,6 +26,8 @@
 //
 // Like the session hooks, none ever blocks a call: an undeclared or unknown model only warns.
 
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { normalizeModel } from '../../core/normalize.js';
 import { resolve, scopeChangesRules } from '../../core/resolve.js';
 import { route, routeReadsScope, routingGate } from '../../core/route.js';
@@ -31,16 +37,21 @@ import {
   agentCallFile,
   agentFile,
   agentLinkFile,
+  agentPendingFile,
   agentStartFile,
   changePool,
   pause,
+  poolFile,
   readAgentCall,
   readAgentLink,
   readAgentModel,
+  readAgentPending,
   readAgentStart,
+  readPool,
   removeRecord,
   writeRecord,
   type AgentCall,
+  type AgentPending,
   type AgentStart,
   type OpenCall,
   type Pool,
@@ -50,9 +61,10 @@ import {
 import { readState, sessionFile } from '../../state/sessions.js';
 import type { Env } from '../../config/paths.js';
 import { classifiedScope } from './classifier.js';
-import { launchModel } from './launch.js';
+import { definitionFinder } from './definitions.js';
+import { launchModel, readCommandLine } from './launch.js';
 import { defaultAccountDir } from './locations.js';
-import { definitionFinder, predict, subagentTranscript, transcriptModel, type Definition, type Prediction } from './predict.js';
+import { predict, refusedCalls, subagentCall, subagentTranscript, transcriptModel, type Prediction } from './predict.js';
 import { notRouted, routeFields, subagentHeld, subagentTranslation } from './routing.js';
 
 export interface SubagentContext {
@@ -99,7 +111,12 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
 
   const parent = parentModel(input, ctx);
   const projectDir = ctx.env.CLAUDE_PROJECT_DIR || str(input.cwd);
-  const findDefinition = once(definitionFinder({ projectDir, configDir: defaultAccountDir(ctx.env, ctx.home) }));
+  const findDefinition = definitionFinder({
+    projectDir,
+    configDir: defaultAccountDir(ctx.env, ctx.home),
+    env: ctx.env,
+    commandLine: () => readCommandLine(ctx.parentPid, process.platform),
+  });
   const predictWith = (model: string | null): Prediction =>
     predict({ subagentType, requested: model, parent: parent.model, env: ctx.env, findDefinition });
   const prompt = typeof ti.prompt === 'string' ? ti.prompt : null;
@@ -123,7 +140,8 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       ? [`noonsight: the classifier could not place the task of subagent ${subagentType} (${classified.failure}), so it has no scope.`]
       : [];
 
-  const definitionEffort = subagentType.includes(':') ? null : (findDefinition(subagentType)?.effort ?? null);
+  const lookup = findDefinition(subagentType);
+  const definitionEffort = lookup.kind === 'found' ? lookup.definition.effort : null;
   const routed = route(config, {
     target: 'subagents',
     scope: scope.scope,
@@ -182,7 +200,7 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
     writeRecord(callFile, call);
     if (callFile !== null && toolUseId !== null && sessionId !== null)
       changePool(ctx.state, sessionId, (pool) => ({
-        pool: { open: [...pool.open, { id: toolUseId, type: subagentType, at: call.at }], groups: pool.groups },
+        pool: { open: [...pool.open, openCall(toolUseId, subagentType, call.at, specific !== null ? { ...ti, ...changes } : ti, str(input.agent_id))], groups: pool.groups },
         value: undefined,
       }));
   } catch (e) {
@@ -207,6 +225,8 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
       model_source: prediction.source,
       ...(prediction.value !== undefined ? { model_value: prediction.value } : {}),
       ...(prediction.definition !== undefined ? { definition: prediction.definition } : {}),
+      ...(prediction.definitionSource !== undefined ? { definition_source: prediction.definitionSource } : {}),
+      ...(prediction.definitionWhy !== undefined ? { definition_why: prediction.definitionWhy } : {}),
       ...(prediction.why !== undefined ? { unresolved_why: prediction.why } : {}),
       ...routing,
       delivered,
@@ -217,6 +237,54 @@ export function agentCall(input: Record<string, unknown>, config: Config, ctx: S
     messages,
     specific,
   };
+}
+
+/**
+ * A call as its session's pool keeps it. A call that gives a name, and is neither a fork nor isolated,
+ * starts an agent team teammate when teams are on, whose start names it by that name instead of its type
+ * (seen on Claude Code 2.1.330). The hash of its input, as Claude Code runs it, finds it again when a
+ * permission prompt holds it, since a permission request names the input but not the call.
+ */
+function openCall(id: string, type: string, at: string, toolInput: Record<string, unknown>, by: string | null): OpenCall {
+  const name = str(toolInput.name);
+  const teammate = name !== null && type !== 'fork' && toolInput.isolation === undefined;
+  return { id, type, at, ...(teammate ? { name } : {}), input: inputHash(toolInput), ...(by !== null ? { by } : {}) };
+}
+
+/** A hash of a tool input that does not depend on the order of its keys. */
+function inputHash(value: unknown): string {
+  const canonical = (v: unknown): unknown =>
+    Array.isArray(v)
+      ? v.map(canonical)
+      : typeof v === 'object' && v !== null
+        ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical((v as Record<string, unknown>)[k])]))
+        : v;
+  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex').slice(0, 32);
+}
+
+/**
+ * PermissionRequest on the agent tool: a permission prompt is about to hold a call, for as long as the
+ * person takes to answer. The call is marked held, so it stays open past the windows that leave out a
+ * call whose subagent did not start in time. The request carries the call's input but not its id, so
+ * the call is the newest open one with the same input from the same caller. It never answers the
+ * request: the person, or another hook, does.
+ */
+export function agentHeld(input: Record<string, unknown>, config: Config, ctx: SubagentContext): SubagentOutcome | null {
+  const sessionId = str(input.session_id);
+  const toolInput = input.tool_input;
+  if (sessionId === null || typeof toolInput !== 'object' || toolInput === null || Array.isArray(toolInput) || config.subagents.delivery === 'off') return null;
+  const hash = inputHash(toolInput);
+  const by = str(input.agent_id) ?? undefined;
+  const now = ctx.now.toISOString();
+  const held = changePool<string | null>(ctx.state, sessionId, (found) => {
+    const pool = current(found, ctx.now.getTime());
+    const match = [...pool.open].reverse().find((c) => c.input === hash && c.by === by && c.held === undefined);
+    if (match === undefined) return { pool: null, value: null };
+    return { pool: { open: pool.open.map((c) => (c.id === match.id ? { ...c, held: now } : c)), groups: pool.groups }, value: match.id };
+  });
+  // Nothing noonsight saw: delivery was off for the call, or its record could not be written.
+  if (held === null) return null;
+  return { record: { subagent_type: str((toolInput as Record<string, unknown>).subagent_type) ?? 'general-purpose', call_id: held, held: true, warned: false }, messages: [], specific: null };
 }
 
 /** The hookSpecificOutput for a call routing changed, with the permission decision the configuration asks for. */
@@ -244,6 +312,11 @@ const OPEN_FOR_MS = 2 * 60 * 1000;
  * earlier than this came from an earlier response and was denied after its hook ran.
  */
 const SIBLING_MS = 5000;
+/**
+ * How long a call a permission prompt holds stays open. The person may answer the prompt long after the
+ * call was made; a call they reject is left out sooner, once the transcript shows it refused.
+ */
+const HELD_FOR_MS = 24 * 60 * 60 * 1000;
 /** How long a start that several open calls could own waits for a result to name it. */
 const LINK_WAIT_MS = 2000;
 const LINK_POLL_MS = 25;
@@ -272,14 +345,18 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
 
   const now = ctx.now.getTime();
   const linkFile = agentLinkFile(ctx.state, agentId);
+  const transcript = str(input.transcript_path);
+  const refused = refusedAmong(current(readPool(poolFile(ctx.state, sessionId)), now), type, transcript, sessionId);
+  const pendingFile = agentPendingFile(ctx.state, agentId);
   // Decides under the pool's lock, and records the start there too, so that a result of the same call,
   // running at the same time, sees either the start or nothing of it.
   const decide = (final: boolean): Decided | 'wait' =>
     changePool<Decided | 'wait'>(ctx.state, sessionId, (found) => {
-      const pool = current(found, now);
+      const read = current(found, now);
+      const pool = refused.size > 0 ? settled({ open: read.open.filter((c) => !refused.has(c.id)), groups: read.groups }) : read;
       const link = readAgentLink(linkFile);
       let taken: Taken | 'wait';
-      const candidates = pool.open.filter((c) => c.type === type);
+      const candidates = pool.open.filter((c) => startsAs(c, type));
       let next: Pool = pool;
       if (link !== null) {
         taken = { match: 'result', calls: [link.call] };
@@ -294,8 +371,8 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
         taken = { match: 'shared', calls: candidates.map((c) => c.id) };
         next = withShared(pool, taken.calls);
       }
-      // Nothing taken: the pool stays as recorded; calls too old to start are left out when it is read.
-      if (taken === null || taken === 'wait') return { pool: null, value: taken };
+      // Nothing taken: the pool stays as recorded, but for refused calls; calls too old to start are left out when it is read.
+      if (taken === null || taken === 'wait') return { pool: pool !== read ? pool : null, value: taken };
       const given = startText(config, taken, ctx.state);
       writeRecord(startFile, {
         session_id: sessionId,
@@ -310,8 +387,12 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
         removeRecord(agentCallFile(ctx.state, link.call));
         removeRecord(linkFile);
       }
+      // A later hook inside the subagent can still find its own call, and give it that call's rules.
+      if (given.fields.reason === 'calls-differ')
+        writeRecord(pendingFile, { session_id: sessionId, calls: taken.calls, at: ctx.now.toISOString() } satisfies AgentPending);
       return { pool: next, value: { taken, given } };
     });
+  for (const id of refused) removeRecord(agentCallFile(ctx.state, id));
 
   let decided = decide(false);
   for (const until = Date.now() + LINK_WAIT_MS; decided === 'wait' && Date.now() < until; ) {
@@ -319,7 +400,8 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
     decided = decide(false);
   }
   if (decided === 'wait') decided = decide(true);
-  // No call of this type is open: a subagent noonsight did not see start, such as a teammate.
+  // No call of this type is open: a subagent that did not start through the agent tool, such as a
+  // workflow's agent, or one whose call noonsight did not see.
   if (decided === null || decided === 'wait') return null;
 
   const { taken, given } = decided;
@@ -329,11 +411,81 @@ export function subagentStart(input: Record<string, unknown>, config: Config, ct
       start_match: taken.match,
       ...(taken.match === 'shared' ? { calls: taken.calls } : { call_id: taken.calls[0] ?? null }),
       ...given.fields,
+      ...(refused.size > 0 ? { refused: [...refused] } : {}),
       delivered: given.text !== null ? 'rules' : given.delivered,
       warned: false,
     },
     messages: [],
     specific: given.text !== null ? startContext(given.text) : null,
+  };
+}
+
+/** Whether a subagent that starts as `type` may come from the call: by the call's type, or by the name a teammate starts under. */
+function startsAs(c: OpenCall, type: string): boolean {
+  return c.type === type || c.name === type;
+}
+
+/**
+ * The open calls a start could come from that the transcripts show refused, such as one rejected at its
+ * permission prompt. Read only when a start has to choose: several calls of its type are open, or a
+ * permission prompt held one of them.
+ */
+function refusedAmong(pool: Pool, type: string, transcript: string | null, sessionId: string): Set<string> {
+  const candidates = pool.open.filter((c) => startsAs(c, type));
+  if (candidates.length < 2 && !candidates.some((c) => c.held !== undefined)) return new Set();
+  const refused = new Set<string>();
+  const byCaller = new Map<string | undefined, string[]>();
+  for (const c of candidates) byCaller.set(c.by, [...(byCaller.get(c.by) ?? []), c.id]);
+  for (const [by, ids] of byCaller) {
+    const file = by === undefined ? transcript : subagentTranscript(transcript, sessionId, by);
+    for (const id of refusedCalls(file, ids)) refused.add(id);
+  }
+  return refused;
+}
+
+/**
+ * A later hook inside a subagent whose start could not tell its call from others that need other rules:
+ * by now Claude Code has written the subagent's metadata, which names its call, so the subagent gets that
+ * call's rules, late, through this hook's context. Null when the subagent has nothing pending, or its
+ * call cannot be told yet.
+ */
+export function lateRules(input: Record<string, unknown>, ctx: Pick<SubagentContext, 'state' | 'now'>): SubagentOutcome | null {
+  const agentId = str(input.agent_id);
+  const pendingFile = agentPendingFile(ctx.state, agentId);
+  if (agentId === null || pendingFile === null || !fs.existsSync(pendingFile)) return null;
+  const pending = readAgentPending(pendingFile);
+  const sessionId = str(input.session_id);
+  if (pending === null || sessionId !== pending.session_id) return null;
+  const callId = subagentCall(str(input.transcript_path), sessionId, agentId);
+  if (callId === null) return null;
+  removeRecord(pendingFile);
+  // A metadata file that names another call than those the start chose from gives nothing.
+  if (!pending.calls.includes(callId)) return null;
+  const call = readAgentCall(agentCallFile(ctx.state, callId));
+  if (call === null || call.delivered !== 'at-start' || call.text === undefined) return null;
+  const startFile = agentStartFile(ctx.state, agentId);
+  const start = readAgentStart(startFile);
+  try {
+    if (start !== null) writeRecord(startFile, { ...start, calls: [callId], text: call.text } satisfies AgentStart);
+  } catch {
+    // A resume of the subagent then gives it nothing again: the rules are in its context already.
+  }
+  return {
+    record: {
+      event: 'subagent-rules',
+      agent_type: start?.subagent_type ?? call.subagent_type,
+      start_match: 'metadata',
+      call_id: callId,
+      model: call.predicted,
+      status: call.status,
+      ...(call.rules !== undefined ? { rules: call.rules, sha256: call.sha256 } : {}),
+      scope: call.scope ?? null,
+      place: 'subagent',
+      delivered: 'rules',
+      warned: false,
+    },
+    messages: [],
+    specific: { hookEventName: str(input.hook_event_name) ?? 'PostToolUse', additionalContext: call.text },
   };
 }
 
@@ -400,7 +552,10 @@ function startText(config: Config, taken: NonNullable<Taken>, state: string): Gi
 function current(pool: Pool, now: number): Pool {
   const newest = new Map<string, number>();
   for (const c of pool.open) newest.set(c.type, Math.max(newest.get(c.type) ?? Number.NEGATIVE_INFINITY, Date.parse(c.at)));
-  const live = (c: OpenCall): boolean => now - Date.parse(c.at) < OPEN_FOR_MS && (newest.get(c.type) ?? 0) - Date.parse(c.at) <= SIBLING_MS;
+  const live = (c: OpenCall): boolean =>
+    c.held !== undefined
+      ? now - Date.parse(c.held) < HELD_FOR_MS
+      : now - Date.parse(c.at) < OPEN_FOR_MS && (newest.get(c.type) ?? 0) - Date.parse(c.at) <= SIBLING_MS;
   const dropped = new Set(pool.open.filter((c) => !live(c)).map((c) => c.id));
   return settled({ open: pool.open.filter(live), groups: pool.groups.filter((g) => !g.calls.some((id) => dropped.has(id))) });
 }
@@ -573,15 +728,6 @@ export function choiceFields(scope: ScopeChoice, place?: PlaceChoice): Record<st
     ...(scope.matcher !== undefined ? { scope_matcher: scope.matcher } : {}),
     ...(place?.because !== undefined ? { unattended_because: place.because } : {}),
     ...(place?.env !== undefined ? { unattended_env: place.env } : {}),
-  };
-}
-
-/** A definition lookup that reads the definition directories once per name. */
-function once(find: (name: string) => Definition | null): (name: string) => Definition | null {
-  const seen = new Map<string, Definition | null>();
-  return (name) => {
-    if (!seen.has(name)) seen.set(name, find(name));
-    return seen.get(name) ?? null;
   };
 }
 

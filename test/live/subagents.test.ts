@@ -31,8 +31,8 @@ function lab(config: Record<string, unknown>): Lab {
     'sonnet.md': `- The verification word for claude-sonnet-5-5 is ${SONNET_WORD}.`,
     'haiku.md': `- The verification word for claude-haiku-5-5 is ${HAIKU_WORD}.`,
   });
-  // A plugin whose subagent sets its own model: noonsight does not read plugin definitions, so it
-  // predicts the parent's model, and the subagent starts on Haiku.
+  // A plugin whose subagent sets its own model, given with --plugin-dir: noonsight reads its
+  // definition from the command line, so it predicts Haiku, the model the subagent starts on.
   const plugin = path.join(l.root, 'plugin');
   fs.mkdirSync(path.join(plugin, '.claude-plugin'), { recursive: true });
   fs.mkdirSync(path.join(plugin, 'agents'));
@@ -145,7 +145,7 @@ test('live, login: nested: a subagent that starts subagents passes on its own mo
   assert.ok(results(log).every((d) => d.result === 'match'), JSON.stringify(results(log)));
 });
 
-test('live, login: a subagent that starts on another model than predicted: a warning and a MISMATCH line', { skip: !enabled }, () => {
+test('live, login: a plugin subagent that sets its own model: predicted from its definition, and the check confirms it', { skip: !enabled }, () => {
   preconditions();
   const l = lab(CONFIG);
   const r = print(
@@ -156,13 +156,10 @@ test('live, login: a subagent that starts on another model than predicted: a war
   );
   assert.equal(r.status, 0, r.result);
   const [call] = calls(l.log());
-  assert.deepEqual([call?.subagent_type, call?.model, call?.definition, call?.delivered], ['noonsight-live:probe', 'claude-sonnet-5-5', 'not-read', 'at-start']);
+  assert.deepEqual([call?.subagent_type, call?.model, call?.definition_source, call?.delivered], ['noonsight-live:probe', 'claude-haiku-5-5', 'plugin', 'at-start']);
   const [checked] = results(l.log());
-  assert.deepEqual([checked?.predicted, checked?.model, checked?.result, checked?.warned], ['claude-sonnet-5-5', 'claude-haiku-5-5', 'MISMATCH', true]);
-  assert.ok(
-    JSON.stringify(r.stream).includes('not on claude-sonnet-5-5 as noonsight predicted'),
-    'the warning reaches the person through the session output',
-  );
+  assert.deepEqual([checked?.predicted, checked?.model, checked?.result, checked?.warned], ['claude-haiku-5-5', 'claude-haiku-5-5', 'match', false]);
+  assert.ok(!JSON.stringify(r.stream).includes('as noonsight predicted'), 'no mismatch warning reaches the person');
 });
 
 test('live, login: auto-mode: in auto mode, a subagent call with rules leaves the other calls of its response to the classifier, which lets them run', { skip: !enabled }, () => {

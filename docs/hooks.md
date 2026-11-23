@@ -1,14 +1,14 @@
 # The hooks
 
 noonsight gives each Claude Code session, and each subagent it starts, the rules for the model it actually runs on.
-Six hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`, when the session's model changes, and `PostToolUse` on Edit and Write, when the session's edits reveal a trigger; `PreToolUse` on the agent tool, before a subagent starts, `SubagentStart`, as it starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
+Seven hook entries do it: `SessionStart`, when a session starts, `PostModelSwitch`, when the session's model changes, and `PostToolUse` on Edit and Write, when the session's edits reveal a trigger; `PreToolUse` on the agent tool, before a subagent starts, `PermissionRequest` on the agent tool, when a permission prompt holds the call, `SubagentStart`, as the subagent starts, and `PostToolUse` on the agent tool, once Claude Code reports the model the subagent started on.
 [install.md](install.md) covers putting them in place; this page is the contract they keep.
 
 ## Rules every hook follows
 
 - **It never holds the session, or a subagent call, beyond a bound.**
   It always exits 0, reads only local files and never uses the network itself.
-  It starts no other process, with three exceptions: on macOS, when the input does not name the session's model and, except at a resume, neither does noonsight's record, or when `noonsight run` started the session, it runs `ps` once to read the Claude Code command line (see [SessionStart](#sessionstart)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
+  It starts no other process, with three exceptions: on macOS, it runs `ps` once to read the Claude Code command line when the input does not name the session's model and, except at a resume, neither does noonsight's record, or when `noonsight run` started the session (see [SessionStart](#sessionstart)), and in the agent call hook when the subagent's model depends on its definition, which `--agents`, `--plugin-dir`, `--add-dir` and `--setting-sources` can change ([PreToolUse](#pretooluse-the-prediction)); until a session reveals `code-edit`, the file edit hook runs `git ls-files` in the directory of an edited file with a code extension and, when git tracks the file, `git rev-parse --git-common-dir` there and in the project, each stopped after 3 seconds ([PostToolUse on Edit and Write](#posttooluse-on-edit-and-write-the-triggers)); and with `classifier.mode` on, the agent call hook may start the classifier, one `claude -p` call that reaches the model with the person's login ([The classifier](configuration.md#the-classifier)).
   Each entry has a 10-second `timeout`; the hook itself takes a fraction of a second, and a classification at most `classifier.timeout_ms` more, which is held to 8 seconds so the hook still answers in time.
   A subagent's start waits at most two seconds more when several calls could have started it ([SubagentStart](#subagentstart-the-rules)).
 - **It never blocks anything.**
@@ -205,9 +205,9 @@ The rules reach the subagent through `SubagentStart`, never through a change to 
 In auto mode, Claude Code's classifier reviews the calls of a response as Claude wrote them, and when a hook changes one of them it gives no verdict for the others, which are then refused until Claude makes them again in a response of their own ([PreToolUse `updatedInput` in auto mode](https://code.claude.com/docs/en/hooks)).
 A call noonsight only gives rules to is left exactly as Claude wrote it.
 
-`PreToolUse` and `PostToolUse` run only for the agent tool: the entries match `Agent|Task`, its current and earlier names, and the hook checks the tool name again, so a widened matcher reaches no other tool.
+`PreToolUse`, `PermissionRequest` and `PostToolUse` run only for the agent tool: the entries match `Agent|Task`, its current and earlier names, and the hook checks the tool name again, so a widened matcher reaches no other tool.
 They also run for calls made inside a subagent, since Claude Code runs settings hooks there too; the input then carries the subagent's `agent_id`.
-`SubagentStart` runs for every subagent type.
+`SubagentStart` runs for every subagent type, for an agent team teammate that runs in the session's own process, and for a workflow's agents (seen on Claude Code 2.1.330).
 
 ### PreToolUse: the prediction
 
@@ -225,7 +225,20 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
 
    `inherit` means the parent's model.
    A family alias (`opus`, `sonnet`, `haiku`, `fable`) means the parent's own model when the parent is of that family, as in Claude Code ([Which version a model alias selects](https://code.claude.com/docs/en/sub-agents)); otherwise an alias resolves as for the session (see [SessionStart](#sessionstart)).
-   Definitions are read from every `.claude/agents/` from the project directory (`CLAUDE_PROJECT_DIR`, else the input's `cwd`) up to the repository root, the closest first, then from `agents/` in the Claude Code configuration directory; both are scanned recursively, and a subagent is known by the `name` in its frontmatter.
+   Definitions are read where Claude Code reads them, and when several places define a name, the first of these wins, as in Claude Code ([Choose the subagent scope](https://code.claude.com/docs/en/sub-agents#choose-the-subagent-scope)):
+
+   | Rank | Place | `definition_source` |
+   | --- | --- | --- |
+   | 1 | `.claude/agents/` in the managed settings directory | `managed` |
+   | 2 | The `--agents` option of the `claude` command: inline JSON, or in `claude -p` the path of a JSON file | `flag` |
+   | 3 | Every `.claude/agents/` from the project directory (`CLAUDE_PROJECT_DIR`, else the input's `cwd`) up to the repository root, the closest first, then `.claude/agents/` in each directory given with `--add-dir` | `project` |
+   | 4 | `agents/` in the Claude Code configuration directory | `user` |
+   | 5 | A plugin's agents, named `plugin:agent` | `plugin` |
+
+   The managed, project and user folders are scanned recursively, and a subagent there is known by the `name` in its frontmatter; `--setting-sources` leaves out the project and user folders it does not list.
+   A plugin's agents are the files its manifest lists under `agents`, else every Markdown file under its `agents/` folder, where each subfolder adds a part to the name; the last part is the frontmatter's `name`, else the file's name, so `agents/review/scan.md` of plugin `kit` is `kit:review:scan`.
+   The plugins read are those given with `--plugin-dir` or `--plugin-dir-no-mcp`, those in `CLAUDE_CODE_PLUGIN_DIRS`, and those installed from a marketplace that the settings' `enabledPlugins` turn on for the project, from `plugins/installed_plugins.json` in the configuration directory.
+   The order, the names and the plugin sources were checked against Claude Code 2.1.330 with a stub session ([verification](verification/claude-code.md)).
    A definition of the same name replaces a built-in subagent.
    The built-in subagents ([Built-in subagents](https://code.claude.com/docs/en/sub-agents#built-in-subagents)): Explore runs on its parent's model, except that under a Fable parent it runs on the model the `opus` alias selects, unless Claude Code runs on Amazon Bedrock, Google Cloud or Microsoft Foundry; Explore and Plan ignore `CLAUDE_CODE_SUBAGENT_MODEL`; `statusline-setup` runs on Sonnet and `claude-code-guide` on Haiku.
    `web-fetch`, which the documentation does not list, runs on the model the `haiku` alias selects, and on its parent's model on another provider than the Anthropic API, as its built-in definition in Claude Code 2.1.326 reads.
@@ -236,7 +249,7 @@ They also run for calls made inside a subagent, since Claude Code runs settings 
    With `classifier.mode` on, the classifier may place a task instead, when the scope can change the subagent's rules or its route; a classification that fails, takes too long, or answers outside the declared scopes leaves the task with no scope, and the person is warned ([The classifier](configuration.md#the-classifier)).
 4. With routing on for subagents, the scope may set the call's `model` and `effort` ([Routing](#routing)); the prediction is then made again with the routed model.
    The rules are resolved for the scope, the place `subagent` and the model the subagent will run on.
-5. The hook records the rules for the subagent's start, and puts the call among its session's calls whose subagent has not started yet.
+5. The hook records the rules for the subagent's start, and puts the call among its session's calls whose subagent has not started yet, with the call's `name` when it gives one, since an agent team teammate starts under that name, and a hash of its input, which a permission request names too.
    A call whose task text already holds the exact rules gets none again (`delivered: "already-delivered"`).
    When the record cannot be written, the subagent gets no rules, the person is warned, and the line records `error`; a call routing changed is still returned changed.
 6. It returns nothing for the call, unless routing changed its model or effort.
@@ -254,19 +267,34 @@ So noonsight finds the call among its session's open calls of that type:
 | `single` | One call of the type is open | That call's rules |
 | `result` | The result of a call already named this subagent, as it does at once for a subagent run in the background | That call's rules |
 | `shared` | Several calls of the type are open, and no result names this subagent within two seconds | What every one of those calls would give: their rules when all are the same; when they are for one model and differ only by scope, that model's rules for every scope, which each of them holds (`shared_rules: "every-scope"`); otherwise none (`reason: "calls-differ"`) |
-| `resumed` | The same subagent started before, and resumes | The rules it was given then; Claude Code adds them only when its context no longer holds them |
+| `resumed` | The same subagent started before, and resumes, or a teammate takes its next message | The rules it was given then; Claude Code adds them only when its context no longer holds them |
 
+A call is of the start's type when its `subagent_type` is, or when it gave a `name` the start carries: a teammate that runs in the session's process starts with the call's `name` as its `agent_type` (seen on Claude Code 2.1.330).
 A shared start never gives a subagent rules chosen for another subagent.
 The subagents of one response's calls of a type start in no fixed order, even though their calls reach the hook in order (seen on Claude Code 2.1.326), so the order of the calls cannot tell them apart.
 Several calls of one response run at the same time, so the hooks of their calls, starts and results interleave in any order; the session's open calls are changed under a lock, one hook at a time.
-A start that matches no open call, such as an agent team teammate's, gets nothing and leaves no log line.
+A start that matches no open call, such as a workflow agent's, gets nothing and leaves no log line.
 A call whose subagent never starts, because something denied it after the hook ran, stays open for 2 minutes, since no hook says it was denied.
 A subagent starts within seconds of its call's hook, so 2 minutes leaves a wide margin.
 Sooner than that, an open call made more than 5 seconds before the newest open call of its type is left out: the calls of one response reach the hook within moments of each other, so it came from an earlier response and was denied, and a later call's subagent still gets its own rules.
-A call that waits longer than that to start, such as one held on a permission prompt, is no longer open when its subagent starts, which then gets no rules.
+A call a permission prompt holds is kept open for 24 hours instead ([PermissionRequest](#permissionrequest-a-held-call)), and when a start has to choose between several calls, or one of them is held, the calls the session's transcript shows refused are left out first: Claude Code writes an error as the tool result of a call the person rejected, or a rule or a hook denied.
+
+When a shared start gives nothing because the calls need different rules (`calls-differ`), the subagent can still get its own: once its start's hooks have run, Claude Code writes the subagent's metadata next to its transcript, and that file names its call (`toolUseId`, seen on Claude Code 2.1.330).
+So the next `PostToolUse` hook noonsight runs inside that subagent, the result of an agent call it makes or an Edit or Write it makes, reads the call from the metadata and returns that call's rules as `additionalContext`, which reaches the subagent's next request.
+It logs a `subagent-rules` line with `start_match: "metadata"`, and a resume of the subagent gets the same rules again.
+A subagent that makes none of those calls, and a session that writes no transcript (`--no-session-persistence`), get nothing.
 
 The rules arrive as `additionalContext`, in the same envelope as the session's, at the start of the subagent's conversation, before its task.
-The start is recorded in `~/.local/state/noonsight/agent-starts/`, under the subagent's id.
+The start is recorded in `~/.local/state/noonsight/agent-starts/`, under the subagent's id, and a start that waits for its call to be named in `agent-pending/`.
+
+### PermissionRequest: a held call
+
+A permission prompt can hold an agent call for as long as the person takes to answer, and its subagent starts only after the answer.
+The permission request carries the call's input, unchanged, but not its `tool_use_id` (seen on Claude Code 2.1.330), so the hook marks held the newest open call of the session with the same input from the same caller.
+A held call stays open for 24 hours, past the windows above, so its subagent still gets its rules when the person allows it minutes later.
+The hook prints nothing: it never answers the request, and a call it cannot find is left as it was.
+A rejected call runs no hook at all; the transcript shows it refused, and the next start that has to choose leaves it out.
+It logs an `agent-held` line with the call's id.
 
 ### PostToolUse: the check
 
@@ -292,7 +320,7 @@ The line's `delivered` says what the subagent's start gave it (`rules` or `nothi
 With `routing.enabled` and the target `subagents` ([Routing](configuration.md#routing)), the agent call hook chooses the subagent's model and effort from its scope before the subagent starts, and the rules it adds are the routed model's.
 
 1. noonsight first predicts the model as the call stands.
-   When that model is fixed (a fork, or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`), or chosen by the caller under `routing.respect_explicit` (the call's `model`, the definition's `model`, a built-in subagent's own model, or a plugin's definition, which noonsight does not read), the call keeps its model.
+   When that model is fixed (a fork, or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`), or chosen by the caller under `routing.respect_explicit` (the call's `model`, the definition's `model`, a built-in subagent's own model, or a definition noonsight cannot read), the call keeps its model.
 2. Otherwise the scope's row, else `routing.default`, gives the options, and the first whose model is declared wins.
    The hook sets the call's `model` to the option's alias and, when the option gives one, its `effort`; an effort the call or its definition already sets is kept under `respect_explicit`.
 3. The changed call is returned with the permission decision `subagents.permission` names, and its reason says what noonsight set:
@@ -314,12 +342,15 @@ Claude Code applies the call's `effort` only from version 2.1.292 ([Choose an ef
 
 ### What the prediction does not see
 
-- The definitions of a plugin's subagents (`plugin:name`) are not read.
-  Such a subagent is predicted on its parent's model, logged with `definition: "not-read"`, and the check reports a difference.
+- A plugin's subagent from a plugin noonsight does not read, such as one an organization syncs to its members, or one that two plugins of the same name define differently.
+  Such a subagent is predicted on `CLAUDE_CODE_SUBAGENT_MODEL`, else its parent's model, logged with `definition: "not-read"` and the reason in `definition_why`, and the check reports a difference when its definition sets another model.
+  The same holds for every name when the `--agents` value cannot be read, such as two values on a macOS command line, where `ps` gives the arguments without their boundaries.
 - An installed mod that sets the model in its `agent.spawn` hook replaces the call's parameter; the check reports a difference.
-- Subagents that do not start through the agent tool, such as agent team teammates and workflow agents, get nothing from these hooks.
-- The subagents given with `--agents` and managed subagent definitions are not read.
-  Such a subagent is predicted like `general-purpose`, on `CLAUDE_CODE_SUBAGENT_MODEL`, else its parent's model, and the check reports a difference.
+- A workflow's agents do not start through the agent tool.
+  Their `SubagentStart` fires, with `agent_type: "workflow-subagent"`, but no agent call comes before it and its input names no model, so they get nothing from these hooks.
+- An agent team teammate in split panes runs in a Claude Code process of its own ([Choose a display mode](https://code.claude.com/docs/en/agent-teams)).
+  How noonsight's hooks treat it was not checked: the checks ran without tmux, where teammates run in the lead's process.
+- Claude Code skips the managed `.claude/agents/` folder when the account itself could have written it under organization-managed settings; noonsight reads that folder whenever it exists.
 
 ## The decision log
 
@@ -331,6 +362,7 @@ When the classifier acted, it also prints a classifier section: the tasks it was
 A delivery is a line whose `delivered` is `rules`, `rules+note` or `system-prompt`; a session start that found the rules already in the launcher's system prompt (`launcher`) is counted once, under `launch`.
 On a `model-switch` line, `delivered` says what the hook returned to Claude Code, not what reached the model ([PostModelSwitch](#postmodelswitch)): a switch whose session's next line in the log is another switch is not counted as a delivery but as `switched-again`, since the second switch may have come before any request.
 A subagent's rules are counted once, on its `subagent-start` line; its `agent-call` line hands them over (`at-start`) and is not counted.
+A subagent whose start could not tell its call is counted under `calls-differ` among the decisions that delivered nothing, and its later `subagent-rules` line, when there is one, as a delivery.
 The rule lengths and the rules never delivered come from the configuration as a session started in the directory the report runs for reads it: with the project configuration found from `CLAUDE_PROJECT_DIR`, else that directory, laid over the machine's ([Project configuration](configuration.md#project-configuration)).
 The report names that project and what became of it on its second line, and the heading of the rules never delivered names the project file when it applied; the log itself holds the sessions of every project, so run the report inside a project to see that project's rules never delivered.
 `--log <file>` reads another log, such as one copied from another machine (a file it cannot read is a usage error), and `--json` prints the same as JSON, with the project as `project`.
@@ -341,17 +373,17 @@ The report names that project and what became of it on its second line, and the 
 
 | Field | Values |
 | --- | --- |
-| `event` | `session-start`, `model-switch`, `file-edit` (`PostToolUse` on Edit and Write), `agent-call` (`PreToolUse`), `subagent-start` (`SubagentStart`), `agent-result` (`PostToolUse` on the agent tool), and `launch` for `noonsight run` ([launcher.md](launcher.md#the-decision-log)) |
+| `event` | `session-start`, `model-switch`, `file-edit` (`PostToolUse` on Edit and Write), `agent-call` (`PreToolUse`), `agent-held` (`PermissionRequest`), `subagent-start` (`SubagentStart`), `agent-result` (`PostToolUse` on the agent tool), `subagent-rules` (a later hook inside a subagent that gave it its call's rules), and `launch` for `noonsight run` ([launcher.md](launcher.md#the-decision-log)) |
 | `source` | The start type, or for a switch where it came from (`command`, `picker`, `auto`, `resume`, ...) |
 | `tool_name`, `tool_use_id`, `permission_mode` | For the tool events: the tool's name, the call's id and the session's permission mode |
 | `trigger`, `file` | For `file-edit`: the trigger the edit revealed, and the edited file, relative to its repository's root |
 | `triggers` | For the session events: the triggers the session has revealed, when it has revealed one |
 | `triggered_rules` | The rules among `rules` that only a trigger brought, when there are some |
 | `agent_id` | For a call made inside a subagent: that subagent's id. For `subagent-start`: the subagent that started |
-| `agent_type`, `start_match`, `call_id`, `calls`, `shared_rules` | For `subagent-start`: the subagent's type; how its call was found (`single`, `result`, `shared`, `resumed`, see [SubagentStart](#subagentstart-the-rules)); the call's `tool_use_id`, or for a shared start the calls it could have been; and `every-scope` when a shared start gave the rules for every scope |
+| `agent_type`, `start_match`, `call_id`, `calls`, `shared_rules`, `refused` | For `subagent-start`: the subagent's type; how its call was found (`single`, `result`, `shared`, `resumed`, see [SubagentStart](#subagentstart-the-rules)); the call's `tool_use_id`, or for a shared start the calls it could have been; `every-scope` when a shared start gave the rules for every scope; and the calls left out because the transcript shows them refused. For `subagent-rules`: `start_match` is `metadata` and `call_id` the call the subagent's metadata names. For `agent-held`: `call_id` is the held call |
 | `subagent_type`, `requested_model` | The call's subagent type (`general-purpose` when it names none) and `model` parameter |
 | `parent_model`, `parent_source` | The model of whoever made the call, and where it came from (see [Subagents](#subagents)) |
-| `model_value`, `definition`, `unresolved_why` | What the prediction's source named, the definition file that decided, and why a model could not be told |
+| `model_value`, `definition`, `definition_source`, `definition_why`, `unresolved_why` | What the prediction's source named; the definition file that decided (`--agents` for an inline one, `not-read` when a place that may define the subagent cannot be read); where it was found (`managed`, `flag`, `project`, `user`, `plugin`); why a definition could not be read; and why a model could not be told |
 | `requested_effort` | For an agent call: the call's own `effort` parameter, when it sets one |
 | `permission` | For a call routing changed: the permission decision returned |
 | `routing`, `routing_reason` | For `launch`, `agent-call` and `agent-result` lines: what routing did (`off`, `yielded`, `inherit`, `routed`) and why ([Routing](configuration.md#when-routing-yields)). A line for a refused configuration or a failed hook records `off` with `config-invalid` or `error` |
@@ -386,7 +418,7 @@ The report names that project and what became of it on its second line, and the 
 
 What each session last received is kept in `~/.local/state/noonsight/sessions/` and `processes/`, one small file per session id and per Claude Code process, and the triggers each session revealed in `triggers/`; files nobody wrote for 30 days are removed, and so are the system prompt files of `noonsight run` in `launch/`.
 This account's trust in each project is kept in `~/.local/state/noonsight/projects.json`, which `noonsight trust` and `noonsight untrust` write and nothing removes.
-The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-links/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
+The subagent records in `agent-calls/`, `agent-pools/`, `agent-starts/`, `agent-links/`, `agent-pending/` and `agents/` are removed after 7 days; a call whose result never came, because another hook denied it, leaves its record until then.
 
 ## Turning noonsight off
 

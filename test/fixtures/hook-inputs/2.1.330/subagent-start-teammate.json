@@ -1,0 +1,9 @@
+{
+  "session_id": "09acace7-f41f-482c-b55c-6f26599b5f14",
+  "transcript_path": "/home/user/.claude/projects/-home-user-project/09acace7-f41f-482c-b55c-6f26599b5f14.jsonl",
+  "cwd": "/home/user/project",
+  "prompt_id": "45d754fe-a599-40bc-aaaa-05651b4cc2de",
+  "agent_id": "aprobe-mate-b12e48c1cbd19f1b",
+  "agent_type": "probe-mate",
+  "hook_event_name": "SubagentStart"
+}

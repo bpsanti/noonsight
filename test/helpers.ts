@@ -77,6 +77,12 @@ const INPUT_VERSIONS: Readonly<Record<string, string>> = {
   'post-tool-use-write': '2.1.326',
   'session-start-resume-continue': '2.1.327',
   'session-start-resume-command': '2.1.327',
+  'permission-request-agent': '2.1.330',
+  'pre-tool-use-agent-held': '2.1.330',
+  'pre-tool-use-agent-teammate': '2.1.330',
+  'subagent-start-teammate': '2.1.330',
+  'post-tool-use-agent-teammate': '2.1.330',
+  'subagent-start-workflow': '2.1.330',
 };
 
 /** A recorded or documented Claude Code hook input, with fields replaced as given. */

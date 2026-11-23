@@ -1,6 +1,6 @@
 # Installing the hooks
 
-noonsight reaches Claude Code through six official settings hook entries: `SessionStart`, `PostModelSwitch` and `PostToolUse` on Edit and Write for the session itself, and `PreToolUse` and `PostToolUse` on the agent tool and `SubagentStart` for the subagents it starts.
+noonsight reaches Claude Code through seven official settings hook entries: `SessionStart`, `PostModelSwitch` and `PostToolUse` on Edit and Write for the session itself, and `PreToolUse`, `PermissionRequest` and `PostToolUse` on the agent tool and `SubagentStart` for the subagents it starts.
 `noonsight install` puts them in place, `noonsight uninstall` takes them out, and `noonsight check` says whether they will run.
 [hooks.md](hooks.md) describes what the hooks do once they run.
 

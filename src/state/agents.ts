@@ -15,6 +15,9 @@
 //   agents/<agent id>.json          written when a call's result names the subagent and the model it
 //                                   started on, so a call made inside that subagent knows the model it
 //                                   would inherit.
+//   agent-pending/<agent id>.json   written when a subagent's start could not tell its call from others
+//                                   that need other rules, so it got none: the calls it may have come
+//                                   from, until a later hook inside that subagent finds its own call.
 //
 // Every key comes from Claude Code's hook input, and every kind of record is pruned with the others.
 
@@ -55,6 +58,14 @@ export interface OpenCall {
   readonly id: string;
   readonly type: string;
   readonly at: string;
+  /** The name the call gives, which an agent team teammate starts under instead of its type. */
+  readonly name?: string;
+  /** A hash of the call's input, which a permission request for the call carries too. */
+  readonly input?: string;
+  /** The subagent that made the call; absent for a call the session made. */
+  readonly by?: string;
+  /** When a permission prompt began to hold the call; absent while none does. */
+  readonly held?: string;
 }
 
 /**
@@ -74,6 +85,13 @@ export interface Pool {
 
 /** How a subagent's start was matched with the call that started it. */
 export type StartMatch = 'single' | 'result' | 'shared';
+
+/** A subagent whose start got no rules because it could not be told from calls that need other rules. */
+export interface AgentPending {
+  readonly session_id: string;
+  readonly calls: readonly string[];
+  readonly at: string;
+}
 
 export interface AgentStart {
   readonly session_id: string;
@@ -115,6 +133,17 @@ export function agentStartFile(stateDir: string, agentId: string | null): string
 
 export function agentLinkFile(stateDir: string, agentId: string | null): string | null {
   return keyed(stateDir, 'agent-links', agentId);
+}
+
+export function agentPendingFile(stateDir: string, agentId: string | null): string | null {
+  return keyed(stateDir, 'agent-pending', agentId);
+}
+
+export function readAgentPending(file: string | null): AgentPending | null {
+  const v = readJson(file);
+  return v !== null && typeof v.session_id === 'string' && Array.isArray(v.calls) && v.calls.every((c) => typeof c === 'string')
+    ? (v as unknown as AgentPending)
+    : null;
 }
 
 export function readAgentCall(file: string | null): AgentCall | null {
@@ -165,8 +194,19 @@ export function readAgentLink(file: string | null): AgentLink | null {
 /** The pool as recorded; an empty pool when there is none or it cannot be read. A count no group carries is ignored. */
 export function readPool(file: string | null): Pool {
   const v = readJson(file);
+  const optional = (x: unknown): boolean => x === undefined || typeof x === 'string';
   const open = Array.isArray(v?.open)
-    ? v.open.filter((c): c is OpenCall => isObject(c) && typeof c.id === 'string' && typeof c.type === 'string' && typeof c.at === 'string')
+    ? v.open.filter(
+        (c): c is OpenCall =>
+          isObject(c) &&
+          typeof c.id === 'string' &&
+          typeof c.type === 'string' &&
+          typeof c.at === 'string' &&
+          optional(c.name) &&
+          optional(c.input) &&
+          optional(c.by) &&
+          optional(c.held),
+      )
     : [];
   const groups = Array.isArray(v?.groups)
     ? v.groups.filter(
@@ -182,7 +222,7 @@ export function readPool(file: string | null): Pool {
   return { open, groups };
 }
 
-export function writeRecord(file: string | null, record: AgentCall | AgentModel | AgentStart | AgentLink | Pool): void {
+export function writeRecord(file: string | null, record: AgentCall | AgentModel | AgentStart | AgentLink | AgentPending | Pool): void {
   if (file === null) return;
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   writeFileAtomic(file, `${JSON.stringify(record)}\n`, 0o600);

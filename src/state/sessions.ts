@@ -114,6 +114,7 @@ export function pruneState(stateDir: string, now: number): void {
     ['agent-pools', AGENT_MAX_AGE_MS],
     ['agent-starts', AGENT_MAX_AGE_MS],
     ['agent-links', AGENT_MAX_AGE_MS],
+    ['agent-pending', AGENT_MAX_AGE_MS],
     ['agents', AGENT_MAX_AGE_MS],
   ] as const) {
     const dir = path.join(stateDir, sub);

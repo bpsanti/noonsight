@@ -574,7 +574,7 @@ Routing leaves a task as it is, and says why in the decision log, in each of the
 | The call names its model, under `respect_explicit`: `--model` on the claude command line, or the `model` parameter of an agent call | `yielded` | `explicit-model` |
 | The subagent's definition sets `model`, under `respect_explicit` | `yielded` | `definition-model` |
 | A built-in subagent with its own model rule (Explore, Plan, `statusline-setup`, `claude-code-guide`, `web-fetch`), under `respect_explicit` | `yielded` | `built-in-model` |
-| A plugin's subagent, whose definition noonsight does not read, under `respect_explicit` | `yielded` | `plugin-definition` |
+| A subagent whose definition noonsight cannot read, such as one from a plugin it does not read, under `respect_explicit` | `yielded` | `definition-not-read` |
 | A fork, which always runs on its parent's model | `yielded` | `fork` |
 | `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, under which Claude Code ignores the call's model | `yielded` | `model-forced` |
 | No scope, or no row and `default` is `inherit` | `inherit` | `no-scope`, `no-row` |

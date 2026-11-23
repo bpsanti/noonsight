@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { frontmatter } from '../src/adapters/claude-code/predict.js';
+import { frontmatter } from '../src/adapters/claude-code/definitions.js';
 import { CLI, hookHome, hookInput, LAB_CONFIG, LAB_PRESETS, runCli, runProgram, tempTree, type HookHome } from './helpers.js';
 
 /** The recorded calls and results come from different sessions; tests replay them in one. */
@@ -679,4 +679,158 @@ test('the session\'s NOONSIGHT_SCOPE never carries over to a subagent, whose sco
     agentLines(h).map((l) => [l.subagent_type, l.scope, l.scope_source]),
     [['general-purpose', null, null]],
   );
+});
+
+// Agent team teammates, permission prompts, refused calls, and subagents whose start could not tell
+// their call: the inputs come from Claude Code 2.1.330 (test/fixtures/hook-inputs/2.1.330).
+
+test('an agent team teammate starts under the name its call gives, and gets that call\'s rules', () => {
+  const h = hookHome();
+  const recorded = JSON.parse(hookInput('pre-tool-use-agent-teammate')) as Record<string, any>;
+  startOn(h, 'claude-sonnet-5-5');
+  const teammate = JSON.stringify({ ...recorded, session_id: SESSION, tool_input: { ...recorded.tool_input, model: 'haiku' } });
+  h.hook('agent-call', teammate);
+  // A general-purpose call of the same response does not take the teammate's start, nor the teammate its.
+  h.hook('agent-call', call({ model: 'sonnet' }, { tool_use_id: 'toolu_plain' }));
+  const started = h.hook('subagent-start', hookInput('subagent-start-teammate', { session_id: SESSION }));
+  assert.match(contextOf(started), /HAIKU-GEN-9047/);
+  assert.match(contextOf(h.hook('subagent-start', start('a-plain'))), /SONNET-GEN-3306/);
+  assert.deepEqual(
+    startLines(h).map((l) => [l.agent_type, l.start_match, l.call_id]),
+    [
+      ['probe-mate', 'single', recorded.tool_use_id],
+      ['general-purpose', 'single', 'toolu_plain'],
+    ],
+  );
+  // The teammate starts again for each message it handles, and gets the same rules.
+  assert.match(contextOf(h.hook('subagent-start', hookInput('subagent-start-teammate', { session_id: SESSION }))), /HAIKU-GEN-9047/);
+  assert.equal(startLines(h).at(-1)?.start_match, 'resumed');
+  const result = JSON.parse(hookInput('post-tool-use-agent-teammate')) as Record<string, any>;
+  h.hook('agent-result', JSON.stringify({ ...result, session_id: SESSION, tool_response: { ...result.tool_response, resolvedModel: 'claude-haiku-5-5' } }));
+  assert.deepEqual([agentLines(h).at(-1)?.result, agentLines(h).at(-1)?.delivered], ['match', 'rules']);
+});
+
+test('a workflow\'s agent starts with no agent call before it, so it gets nothing and leaves no line', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  assert.equal(h.hook('subagent-start', hookInput('subagent-start-workflow', { session_id: SESSION })).raw, '');
+  assert.deepEqual(startLines(h), []);
+});
+
+/** The recorded call a permission prompt held, and the permission request for it. */
+function heldCall(fields: Record<string, unknown> = {}, toolInput: Record<string, unknown> = {}): { call: string; request: string; id: string } {
+  const pre = JSON.parse(hookInput('pre-tool-use-agent-held')) as Record<string, any>;
+  const req = JSON.parse(hookInput('permission-request-agent')) as Record<string, any>;
+  const ti = { ...pre.tool_input, ...toolInput };
+  const id = String(fields.tool_use_id ?? pre.tool_use_id);
+  return {
+    call: JSON.stringify({ ...pre, session_id: SESSION, ...fields, tool_input: ti }),
+    request: JSON.stringify({ ...req, session_id: SESSION, tool_input: ti }),
+    id,
+  };
+}
+
+test('a call a permission prompt holds stays open until its subagent starts, however long the person takes to answer', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const held = heldCall({}, { model: 'haiku' });
+  h.hook('agent-call', held.call);
+  const answered = h.hook('agent-held', held.request);
+  assert.equal(answered.raw, '', 'the hook never answers a permission request');
+  assert.deepEqual(h.log().at(-1), { ...h.log().at(-1), event: 'agent-held', call_id: held.id, held: true });
+  // Ten minutes later the person allows the call: its subagent still gets its rules.
+  age(h, 10 * 60 * 1000);
+  const poolPath = path.join(h.dir, '.local', 'state', 'noonsight', 'agent-pools', `${SESSION}.json`);
+  const pool = JSON.parse(fs.readFileSync(poolPath, 'utf8')) as { open: { held?: string }[] };
+  for (const c of pool.open) if (c.held !== undefined) c.held = new Date(Date.parse(c.held) - 10 * 60 * 1000).toISOString();
+  fs.writeFileSync(poolPath, JSON.stringify(pool));
+  assert.match(contextOf(h.hook('subagent-start', start('a-held'))), /HAIKU-GEN-9047/);
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id], ['single', held.id]);
+
+  // Without the prompt, the same call is left out after 2 minutes.
+  const h2 = hookHome();
+  startOn(h2, 'claude-sonnet-5-5');
+  h2.hook('agent-call', held.call);
+  const pool2 = path.join(h2.dir, '.local', 'state', 'noonsight', 'agent-pools', `${SESSION}.json`);
+  const open2 = JSON.parse(fs.readFileSync(pool2, 'utf8')) as { open: { at: string }[] };
+  for (const c of open2.open) c.at = new Date(Date.parse(c.at) - 10 * 60 * 1000).toISOString();
+  fs.writeFileSync(pool2, JSON.stringify(open2));
+  assert.equal(h2.hook('subagent-start', start('a-late')).raw, '');
+});
+
+test('a held call is found by its input: a request for an input no open call has marks nothing and logs nothing', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const held = heldCall();
+  h.hook('agent-call', held.call);
+  assert.equal(h.hook('agent-held', heldCall({}, { prompt: 'Another task.' }).request).raw, '');
+  assert.deepEqual(h.log().filter((l) => l.event === 'agent-held'), []);
+});
+
+test('a call the transcript shows refused, such as one rejected at its permission prompt, no longer competes for a start', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const transcript = path.join(tempTree({}), 'session.jsonl');
+  const line = (o: unknown): string => `${JSON.stringify(o)}\n`;
+  fs.writeFileSync(
+    transcript,
+    line({ type: 'assistant', message: { model: 'claude-sonnet-5-5', content: [{ type: 'tool_use', id: 'toolu_rejected', name: 'Agent', input: {} }] } }) +
+      line({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_rejected', is_error: true, content: "The user doesn't want to proceed with this tool use." }] } }) +
+      line({ type: 'assistant', message: { model: 'claude-sonnet-5-5', content: [{ type: 'tool_use', id: 'toolu_allowed', name: 'Agent', input: {} }] } }),
+  );
+  const rejected = heldCall({ tool_use_id: 'toolu_rejected', transcript_path: transcript }, { model: 'haiku', prompt: 'First.' });
+  h.hook('agent-call', rejected.call);
+  h.hook('agent-held', rejected.request);
+  h.hook('agent-call', call({ model: 'sonnet', prompt: 'Second.' }, { tool_use_id: 'toolu_allowed', transcript_path: transcript }));
+  const r = h.hook('subagent-start', start('a-allowed', 'general-purpose', { transcript_path: transcript }));
+  assert.match(contextOf(r), /SONNET-GEN-3306/);
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.call_id, startLines(h).at(-1)?.refused], ['single', 'toolu_allowed', ['toolu_rejected']]);
+  const state = path.join(h.dir, '.local', 'state', 'noonsight');
+  assert.ok(!fs.existsSync(path.join(state, 'agent-calls', 'toolu_rejected.json')), 'the refused call\'s record is removed');
+});
+
+test('a subagent whose start could not tell its call gets that call\'s rules at a later hook inside it, once Claude Code names its call', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const sessionDir = tempTree({});
+  const transcript = path.join(sessionDir, `${SESSION}.jsonl`);
+  fs.writeFileSync(transcript, '');
+  h.hook('agent-call', call({ model: 'haiku' }, { tool_use_id: 'toolu_fg_h', transcript_path: transcript }));
+  h.hook('agent-call', call({ model: 'sonnet' }, { tool_use_id: 'toolu_fg_s', transcript_path: transcript }));
+  assert.equal(h.hook('subagent-start', start('afgsonnet', 'general-purpose', { transcript_path: transcript })).raw, '');
+  assert.deepEqual([startLines(h).at(-1)?.start_match, startLines(h).at(-1)?.reason], ['shared', 'calls-differ']);
+
+  const edit = (agentId: string): string => hookInput('post-tool-use-edit', { session_id: SESSION, transcript_path: transcript, agent_id: agentId, agent_type: 'general-purpose' });
+  // Before Claude Code writes the subagent's metadata, nothing is given.
+  assert.equal(h.hook('file-edit', edit('afgsonnet')).raw, '');
+  const meta = path.join(sessionDir, SESSION, 'subagents', 'agent-afgsonnet.meta.json');
+  fs.mkdirSync(path.dirname(meta), { recursive: true });
+  fs.writeFileSync(meta, JSON.stringify({ agentType: 'general-purpose', toolUseId: 'toolu_fg_s', requestShape: 'foreground', model: 'sonnet' }));
+  const late = h.hook('file-edit', edit('afgsonnet'));
+  assert.equal(late.out?.hookSpecificOutput?.hookEventName, 'PostToolUse');
+  assert.match(late.out?.hookSpecificOutput?.additionalContext, /<noonsight-rules model="claude-sonnet-5-5">/);
+  assert.doesNotMatch(late.out?.hookSpecificOutput?.additionalContext, /HAIKU-GEN-9047/);
+  const line = h.log().find((l) => l.event === 'subagent-rules');
+  assert.deepEqual([line?.agent_id, line?.start_match, line?.call_id, line?.model, line?.delivered], ['afgsonnet', 'metadata', 'toolu_fg_s', 'claude-sonnet-5-5', 'rules']);
+  // Given once: the next edit adds nothing, and a resume of the subagent gets the same rules again.
+  assert.equal(h.hook('file-edit', edit('afgsonnet')).raw, '');
+  assert.match(contextOf(h.hook('subagent-start', start('afgsonnet', 'general-purpose', { transcript_path: transcript }))), /SONNET-GEN-3306/);
+  // The result of its call says it got rules.
+  h.hook('agent-result', result('toolu_fg_s', 'claude-sonnet-5-5', { agentId: 'afgsonnet' }));
+  assert.deepEqual([agentLines(h).at(-1)?.result, agentLines(h).at(-1)?.delivered], ['match', 'rules']);
+});
+
+test('metadata that names a call the start did not choose from gives nothing', () => {
+  const h = hookHome();
+  startOn(h, 'claude-sonnet-5-5');
+  const sessionDir = tempTree({});
+  const transcript = path.join(sessionDir, `${SESSION}.jsonl`);
+  h.hook('agent-call', call({ model: 'haiku' }, { tool_use_id: 'toolu_x_h', transcript_path: transcript }));
+  h.hook('agent-call', call({ model: 'sonnet' }, { tool_use_id: 'toolu_x_s', transcript_path: transcript }));
+  h.hook('subagent-start', start('aother', 'general-purpose', { transcript_path: transcript }));
+  const meta = path.join(sessionDir, SESSION, 'subagents', 'agent-aother.meta.json');
+  fs.mkdirSync(path.dirname(meta), { recursive: true });
+  fs.writeFileSync(meta, JSON.stringify({ toolUseId: 'toolu_somewhere_else' }));
+  assert.equal(h.hook('file-edit', hookInput('post-tool-use-edit', { session_id: SESSION, transcript_path: transcript, agent_id: 'aother' })).raw, '');
+  assert.deepEqual(h.log().filter((l) => l.event === 'subagent-rules'), []);
 });
