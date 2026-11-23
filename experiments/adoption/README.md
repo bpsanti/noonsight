@@ -162,6 +162,47 @@ That was wrong against the code: a Sonnet 5.5 or Haiku 5.5 session with no scope
 L4 now says so, and also that the attended rules of Opus 5.5 and Fable 5.2 ship off until `enable` turns one on.
 The results of v1 to v4 stay as judged, with the reference they were pre-registered with; [results/2026-11-21-v4](results/2026-11-21-v4/README.md#where-the-answers-went-wrong) gives what v4 would have scored with L4 read as the code has it.
 
+## v5: the README after the attended places and the new delivery paths
+
+This section was written before any v5 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `516914f`, the head of `main`.
+Since v4 (`ceecdb2`) the README names the places `attended` and `all`, gives a table of the preset's rules with the ones that ship off, no longer names Claude Code versions, gives Fable 5.2's measured rule effect (R9), says what `noonsight report` does not measure, and reports the delivery run on forks, plan mode, `noonsight run`, project configurations and subagents that edit a file.
+Its `docs/evidence.md`, the evidence map the judge reads, adds D18 to D24.
+`before` is unchanged, `f061f03`.
+
+**Sessions.**
+Five new `after` sessions for each of the four models, twenty in all; no earlier `after` answer counts.
+No `before` session runs: the twelve `before` answers of v3 and v4 are reused as they are, and judged again with the v5 reference and evidence map, as v4 did, so both conditions are scored against one reference.
+Fable 5.2's sessions run first, so that the per-session budgets the runner holds back do not stop them.
+The sessions run under `caffeinate`, at most two at once.
+A session that ends with no answer is run again only if the spending projection, with its estimated cost, stays within the cap.
+
+**The reference.**
+[rubric.md](rubric.md) as revised after v4 (the L4 correction), and otherwise unchanged.
+Two of its statements are known, before the run, to describe an earlier build, and are left as they are so that the reference differs from v4's only in L4:
+
+- The delivery claim gives 99.5% (3,199 of 3,216) and 3 of 300 sessions, from the run of 2026-11-20.
+- L5 says forks, plan mode, `/resume` inside a session, the launcher and project configurations are not measured, and that the fixed build was not rerun on the random sessions; D18 to D22 measure those paths, and the README now names only agent teams, routing and the classifier as not measured.
+
+The evidence map gives the newer values.
+If an answer is judged not grounded only because it agrees with the evidence map against one of these two statements, the judgment stays as made and the pass bar is read on it; the results also give what v5 would score without those judgments, as v4 did for L4.
+
+**The judge.**
+Before any answer is judged, the judge scores the nine answers of [calibration.json](calibration.json) against the v5 evidence map and must reach the expected `grounded` on all nine; if it does not, v5 stops and reports, with no revision.
+Two calibration answers, `grounded-conditions` and `rounding`, said that a watched session with no scope gets none of the preset's rules, which the corrected L4 contradicts; they now say that it gets little of the preset, and their cases and expected judgments are unchanged.
+
+**Unchanged.**
+The prompt, [judge.md](judge.md), the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The comparison with `before` is Fisher's exact test, two-sided; the results also compare v5's `after` with v3's and v4's, which were judged with the earlier L4 and their own evidence maps, so that comparison is read as a direction.
+
+**Money.**
+v5 has a cap of $25 of its own, for its calibration, sessions and judgments.
+The runner is given what remains after the calibration, less a reserve for the 32 judgments at the highest judgment cost measured so far ($0.246); v5 stops and reports if the measured costs project past the cap.
+
+v5's results are in `results/2026-11-23-v5/`.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.
