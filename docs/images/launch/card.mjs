@@ -36,7 +36,7 @@ td{padding:5px 0;border-bottom:1px solid var(--line)}
 </style><body class="${theme}">
 ${lockup}
 <div><h1>${HEADLINE}</h1><p class="sub">${SUBHEAD}</p></div>
-<p class="ex">One measured example: with the rule <code>carry-through</code> delivered alone, Sonnet 5.5 did every part of a 13-ticket backlog in <b>${WITH}</b> runs, against <b>${WITHOUT}</b> without any rule.</p>
+<p class="ex">One measured example: with the rule <code>carry-through</code> delivered alone, Sonnet 5.5 did every part of a 13-ticket backlog in <b>${WITH}</b>, against <b>${WITHOUT}</b> without any rule.</p>
 <table><tr><th>Arm</th><th>Model</th><th>Task</th><th>Runs that did every part (hidden check)</th></tr>
 ${row('No rule', WITHOUT, '')}${row('<code>carry-through</code> alone', WITH, 'rule')}</table>
 <p class="note">${NOTE}</p>

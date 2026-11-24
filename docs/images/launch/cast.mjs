@@ -30,6 +30,9 @@ function wrap(text, width) {
   return lines;
 }
 
+/** Keeps a number on one line through wrap(). */
+const solid = (s) => s.replaceAll(' ', '\u00a0');
+
 const events = [];
 let now = 0;
 const frame = (seconds, draw) => {
@@ -72,14 +75,14 @@ frame(4.2, head() + steps(n) + reports());
 frame(3.2, head() + steps(n) + reports() + checks());
 
 // Closing: the delivery, then the number in its full sentence.
-const sentence = wrap(`With the rule carry-through delivered alone, Sonnet 5.5 did every part of a 13-ticket backlog in ${WITH} runs, against ${WITHOUT} without any rule.`, 84);
+const sentence = wrap(`With the rule carry-through delivered alone, Sonnet 5.5 did every part of a 13-ticket backlog in ${solid(WITH)}, against ${solid(WITHOUT)} without any rule.`, 84).map((l) => l.replaceAll('\u00a0', ' '));
 frame(7, [
   at(3, 6, bold('$ noonsight report --log decisions.jsonl')),
   at(4, 6, dim("… the experiment's log, this rule's lines:")),
   ...REPORT.map((l, i) => at(5 + i, 6, l)),
   at(11, 6, bold('The measured example')),
   ...sentence.map((l, i) => at(12 + i, 6, l.replaceAll(WITH, amber(WITH)).replaceAll(WITHOUT, amber(WITHOUT)))),
-  at(15, 6, dim('Most of the difference is the one ticket shown. Evidence: R10 in docs/evidence.md.')),
+  at(16, 6, dim('Most of the difference is the one ticket shown. Evidence: R10 in docs/evidence.md.')),
   at(19, 6, amber(HEADLINE) + ' ' + SUBHEAD),
   at(21, 6, bold(`$ ${INSTALL}`)),
   at(23, 6, REPO),

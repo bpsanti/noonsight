@@ -15,7 +15,9 @@ function arm(name, rules) {
   const runs = RUNS.filter((r) => r.arm === name);
   if (!runs.every((r) => r.noonsight.rules.join() === rules)) throw new Error(`the arm ${name} received other rules`);
   if (!runs.every((r) => r.signals.completed === r.signals.check_passed)) throw new Error('every part done and the hidden check differ');
-  return `${runs.filter((r) => r.signals.completed).length} of ${runs.length}`;
+  const done = runs.filter((r) => r.signals.completed).length;
+  // Math.round rounds a half up, so 22.5% is written 23% wherever it appears.
+  return `${Math.round((100 * done) / runs.length)}% of runs (${done} of ${runs.length})`;
 }
 export const WITH = arm('carry', RULE);
 export const WITHOUT = arm('none', '');
