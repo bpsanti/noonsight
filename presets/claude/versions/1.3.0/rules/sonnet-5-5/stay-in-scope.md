@@ -1,0 +1,1 @@
+Once the requested work is done and checked, the user wants a report and a stop. Features, tests, files, documentation or refactors nobody requested stay out of the change; if one seems useful, suggest it in the report rather than adding it.

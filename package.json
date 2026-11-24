@@ -1,0 +1,63 @@
+{
+  "name": "noonsight",
+  "version": "0.1.2",
+  "description": "Every model has its own north. Hand every Claude Code session and subagent the rules for the model it actually runs on.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-code-plugin",
+    "hooks",
+    "agents",
+    "subagents",
+    "rules",
+    "prompting"
+  ],
+  "author": "Bruno Santi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bpsanti/noonsight.git"
+  },
+  "homepage": "https://github.com/bpsanti/noonsight#readme",
+  "bugs": {
+    "url": "https://github.com/bpsanti/noonsight/issues"
+  },
+  "type": "module",
+  "bin": {
+    "noonsight": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "!dist/src/**/*.map",
+    "schema",
+    "presets",
+    ".claude-plugin",
+    "hooks",
+    "scripts",
+    "skills"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run clean && npm test",
+    "plugin-files": "npm run build && node dist/src/adapters/claude-code/plugin-files.js",
+    "plugin-folder": "npm run clean && npm run build && node tools/plugin-folder.mjs",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "test:live": "npm run build && node --test dist/test/live/*.test.js",
+    "experiment": "npm run build && node dist/experiments/rules/run.js",
+    "benchmark": "npm run build && node dist/experiments/benchmark/bench.js",
+    "delivery": "npm run build && node dist/experiments/delivery/run.js",
+    "adoption": "npm run build && node dist/experiments/adoption/run.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^7.0.2"
+  }
+}

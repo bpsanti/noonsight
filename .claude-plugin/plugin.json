@@ -1,0 +1,18 @@
+{
+  "name": "noonsight",
+  "version": "0.1.2",
+  "description": "Hands every Claude Code session and subagent the rules for the model it actually runs on.",
+  "author": {
+    "name": "Bruno Santi"
+  },
+  "homepage": "https://github.com/bpsanti/noonsight#readme",
+  "repository": "https://github.com/bpsanti/noonsight",
+  "license": "MIT",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://github.com/bpsanti/noonsight/blob/main/docs/install.md#as-a-claude-code-plugin",
+  "supportUrl": "https://github.com/bpsanti/noonsight/issues",
+  "privacyPolicyUrl": "https://github.com/bpsanti/noonsight/blob/main/docs/privacy.md",
+  "engines": {
+    "claude-code": ">=2.1.251"
+  }
+}

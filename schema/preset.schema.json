@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unpkg.com/noonsight@0/schema/preset.schema.json",
+  "title": "noonsight preset",
+  "description": "A preset shipped with the package: rules per exact model identifier, each with its source.",
+  "type": "object",
+  "required": ["id", "version", "models"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "claude_code": {
+      "description": "The Claude Code version whose own system prompts were compared with these rules, and the date of that comparison. A rule is not delivered in a place where that version already sends equivalent text.",
+      "type": "object",
+      "required": ["version", "checked"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "checked": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
+    },
+    "scopes": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/scope" }
+    },
+    "routing": {
+      "description": "The routing table the preset suggests, used only when the user turns routing on. A user row for the same scope replaces the preset's row.",
+      "type": "object",
+      "required": ["table"],
+      "additionalProperties": false,
+      "properties": {
+        "table": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+          "additionalProperties": { "$ref": "#/$defs/routeEntry" }
+        }
+      }
+    },
+    "models": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(?=.*[0-9])[a-z0-9]+(?:[-.][a-z0-9]+)*$",
+        "x-hint": "a preset declares rules by full lowercase model identifier only, such as claude-fable-5-2"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["rules"],
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/$defs/rule" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "routeEntry": {
+      "description": "One row of the preset's routing table, with what it rests on.",
+      "type": "object",
+      "required": ["route", "basis", "sources"],
+      "additionalProperties": false,
+      "properties": {
+        "route": { "type": ["array", "object"], "$ref": "#/$defs/routeRow" },
+        "basis": {
+          "description": "What the sources say that supports this row.",
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/source" }
+        }
+      }
+    },
+    "routeRow": {
+      "description": "Options in order of preference: one list for every target, or an object with a list for each target.",
+      "items": { "$ref": "#/$defs/routeOption" },
+      "properties": {
+        "launcher": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } },
+        "subagents": { "type": "array", "items": { "$ref": "#/$defs/routeOption" } }
+      },
+      "additionalProperties": false
+    },
+    "routeOption": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "description": "A preset names models by alias only, since it cannot know which model identifiers a user declares.",
+          "enum": ["fable", "opus", "sonnet", "haiku"]
+        },
+        "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "file", "scopes", "where", "source", "effect", "cost"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*$"
+        },
+        "file": {
+          "description": "Path to the rule text, relative to the preset directory.",
+          "type": "string",
+          "minLength": 1
+        },
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?:\\*|[a-z][a-z0-9-]*)$" }
+        },
+        "where": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "attended: a session someone is watching. unattended: a session nobody is watching. subagent: a subagent's task. session: the earlier name of attended, which copies of earlier versions use.",
+          "items": { "enum": ["attended", "unattended", "subagent", "session"] }
+        },
+        "triggers": {
+          "description": "Actions that also deliver the rule to a session whose scope is not one of the rule's scopes (see the configuration schema). Only for a rule that is cheap when the action was not what the scopes mean; SOURCES.md says why for each.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["code-edit"] }
+        },
+        "renamed_from": {
+          "description": "Every id this rule had in earlier versions of the preset, for the same model. An enable, disable or replaces entry that names one applies to this rule, and noonsight reports the rename when the preset is updated.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*$"
+          }
+        },
+        "enabled": {
+          "description": "Whether the rule is on unless the user turns it off. Rules with a high cost or a described side effect ship off.",
+          "type": "boolean",
+          "default": true
+        },
+        "source": { "$ref": "#/$defs/source" },
+        "effect": {
+          "description": "What the source reports the text changes, with its own measurements where it gives them.",
+          "type": "string",
+          "minLength": 1
+        },
+        "cost": {
+          "description": "What the source reports the text costs, such as more output tokens or a side effect, or that it reports no cost.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "source": {
+      "description": "Where a rule or a scope comes from: the page, the section and the date it was read.",
+      "type": "object",
+      "required": ["url", "section", "date"],
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "pattern": "^https://" },
+        "section": { "type": "string", "minLength": 1 },
+        "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["description", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/source" },
+        "match": {
+          "description": "Regular expressions (JavaScript syntax, case-insensitive, Unicode-aware) matched against a subagent's description and task text.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
