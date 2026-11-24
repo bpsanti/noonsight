@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `noonsight watch`: a configuration directory made just after the watcher started, before the system delivered events for the home directory, was never seen; so was any directory whose event was lost.
+  The watcher now also lists the entries of the home directory every 100 ms for its first ten seconds, then every five seconds, and finds it (`docs/install.md`, "New logins as they appear").
+
 ## 0.1.0
 
 The first published version.

@@ -134,7 +134,7 @@ noonsight watch disable   # turn it off
 The watcher is off by default.
 Neither `noonsight install` nor anything else turns it on; only `noonsight watch enable` does.
 When it is on, a Claude Code configuration directory made in your home directory gets noonsight's hooks without anyone running `noonsight install` again.
-The watcher sees a new directory as soon as it appears, then checks for its marker every 100 ms for ten seconds, and every five seconds after that for as long as the directory stays there without one.
+The watcher sees a new directory as soon as it appears, or within five seconds when the system delivers no event for it, then checks for its marker every 100 ms for ten seconds, and every five seconds after that for as long as the directory stays there without one.
 
 ### What it does
 
@@ -145,7 +145,7 @@ The watcher sees a new directory as soon as it appears, then checks for its mark
 | macOS | `~/Library/LaunchAgents/io.github.bpsanti.noonsight.watch.plist` | launchd, with `RunAtLoad` and `KeepAlive` |
 | Linux | `~/.config/systemd/user/noonsight-watch.service` (under `$XDG_CONFIG_HOME` when it is set) | the systemd user manager, enabled for `default.target`, with `Restart=always` |
 
-The service starts at every login and runs `noonsight watch run`: one resident Node.js process for the account, which is idle while nothing changes in the home directory, apart from one check every five seconds for each new directory that has no marker yet.
+The service starts at every login and runs `noonsight watch run`: one resident Node.js process for the account, which is idle while nothing changes in the home directory, apart from a look at its entries, and one check for each new directory that has no marker yet, every five seconds.
 Like the hook pointer, it runs the Node.js and the copy of noonsight that ran `enable`, by absolute paths.
 After moving or upgrading either one, run `noonsight watch enable` again; `noonsight check` warns until then.
 The service file records the noonsight version, so an upgrade at the same path counts too: `enable` restarts the watcher on the new code.
@@ -154,6 +154,8 @@ Running `enable` again with nothing changed writes nothing.
 The process watches only the entries directly in the home directory, without recursion.
 Writes below them, in a project, in `~/Library` or inside a Claude Code configuration directory, never wake it.
 Claude Code rewrites `~/.claude.json` often; each rewrite wakes the watcher for one check of that entry, and nothing is written.
+The system can fail to report a new entry, most of all one made just as the watcher starts, so the watcher also lists the home directory and checks each entry in it every 100 ms for its first ten seconds, then every five seconds for as long as it runs.
+That look reads only the entries directly in the home directory and writes nothing.
 
 When a new directory appears directly in the home directory, the watcher waits for the `.claude.json` file that marks a Claude Code configuration directory, the same marker the default install looks for, because Claude Code writes it just after it creates the directory.
 It checks every 100 ms for the first ten seconds, then every five seconds, until the marker appears or the directory goes away.
@@ -179,7 +181,7 @@ The behavior below was measured with Claude Code 2.1.327 on macOS ([verification
 - **The first interactive session receives the rules.**
   An interactive session starts with the hooks that are in `settings.json` when the theme is confirmed on Claude Code's first screen.
   The watcher has written them before that screen appears, so the first session received the rules in every run, even with the theme confirmed the moment it showed.
-  Only a watcher held up past that moment, such as on a heavily loaded machine, would leave the first session without them; the session then receives them after `/clear` or `/model`.
+  Only a watcher held up past that moment, such as on a heavily loaded machine or by an event the system did not deliver, would leave the first session without them; the session then receives them after `/clear` or `/model`.
 - **The first `claude -p` receives the rules only when Claude Code waits for server-managed settings.**
   `claude -p` reads `settings.json` as it starts, while the new directory has no hooks yet, and runs `SessionStart` with what it read then; it notices the hooks the watcher wrote only after that.
   On a login whose organization delivers [server-managed settings](#why-it-is-the-default), Claude Code first waits for those settings and reads its settings files again, by which time the watcher has written the hooks, so the first `claude -p` receives the rules.

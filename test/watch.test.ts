@@ -4,9 +4,10 @@
 
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import { serviceContent, SERVICE_LABEL, SERVICE_UNIT, watchService, type WatchService } from '../src/watch/service.js';
 import { startWatcher as runWatcher } from '../src/watch/watcher.js';
 import { packageVersion } from '../src/version.js';
@@ -301,22 +302,76 @@ interface Running {
 }
 
 /** Start `noonsight watch run` on the home directory, and wait until it watches. */
-async function startWatcher(env: Record<string, string>): Promise<Running> {
+async function startWatcher(t: TestContext, env: Record<string, string>): Promise<Running> {
   const child = spawn(process.execPath, [CLI, 'watch', 'run'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => child.kill());
   let output = '';
   child.stdout?.on('data', (d: Buffer) => (output += d.toString()));
   child.stderr?.on('data', (d: Buffer) => (output += d.toString()));
-  await until(() => / watching /.test(output), () => `the watcher did not start:\n${output}`);
+  await until(child, () => / watching /.test(output), () => `the watcher did not start:\n${output}`);
   return { child, output: () => output };
 }
 
-async function until(done: () => boolean, message: () => string, timeoutMs = 10_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+/** Ends a test whose watcher runs but never acts; a watcher that does act ends the wait itself, however slow the machine is. */
+const NEVER_MS = 300_000;
+
+/** Wait until the running watcher has done something; a watcher that exited never will. */
+async function until(child: ChildProcess, done: () => boolean, message: () => string): Promise<void> {
+  const deadline = Date.now() + NEVER_MS;
   while (!done()) {
-    if (Date.now() > deadline) assert.fail(message());
+    if (child.exitCode !== null || child.signalCode !== null || Date.now() > deadline) assert.fail(message());
     await new Promise((r) => setTimeout(r, 25));
   }
 }
+
+/**
+ * The watcher in this process, on a home directory of its own, with the clock and the events in the
+ * test's hands: time passes only by `tick`, and the only events are those the test sends, as when
+ * the system delivers none.
+ */
+function watcherInHand(t: TestContext, install: (dir: string) => void = () => {}) {
+  const home = tempTree({ '.local/.keep': '' });
+  const events = Object.assign(new EventEmitter(), { close: () => {} });
+  let listener: ((event: string, filename: string | null) => void) | undefined;
+  t.mock.method(fs, 'watch', (_dir: string, _options: unknown, onEvent: typeof listener) => {
+    listener = onEvent;
+    return events;
+  });
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const logged: string[] = [];
+  const installed: string[] = [];
+  const close = runWatcher({
+    home,
+    log: (text) => logged.push(text),
+    install: (dir) => {
+      installed.push(dir);
+      install(dir);
+    },
+    fastWindowMs: FAST_MS,
+    slowPollMs: SLOW_MS,
+  });
+  t.after(close);
+  return {
+    logged,
+    installed,
+    close,
+    tick: (ms: number): void => t.mock.timers.tick(ms),
+    event: (name: string | null): void => listener?.('rename', name),
+    fail: (e: Error): boolean => events.emit('error', e),
+    /** Make a directory in the home directory, with Claude Code's marker in it unless told otherwise. */
+    login: (name: string, marker = true): string => {
+      const dir = path.join(home, name);
+      fs.mkdirSync(dir);
+      if (marker) fs.writeFileSync(path.join(dir, '.claude.json'), '{}');
+      return dir;
+    },
+  };
+}
+
+/** The schedule of a watcher in hand: POLL_MS, as the watcher has it, until FAST_MS has passed, then SLOW_MS. */
+const POLL_MS = 100;
+const FAST_MS = 1_000;
+const SLOW_MS = 5_000;
 
 /** Whether the directory's settings.json holds a hook whose command is noonsight's hook pointer. */
 function hasNoonsightHooks(dir: string): boolean {
@@ -337,30 +392,29 @@ test('the watcher installs into a new configuration directory in the home direct
     'code/.keep': '',
   });
   const env = { HOME: home, PATH: process.env.PATH ?? '', NOONSIGHT_SYSTEM_ROOT: tempTree({}), NOONSIGHT_CONFIG: LAB_CONFIG, NOONSIGHT_PRESETS_DIR: LAB_PRESETS };
-  const watcher = await startWatcher(env);
-  t.after(() => watcher.child.kill());
+  const watcher = await startWatcher(t, env);
   const entries = new Set(fs.readdirSync(home));
 
   // A directory that is not a configuration directory, and a configuration directory below the home directory.
   fs.mkdirSync(path.join(home, 'notes'));
   fs.mkdirSync(path.join(home, 'code', 'project'));
   fs.writeFileSync(path.join(home, 'code', 'project', '.claude.json'), '{}');
-  // A new login: Claude Code creates the directory, then its marker a moment later.
+  // A new login: Claude Code creates the directory, then its marker a moment later. How long the moment is does not matter to the outcome.
   const login = path.join(home, '.claude-new');
   fs.mkdirSync(login);
   await new Promise((r) => setTimeout(r, 300));
   fs.writeFileSync(path.join(login, '.claude.json'), '{}');
   entries.add('notes').add('.claude-new');
 
-  await until(() => hasNoonsightHooks(login), () => `no hooks in ${login}:\n${watcher.output()}`);
-  await until(() => watcher.output().includes(`new Claude Code configuration ${login}: installed`), () => watcher.output());
+  await until(watcher.child, () => hasNoonsightHooks(login), () => `no hooks in ${login}:\n${watcher.output()}`);
+  await until(watcher.child, () => watcher.output().includes(`new Claude Code configuration ${login}: installed`), () => watcher.output());
   assert.ok(fs.existsSync(path.join(home, '.local', 'share', 'noonsight', 'noonsight-hook')));
 
   // The default directory has its marker in the home directory, so it needs none of its own.
   const defaultDir = path.join(home, '.claude');
   fs.mkdirSync(defaultDir);
   entries.add('.claude');
-  await until(() => hasNoonsightHooks(defaultDir), () => `no hooks in ${defaultDir}:\n${watcher.output()}`);
+  await until(watcher.child, () => hasNoonsightHooks(defaultDir), () => `no hooks in ${defaultDir}:\n${watcher.output()}`);
 
   assert.equal(hasNoonsightHooks(path.join(home, '.claude-before')), false, 'a directory that was there before is left to noonsight install');
   assert.equal(hasNoonsightHooks(path.join(home, 'code', 'project')), false, 'nothing below the home directory is watched');
@@ -369,43 +423,73 @@ test('the watcher installs into a new configuration directory in the home direct
   assert.equal(watcher.child.exitCode, null, 'the watcher is still running');
 });
 
-test('a watcher install that throws logs its failure on one line that says problem', async (t) => {
-  const home = tempTree({ '.local/.keep': '' });
-  const logged: string[] = [];
-  const close = runWatcher({
-    home,
-    log: (text) => logged.push(text),
-    install: () => {
-      throw new Error('disk full');
-    },
+test('a watcher install that throws logs its failure on one line that says problem', (t) => {
+  const watcher = watcherInHand(t, () => {
+    throw new Error('disk full');
   });
-  t.after(close);
-  const login = path.join(home, '.claude-new');
-  fs.mkdirSync(login);
-  fs.writeFileSync(path.join(login, '.claude.json'), '{}');
-  await until(() => logged.some((line) => line.startsWith('problem:')), () => logged.join('\n'));
-  assert.deepEqual(logged.filter((line) => line.startsWith('problem:')), [`problem: install into ${login} failed: disk full`]);
+  const login = watcher.login('.claude-new');
+  watcher.event('.claude-new');
+  assert.deepEqual(watcher.logged.filter((line) => line.startsWith('problem:')), [`problem: install into ${login} failed: disk full`]);
 });
 
-test('a marker written after the fast window is still picked up', async (t) => {
-  const home = tempTree({ '.local/.keep': '' });
-  const installed: string[] = [];
-  const close = runWatcher({
-    home,
-    log: () => {},
-    install: (dir) => {
-      installed.push(dir);
-    },
-    fastWindowMs: 100,
-    slowPollMs: 50,
-  });
-  t.after(close);
-  const login = path.join(home, '.claude-late');
-  fs.mkdirSync(login);
-  await new Promise((r) => setTimeout(r, 400));
+test('an event for a new configuration directory is acted on at once, and the looks after it do not install again', (t) => {
+  const watcher = watcherInHand(t);
+  const login = watcher.login('.claude-new');
+  watcher.event('.claude-new');
+  assert.deepEqual(watcher.installed, [login]);
+  watcher.event(null);
+  watcher.tick(FAST_MS + SLOW_MS);
+  assert.deepEqual(watcher.installed, [login]);
+});
+
+test('a directory made just after the watcher started, whose event never came, is found by the next look', (t) => {
+  const watcher = watcherInHand(t);
+  const login = watcher.login('.claude-new');
+  watcher.tick(POLL_MS);
+  assert.deepEqual(watcher.installed, [login]);
+});
+
+test('a directory whose event never came is found after the fast window too, for as long as the watcher runs', (t) => {
+  const watcher = watcherInHand(t);
+  watcher.tick(FAST_MS + SLOW_MS);
+  const first = watcher.login('.claude-first');
+  watcher.tick(SLOW_MS);
+  assert.deepEqual(watcher.installed, [first]);
+  const second = watcher.login('.claude-second');
+  watcher.tick(SLOW_MS);
+  assert.deepEqual(watcher.installed, [first, second]);
+});
+
+test('a marker written after the fast window is still picked up', (t) => {
+  const watcher = watcherInHand(t);
+  const login = watcher.login('.claude-late', false);
+  watcher.event('.claude-late');
+  watcher.tick(FAST_MS + SLOW_MS);
+  assert.deepEqual(watcher.installed, []);
   fs.writeFileSync(path.join(login, '.claude.json'), '{}');
-  await until(() => installed.length > 0, () => `nothing installed into ${login}`);
-  assert.deepEqual(installed, [login]);
+  watcher.tick(SLOW_MS);
+  assert.deepEqual(watcher.installed, [login]);
+});
+
+test('a closed watcher looks no more', (t) => {
+  const watcher = watcherInHand(t);
+  watcher.close();
+  watcher.login('.claude-new');
+  watcher.tick(FAST_MS + SLOW_MS);
+  assert.deepEqual(watcher.installed, []);
+});
+
+test('a watcher whose watch fails logs one problem line, looks no more and leaves exit code 1', (t) => {
+  const exitCode = process.exitCode;
+  t.after(() => (process.exitCode = exitCode));
+  const watcher = watcherInHand(t);
+  watcher.fail(new Error('watch lost'));
+  assert.equal(process.exitCode, 1);
+  process.exitCode = exitCode;
+  watcher.login('.claude-new');
+  watcher.tick(FAST_MS + SLOW_MS);
+  assert.deepEqual(watcher.installed, []);
+  assert.equal(watcher.logged.filter((line) => line.startsWith('problem:')).length, 1);
 });
 
 test('macOS: a loaded job without a running process is a warning, and enable and disable still reach it', { skip: process.platform !== 'darwin' }, () => {
@@ -431,13 +515,12 @@ test('macOS: a loaded job without a running process is a warning, and enable and
 test('a watcher install that fails leaves a problem line as its last log line, and check reports it as a warning', { skip: !supported }, async (t) => {
   const { home, env, service } = machine();
   assert.equal(runCli(['watch', 'enable'], env).status, 0);
-  const watcher = await startWatcher({ ...env, PATH: process.env.PATH ?? '' });
-  t.after(() => watcher.child.kill());
+  const watcher = await startWatcher(t, { ...env, PATH: process.env.PATH ?? '' });
   const login = path.join(home, '.claude-broken');
   fs.mkdirSync(login);
   fs.writeFileSync(path.join(login, 'settings.json'), '{ not json');
   fs.writeFileSync(path.join(login, '.claude.json'), '{}');
-  await until(() => watcher.output().includes('failed; see the lines above'), () => watcher.output());
+  await until(watcher.child, () => watcher.output().includes('failed; see the lines above'), () => watcher.output());
   fs.writeFileSync(service.log, watcher.output());
   const check = runCli(['check'], env);
   assert.match(check.stdout, /^warning: watcher log .*: \S+ problem: install into .* failed; see the lines above$/m);
