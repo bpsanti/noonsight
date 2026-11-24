@@ -1,7 +1,7 @@
 # Launch assets
 
 `launch.gif` and `card-light.png` and `card-dark.png` show one result, [R10](../../evidence.md#r10): `carry-through` alone on Sonnet 5.5, on the 13-ticket backlog of the rule effect experiment.
-`result.mjs` computes its numbers from the [committed run](../../../experiments/rules/results/2026-11-20-harder/README.md) and copies the `noonsight report` lines from that run's `summary.md`, so no figure is written by hand.
+`result.mjs` computes its numbers from the [committed run](../../../experiments/rules/results/2026-11-20-harder/README.md) (Claude Code 2.1.329) and copies the `noonsight report` lines from that run's `summary.md`, so no figure is written by hand.
 
 ## The GIF
 
