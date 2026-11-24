@@ -1,0 +1,21 @@
+Verdict: **Adopt with conditions.** Run a one-to-two-week pilot before rolling it out to the whole team.
+
+Reasons:
+- **It targets your actual problem.** Your team mixes Opus, Sonnet, Haiku and Fable sessions and subagents. noonsight delivers each model its own rules, re-delivers them after `/compact`, `/clear`, `/resume`, `/fork` and model switches, and covers subagents, which a user `CLAUDE.md` misses (the Explore and Plan built-in subagents never receive it). In the current delivery run, 100% of rule-bearing requests held their model's rules (3,090 of 3,090), including 763 of 763 subagent requests (`README.md`, D18–D20). A user `CLAUDE.md` covered 88.2% of requests and 46.9% of subagent requests on the same sequences (D25, D28).
+- **Its own benchmark is the one-sided part.** The delivery run used real Claude Code sessions but a local stand-in for the Messages API, so no model answered. The authors wrote and ran it, and I did not rerun it. Treat 100% as "the hooks deliver what they are configured to deliver," not as "the team's behaviour improves."
+- **The measured behavioural gains are narrow.** Only three rules show an effect on the tasks tested: `verify-changes` for Sonnet and Haiku, `carry-through` for Sonnet, and `low-context-report` for Fable. Each was tested on a few small tasks. The paid pilot found no difference in pass rate: 133 of 144 without rules, 132 of 144 with noonsight, 133 of 144 with a `CLAUDE.md` (B1). Opus's and Fable's attended rules ship off by default.
+- **It adds cost.** Per-run cost rose from $0.145 to $0.155 across the pilot's round 1 (B2). Haiku's input tokens rose about 36% (267k to 364k per run). Sonnet's rose about 28%.
+- **Known gaps apply directly to your use.** Workflow agents receive nothing. Foreground agents receive nothing until their first Edit, Write or agent call. Plugins not read by noonsight leave subagents on the parent's model. `/fork` is unavailable in sessions started by `noonsight run`.
+
+Conditions and risks:
+- **Pin the Claude Code version and re-run the check on each upgrade.** Every result is tied to a version (2.1.326 to 2.1.330). Hooks can change behaviour between versions, and the authors say so.
+- **Install from a pinned npm version and review the source before use.** It is installed globally and hooks every Claude Code login on the machine, and it can inject text into every request. The classifier is off by default; if you turn it on, the first 4,000 characters of each task go to a small model.
+- **Set `session.unattended_when_env` in CI and orchestrator environments.** Otherwise interactive sessions count as attended, and unattended rules are skipped.
+- **Put shared repo rules in `.noonsight/noonsight.json` and require each person to run `noonsight trust`.** Until they do, the file does nothing, so someone will silently get different behaviour.
+- **Decide the Fable policy.** Fable's preset rules are mostly off or limited to unattended runs and subagents, so Fable sessions gain little from the preset.
+- **Ask about one unresolved row.** The 2026-11-19 pilot summary shows only 55% share of rule text written for Haiku after a model switch under noonsight. The README's current delivery run reports 100%. I did not verify that the switch fix is in the build you would install.
+- **Pilot to answer your own question.** Choose one repo and two or three people. Run `noonsight report` and `noonsight check`, and compare pass rates and token cost with and without it over the same tasks. Adopt only if the gains you see justify the extra tokens.
+
+What it guarantees: noonsight guarantees that, through Claude Code's hooks, each session and subagent receives the rules declared for the model it runs on, again when that model changes or the conversation is compacted, cleared, resumed or forked. That rests on the hook implementation in Claude Code 2.1.330 and on the authors' delivery benchmark, which uses a stubbed API and measured no model's output, so it says nothing about whether the rules change what a model does.
+
+I read the README, the evidence map, the benchmark summary and the rule-effects table. I did not run `npm test` or inspect the source code, so the claims above are the authors' documented results, not ones I checked.

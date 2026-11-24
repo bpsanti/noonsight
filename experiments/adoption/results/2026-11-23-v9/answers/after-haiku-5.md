@@ -1,0 +1,26 @@
+Verdict: adopt with conditions. Run it as a pilot on a few machines first, under the conditions below.
+
+Reasons:
+- **It fixes a gap your setup has.** Your sessions start many subagents. A user `CLAUDE.md` reached only 46.9% of subagent requests (60 of 128) in the delivery benchmark, and never reaches the built-in Explore and Plan subagents. noonsight reached 100% (763 of 763) on Claude Code 2.1.330 (D20, D34).
+- **It stops cross-model leakage.** With a `CLAUDE.md` or `.claude/rules`, models receive each other's rules. Only 32.6% and 27.9% of the rule text in those requests was written for the request's model, against 78.6% under noonsight (D30). Requests holding another model's unretired rules: 0 under noonsight, 619 and 622 under the alternatives (D32).
+- **The delivery numbers are strong but narrow.** The current run covers 299 sessions and 3,090 requests with rules due, all covered, on the four models you use. Its sessions are real interactive Claude Code sessions, but they talk to a local stand-in for the Messages API, so no request reached a model. I checked the `claudemd` coverage figure (508 of 576) against the committed `summary.json`. I did not recompute the 2.1.330 `on-g2-s1-n300` figures from the raw file; `npm test` does that.
+- **Quality gains are not shown.** In the paid pilot, runs that passed were 133 of 144 with no rules, 132 of 144 under noonsight and 133 of 144 with a `CLAUDE.md` (B1). In the rule-effect runs, every run passed the hidden check with or without rules (R8). The measured per-rule effects are only for `verify-changes`, `carry-through` on Sonnet, and `low-context-report` on Fable, on small tasks.
+- **Some rules cost real money.** On the precise Sonnet fix, mean cost per run went from $0.0240 to $0.0505 with `verify-changes` alone. On Haiku it went from $0.0015 to $0.0033 (R6, R7). Those are list-price figures from a small task, not your workload.
+- **It is young.** The package is version 0.1.0, the first published version, and it depends on Claude Code's hook behavior. Its results were measured on Claude Code 2.1.325 through 2.1.330.
+
+Conditions and risks:
+- **Pin the Claude Code version.** Test on the version your team uses. Re-run `noonsight check` and the delivery check after each Claude Code upgrade, since the project's guarantees hold per version.
+- **Install per login with the default command.** Run `npm install -g noonsight`, then `noonsight install`, on each machine. Do not use `npx` for the hooks, because they stop delivering once npm's cache is cleared. On logins with organization server-managed settings, `--managed` is ignored, so use the default install there. Watch for `disableAllHooks` and `allowManagedHooksOnly`, which `check` reports.
+- **Declare all four models.** Every model needs an entry, including `claude-fable-5-2`. Otherwise you get a warning and no rules. Note that Opus 5.5's and Fable 5.2's attended rules ship off, so attended sessions on those models get nothing until you use `enable`.
+- **Set `session.unattended_when_env`** to your CI and orchestrator variables. Otherwise interactive sessions that nobody watches are treated as attended.
+- **Use scopes.** Attended Sonnet and Haiku sessions with no scope get only `verify-changes`, after a code edit.
+- **Treat repository rules as untrusted input.** A repo's `.noonsight/noonsight.json` and rule files, once trusted with `noonsight trust`, go into model context. Review them as you would review a prompt. By default a trusted project can only add rules.
+- **Know the known gaps.** Subagents of a workflow get nothing. Plugins that noonsight does not read leave their subagents on the parent's model. A compacted or resumed session with no model named runs on the default model, which noonsight cannot detect. `/fork` is unavailable in sessions started with `noonsight run` and rules. Agent teams, routing and the classifier are not measured.
+- **Rules are context, not enforcement.** The hooks never block anything. Anything that must never happen needs a hook or a permission rule.
+- **The classifier is off by default.** If you enable it, it sends the first 4,000 characters of each task to a small model through your Claude Code login.
+- **Measure your own tasks before keeping rules.** Use `noonsight report` to confirm delivery. Measure outcomes and cost on your own work, because the benchmark tasks are small. Drop any rule that never changes anything you can see.
+- **Keep universal rules in `CLAUDE.md`.** Anything the same for every model belongs there, and noonsight covers the model-specific and subagent-specific rules.
+
+What it guarantees: noonsight guarantees that each session and subagent receives the rules declared for the model it runs on, and receives them again after a model switch, compaction, clear, resume or fork, and that is delivery of context, not compliance with those rules. That rests on Claude Code's documented hooks, on noonsight's own test suite, and on a self-run benchmark of 299 sessions on Claude Code 2.1.330 against a stand-in API, all written by the project's author.
+
+I did not install the package or run its tests, so the verdict rests on reading the docs, the evidence map and the committed `summary.json`.
