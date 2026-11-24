@@ -2,8 +2,9 @@
 // it: every value and every other number of an entry is computed again from its raw file, each entry
 // and each run of the map's table carries the date and the Claude Code version of its run, a run or an
 // entry that a later run measured again is marked superseded, and every line of README.md,
-// docs/usage.md and docs/sources.md that states a measurement cites an entry whose value it quotes and
-// the version it ran on. No page outside a superseded run's own folder states a superseded value, or
+// docs/usage.md and docs/sources.md that states a measurement cites an entry whose value it quotes and,
+// outside the README, the version it ran on: the README names no version of a result, and points to the
+// map for all of them. Each rule effect of the README names its rule, its arm and its model. No page outside a superseded run's own folder states a superseded value, or
 // links to a superseded run, without saying so.
 
 import assert from 'node:assert/strict';
@@ -17,6 +18,8 @@ import { PRIMARY, proseLines, readMap, readSources } from './docs-lib.js';
 
 /** The pages whose measurements must each cite an entry of the map. */
 export const CITING_PAGES = ['README.md', 'docs/usage.md', 'docs/sources.md'];
+/** The page that leaves the Claude Code version of each result to the map, with one line that points there. */
+const UNVERSIONED_PAGE = 'README.md';
 
 // --- Reading the raw results ---------------------------------------------------------------
 
@@ -457,7 +460,7 @@ function inContext(lines: readonly string[], i: number): string {
 }
 
 for (const page of CITING_PAGES) {
-  test(`${page}: every measurement cites the evidence map, quotes the value of the entry it cites, and names its Claude Code version`, () => {
+  test(`${page}: every measurement cites the evidence map, quotes the value of the entry it cites${page === UNVERSIONED_PAGE ? '' : ', and names its Claude Code version'}`, () => {
     const text = fs.readFileSync(path.join(PACKAGE_ROOT, page), 'utf8');
     const lines = text.split('\n');
     const problems: string[] = [];
@@ -478,7 +481,7 @@ for (const page of CITING_PAGES) {
         for (const p of parts.sort((a, b) => b.length - a.length)) rest = rest.split(p).join(' ');
         for (const v of versionsOf(entry)) {
           versions.add(v);
-          if (!context.includes(v)) problems.push(`${page}:${line} cites ${entry.id} without its Claude Code version, ${v}`);
+          if (page !== UNVERSIONED_PAGE && !context.includes(v)) problems.push(`${page}:${line} cites ${entry.id} without its Claude Code version, ${v}`);
         }
         if (supersededBy(entry) && !/superseded/i.test(context)) problems.push(`${page}:${line} cites ${entry.id}, which is superseded, without saying so`);
       }
@@ -490,6 +493,32 @@ for (const page of CITING_PAGES) {
     assert.deepEqual(problems, []);
   });
 }
+
+test('README.md: one line points to the map for the Claude Code version of every result, and no line names one', () => {
+  const lines = fs.readFileSync(path.join(PACKAGE_ROOT, UNVERSIONED_PAGE), 'utf8').split('\n');
+  // A version noonsight needs, "2.1.275 or later", is a requirement and not the version of a result.
+  assert.deepEqual(lines.filter((l) => /\b2\.1\.\d{3}\b(?! or later)/.test(l) || RUNS.some((r) => l.includes(r.version))), [], 'lines that name a version');
+  assert.equal(lines.filter((l) => l.includes('](docs/evidence.md#runs-and-versions)')).length, 1, 'lines that point to the versions');
+});
+
+test('README.md: each line that states a rule effect names its rules, whether alone or together, and its one model', () => {
+  const problems: string[] = [];
+  let checked = 0;
+  for (const { line, text, raw } of proseLines(fs.readFileSync(path.join(PACKAGE_ROOT, UNVERSIONED_PAGE), 'utf8'))) {
+    const entries = [...raw.matchAll(CITATION)].map((m) => BY_ID.get(m[2] as string)).filter((e) => e?.id.startsWith('R'));
+    if (entries.length === 0 || !text.match(MEASUREMENT)) continue;
+    checked++;
+    const models = [...new Set(raw.match(/\b(?:Fable|Opus|Sonnet|Haiku) \d\.\d\b/g) ?? [])];
+    if (models.length !== 1) problems.push(`README.md:${line} names ${models.length ? models.join(', ') : 'no model'}`);
+    // With one model and one rule set per line, an entry on another model cannot lend the line its number.
+    for (const e of entries) if (models[0] && !new RegExp(models[0].split(' ')[0] as string, 'i').test(e?.fields.claim ?? '')) problems.push(`README.md:${line} cites ${e?.id}, which is not on ${models[0]}`);
+    const arm = /^- With ((?:`[a-z-]+`(?:, | and )?)+) (alone|together), /.exec(raw);
+    const rules = [...(arm?.[1] ?? '').matchAll(/`([a-z-]+)`/g)].length;
+    if (!arm || (arm[2] === 'alone') !== (rules === 1)) problems.push(`README.md:${line} does not name its rules as one alone or several together`);
+  }
+  assert.ok(checked > 0);
+  assert.deepEqual(problems, []);
+});
 
 /** The tracked Markdown files outside the folder whose own tests fix what it says. */
 const MARKDOWN = spawnSync('git', ['-C', PACKAGE_ROOT, 'ls-files', '-z', '*.md'], { encoding: 'utf8' })

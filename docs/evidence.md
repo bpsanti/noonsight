@@ -2,7 +2,8 @@
 
 Every measured number in [the README](../README.md), [docs/usage.md](usage.md) and [docs/sources.md](sources.md) links to an entry here.
 Each entry names the raw file it comes from, how the number is computed from that file, the date of the measurement, the Claude Code version it ran on, and whether it is current.
-[test/evidence.test.ts](../test/evidence.test.ts) computes every value and every number of an entry again from the raw file, checks each entry's date and version against its run, and fails when one differs or when a page states a measurement without its entry and version.
+[test/evidence.test.ts](../test/evidence.test.ts) computes every value and every number of an entry again from the raw file, checks each entry's date and version against its run, and fails when one differs or when a page states a measurement without its entry and, outside the README, its version.
+The README names no version of its own for a result: look it up in the result's entry, or in the table below.
 
 **Each fact has one current value.**
 An entry's value never changes: when a later run measures the same thing, it gets a new entry, and the earlier one moves to [Superseded results](#superseded-results) with a link to it.
