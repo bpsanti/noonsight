@@ -24,9 +24,9 @@ Give the ids of every limit it names.
 - **L2** The measured effects of the rules are on small tasks with small samples, or only some rules showed an effect; several rules changed nothing measurable.
 - **L3** Rules can cost money or time: a rule that makes the model do more work (such as running tests) raises the cost per run; the hooks add a little latency at each event.
 - **L4** A watched (attended) session with no task scope receives little from the shipped preset: nothing on Opus 5.5 or Fable 5.2, whose rules for that place ship off until `enable` turns one on, and on Sonnet 5.5 or Haiku 5.5 only `verify-changes`, once the session edits a code file its git repository tracks (the `code-edit` trigger); scopes, the unattended setting or `enable` must be configured for the rest.
-- **L5** Parts of delivery are not measured or fail: agent teams, routing and the classifier are not measured; a known limit after a compaction and a resume with no model; known limits for subagents (a workflow's agents get nothing, foreground calls of one type that need different rules); the benchmark found nine failures, F1 to F9, fixed before the current run, which measured forks, plan mode, `/resume` inside a session, `noonsight run` and project configurations.
+- **L5** Parts of delivery are not measured or fail: agent teams, routing and the classifier are not measured; a known limit after a compaction and a resume with no model; known limits for subagents (a workflow's agents get nothing, foreground calls of one type that need different rules); `/fork` is not available in a session `noonsight run` started with rules; the benchmark found nine failures, F1 to F9, fixed before the current run, which measured forks, plan mode, `/resume` inside a session, `noonsight run` and project configurations.
 - **L6** It depends on Claude Code's hook behavior and on the Claude Code version; a Claude Code update can change what it relies on, and an organization's managed settings can turn user hooks off.
-- **L7** It is pre-release: not published on npm as a usable version, installed from a clone, early development or a single maintainer.
+- **L7** It is an early release: 0.1.0 is its first usable version on npm, by a single maintainer.
 - **L8** It covers Claude Code and the current Claude models only; another agent or model needs its own rules declared, and a new model version gets no rules until declared.
 - **L9** It is another moving part: hooks in every login, a configuration to maintain, preset updates to review, trust per repository.
 - **L10** A `CLAUDE.md` already reaches every request of the main conversation; noonsight's measured advantage over it is per-model precision and subagents.
@@ -39,10 +39,11 @@ A **hallucinated feature** is a claim that noonsight has a feature this referenc
 A statement about a detail the reference does not cover either way, such as an option, a warning or a time limit it does not mention, is not a hallucinated feature: the judge cannot tell it from a documented detail, so it is unsupported and fails nothing.
 
 - Commands: `noonsight init`, `install`, `uninstall`, `watch`, `check`, `accept`, `trust`, `untrust`, `models`, `resolve`, `report`, `run`, `hook`.
-- Hooks it installs: `SessionStart`, `PostModelSwitch`, `PreToolUse` and `PostToolUse` on the agent tool, `SubagentStart`, and `PostToolUse` on Edit and Write.
+- Two ways to install it: from npm with `noonsight install` (recommended), or as a Claude Code plugin; with both, each event is delivered once.
+- Hooks it installs: `SessionStart`, `PostModelSwitch`, `PreToolUse`, `PermissionRequest` and `PostToolUse` on the agent tool, `SubagentStart`, and `PostToolUse` on Edit and Write.
 - One configuration file for the machine (`~/.config/noonsight/noonsight.json` or `NOONSIGHT_CONFIG`), and an optional project file `.noonsight/noonsight.json` that each person trusts with `noonsight trust`; by default a project can only add rules.
 - One preset, `claude`, with rules for Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5, each with its source; rules can be turned on, off or replaced, and the user adds rule files of their own, per model or for every model.
-- Scopes (kinds of task), places (`session`, `unattended`, `subagent`), and one trigger, `code-edit`.
+- Scopes (kinds of task), places (`attended`, whose earlier name `session` is still read, `unattended`, `subagent`, and `all`), and one trigger, `code-edit`.
 - A decision log and `noonsight report` of what was delivered; `noonsight resolve` prints the exact text a model receives.
 - `noonsight run`, which puts the rules in the system prompt for sessions the hooks do not reach.
 - Optional routing of model and effort by scope, off by default, and an optional classifier that uses a small model to place a task in a scope, off by default.

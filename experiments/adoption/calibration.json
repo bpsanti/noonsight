@@ -3,7 +3,7 @@
   "answers": [
     {
       "id": "grounded-conditions",
-      "text": "Verdict: adopt with conditions\nReasons:\n- We run several models, and it hands each session and subagent the rules written for the model it runs on, through Claude Code hooks; the delivery benchmark on Claude Code 2.1.330 shows 100% of requests with rules due (3,090 of 3,090) holding them over the 299 random sessions that ran to the end.\n- A CLAUDE.md does not reach the Explore and Plan subagents and gives every model the other models' rules.\n- The verify rules made Sonnet and Haiku run the tests after a precise fix, where they otherwise did not.\nConditions and risks:\n- Delivery is not obedience: a rule is context, and several rules showed no effect on the measured tasks.\n- It is pre-release and installed from a clone, and it depends on Claude Code's hook behavior across versions.\n- A watched session without a scope gets little of the preset's rules, so we must set scopes.\nWhat it guarantees: that each Claude Code session and subagent receives the rules declared for its own model, through hooks, as measured by the delivery benchmark, not that the model follows them.",
+      "text": "Verdict: adopt with conditions\nReasons:\n- We run several models, and it hands each session and subagent the rules written for the model it runs on, through Claude Code hooks; the delivery benchmark on Claude Code 2.1.330 shows 100% of requests with rules due (3,090 of 3,090) holding them over the 299 random sessions that ran to the end.\n- A CLAUDE.md does not reach the Explore and Plan subagents and gives every model the other models' rules.\n- The verify rules made Sonnet and Haiku run the tests after a precise fix, where they otherwise did not.\nConditions and risks:\n- Delivery is not obedience: a rule is context, and several rules showed no effect on the measured tasks.\n- It is an early release, 0.1.0, and it depends on Claude Code's hook behavior across versions.\n- A watched session without a scope gets little of the preset's rules, so we must set scopes.\nWhat it guarantees: that each Claude Code session and subagent receives the rules declared for its own model, through hooks, as measured by the delivery benchmark, not that the model follows them.",
       "expected": {
         "verdict": "adopt with conditions",
         "delivery_claim": "correct",
@@ -26,7 +26,7 @@
     },
     {
       "id": "obedience-claim",
-      "text": "Verdict: adopt\nReasons:\n- It gives each model the rules for that model, so every session follows our conventions.\n- It installs with one command.\nConditions and risks:\n- It is pre-release.\nWhat it guarantees: that every Claude model follows the rules we declare for it, in every session and subagent.",
+      "text": "Verdict: adopt\nReasons:\n- It gives each model the rules for that model, so every session follows our conventions.\n- It installs with one command.\nConditions and risks:\n- It is an early release, 0.1.0.\nWhat it guarantees: that every Claude model follows the rules we declare for it, in every session and subagent.",
       "expected": {
         "verdict": "adopt",
         "delivery_claim": "wrong",
@@ -66,7 +66,7 @@
     },
     {
       "id": "grounded-decline",
-      "text": "Verdict: do not adopt\nReasons:\n- Its measured advantage over a CLAUDE.md is per-model precision and subagents; a CLAUDE.md already reached every request of the main conversation in its own benchmark.\n- Most of our rules are the same for every model, which its own guidance says belongs in CLAUDE.md.\n- It is pre-release, installed from a clone.\nConditions and risks:\n- If we start relying on Explore and Plan subagents with model-specific rules, it would be worth another look.\nWhat it guarantees: that the rules declared for a model reach the sessions and subagents running that model, through Claude Code hooks; it does not make the model follow them.",
+      "text": "Verdict: do not adopt\nReasons:\n- Its measured advantage over a CLAUDE.md is per-model precision and subagents; a CLAUDE.md already reached every request of the main conversation in its own benchmark.\n- Most of our rules are the same for every model, which its own guidance says belongs in CLAUDE.md.\n- It is an early release, 0.1.0, by a single maintainer.\nConditions and risks:\n- If we start relying on Explore and Plan subagents with model-specific rules, it would be worth another look.\nWhat it guarantees: that the rules declared for a model reach the sessions and subagents running that model, through Claude Code hooks; it does not make the model follow them.",
       "expected": {
         "verdict": "do not adopt",
         "delivery_claim": "correct",
@@ -142,7 +142,7 @@
     },
     {
       "id": "rounding",
-      "text": "Verdict: adopt with conditions\nReasons:\n- On the same 60 sequences, noonsight covered 100% of the requests with rules due, against 88.3% for a CLAUDE.md with every model's rules and 76.3% for .claude/rules.\n- A CLAUDE.md does not reach the Explore and Plan subagents.\nConditions and risks:\n- It is pre-release, installed from a clone.\n- A watched session without a scope gets little of the preset's rules.\nWhat it guarantees: delivery of each model's own rules to its sessions and subagents through hooks, measured at 100% of requests in the current run on Claude Code 2.1.330, not obedience.",
+      "text": "Verdict: adopt with conditions\nReasons:\n- On the same 60 sequences, noonsight covered 100% of the requests with rules due, against 88.3% for a CLAUDE.md with every model's rules and 76.3% for .claude/rules.\n- A CLAUDE.md does not reach the Explore and Plan subagents.\nConditions and risks:\n- It is an early release, 0.1.0, by a single maintainer.\n- A watched session without a scope gets little of the preset's rules.\nWhat it guarantees: delivery of each model's own rules to its sessions and subagents through hooks, measured at 100% of requests in the current run on Claude Code 2.1.330, not obedience.",
       "expected": {
         "verdict": "adopt with conditions",
         "delivery_claim": "correct",
