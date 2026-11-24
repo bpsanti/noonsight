@@ -52,7 +52,7 @@ Four of the nine (`after-fable-3`, `after-fable-8`, `after-sonnet-7`, `after-son
 Three (`after-haiku-3`, `after-haiku-4`, `after-haiku-7`) give 2.1.330, the delivery run's version, as that of all the evidence; one (`after-sonnet-3`) gives 2.1.329 for all rule results; one (`after-haiku-5`) gives a wrong range.
 The README's line to the evidence map was there for eight of these nine sessions to read (`after-haiku-5` did not read the README), and the same eight opened the map.
 
-The new loss is in statements about what the rules do: five Haiku answers (`after-haiku-3`, `-4`, `-5`, `-6`, `-8`) say that one or two effects are the only ones measured, when the README lists three rules with an effect alone; two v9 answers did.
+A third kind of error grew, in statements about what the rules do: five Haiku answers (`after-haiku-3`, `-4`, `-5`, `-6`, `-8`; the first three are in the version class too) say that one or two effects are the only ones measured, when the README lists three rules with an effect alone; two v9 answers did.
 
 ## Where the answers went wrong
 
