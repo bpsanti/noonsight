@@ -1,0 +1,264 @@
+{
+  "none": {
+    "run": "triage.sonnet.none.1",
+    "started": "2026-11-20T19:17:01.893Z",
+    "stream_sha256": "f1415be959eb667171d4007afbb5e9d1729eb083a474c2d70e81593529fbfb7e",
+    "steps": [
+      {
+        "tool": "Read",
+        "what": "TICKETS.md"
+      },
+      {
+        "tool": "Bash",
+        "what": "ls -R . | grep -v node_modules | head -50; cat package.json README.md src/*.js bin/* 2>/dev/null; cat test/*.js | head -60; ls docs",
+        "error": true
+      },
+      {
+        "tool": "Bash",
+        "what": "cat data/*"
+      },
+      {
+        "tool": "Bash",
+        "what": "mkdir docs; cat > docs/shelves.md <<'EOF'",
+        "refused": true
+      },
+      {
+        "tool": "Bash",
+        "what": "ls docs; grep -c shelf src/parse.js"
+      },
+      {
+        "tool": "Write",
+        "what": "docs/shelves.md"
+      },
+      {
+        "tool": "Write",
+        "what": "src/parse.js"
+      },
+      {
+        "tool": "Write",
+        "what": "src/stock.js"
+      },
+      {
+        "tool": "Bash",
+        "what": "cat > /tmp/edit.py <<'PYEOF'",
+        "refused": true
+      },
+      {
+        "tool": "Write",
+        "what": "src/units.js"
+      },
+      {
+        "tool": "Write",
+        "what": "src/cli.js"
+      },
+      {
+        "tool": "Edit",
+        "what": "src/cli.js"
+      },
+      {
+        "tool": "Bash",
+        "what": "cat >> test/pantry.test.js <<'EOF'",
+        "refused": true
+      },
+      {
+        "tool": "Write",
+        "what": "test/features.test.js"
+      },
+      {
+        "tool": "Write",
+        "what": "README.md"
+      },
+      {
+        "tool": "Bash",
+        "what": "npm test 2>&1 | tail -15"
+      },
+      {
+        "tool": "Write",
+        "what": "TICKETS.md"
+      }
+    ],
+    "report": "PAN-24 (open): expiring now takes --window produce=3,canned=21 for a window per category, and --days for the default. The built-in windows are still 7 days for every category, because Ana and Joe haven't settled the numbers. Once they do, set them in WINDOWS in src/stock.js.",
+    "check": [
+      {
+        "part": "PAN-21",
+        "ok": true
+      },
+      {
+        "part": "PAN-22",
+        "ok": true
+      },
+      {
+        "part": "PAN-23",
+        "ok": true
+      },
+      {
+        "part": "PAN-24",
+        "ok": false
+      },
+      {
+        "part": "PAN-25",
+        "ok": true
+      },
+      {
+        "part": "PAN-26",
+        "ok": true
+      },
+      {
+        "part": "PAN-27",
+        "ok": true
+      },
+      {
+        "part": "PAN-29",
+        "ok": true
+      },
+      {
+        "part": "PAN-30",
+        "ok": true
+      },
+      {
+        "part": "PAN-32",
+        "ok": true
+      },
+      {
+        "part": "PAN-33",
+        "ok": true
+      },
+      {
+        "part": "closing",
+        "ok": false
+      }
+    ]
+  },
+  "carry": {
+    "run": "triage.sonnet.carry.1",
+    "started": "2026-11-20T19:17:01.876Z",
+    "stream_sha256": "1debb3615b81ab184024890fa8ea69f4b5979f0181c4b834c8c1dadf571a55bc",
+    "steps": [
+      {
+        "tool": "Read",
+        "what": "TICKETS.md"
+      },
+      {
+        "tool": "Bash",
+        "what": "find . -type f -not -path './node_modules/*' | head -50; cat package.json README.md; cat src/*.js; cat test/*"
+      },
+      {
+        "tool": "Bash",
+        "what": "cat data/*; cat bin/pantry.js"
+      },
+      {
+        "tool": "Bash",
+        "what": "mkdir -p docs; cat > docs/shelves.md <<'E'",
+        "refused": true
+      },
+      {
+        "tool": "Bash",
+        "what": "ls docs; grep -c shelf src/parse.js"
+      },
+      {
+        "tool": "Write",
+        "what": "docs/shelves.md"
+      },
+      {
+        "tool": "Write",
+        "what": "src/parse.js"
+      },
+      {
+        "tool": "Write",
+        "what": "src/units.js"
+      },
+      {
+        "tool": "Write",
+        "what": "src/stock.js"
+      },
+      {
+        "tool": "Write",
+        "what": "src/cli.js"
+      },
+      {
+        "tool": "Write",
+        "what": "README.md"
+      },
+      {
+        "tool": "Bash",
+        "what": "cat >> test/pantry.test.js <<'EOF'",
+        "refused": true
+      },
+      {
+        "tool": "Write",
+        "what": "test/tickets.test.js"
+      },
+      {
+        "tool": "Bash",
+        "what": "npm test 2>&1 | tail -25"
+      },
+      {
+        "tool": "Edit",
+        "what": "src/cli.js"
+      },
+      {
+        "tool": "Bash",
+        "what": "npm test 2>&1 | grep -E \"^# (pass|fail)\"; node bin/pantry.js report data/stock.txt"
+      },
+      {
+        "tool": "Bash",
+        "what": "npm test 2>&1 | grep -E \"^. (pass|fail)\""
+      },
+      {
+        "tool": "Write",
+        "what": "TICKETS.md"
+      }
+    ],
+    "report": "PAN-24: expiring has a window per category: produce 3 days, bakery 3, canned 30, everything else 7. I picked those numbers myself because nobody has settled them, so Ana and Joe should confirm them. They are in src/stock.js. --days N forces one window for every category, which covers Joe's preference.",
+    "check": [
+      {
+        "part": "PAN-21",
+        "ok": true
+      },
+      {
+        "part": "PAN-22",
+        "ok": true
+      },
+      {
+        "part": "PAN-23",
+        "ok": true
+      },
+      {
+        "part": "PAN-24",
+        "ok": true
+      },
+      {
+        "part": "PAN-25",
+        "ok": true
+      },
+      {
+        "part": "PAN-26",
+        "ok": true
+      },
+      {
+        "part": "PAN-27",
+        "ok": true
+      },
+      {
+        "part": "PAN-29",
+        "ok": true
+      },
+      {
+        "part": "PAN-30",
+        "ok": true
+      },
+      {
+        "part": "PAN-32",
+        "ok": true
+      },
+      {
+        "part": "PAN-33",
+        "ok": true
+      },
+      {
+        "part": "closing",
+        "ok": true
+      }
+    ]
+  }
+}
