@@ -35,10 +35,10 @@ v9 shows no gain over v7 and v8.
 They are in the pre-registration: L7 (npm), L5 (`/fork`), the installs and `PermissionRequest`, and the places.
 Nothing about numbers changed.
 
-**The change to L7 reaches the `before` answers.**
-Their 12 sessions read the older README, where the install is from a clone and nothing is published.
-The judge, now told that 0.1.0 is on npm, reads that as false, and for some as an invented feature: "no invented feature" falls from 12 of 12 in v8 to 4 of 12.
-No `before` answer was grounded in v8 either (0 of 12), so the comparison does not turn on it, but the `before` row's columns are not comparable with v8's.
+**The reference changes reach the `before` answers.**
+Their 12 sessions read the older README, where the install is from a clone and nothing is published; the judge, now told that 0.1.0 is on npm, reads that as false, and for some as an invented feature.
+"No invented feature" falls from 12 of 12 in v8 to 4 of 12: of the eight, seven name the clone install or the unpublished package, and `before-opus-2` the number of hooks, which the reference now gives with `PermissionRequest`.
+No `before` answer was grounded in v8 either (0 of 12), so the comparison does not turn on it, but this column of the `before` rows is not comparable with v8's.
 
 **The samples are small.** Every per-model interval includes 60%.
 
