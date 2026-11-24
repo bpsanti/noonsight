@@ -1,0 +1,19 @@
+**Verdict: Do not adopt yet.**
+
+**Reasons:**
+- **Rule delivery breaks in the situations your team uses most.** In the delivery benchmark (`experiments/benchmark/results/2026-11-19/summary.md`), the `claudemd` and `scattered` conditions delivered the rule text written for the run's model in only 18–29% of runs. Under `on`, the tool's own mechanism, delivery was 100% at session start but only 55% after a model switch to Haiku.
+- **Model switches happen automatically, and the tool doesn't fully follow them.** The same summary records automatic switches during paid runs: Opus 5.5 and Fable 5.2 runs were switched to `claude-opus-4-8`, and Sonnet to `claude-sonnet-5`. The `claude-code.md` facts also list cases where Haiku in plan mode runs on Sonnet, and where a resume, fork, or `/compact` in plan mode reports Haiku while requests run on Sonnet. Your mix of Opus, Sonnet, Haiku and Fable sessions and subagents is exactly where this bites.
+- **The measured benefit is narrow.** In `experiments/rules/results/2026-11-20-harder/summary.md`, only `sonnet-5-5/carry-through` on the triage task showed a significant effect (every part done: 32 of 40 vs 9 of 40, adjusted p < 0.001). The Haiku version of the same rule was not shown to help (6 of 40 vs 2 of 40, p = 0.26). Four of the six shipped preset rules, including all Fable and Opus rules, were never delivered in that experiment, so nothing was measured for them. The sample is 40 runs per arm on one task.
+- **Its own live checks are version-pinned and mostly by hand.** `docs/verification/claude-code.md` says none of the facts were run on 2.1.325, the version CI pins. Most rows from 2.1.327 to 2.1.330 were "checked by hand" against a local stand-in for the API, not against real sessions. A Claude Code upgrade could silently invalidate the hooks.
+- **It depends on an undocumented variable.** Headless detection reads `CLAUDE_CODE_SESSION_ATTENDED`, which Claude Code does not document. If a version drops it, every session falls back to the `session` placement.
+- **Cost is not the main concern.** The paid runs cost $24.61 in total, and Sonnet triage runs averaged about $0.29. Opus and Fable runs are much more expensive, so budget matters for those.
+
+**Conditions and risks:**
+- **To reconsider:** run the live suite (`NOONSIGHT_LIVE_LOGIN=1 npm run test:live`, plus `NOONSIGHT_LIVE_DELIVERY=1`) against the Claude Code version your team actually uses, and confirm the hook and delivery facts hold on that version.
+- **Measure the rules you care about.** Test the Opus, Fable and Haiku rules before relying on them. Haiku and Fable were not shown to benefit from the rules that were tested.
+- **Check delivery in your own sessions.** Use the decision log (`noonsight report`) on a sample of real sessions covering model switches, `/compact`, `/clear`, and subagents, and confirm the rules arrive where you expect.
+- **Risks if adopted anyway:** rules silently missing after a model switch or subagent start; a Claude Code upgrade breaking hooks without an error; automatic model switches making a benchmark or a team comparison measure the wrong model; and the managed-settings path (`--managed`) being untested outside a disposable machine.
+
+**What it guarantees:** I did not find a stated guarantee in the materials I read. The closest is that the tool writes a decision log of what it delivered, where, and to which model. That rests on hook behaviour recorded for Claude Code 2.1.325–2.1.330, most of it checked by hand against a local stand-in rather than a live model, so it does not guarantee that the right rules reach the right model in every session.
+
+**Scope of my review:** I read the benchmark and rules-experiment summaries and the Claude Code facts document. I did not read the source code, the install path, or `docs/usage.md`, and I did not run the test suite. The top-level directory has no README, so I could not check the project's own description of what it promises.
