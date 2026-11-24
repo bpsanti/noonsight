@@ -185,21 +185,22 @@ A failing session other than `s1-0096` is read one by one as in the design `afte
 ### The design `native-n1000`
 
 The run of 2026-11-23 on Claude Code 2.1.330 measured `on` on 300 sequences and each native arm on the first 60 of them, so its arms do not compare on the same sample.
-The design `native-n1000` runs `on`, `claudemd`, `skills` and `rules` on the same 1000 sequences, whose first 300 are that run's.
+The design `native-n1000` runs `on`, `claudemd` and `skills` on the same 1000 sequences, whose first 300 are that run's.
 Held fixed: Claude Code 2.1.330, generator 2, seed 1, 2 sessions at once, and the build of noonsight, `c5b9130`, which every session installs through `--noonsight` while the harness is this checkout's.
 Between `c5b9130` and this checkout, the generator, the stub, the oracle, the arms, the bridge to the terminal, the resolver (`src/core`) and the preset's rules did not change; the harness changed only in how it installs noonsight as a plugin, which this design does not use, and in how it renders and names its results.
 The arms run one after the other.
-`rules` runs last, and it is left out if the run is stopped before it starts or before it ends: it then keeps its earlier sample of 60, where its subagent coverage was the same as `claudemd`'s, and no partial number of it is given.
+`rules` is not run: it keeps its earlier sample of 60, where its subagent coverage was the same as `claudemd`'s ([D28](../../docs/evidence.md#d28), Claude Code 2.1.330), though its coverage over every request was not.
+The design was amended once, to drop `rules`, which it first ran last: the change was made while the first arm, `on`, was running, before any session of a native arm, and it left out the four comparisons of `rules`.
 
 The design's comparisons, in [plan.json](plan.json):
 
 | | Question | Measure | Expects | Paired on |
 | --- | --- | --- | --- | --- |
-| P1 to P3, primary | On the same 1000 sequences, subagent coverage is higher under `on` than under `claudemd`, `skills` and `rules` | Subagent coverage | Higher | Sessions with a subagent request without its right rules |
-| P4 to P6, primary | The same for every request | Coverage | Higher | Sessions with a request without its right rules |
-| C1 to C3, controls | On its first 60 sequences, each native arm gives the subagent coverage of the run before | Subagent coverage, the 60 of each run | The same | |
-| C4 to C6, controls | The same for every request | Coverage, the 60 of each run | The same | |
-| C7 and C8, controls | On its first 300 sequences, `on` gives the failing sessions and the subagent coverage of the run before | Sessions with an unexplained violation, and subagent coverage | The same | |
+| P1 and P2, primary | On the same 1000 sequences, subagent coverage is higher under `on` than under `claudemd` and `skills` | Subagent coverage | Higher | Sessions with a subagent request without its right rules |
+| P3 and P4, primary | The same for every request | Coverage | Higher | Sessions with a request without its right rules |
+| C1 and C2, controls | On its first 60 sequences, each native arm gives the subagent coverage of the run before | Subagent coverage, the 60 of each run | The same | |
+| C3 and C4, controls | The same for every request | Coverage, the 60 of each run | The same | |
+| C5 and C6, controls | On its first 300 sequences, `on` gives the failing sessions and the subagent coverage of the run before | Sessions with an unexplained violation, and subagent coverage | The same | |
 
 Fixed before the run:
 
@@ -208,7 +209,7 @@ Fixed before the run:
 - An interrupted arm continues where it stopped.
 - The requests with rules due are not the same number in every arm: under the native arms a session drawn to start in the project is measured against the reference without the project, whose rules make more requests due under `on`.
 - A failing session under `on` is read one by one, as in the design `after-f1-f2`, and a new defect is recorded, not fixed in the same change.
-- The numbers over the 1000 replace those over the 60 and the 300 whatever they show, and a control that does not hold is reported and read session by session.
+- The numbers over the 1000 replace those of the same arms over the 60 and the 300 whatever they show, and a control that does not hold is reported and read session by session.
 
 ### The decision log
 
