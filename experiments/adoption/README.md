@@ -435,6 +435,58 @@ The results also compare v9's `after` with v5's to v8's, read as a direction, si
 
 v9's results are in `results/2026-11-23-v9/`.
 
+## v10: the README that leaves versions to the evidence map and names each number's rule and model
+
+This section was written before any v10 session, calibration or judgment.
+
+**What is evaluated.**
+The `after` condition becomes `5e20724`, the head of `main`.
+Since v9 (`c02c926`) the README names no Claude Code version for a result and points once to the evidence map for all of them, and each rule effect is one sentence with its rule or rules, whether alone or together, its model, its task and its cost (https://github.com/bpsanti/noonsight/pull/75); `docs/evidence.md` says so in two lines and no entry's value changes; `docs/install.md` and the code of `noonsight watch` describe its scan of the home directory (https://github.com/bpsanti/noonsight/pull/74).
+`before` is unchanged, `f061f03`.
+
+**What it aims at.**
+v9 had 17 answers not grounded, seven of them on which Claude Code version results ran on and five crediting a number to the wrong arm, rule or model ([results/2026-11-23-v9](results/2026-11-23-v9/README.md#where-the-answers-went-wrong)); the README was changed for these two classes.
+v10's results count, over its answers not grounded, how many have a failing statement in each class, whatever else they also get wrong, and an answer may be in both.
+v9's seventeen are counted again by the same rule from v9's judgments, beside the one class per answer its README gives.
+The classes are read from the judgments and the answers after the run, and change no score.
+
+**Sessions.**
+As in v9: ten new `after` sessions for each of the four models, forty in all, in rounds of one per model in the order Fable 5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5, under `caffeinate` and at most two at once; no earlier `after` answer counts, and no `before` session runs.
+A session that ends with no answer is run again only if the spending projection, with its estimated cost, stays within the cap.
+The sessions and the judge run on Claude Code 2.1.331, the version of v9, through the same kind of `PATH` entry.
+
+**The reference.**
+[rubric.md](rubric.md), [judge.md](judge.md) and [calibration.json](calibration.json) are those of v9, unchanged: D18 and D19, the only numbers the reference gives, are the map's current ones, and the calibration answers' numbers and versions agree with it.
+The evidence map the judge reads is that of `5e20724`.
+It differs from v9's only in the two lines named above, which tell the judge that the README gives no versions of its own.
+Before any answer is judged, the judge scores the nine calibration answers against the v10 evidence map and must reach the expected `grounded` on all nine.
+If it misses any, v9's rule applies: a calibration sentence the repository contradicts is corrected once, declared here before any session, and the calibration runs once more; otherwise, or if the second misses any, v10 stops and reports.
+
+**What the copy was checked for, before the run.**
+The archive of `5e20724`, without this folder, was searched for the word "adoption" in every file, and for this evaluation's commits, counts and vocabulary ("grounded", "pass bar", calibration answers, "wrong grounds", the rubric).
+No Markdown file contains the word.
+`package.json`, `.gitignore` and `test/adoption.test.ts` name the evaluation, `test/evidence.test.ts` excludes its folder from a check, and `src/config/preset-changes.ts` and `src/config/load.ts` match only through `LoadOptions`.
+The one Markdown hit on the evaluation's commits is `f061f03` in a delivery results README, which names it as a commit of `main`; the rubric, judge and count matches belong to the benchmark and the rule experiment.
+`CHANGELOG.md` describes the README's changes as product changes, and does not say that the evaluation led to them.
+
+**Files read.**
+As in v7 to v9.
+
+**Money.**
+v10 has a cap of $45 of its own, for its calibrations, sessions and judgments, on the account of v9.
+v9's design cost $41.88: $27.19 for forty sessions, $1.68 for the calibration, $9.87 for the `after` judgments and $3.15 for the `before` ones.
+The reserve for each judgment is $0.27, as in v9, and the runner is given what remains of $45 after the calibration and forty `after` judgments at that reserve.
+If its guard stops it with sessions left, the answers held are judged, and the rest run one at a time, each only if the calibration, sessions and judgments so far, its whole budget and $0.27 for each `after` judgment owed stay within $45; that decision reads money and no score.
+A round that does not fit whole is dropped for scoring, and the percentages are read on the answers scored.
+The `before` answers, which v3 and later runs paid for, are judged again with the v10 evidence map last, only if their twelve judgments at that reserve also stay within $45; if they do not, v9's judgments of the same answers stand in, and the results say so.
+v10 stops and reports if the running projection passes $45.
+
+**Unchanged.**
+The prompt, the scoring, the pass bar, the sandbox, the per-session budgets of [plan.json](plan.json) and at most two sessions at once.
+The results also compare v10's `after` with v5's to v9's, read as a direction where the judge's reference or evidence map differ; v9's and v10's reference is the same and their evidence maps differ in two lines.
+
+v10's results are in `results/2026-11-23-v10/`.
+
 ## Limits
 
 - The judge is a model; the calibration checks it on six answers, not on every kind of mistake.
