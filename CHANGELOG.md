@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The plugin's manifest carries what Anthropic's plugin directory lists: an icon, and the documentation, support and privacy links.
+- The README and `docs/privacy.md` say what noonsight runs, reads, writes and sends.
+- `npm run plugin-folder` writes the plugin as a folder with its compiled code, which the directory needs (`docs/install.md`, "From Anthropic's plugin directory").
+
 ## 0.1.1
 
 - `noonsight watch`: a configuration directory made just after the watcher started, before the system delivered events for the home directory, was never seen; so was any directory whose event was lost.

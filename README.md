@@ -251,6 +251,17 @@ More on [what a rule costs](docs/usage.md#what-a-rule-costs), and on how each re
 | New Claude Code logins (off by default) | `noonsight watch enable` | [docs/install.md](docs/install.md#new-logins-as-they-appear-optional) |
 | Turning it off for a session | `NOONSIGHT_DISABLE=1` | [docs/hooks.md](docs/hooks.md#turning-noonsight-off) |
 
+## What it runs, reads, writes and sends
+
+- **Runs.** Each hook starts a shell launcher or pointer, which starts Node.js on noonsight's own code; that code can start `ps`, to read the command line Claude Code was started with, and `git`, to tell whether an edited file is tracked code.
+  The classifier (off by default) and `noonsight run` start `claude`, `noonsight check` asks `claude` its version, and `noonsight watch` (off by default) uses `launchctl` or `systemctl`.
+- **Reads.** The hook's input, your configuration and rules, Claude Code's settings, plugin and subagent files, and session transcripts, from which it takes models, session and call ids and whether a call was refused.
+- **Writes.** The first configuration file, in `~/.config/noonsight/`, and its own records, in `~/.local/state/noonsight/` and `~/.local/share/noonsight/`; the decision log records decisions, not prompts or responses.
+- **Sends.** Nothing, unless you turn the classifier on, which hands the first 4,000 characters of a task to `claude` under your own login; noonsight has no telemetry, opens no connection of its own, and reads and stores no credential.
+- **Changes.** It adds rule text to a session's or subagent's context; routing, off by default, also sets the model and effort of a subagent call and then, by default, returns `allow` for that call, which `"subagents": { "permission": "passthrough" }` turns off.
+
+The whole list, with how long each record is kept, is in [docs/privacy.md](docs/privacy.md).
+
 The hooks never block anything, and use the network in one case only: the classifier, off unless you turn it on, sends the first 4,000 characters of a task to a small model through your own Claude Code login ([docs/configuration.md](docs/configuration.md#the-classifier)).
 
 ## Using it well

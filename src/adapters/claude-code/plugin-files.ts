@@ -70,6 +70,11 @@ export function pluginFiles(version: string): Record<string, string> {
       homepage: 'https://github.com/bpsanti/noonsight#readme',
       repository: 'https://github.com/bpsanti/noonsight',
       license: 'MIT',
+      // What Anthropic's plugin directory shows in a listing; Claude Code does not read these.
+      icon: './.claude-plugin/icon.png',
+      documentationUrl: 'https://github.com/bpsanti/noonsight/blob/main/docs/install.md#as-a-claude-code-plugin',
+      supportUrl: 'https://github.com/bpsanti/noonsight/issues',
+      privacyPolicyUrl: 'https://github.com/bpsanti/noonsight/blob/main/docs/privacy.md',
       engines: { 'claude-code': `>=${CLAUDE_CODE_FLOORS[0]?.version ?? '0.0.0'}` },
     }),
     // The plugin is the npm package itself, by its exact version.
