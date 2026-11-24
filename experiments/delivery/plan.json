@@ -274,6 +274,139 @@
      "expect": null
     }
    ]
+  },
+  "native-n1000": {
+   "description": "noonsight's arm and the native arms on the same 1000 sequences, with the seed, generator, Claude Code version, noonsight build and concurrency of the run before, whose `on` level ran 300 sequences and whose native arms ran the first 60 of them.",
+   "claudeCode": "2.1.330",
+   "command": "fuzz --generator 2 --seed 1 --n 1000 --concurrency 2 --noonsight <build of c5b9130>, under on, claudemd, skills and rules, in that order",
+   "before": "claude-code-2.1.330/2026-11-23-c5b9130",
+   "alpha": 0.05,
+   "comparisons": [
+    {
+     "id": "P1",
+     "primary": true,
+     "question": "On the same 1000 sequences, subagent coverage is higher under `on` than under `claudemd`",
+     "a": { "folder": "after", "run": "claudemd-g2-s1-n1000" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000" },
+     "measure": "coverage.subagents.coverage",
+     "expect": "higher",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "P2",
+     "primary": true,
+     "question": "On the same 1000 sequences, subagent coverage is higher under `on` than under `skills`",
+     "a": { "folder": "after", "run": "skills-g2-s1-n1000" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000" },
+     "measure": "coverage.subagents.coverage",
+     "expect": "higher",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "P3",
+     "primary": true,
+     "question": "On the same 1000 sequences, subagent coverage is higher under `on` than under `rules`",
+     "a": { "folder": "after", "run": "rules-g2-s1-n1000" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000" },
+     "measure": "coverage.subagents.coverage",
+     "expect": "higher",
+     "paired": "uncovered-subagent"
+    },
+    {
+     "id": "P4",
+     "primary": true,
+     "question": "On the same 1000 sequences, coverage is higher under `on` than under `claudemd`",
+     "a": { "folder": "after", "run": "claudemd-g2-s1-n1000" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000" },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "P5",
+     "primary": true,
+     "question": "On the same 1000 sequences, coverage is higher under `on` than under `skills`",
+     "a": { "folder": "after", "run": "skills-g2-s1-n1000" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000" },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "P6",
+     "primary": true,
+     "question": "On the same 1000 sequences, coverage is higher under `on` than under `rules`",
+     "a": { "folder": "after", "run": "rules-g2-s1-n1000" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000" },
+     "measure": "coverage.coverage",
+     "expect": "higher",
+     "paired": "uncovered"
+    },
+    {
+     "id": "C1",
+     "question": "On its first 60 sequences, `claudemd` gives the subagent coverage of the run before",
+     "a": { "folder": "before", "run": "claudemd-g2-s1-n60" },
+     "b": { "folder": "after", "run": "claudemd-g2-s1-n1000", "first": 60 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "same"
+    },
+    {
+     "id": "C2",
+     "question": "On its first 60 sequences, `skills` gives the subagent coverage of the run before",
+     "a": { "folder": "before", "run": "skills-g2-s1-n60" },
+     "b": { "folder": "after", "run": "skills-g2-s1-n1000", "first": 60 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "same"
+    },
+    {
+     "id": "C3",
+     "question": "On its first 60 sequences, `rules` gives the subagent coverage of the run before",
+     "a": { "folder": "before", "run": "rules-g2-s1-n60" },
+     "b": { "folder": "after", "run": "rules-g2-s1-n1000", "first": 60 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "same"
+    },
+    {
+     "id": "C4",
+     "question": "On its first 60 sequences, `claudemd` gives the coverage of the run before",
+     "a": { "folder": "before", "run": "claudemd-g2-s1-n60" },
+     "b": { "folder": "after", "run": "claudemd-g2-s1-n1000", "first": 60 },
+     "measure": "coverage.coverage",
+     "expect": "same"
+    },
+    {
+     "id": "C5",
+     "question": "On its first 60 sequences, `skills` gives the coverage of the run before",
+     "a": { "folder": "before", "run": "skills-g2-s1-n60" },
+     "b": { "folder": "after", "run": "skills-g2-s1-n1000", "first": 60 },
+     "measure": "coverage.coverage",
+     "expect": "same"
+    },
+    {
+     "id": "C6",
+     "question": "On its first 60 sequences, `rules` gives the coverage of the run before",
+     "a": { "folder": "before", "run": "rules-g2-s1-n60" },
+     "b": { "folder": "after", "run": "rules-g2-s1-n1000", "first": 60 },
+     "measure": "coverage.coverage",
+     "expect": "same"
+    },
+    {
+     "id": "C7",
+     "question": "On its first 300 sequences, `on` breaks the invariant in no more sessions than in the run before",
+     "a": { "folder": "before", "run": "on-g2-s1-n300" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000", "first": 300 },
+     "measure": "robustness.sessionsFailed",
+     "expect": "same"
+    },
+    {
+     "id": "C8",
+     "question": "On its first 300 sequences, `on` gives the subagent coverage of the run before",
+     "a": { "folder": "before", "run": "on-g2-s1-n300" },
+     "b": { "folder": "after", "run": "on-g2-s1-n1000", "first": 300 },
+     "measure": "coverage.subagents.coverage",
+     "expect": "same"
+    }
+   ]
   }
  }
 }
