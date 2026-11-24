@@ -23,28 +23,28 @@ Its known limits are part of it:
 - A conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)); the corpus reproduces it, and it broke no session of the current run.
 - In a session `noonsight run` started with rules, and only there, `/fork` is not available: Claude Code refuses to fork a session with a system prompt of its own ([docs/launcher.md](docs/launcher.md#other-text-in-the-system-prompt)).
 - Agent teams, routing and the classifier are not measured ([limits](experiments/delivery/README.md#limits)).
-- Claude Code changes how hooks behave, and each result holds for the version it ran on: delivery 2.1.330; rule effects 2.1.329, except Fable 5.2's, 2.1.328; the paid pilot 2.1.326 ([every run](docs/evidence.md#runs-and-versions)).
-  [docs/verification/claude-code.md](docs/verification/claude-code.md) dates facts about Claude Code, not results.
+- Claude Code changes how hooks behave, and the results on this page did not all run on the same version of it: each holds for the version it ran on, which [docs/evidence.md](docs/evidence.md#runs-and-versions) gives for every run and every result.
 
 **What was measured.** The delivery benchmark's sessions are real, interactive Claude Code sessions, not simulated ones; only the Messages API is a local stand-in, so every request was read and no model answered ([experiments/delivery](experiments/delivery/README.md)).
 Its current run (2026-11-23) generated 300 random sessions on the four models; 299 ran to the end, and one stopped on an unanswered turn.
-Of these, 0 of 299 broke the invariant ([D18](docs/evidence.md#d18), Claude Code 2.1.330): every request with rules due held its model's rules, and no other model's rules left unretired.
-That is 100% (3,090 of 3,090) of the requests with rules due, the subagents' 100% (763 of 763) among them ([D19](docs/evidence.md#d19), [D20](docs/evidence.md#d20), Claude Code 2.1.330).
-Those requests include every one after a fork, after `/resume` typed in a session, in plan mode and after subagents that edit a file ([D21](docs/evidence.md#d21)), and every one of the sessions with a repository's configuration or started through `noonsight run` ([D22](docs/evidence.md#d22), Claude Code 2.1.330).
+Under noonsight, on the four models together, 0 of 299 sessions broke the invariant ([D18](docs/evidence.md#d18)): every request with rules due held its model's rules, and no other model's rules left unretired.
+Under noonsight, 100% (3,090 of 3,090) of the requests with rules due held them all ([D19](docs/evidence.md#d19)), and of those, the subagents' 100% (763 of 763) ([D20](docs/evidence.md#d20)).
+Those requests include every one after a fork, after `/resume` typed in a session, in plan mode and after subagents that edit a file ([D21](docs/evidence.md#d21)), and every one of the sessions with a repository's configuration or started through `noonsight run` ([D22](docs/evidence.md#d22)).
 noonsight picks a rule by its model, scope, place and trigger, never by its text, so this covers your own rules too, though the sessions carried the preset's.
 The benchmark found nine failures of noonsight, F1 to F9, on builds before the current run's, all fixed before it ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
 
-The native ways to give a model rules, on the run's first 60 sequences; noonsight's row is all its sessions, those 60 included (Claude Code 2.1.330):
+The native ways to give a model rules, each measured without noonsight on the run's first 60 sequences, next to noonsight on all its sessions, those 60 included.
+A cell is the requests with rules due that held them all, on the four models together:
 
-| Every model's rules in | All requests with rules due, the main conversation's and the subagents' | Of those, the subagents' |
+| How every model's rules were given | All requests with rules due, the main conversation's and the subagents' | Of those, the subagents' |
 | --- | --- | --- |
 | noonsight | [100% (3,090 of 3,090)](docs/evidence.md#d19) | [100% (763 of 763)](docs/evidence.md#d20) |
-| A user `CLAUDE.md` | [88.2% (508 of 576)](docs/evidence.md#d25) | [46.9% (60 of 128)](docs/evidence.md#d28) |
-| `.claude/rules`, one file per model | [76.3% (441 of 578)](docs/evidence.md#d26) | [46.9% (60 of 128)](docs/evidence.md#d28) |
-| A skill per model | [0% (0 of 579)](docs/evidence.md#d27) | [0 of 128](docs/evidence.md#d29) |
+| A user `CLAUDE.md`, without noonsight | [88.2% (508 of 576)](docs/evidence.md#d25) | [46.9% (60 of 128)](docs/evidence.md#d28) |
+| `.claude/rules`, one file per model, without noonsight | [76.3% (441 of 578)](docs/evidence.md#d26) | [46.9% (60 of 128)](docs/evidence.md#d28) |
+| A skill per model, without noonsight | [0% (0 of 579)](docs/evidence.md#d27) | [0 of 128](docs/evidence.md#d29) |
 
-What a `CLAUDE.md` missed were subagents only: it reached every request of the main conversation ([D34](docs/evidence.md#d34), Claude Code 2.1.330), and never reaches the built-in Explore and Plan subagents, as Claude Code documents ([S4](docs/sources.md#s4)).
-It and `.claude/rules` also give every model the other models' rules, most of the rule text in their requests ([D30](docs/evidence.md#d30), Claude Code 2.1.330).
+What a `CLAUDE.md` missed were subagents only: it reached every request of the main conversation ([D34](docs/evidence.md#d34)), and never reaches the built-in Explore and Plan subagents, as Claude Code documents ([S4](docs/sources.md#s4)).
+It and `.claude/rules` also give every model the other models' rules, most of the rule text in their requests ([D30](docs/evidence.md#d30)).
 A skill guarantees only its description until the model decides to open it ([S5](docs/sources.md#s5)).
 
 **What the preset delivers right after install** depends on the model and the place, and `noonsight install` writes it out for each model.
@@ -200,28 +200,35 @@ To turn one on, name it in `enable` in `~/.config/noonsight/noonsight.json`:
 
 What a delivered rule changes depends on the rule, the model and the task.
 The rule effect experiment ran the same task on the real models with a rule or the preset's rules delivered, and without any rule ([experiments/rules](experiments/rules/README.md)).
-A row is the result of what its first cell names: a result of rules together is not a result of one of them.
-Results and mean costs are with the rules against without; a result is the runs that ran the tests after their last edit, unless its cell says otherwise:
-
-| Delivered | Model and task | Runs per arm | Result | Cost per run | Claude Code | Evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| `verify-changes`, **alone** | Sonnet 5.5, fix | 30 | 29 of 30 against 0 of 30 | $0.0505 against $0.0240 | 2.1.329 | [R3](docs/evidence.md#r3), [R6](docs/evidence.md#r6); without: [R14](docs/evidence.md#r14) |
-| `verify-changes`, **alone** | Haiku 5.5, fix | 30 | 27 of 30 against 0 of 30 | $0.0033 against $0.0015 | 2.1.329 | [R3](docs/evidence.md#r3), [R7](docs/evidence.md#r7); without: [R14](docs/evidence.md#r14) |
-| `verify-changes`, **alone** | Sonnet 5.5, bug | 30 | 30 of 30 against 11 of 30 | $0.0494 against $0.0321 | 2.1.329 | [R16](docs/evidence.md#r16), [R17](docs/evidence.md#r17); without: [R15](docs/evidence.md#r15) |
-| `carry-through`, **alone** | Sonnet 5.5, bug | 30 | 30 of 30 against 11 of 30 | $0.0461 against $0.0321 | 2.1.329 | [R16](docs/evidence.md#r16), [R17](docs/evidence.md#r17); without: [R15](docs/evidence.md#r15) |
-| `carry-through`, **alone** | Sonnet 5.5, backlog | 40 | 32 of 40 against 9 of 40 did every part | $0.2848 against $0.2920 | 2.1.329 | [R10](docs/evidence.md#r10), [R18](docs/evidence.md#r18) |
-| `low-context-report`, **alone** | Fable 5.2, question, bug and feature | 30 each | 12.3 against 16.4, 17.8 against 20.1 and 12.2 against 16.2 words per sentence of its report | $0.3088 against $0.3005, $0.2061 against $0.2007 and $0.4642 against $0.5465 | 2.1.328 | [R9](docs/evidence.md#r9), [R19](docs/evidence.md#r19) |
-| **The preset's three together**: `carry-through`, `stay-in-scope`, `verify-changes` | Sonnet 5.5, fix | 30 | 30 of 30 against 0 of 30 | $0.0378 against $0.0240 | 2.1.329 | [R14](docs/evidence.md#r14), [R6](docs/evidence.md#r6) |
-| **The preset's two together**: `carry-through`, `verify-changes` | Sonnet 5.5, bug | 30 | 30 of 30 against 11 of 30 | $0.0513 against $0.0321 | 2.1.329 | [R15](docs/evidence.md#r15), [R17](docs/evidence.md#r17) |
-| **The preset's two together**: `carry-through`, `verify-changes` | Haiku 5.5, fix | 30 | 27 of 30 against 0 of 30 | $0.0033 against $0.0015 | 2.1.329 | [R14](docs/evidence.md#r14), [R7](docs/evidence.md#r7) |
+Each line below is one result, and its numbers belong to the rule or rules, the model and the task it names, and to no other: a result of rules together is not a result of one of them, and a result on one model is not a result on another.
 
 The fix is precise and in one file, the bug is known only by its symptom, and the backlog has 13 tickets, one with a decision left open.
 
+**One rule delivered alone**
+
+- With `verify-changes` alone, Sonnet 5.5 on the fix ran the tests after its last edit in 29 of 30 runs ([R3](docs/evidence.md#r3)), against 0 of 30 without any rule ([R14](docs/evidence.md#r14)), at a mean cost per run of $0.0505 with `verify-changes` alone against $0.0240 without any rule ([R6](docs/evidence.md#r6)).
+- With `verify-changes` alone, Haiku 5.5 on the fix ran the tests after its last edit in 27 of 30 runs ([R3](docs/evidence.md#r3)), against 0 of 30 without any rule ([R14](docs/evidence.md#r14)), at a mean cost per run of $0.0033 with `verify-changes` alone against $0.0015 without any rule ([R7](docs/evidence.md#r7)).
+- With `verify-changes` alone, Sonnet 5.5 on the bug ran the tests after its last edit in 30 of 30 runs ([R16](docs/evidence.md#r16)), against 11 of 30 without any rule ([R15](docs/evidence.md#r15)), at a mean cost per run of $0.0494 with `verify-changes` alone against $0.0321 without any rule ([R17](docs/evidence.md#r17)).
+- With `carry-through` alone, Sonnet 5.5 on the bug ran the tests after its last edit in 30 of 30 runs ([R16](docs/evidence.md#r16)), against 11 of 30 without any rule ([R15](docs/evidence.md#r15)), at a mean cost per run of $0.0461 with `carry-through` alone against $0.0321 without any rule ([R17](docs/evidence.md#r17)).
+- With `carry-through` alone, Sonnet 5.5 on the backlog did every part in 32 of 40 runs, against 9 of 40 without any rule ([R10](docs/evidence.md#r10)), at a mean cost per run of $0.2848 with `carry-through` alone against $0.2920 without any rule ([R18](docs/evidence.md#r18)).
+- With `low-context-report` alone, Fable 5.2 on the question wrote 12.3 words per sentence of its report, against 16.4 without any rule, over 30 runs each ([R9](docs/evidence.md#r9)), at a mean cost per run of $0.3088 with `low-context-report` alone against $0.3005 without any rule ([R19](docs/evidence.md#r19)).
+- With `low-context-report` alone, Fable 5.2 on the bug wrote 17.8 words per sentence of its report, against 20.1 without any rule, over 30 runs each ([R9](docs/evidence.md#r9)), at a mean cost per run of $0.2061 with `low-context-report` alone against $0.2007 without any rule ([R19](docs/evidence.md#r19)).
+- With `low-context-report` alone, Fable 5.2 on the feature wrote 12.2 words per sentence of its report, against 16.2 without any rule, over 30 runs each ([R9](docs/evidence.md#r9)), at a mean cost per run of $0.4642 with `low-context-report` alone against $0.5465 without any rule ([R19](docs/evidence.md#r19)).
+
+**The preset's rules delivered together**
+
+- With `carry-through`, `stay-in-scope` and `verify-changes` together, Sonnet 5.5 on the fix ran the tests after its last edit in 30 of 30 runs ([R14](docs/evidence.md#r14)), against 0 of 30 without any rule ([R14](docs/evidence.md#r14)), at a mean cost per run of $0.0378 with `carry-through`, `stay-in-scope` and `verify-changes` together against $0.0240 without any rule ([R6](docs/evidence.md#r6)).
+- With `carry-through` and `verify-changes` together, Sonnet 5.5 on the bug ran the tests after its last edit in 30 of 30 runs ([R15](docs/evidence.md#r15)), against 11 of 30 without any rule ([R15](docs/evidence.md#r15)), at a mean cost per run of $0.0513 with `carry-through` and `verify-changes` together against $0.0321 without any rule ([R17](docs/evidence.md#r17)).
+- With `carry-through` and `verify-changes` together, Haiku 5.5 on the fix ran the tests after its last edit in 27 of 30 runs ([R14](docs/evidence.md#r14)), against 0 of 30 without any rule ([R14](docs/evidence.md#r14)), at a mean cost per run of $0.0033 with `carry-through` and `verify-changes` together against $0.0015 without any rule ([R7](docs/evidence.md#r7)).
+
+**Across the results**
+
 - **Rules with a measured effect alone:** `verify-changes` (Sonnet 5.5, Haiku 5.5), `carry-through` (Sonnet 5.5) and `low-context-report` (Fable 5.2).
   In these runs `stay-in-scope` came only with other rules.
-- **No effect shown:** `carry-through` alone on the fix, for Sonnet 5.5 and Haiku 5.5 ([R3](docs/evidence.md#r3)), and on the backlog for Haiku 5.5 ([R11](docs/evidence.md#r11), Claude Code 2.1.329).
+- **No effect shown:** `carry-through` alone on the fix, for Sonnet 5.5 and Haiku 5.5 ([R3](docs/evidence.md#r3)), and on the backlog for Haiku 5.5 ([R11](docs/evidence.md#r11)).
 - No other rule of the preset, Opus 5.5's included, has a measured effect in [docs/evidence.md](docs/evidence.md#rule-effects), and a rule of your own has none until you measure it.
-- **No quality gain shown:** in the run that measured the fix and the bug, every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8), Claude Code 2.1.329), and a paid pilot on public tasks, which delivered rules to the main conversation only, saw no measurable difference in the runs that passed: 133 of 144 without rules, 132 of 144 under noonsight and 133 of 144 with a `CLAUDE.md` of every model's rules ([B1](docs/evidence.md#b1), Claude Code 2.1.326).
+- **No quality gain shown:** in the run that measured the fix and the bug, on Sonnet 5.5 and Haiku 5.5, every run passed its hidden check, with or without rules ([R8](docs/evidence.md#r8)).
+  A paid pilot on public tasks, on the four models together, with rules delivered to the main conversation only, saw no measurable difference in the runs that passed: 133 of 144 without rules, 132 of 144 under noonsight and 133 of 144 with a `CLAUDE.md` of every model's rules ([B1](docs/evidence.md#b1)).
 
 The tasks are small: these are results on them, not general effects.
 More on [what a rule costs](docs/usage.md#what-a-rule-costs), and on how each result compares with [what Anthropic published](docs/sources.md).
