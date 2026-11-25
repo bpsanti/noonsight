@@ -1,0 +1,36 @@
+{
+  "name": "f11-switch-after-compact",
+  "about": "A /model after a compaction that kept the last response, then a resume that names no model: it runs on the model of the response kept, not on the one the switch set (F11, fixed).",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

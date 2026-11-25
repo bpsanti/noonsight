@@ -1,0 +1,35 @@
+{
+  "name": "f10-model-haiku-after-opus-in-plan-mode",
+  "about": "The same after /model opus and /model sonnet in plan mode, with the conversation's last response from Opus (F10, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "model",
+      "to": "opus"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "model",
+      "to": "sonnet"
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

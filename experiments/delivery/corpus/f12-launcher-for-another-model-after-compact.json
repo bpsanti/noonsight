@@ -1,0 +1,34 @@
+{
+  "name": "f12-launcher-for-another-model-after-compact",
+  "about": "A session noonsight run started, compacted with no response since, then a resume under another model setting: the launcher prepares the setting's rules while the conversation runs on the model of the response the compaction kept, so a note must say the launcher's do not apply (F11 and F12, fixed).",
+  "model": "opus",
+  "scope": null,
+  "unattended": true,
+  "launcher": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "setting": "sonnet"
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

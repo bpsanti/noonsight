@@ -1,0 +1,34 @@
+{
+  "name": "f11-resume-after-resume-and-compact",
+  "about": "A compaction kept Haiku's last response, so a resume that names no model runs on Haiku, while noonsight took the model setting, Fable, and its note retired Haiku's rules (F11, fixed).",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "model",
+      "to": "fable"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

@@ -142,7 +142,7 @@ test('SessionStart by start type: resume and fork skip rules the session already
   // A resume on another model, or into a session with no record, delivers; on another model, with a
   // note that the rules the conversation holds no longer apply.
   assert.match(
-    words(h.hook('session-start', start('claude-haiku-5-5', { source: 'resume' }))) ?? '',
+    words(underClaude(h, ['--continue', '--model', 'haiku'], start('claude-haiku-5-5', { source: 'resume', model: undefined }))) ?? '',
     /^<noonsight-rules-change from="claude-sonnet-5-5" to="claude-haiku-5-5">[\s\S]*HAIKU-GEN/,
   );
   assert.match(words(h.hook('session-start', start('claude-sonnet-5-5', { source: 'resume', session_id: 'never-seen' }))) ?? '', /SONNET-GEN/);
@@ -594,6 +594,27 @@ test('the conversation\'s model is that of its own last response: not a subagent
   assert.equal(conversationModel(file), 'claude-opus-5-5');
 });
 
+test('the messages a compaction kept still hold the conversation\'s last response, which a resume runs on over the model setting', () => {
+  const compacted = (...uuids: string[]) => ({ ...COMPACTED, compactMetadata: { preservedMessages: { uuids } } });
+  const replied = (model: string, uuid: string) => reply(model, { uuid });
+  // The last response among those kept; one it did not keep, or one a later compaction did not keep, is gone.
+  assert.equal(conversationModel(conversation(replied('claude-fable-5-2', 'a'), replied('claude-haiku-5-5', 'b'), compacted('b'), SUMMARY)), 'claude-haiku-5-5');
+  assert.equal(conversationModel(conversation(replied('claude-fable-5-2', 'a'), replied('claude-haiku-5-5', 'b'), compacted('a'), SUMMARY)), 'claude-fable-5-2');
+  assert.equal(conversationModel(conversation(replied('claude-fable-5-2', 'a'), compacted('a'), SUMMARY, compacted(), SUMMARY)), null);
+  assert.equal(conversationModel(conversation(replied('claude-fable-5-2', 'a'), compacted('a'), SUMMARY, compacted('a'), SUMMARY)), 'claude-fable-5-2');
+  assert.equal(conversationModel(conversation(replied('claude-fable-5-2', 'a'), compacted('gone'), SUMMARY)), null);
+  // A response since the compaction outranks those it kept.
+  assert.equal(conversationModel(conversation(replied('claude-haiku-5-5', 'b'), compacted('b'), SUMMARY, turn, replied('claude-sonnet-5-5', 'c'))), 'claude-sonnet-5-5');
+
+  // F11: the setting names another model, and the conversation's own rules are not retired.
+  const h = home();
+  h.hook('session-start', start('claude-haiku-5-5', { session_id: 'f11', source: 'compact' }));
+  const kept = conversation(turn, replied('claude-haiku-5-5', 'b'), compacted('b'), SUMMARY);
+  assert.equal(underClaude(h, ['--continue'], resumeOf('f11', kept), { CLAUDE_CONFIG_DIR: tempTree({ 'settings.json': { model: 'sonnet' } }) }).raw, '');
+  const line = h.log().at(-1);
+  assert.deepEqual([line?.model, line?.model_source, line?.delivered], ['claude-haiku-5-5', 'session-transcript', 'already-delivered']);
+});
+
 test('a /model delivery is unconfirmed: a switch right after it, or a resume, delivers again what may have been lost', () => {
   const custom = (word: string) => ({ use: 'custom', add: [{ id: `user/${word}`, file: `${word}.md` }] });
   const dir = tempTree({
@@ -872,6 +893,52 @@ test('/resume or /branch typed in plan mode on Haiku keeps Sonnet, which the pro
       ['resume', 'claude-haiku-5-5', 'claude-args', null],
     ],
   );
+});
+
+test('/model haiku in plan mode on Sonnet, which no switch announces, keeps Sonnet through a compaction, /branch and /resume', () => {
+  const compact = (model: string) => hookInput('session-start-startup', { session_id: SESSION, source: 'compact', model });
+  const h = home(forkConfig());
+  h.hook('session-start', start('claude-sonnet-5-5', { session_id: 'earlier' }));
+  h.hook('session-start', start('claude-sonnet-5-5'));
+  // The start reports Haiku, the chosen model, and no switch said that anything but Sonnet runs.
+  const compacted = context(h.hook('session-start', compact('claude-haiku-5-5')));
+  assert.match(compacted, /^<noonsight-rules model="claude-sonnet-5-5">[\s\S]*SONNET-WORD/);
+  assert.doesNotMatch(compacted, /HAIKU-WORD/);
+  assert.equal(h.hook('session-start', hookInput('session-start-resume-command', { session_id: 'earlier', model: 'claude-haiku-5-5' })).raw, '');
+  // Plan mode ends: Claude Code switches to Haiku by itself, the chosen model from then on.
+  assert.match(context(h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { source: 'auto', requested_model: null }))), /HAIKU-WORD/);
+  assert.match(context(h.hook('session-start', compact('claude-haiku-5-5'))), /HAIKU-WORD/);
+  assert.deepEqual(
+    h.log().slice(2).map((l) => [l.event, l.source, l.model, l.model_source, l.chosen_model ?? null, l.reported_model ?? null]),
+    [
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'process-record', 'claude-haiku-5-5', 'claude-haiku-5-5'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'process-record', 'claude-haiku-5-5', 'claude-haiku-5-5'],
+      ['model-switch', 'auto', 'claude-haiku-5-5', 'hook-input', null, null],
+      ['session-start', 'compact', 'claude-haiku-5-5', 'hook-input', null, null],
+    ],
+  );
+  // No other pair: a start that reports another model than the record's is taken at its word.
+  h.hook('session-start', start('claude-fable-5-2'));
+  assert.match(context(h.hook('session-start', compact('claude-haiku-5-5'))), /HAIKU-WORD/);
+});
+
+test('a switch from Sonnet to Haiku with no chosen model recorded, as plan mode ends, leaves none', () => {
+  const h = home(forkConfig());
+  h.hook('session-start', start('claude-sonnet-5-5'));
+  h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { source: 'auto', requested_model: null }));
+  assert.equal(h.log().at(-1)?.chosen_model, undefined);
+});
+
+test('a switch under a refused configuration still says which model the process runs', () => {
+  const file = forkConfig();
+  const good = fs.readFileSync(file, 'utf8');
+  const h = home(file);
+  h.hook('session-start', start('claude-sonnet-5-5'));
+  fs.writeFileSync(file, '{');
+  h.hook('model-switch', switchTo('claude-sonnet-5-5', 'claude-haiku-5-5', { requested_model: 'haiku' }));
+  fs.writeFileSync(file, good);
+  // Haiku does run: the record of the process says so, and the report is taken at its word.
+  assert.match(context(h.hook('session-start', hookInput('session-start-startup', { session_id: SESSION, source: 'compact', model: 'claude-haiku-5-5' }))), /HAIKU-WORD/);
 });
 
 test('/model haiku in plan mode, which Claude Code runs as Sonnet, keeps Sonnet through a compaction', () => {

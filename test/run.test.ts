@@ -256,7 +256,70 @@ test('launcher route with the hook: an interactive start that reports the model,
       ['startup', 'launcher'],
       ['clear', 'launcher'],
       ['compact', 'launcher'],
-      ['resume', 'already-delivered'],
+      // Nothing answered since the compaction, so the process's own launcher text decides.
+      ['resume', 'launcher'],
+    ],
+  );
+});
+
+test('launcher route with the hook: after a compaction with no response since, a process that names no model gets the rules its system prompt lacks', () => {
+  const l = lab();
+  const id = 'f00dcafe-0000-4000-8000-000000000012';
+  const transcript = path.join(tempTree({}), `${id}.jsonl`);
+  const response = (uuid: string, at: number, model = 'claude-sonnet-5-5') =>
+    ({ type: 'assistant', uuid, isSidechain: false, timestamp: new Date(at).toISOString(), message: { model, role: 'assistant', content: [] } });
+  const compacted = (...uuids: string[]) => ({ type: 'system', subtype: 'compact_boundary', isSidechain: false, compactMetadata: { preservedMessages: { uuids } } });
+  const holds = (...records: object[]) => fs.writeFileSync(transcript, records.map((r) => `${JSON.stringify(r)}\n`).join(''));
+  const compact = hookInput('session-start-startup', { session_id: id, source: 'compact', model: 'claude-sonnet-5-5', transcript_path: transcript });
+  const resume = hookInput('session-start-resume-continue', { session_id: id, transcript_path: transcript });
+  const hook = (args: string[], input: string) => {
+    const { stdout } = l.run(args, { FAKE_HOOK_INPUT: input });
+    return stdout ? (JSON.parse(stdout) as Record<string, any>) : null;
+  };
+  const before = response('kept', Date.now() - 60_000);
+
+  // F12: the compaction kept the last response, and nothing has answered since.
+  holds(before, compacted('kept'));
+  assert.equal(hook(['--model', 'sonnet'], compact), null);
+  assert.match(hook(['--continue'], resume)?.hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
+  // That delivery may be lost as any resume's, so the next resume makes it again.
+  assert.match(hook(['--continue'], resume)?.hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
+
+  // The process's own launcher file holds the rules: they are there.
+  assert.equal(hook(['--model', 'sonnet'], compact), null);
+  assert.equal(hook(['--continue', '--model', 'sonnet'], resume), null);
+  assert.equal(hook(['--model', 'sonnet'], compact), null);
+
+  // A /model switch to the record's model does not trust it either.
+  const back = hookInput('model-switch-command', { session_id: id, from_model: 'claude-haiku-5-5', to_model: 'claude-sonnet-5-5' });
+  assert.match(l.h.hook('model-switch', back).out?.hookSpecificOutput.additionalContext, /SONNET-GEN-3306/);
+
+  // Answered since the compaction: the launcher's text is the conversation's own system prompt.
+  assert.equal(hook(['--model', 'sonnet'], compact), null);
+  holds(before, compacted('kept'), response('since', Date.now() + 60_000));
+  assert.equal(hook(['--continue'], resume), null);
+
+  // Nothing names the model: no rules go, none count as delivered, and the person is told.
+  assert.equal(hook(['--model', 'sonnet'], compact), null);
+  holds(before, compacted());
+  const unknown = hook(['--continue'], resume);
+  assert.equal(unknown?.hookSpecificOutput, undefined);
+  assert.match(unknown?.systemMessage, /no rules were delivered/);
+
+  assert.deepEqual(
+    l.h.log().filter((d) => d.event !== 'launch').map((d) => [d.event, d.source, d.model, d.model_source, d.delivered]),
+    [
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'hook-input', 'launcher'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'session-transcript', 'rules'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'session-transcript', 'rules'],
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'hook-input', 'launcher'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'claude-args', 'launcher'],
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'hook-input', 'launcher'],
+      ['model-switch', 'command', 'claude-sonnet-5-5', 'hook-input', 'rules'],
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'hook-input', 'launcher'],
+      ['session-start', 'resume', 'claude-sonnet-5-5', 'session-transcript', 'already-delivered'],
+      ['session-start', 'compact', 'claude-sonnet-5-5', 'hook-input', 'launcher'],
+      ['session-start', 'resume', null, null, 'nothing'],
     ],
   );
 });

@@ -214,8 +214,8 @@ The folder for one version holds what was measured on that version; comparing tw
 
 ## Failures found, and a limit
 
-The corpus entries that start with `f1-` to `f9-` are the shortest reproductions of nine failures of noonsight: F1 to F4 the fuzzer found, F5 to F9 the paths generator 2 added.
-All nine are fixed, and their entries must pass.
+The corpus entries that start with `f1-` to `f12-` are short reproductions of twelve failures of noonsight: F1 to F4 the fuzzer found, F5 to F9 the paths generator 2 added, F10 to F12 a run on 1000 sequences.
+All twelve are fixed, and their entries must pass.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
@@ -260,7 +260,22 @@ F5 and F6 showed in the corpus entries written for the paths generator 2 added, 
 
 The current run, [with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md), measured the new paths after the fixes of F5 to F9: 300 sessions were generated under `on`, 299 ran to the end and none of the 299 breaks the invariant, and every request with rules due held them; the other, `s1-0123`, stopped on a turn that got no answer and is not measured.
 
-`limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
+- **F10, Haiku chosen in plan mode from Sonnet.**
+  In plan mode on Sonnet, `/model haiku` draws no model switch, since Claude Code goes on running Sonnet, so noonsight did not learn that Haiku is the chosen model; a compaction's start, or that of a `/branch` or `/resume` typed in the session, then reports Haiku, and Haiku's rules went to Sonnet's requests (`f10-model-haiku-in-plan-mode-from-sonnet`, `f10-model-haiku-after-opus-in-plan-mode`, `f10-branch-in-plan-mode`, `f10-resume-in-plan-mode`).
+  It is F7 and F8 without the switch their fixes rely on.
+  noonsight now takes such a start that reports Haiku in a process whose record says Sonnet, with no switch since, for what it is: the chosen model, while Sonnet runs (`docs/hooks.md`, "SessionStart").
+- **F11, the model of the messages a compaction kept.**
+  A compaction can keep the conversation's last messages, and a resume or a fork that names no model runs on the model of the last response among them; noonsight looked no further back than the compaction and took the `model` setting, and its note retired the running model's rules (`f11-resume-after-resume-and-compact`, `f11-fork-after-resume-and-compact`, `f11-switch-after-compact`).
+  noonsight now reads the messages the compaction's record names (`docs/hooks.md`, "SessionStart").
+- **F12, a launcher's rules counted as delivered.**
+  In a session `noonsight run` started with rules, they are in the system prompt of that process; after a compaction with no response since, a resume or a fork that names no model starts with no launcher file, and noonsight recorded the rules as already delivered, though the new process never had them (`f12-fork-from-the-launcher-after-compact`, `f12-two-resumes-from-the-launcher-after-compact`); with a launcher file for another model, that model's rules had no note (`f12-launcher-for-another-model-after-compact`).
+  noonsight now records that the rules are only in the launcher's prompt until a response shows that a request was sent with it, and delivers them again at a resume or a fork before that (`docs/hooks.md`, "SessionStart").
+
+F10 to F12 showed in fuzz sessions of generator 2, seed 1 (`s1-0345` and `s1-0969` for F10, `s1-0564` for F11, `s1-0949` for F12): on the build before their fix, every one of their entries breaks the invariant, and on the fixed build they pass, as do the four sessions.
+The fuzz level has not run again since.
+
+`limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since or kept, and resumed with nothing that names a model, runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
+`limit-default-model-after-compact-from-the-launcher` is the same for a session `noonsight run` started, whose conversation holds no rules then: noonsight delivers none and warns the person, so no rules of another model reach the request and none count as delivered.
 
 ## Limits
 

@@ -1,0 +1,40 @@
+{
+  "name": "f10-resume-in-plan-mode",
+  "about": "/resume typed in the session after /model haiku in plan mode on Sonnet: the start reports Haiku while Sonnet runs, and its note retired Sonnet's rules (F10, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "clear"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "back"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

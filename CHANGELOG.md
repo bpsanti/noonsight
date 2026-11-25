@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Three failures of delivery after a compaction, F10 to F12, are fixed (`experiments/delivery/README.md`, "Failures found, and a limit"):
+  - After `/model haiku` in plan mode on Sonnet, which Claude Code goes on running, a compaction, `/branch` or `/resume` delivered Haiku's rules to Sonnet's requests.
+  - A resume or a fork that names no model, after a compaction that kept the last response, took the `model` setting instead of that response's model.
+  - In a session `noonsight run` started, after a compaction with no response since, a resume or a fork that names no model counted the launcher's rules as delivered though its process never had them.
+    When nothing names the resumed model either, no rules are delivered and the person is warned.
+
 ## 0.1.2
 
 - The plugin's manifest carries what Anthropic's plugin directory lists: an icon, and the documentation, support and privacy links.

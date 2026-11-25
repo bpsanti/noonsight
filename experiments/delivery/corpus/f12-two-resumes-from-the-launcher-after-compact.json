@@ -1,0 +1,37 @@
+{
+  "name": "f12-two-resumes-from-the-launcher-after-compact",
+  "about": "The same for a resume, and for a second one with no request between them (F12, fixed).",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "launcher": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "resume",
+      "model": null
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

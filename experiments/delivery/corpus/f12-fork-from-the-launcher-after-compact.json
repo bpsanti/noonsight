@@ -1,0 +1,34 @@
+{
+  "name": "f12-fork-from-the-launcher-after-compact",
+  "about": "A session noonsight run started, compacted with no response since, then a fork that names no model: the new process has no launcher file, and the rules counted as already delivered reached no request (F12, fixed).",
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "launcher": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "spawn",
+      "calls": [
+        {
+          "type": "general-purpose",
+          "model": null
+        }
+      ]
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "fork": true
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

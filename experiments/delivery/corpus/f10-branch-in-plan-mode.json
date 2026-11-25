@@ -1,0 +1,34 @@
+{
+  "name": "f10-branch-in-plan-mode",
+  "about": "/branch after /model haiku typed in plan mode on Sonnet: the fork's start reports Haiku while Sonnet runs, and its note retired Sonnet's rules (F10, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "branch"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}
