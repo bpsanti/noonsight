@@ -64,7 +64,7 @@ The hook decides by how the session started (the `source` field):
 | --- | --- | --- |
 | `startup` | Delivers the rules | A new session |
 | `clear`, `compact` | Delivers them again | The earlier context, and the rules in it, are gone |
-| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's or a launcher's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply. A fork, whose new session id has no record yet, goes by the record of the conversation it copied ([Forks](#forks)) | The restored conversation already holds them, except a switch's or a resume's that may never have reached it (below, and [PostModelSwitch](#postmodelswitch)) |
+| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's or a launcher's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply. A fork, whose new session id has no record yet, goes by the record of the conversation it copied ([Forks](#forks)) | The restored conversation already holds them, except a switch's, a resume's or a launcher's that may never have reached it (below, [PostModelSwitch](#postmodelswitch) and [launcher.md](launcher.md#with-the-hooks)) |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect noonsight exists to prevent |
 
 The model comes from the first of these that knows it:
