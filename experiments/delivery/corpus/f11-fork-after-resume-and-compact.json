@@ -1,0 +1,35 @@
+{
+  "name": "f11-fork-after-resume-and-compact",
+  "about": "The same for a fork in a new process (F11, fixed).",
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "model",
+      "to": "fable"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "resume",
+      "model": "haiku"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "resume",
+      "model": null,
+      "fork": true
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

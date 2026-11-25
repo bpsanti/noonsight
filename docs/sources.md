@@ -113,7 +113,7 @@ A real model may open the skill; whether it does on the right model, every time,
 The first excerpt is the use noonsight makes of `PostModelSwitch`.
 The second and third are the cause of F1: a switch's text that never reached a request was still taken as delivered, and a later note did not retire the rules the conversation still held.
 Before noonsight treated such a delivery as unconfirmed, 26 of 296 sessions broke the invariant, and 1 of 300 after that fix and those of F2 to F4, in superseded runs on Claude Code 2.1.328 ([D4](evidence.md#d4), [D1](evidence.md#d1)).
-The current run, on other sequences, has 4 of 997 ([D35](evidence.md#d35), Claude Code 2.1.330), from three failures that are open ([F10 to F12](../experiments/delivery/README.md#failures-found-and-a-limit)).
+The current run, on other sequences, has 4 of 997 ([D35](evidence.md#d35), Claude Code 2.1.330), from three failures fixed since ([F10 to F12](../experiments/delivery/README.md#failures-found-and-a-limit)).
 The same holds at a resume (F3): what `SessionStart` returns there also reaches the conversation with the process's next request only, so a resume ended before any request loses it.
 noonsight writes its envelope as facts, as the fourth and fifth excerpts ask, and [docs/usage.md](usage.md#choosing-where-a-rule-lives) follows the sixth for rules that are the same for every model.
 

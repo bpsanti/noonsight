@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+- Three failures of delivery after a compaction, F10 to F12, are fixed (`experiments/delivery/README.md`, "Failures found, and a limit"):
+  - After `/model haiku` in plan mode on Sonnet, which Claude Code goes on running, a compaction, `/branch` or `/resume` delivered Haiku's rules to Sonnet's requests.
+  - A resume or a fork that names no model, after a compaction that kept the last response, took the `model` setting instead of that response's model.
+  - In a session `noonsight run` started, after a compaction with no response since, a resume or a fork that names no model counted the launcher's rules as delivered though its process never had them.
+    When nothing names the resumed model either, no rules are delivered and the person is warned.
+
 - The delivery benchmark ran noonsight, a `CLAUDE.md` and a skill per model on the same 1,000 sequences (`experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/`, Claude Code 2.1.330), and `docs/evidence.md` gains D35 to D51, which replace the numbers over 300 and 60 sequences.
   Subagent coverage is 100% (2,417 of 2,417) under noonsight, 48.3% (1,082 of 2,242) with a `CLAUDE.md` and 0 of 2,242 with skills.
-  The larger sample found three failures of noonsight, F10 to F12, which are open: 4 of 997 sessions break the invariant, and coverage over every request is 99.9% (10,237 of 10,245) (`experiments/delivery/README.md`, "Failures found, and a limit").
+  The larger sample found three failures of noonsight, F10 to F12, fixed since (above): on the build measured, 4 of 997 sessions break the invariant, and coverage over every request is 99.9% (10,237 of 10,245) (`experiments/delivery/README.md`, "Failures found, and a limit").
 
 ## 0.1.2
 

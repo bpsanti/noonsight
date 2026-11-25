@@ -1,0 +1,34 @@
+{
+  "name": "f10-model-haiku-in-plan-mode-from-sonnet",
+  "about": "/model haiku typed in plan mode on Sonnet draws no model switch, since Sonnet goes on running, and a compaction's start then reports Haiku: Haiku's rules went to Sonnet's requests (F10, fixed).",
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": true
+    },
+    {
+      "k": "model",
+      "to": "haiku"
+    },
+    {
+      "k": "compact"
+    },
+    {
+      "k": "turn"
+    },
+    {
+      "k": "plan",
+      "on": false
+    },
+    {
+      "k": "turn"
+    }
+  ],
+  "expect": "pass"
+}

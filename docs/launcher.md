@@ -112,7 +112,7 @@ The variable alone is not enough, because a `claude` started from inside a launc
 | Start | What the hook does |
 | --- | --- |
 | `startup`, `clear`, `compact` | Claude Code renders the system prompt from this launch for a new conversation, after `/clear` and after compaction, so the rules in the launcher's file count as delivered |
-| `resume`, `fork` | Claude Code reuses the system prompt the conversation was first sent with (`--system-prompt-snapshot`), so the session's record decides whether the rules are delivered again, as without the launcher |
+| `resume`, `fork` | Claude Code reuses the system prompt the conversation was first sent with (`--system-prompt-snapshot`), so the session's record decides whether the rules are delivered again, as without the launcher. A conversation with no response since the start, `/clear` or compaction that counted on the launcher's file has no such prompt yet: the process renders its own, so the rules are delivered again unless this process's launcher file holds them |
 | The launcher's rules are for another model than the session's | The hook delivers the session's model's rules with a note that the launcher's rules do not apply, and warns the person. This happens when the settings' `env` pins an alias to another model, which Claude Code and its hooks see and the launcher does not |
 | The same model, other rules | The hook delivers its own rules, as without the launcher. This happens when the settings' `env` sets `NOONSIGHT_SCOPE` or a variable of `session.unattended_when_env` |
 

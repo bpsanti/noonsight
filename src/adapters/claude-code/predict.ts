@@ -150,8 +150,8 @@ export function familyOf(model: string): string | null {
 // transcript can lag behind the conversation, so a transcript is read only when no record knows,
 // except at a resume, when the conversation's earlier process has finished writing it.
 //
-// A compaction writes a system record with subtype compact_boundary, and the messages it kept are
-// referred to there, not written again after it.
+// A compaction writes a system record with subtype compact_boundary. The messages it kept are named
+// there by uuid (compactMetadata.preservedMessages), not written again after it.
 
 /** How much of a transcript is read at a time, from its end. */
 const CHUNK_BYTES = 1024 * 1024;
@@ -171,9 +171,10 @@ export interface Response {
 }
 
 /**
- * The conversation's last response since its last compaction, its own messages only: its model is
- * the one Claude Code resumes a conversation on when nothing it was started with names one. Null when
- * the conversation has no response since, or the transcript cannot be read.
+ * The conversation's last response since its last compaction, or, with none since, the last one among
+ * the messages that compaction kept; its own messages only. Its model is the one Claude Code resumes a
+ * conversation on when nothing it was started with names one. Null when the conversation holds no
+ * response, or the transcript cannot be read.
  */
 export function conversationResponse(file: string | null): Response | null {
   return lastResponse(file, true, true);
@@ -187,11 +188,13 @@ export function conversationModel(file: string | null): string | null {
 function lastResponse(file: string | null, ownOnly: boolean, sinceCompaction: boolean): Response | null {
   if (file === null) return null;
   let found: Response | null = null;
+  // The messages the last compaction kept, once its record is reached: only those before it count.
+  let kept: Set<string> | null = null;
   try {
     scanLinesBackward(file, (line) => {
-      const boundary = sinceCompaction && line.includes('"compact_boundary"');
+      const boundary = sinceCompaction && kept === null && line.includes('"compact_boundary"');
       if (!boundary && !line.includes('"assistant"')) return false;
-      let r: { type?: unknown; subtype?: unknown; isSidechain?: unknown; timestamp?: unknown; message?: { model?: unknown } };
+      let r: { type?: unknown; subtype?: unknown; isSidechain?: unknown; timestamp?: unknown; uuid?: unknown; compactMetadata?: unknown; message?: { model?: unknown } };
       try {
         r = JSON.parse(line) as typeof r;
       } catch {
@@ -199,8 +202,12 @@ function lastResponse(file: string | null, ownOnly: boolean, sinceCompaction: bo
         return false;
       }
       if (ownOnly && r.isSidechain === true) return false;
-      if (boundary && r.type === 'system' && r.subtype === 'compact_boundary') return true;
+      if (boundary && r.type === 'system' && r.subtype === 'compact_boundary') {
+        kept = keptMessages(r.compactMetadata);
+        return kept.size === 0;
+      }
       if (r.type !== 'assistant') return false;
+      if (kept !== null && !(typeof r.uuid === 'string' && kept.has(r.uuid))) return false;
       const model = typeof r.message?.model === 'string' ? normalizeModel(r.message.model) : '';
       if (!model || model === '<synthetic>') return false;
       const at = typeof r.timestamp === 'string' ? Date.parse(r.timestamp) : NaN;
@@ -211,6 +218,12 @@ function lastResponse(file: string | null, ownOnly: boolean, sinceCompaction: bo
     return null;
   }
   return found;
+}
+
+/** The uuids of the messages a compaction kept in the conversation, as its record names them. */
+function keptMessages(metadata: unknown): Set<string> {
+  const uuids = (metadata as { preservedMessages?: { uuids?: unknown } } | null | undefined)?.preservedMessages?.uuids;
+  return new Set(Array.isArray(uuids) ? uuids.filter((u): u is string => typeof u === 'string') : []);
 }
 
 /**

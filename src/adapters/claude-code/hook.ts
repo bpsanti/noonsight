@@ -36,7 +36,7 @@ import { inheritTriggers, sessionTriggers } from '../../state/triggers.js';
 import { forkOrigin, type ForkOrigin } from './fork.js';
 import { launchFields, launchModel, readCommandLine, resolveModelValue, resolveValue, type LaunchModel, type LaunchSources } from './launch.js';
 import { launcherPrompt, type LauncherPrompt } from './launcher.js';
-import { conversationResponse, type Response } from './predict.js';
+import { conversationResponse, familyOf, type Response } from './predict.js';
 import { HOOK_HANDLERS } from './settings.js';
 import { notRouted } from './routing.js';
 import { agentCall, agentHeld, agentResult, choiceFields, decisionFields, lateRules, subagentStart } from './subagents.js';
@@ -154,6 +154,7 @@ function runEvent(arg: string, rawInput: string, ctx: HookContext, late: boolean
         log({ status: 'config-invalid', problems: e.problems.length, ...notRouted('config-invalid'), warned: false });
         return '';
       }
+      if (event === 'PostModelSwitch') rememberSwitch(input, state, ctx);
       log({ status: 'config-invalid', problems: e.problems.length, ...(event === 'PreToolUse' ? notRouted('config-invalid') : {}), delivered: 'nothing', warned: true });
       return output(
         [
@@ -194,9 +195,10 @@ function runEvent(arg: string, rawInput: string, ctx: HookContext, late: boolean
             ...outcome.state,
             held,
             ...(before?.unconfirmed !== undefined ? { unconfirmed: before.unconfirmed } : {}),
+            ...(before?.inPrompt ? { inPrompt: true as const } : {}),
             ...(before?.chosen !== undefined ? { chosen: before.chosen } : {}),
-            // A resume's delivery is confirmed by a response after it, so its time is kept.
-            at: before?.unconfirmed === 'resume' ? before.at : ctx.now.toISOString(),
+            // A resume's delivery and a launcher's are confirmed by a response after them, so their time is kept.
+            at: before?.unconfirmed === 'resume' || before?.inPrompt ? before.at : ctx.now.toISOString(),
           });
         } catch {
           // Without the record, a later resume delivers again: the safe direction.
@@ -280,8 +282,24 @@ function runEvent(arg: string, rawInput: string, ctx: HookContext, late: boolean
       log({ status: 'error', error: message, delivered: 'nothing', warned: true });
       return output([`noonsight: the hook failed (${message}), so the subagent that started got no rules.`], null);
     }
+    if (event === 'PostModelSwitch') rememberSwitch(input, state, ctx);
     log({ status: 'error', error: message, ...(event === 'PreToolUse' ? notRouted('error') : {}), delivered: 'nothing', warned: true });
     return output([`noonsight: the hook failed (${message}), so no rules were delivered.`], null);
+  }
+}
+
+/**
+ * Keep the process's record on the model it runs after a switch that delivered nothing, as under a
+ * refused configuration: a later start in the process takes it for the running model.
+ */
+function rememberSwitch(input: Record<string, unknown>, state: string, ctx: HookContext): void {
+  const model = normalizeModel(str(input.to_model));
+  const file = processFile(state, ctx.parentPid);
+  if (!model || readState(file) === null) return;
+  try {
+    writeState(file, { model, status: 'undeclared', sha256: null, held: [], at: ctx.now.toISOString() });
+  } catch {
+    // The record stays as it was.
   }
 }
 
@@ -333,7 +351,7 @@ interface Outcome {
  *   clear, compact  deliver again: the earlier context, and the rules in it, are gone
  *   resume, fork    deliver only when the model or the rules changed since this session's record, or
  *                   when its last delivery may never have arrived: a /model switch's, or a resume's
- *                   the conversation has not answered since
+ *                   or a launcher's the conversation has not answered since
  *   anything else   deliver: delivering twice costs little, missing a delivery is the defect
  *
  * The model comes from the input. When Claude Code leaves it out, after /clear and compaction it comes
@@ -341,15 +359,18 @@ interface Outcome {
  * /model since the launch chose; and when neither knows it, as in every `claude -p` run, from what the
  * session was started with (launch.ts). A resumed or forked conversation runs in a new Claude Code
  * process, which takes its model from --model, else ANTHROPIC_MODEL, else the model of the
- * conversation's last response since its last compaction, else the model setting; so there those come
- * first, in that order, and the session's record after them. When the model is not the one the record
- * holds, the conversation still holds that model's rules, and as at a /model switch a note says they no
- * longer apply.
+ * conversation's last response since its last compaction or among the messages that compaction kept,
+ * else the model setting; so there those come first, in that order, and the session's record after
+ * them. When the model is not the one the record holds, the conversation still holds that model's
+ * rules, and as at a /model switch a note says they no longer apply.
  *
  * A session `noonsight run` started already holds rules in its system prompt. Claude Code renders the
  * system prompt from the current launch for a new conversation, after /clear and after compaction,
  * so at those starts the rules are not delivered again when the launcher's text holds them. A resumed
- * or forked conversation keeps the system prompt it was first sent with, so the session record decides.
+ * or forked conversation keeps the system prompt it was first sent with, so the session record decides;
+ * but one that has made no request since the start or the compaction that counted on the launcher's
+ * text was never sent it, and a new process renders its own: there the rules are delivered unless
+ * that process's launcher text holds them, and with nothing but the record to name the model, none are.
  * When the launcher's rules are for another model than the session's, a note says they do not apply.
  *
  * The rules are resolved with the triggers the session has revealed (triggers.ts), which its id keeps:
@@ -377,6 +398,10 @@ function sessionStart(
   // A background job runs on the model it was started with, which its own command line does not show.
   const readStart: typeof readLaunch = fork?.launch ? (sources) => (sources === 'settings' ? readLaunch(sources) : (fork.launch as LaunchModel)) : readLaunch;
   const reported = normalizeModel(str(input.model));
+  const record = resumed && known !== null ? confirmed(known, fork !== null ? fork.response : readConversation) : known;
+  // The rules the record counts on were the launcher's, and the conversation may hold none: the record
+  // then tells neither what it holds nor, with nothing else naming it, the model.
+  const atLaunch = resumed && record?.inPrompt === true;
   const recorded = known?.model ?? (source === 'clear' || source === 'compact' ? process?.model : null) ?? null;
   // Claude Code may run another model in place of the one the person chose, as it runs Sonnet in plan
   // mode for Haiku; the start of a compaction, /resume or /branch in that process then reports the
@@ -385,13 +410,17 @@ function sessionStart(
   // one in a new process reports none, and a new process starts on the model it is given.
   const sameProcess = source === 'compact' || source === 'clear' || (resumed && !!reported);
   const carried = sameProcess ? (process ?? (source === 'compact' ? known : null)) : null;
-  const substituted = carried?.chosen !== undefined && carried.model !== null && (!reported || reported === carried.chosen) ? carried : null;
+  const announced = carried?.chosen !== undefined && carried.model !== null && (!reported || reported === carried.chosen);
+  // A /model haiku in plan mode on Sonnet changes the chosen model and not the running one, so no switch
+  // says so. Every change of the running model is a switch, and Claude Code runs Sonnet for Haiku only.
+  const unannounced = process !== null && carried === process && standsIn(process.model, reported) && (source !== 'compact' || known?.model === process.model);
+  const substituted: (DeliveryState & { readonly chosen?: string }) | null = announced ? carried : unannounced ? { ...process, chosen: reported } : null;
   const chosen: ModelChoice = substituted
-    ? { model: substituted.model, source: substituted === process ? 'process-record' : 'session-record', launch: null }
+    ? { model: substituted.model, source: process !== null ? 'process-record' : 'session-record', launch: null }
     : reported
       ? { model: reported, source: 'hook-input', launch: null }
       : resumed
-      ? resumedModel(recorded, readStart, () => readConversation()?.model ?? null)
+      ? resumedModel(atLaunch ? null : recorded, readStart, () => readConversation()?.model ?? null)
       : recorded
         ? { model: recorded, source: session?.model ? 'session-record' : 'process-record', launch: null }
         : launchChoice(readLaunch('all'), null);
@@ -399,26 +428,27 @@ function sessionStart(
   const request = { model, scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, request);
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  const record = resumed && known !== null ? confirmed(known, fork !== null ? fork.response : readConversation) : known;
   // A delivery that may never have reached the conversation is made again.
-  const unconfirmed = resumed && record?.unconfirmed !== undefined;
+  const unconfirmed = resumed && (record?.unconfirmed !== undefined || atLaunch);
   const repeat = resumed && record !== null && !unconfirmed && record.model === decision.model && record.sha256 === sha;
   // A resumed conversation still holds the rules it held; those of another model no longer apply.
   const kept = resumed ? heldModels(record) : [];
   const retired = repeat || decision.model === null ? [] : kept.filter((m) => m !== decision.model);
   const changedFrom = resumed && record?.model && decision.model !== null && record.model !== decision.model ? record.model : null;
 
-  const launcher = source === 'startup' || source === 'clear' || source === 'compact' ? readLauncher() : null;
+  const launcher = source === 'startup' || source === 'clear' || source === 'compact' || atLaunch ? readLauncher() : null;
   // The launcher's system prompt holds the rules for the session's scope; it never holds those a
   // trigger the session revealed later added, which are delivered here.
   const forLauncher = where.triggers.length ? resolve(config, { ...request, triggers: [] }) : decision;
-  const inPrompt = launcher !== null && forLauncher.status === 'matched' && launcher.content.includes(forLauncher.text);
+  // At a resume it stands in for the delivery only of rules the conversation's own prompt would hold too.
+  const unchanged = !resumed || (record !== null && record.unconfirmed === undefined && record.model === decision.model && record.sha256 === sha);
+  const inPrompt = unchanged && launcher !== null && forLauncher.status === 'matched' && launcher.content.includes(forLauncher.text);
   const added = inPrompt && where.triggers.length ? resolveAdded(config, request, []) : null;
   const sent = inPrompt ? (added?.status === 'matched' ? added : null) : decision.status === 'matched' ? decision : null;
   const otherModel = launcher !== null && !inPrompt && launcher.model !== null && launcher.model !== decision.model ? launcher.model : null;
   const rules = sent !== null && !repeat ? sent.text : null;
   const note = retired.length
-    ? switchNote(changedFrom, decision.model ?? '', retired)
+    ? switchNote(changedFrom, decision.model ?? '', otherModel !== null && !retired.includes(otherModel) ? [...retired, otherModel] : retired)
     : otherModel !== null
       ? launcherNote(otherModel, decision.model ?? '')
       : null;
@@ -463,21 +493,26 @@ function sessionStart(
     state:
       decision.model === null
         ? null
-        : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}), ...(substituted?.chosen ? { chosen: substituted.chosen } : {}) },
+        : { model: decision.model, status: decision.status, sha256: sha, held, ...(pending ? { unconfirmed: 'resume' as const } : {}), ...(inPrompt ? { inPrompt: true as const } : {}), ...(substituted?.chosen ? { chosen: substituted.chosen } : {}) },
   };
 }
 
 /**
  * A resumed conversation's record as the conversation stands. A resume's delivery goes with the first
  * request its process sends, so when the conversation has answered since that delivery, it arrived,
- * and its note left only the record's model's rules standing. Otherwise the record stands as written.
+ * and its note left only the record's model's rules standing; and the system prompt that request was
+ * sent with, the launcher's, is the conversation's own. Otherwise the record stands as written.
  */
 function confirmed(session: DeliveryState, readConversation: () => Response | null): DeliveryState {
-  if (session.unconfirmed !== 'resume') return session;
+  if (session.unconfirmed !== 'resume' && !session.inPrompt) return session;
   const delivered = Date.parse(session.at);
   const answered = readConversation()?.at ?? null;
   if (answered === null || Number.isNaN(delivered) || answered <= delivered) return session;
-  const { unconfirmed: _, ...rest } = session;
+  if (session.unconfirmed !== 'resume') {
+    const { inPrompt: _, ...rest } = session;
+    return rest;
+  }
+  const { unconfirmed: _, inPrompt: __, ...rest } = session;
   return { ...rest, held: heldModels(session).filter((m) => m === session.model) };
 }
 
@@ -496,9 +531,10 @@ function launchChoice(launch: LaunchModel, fallback: { model: string; source: st
 /**
  * The model of a resumed or forked conversation, which Claude Code reports no model for, in the order
  * Claude Code itself takes it: --model, else ANTHROPIC_MODEL, else the model of the conversation's
- * last response since its last compaction, else the model setting. A value noonsight cannot tell
- * which model it selects leaves the conversation to decide, and below the setting the session's record
- * does: Claude Code then runs its default model, which noonsight cannot tell either.
+ * last response since its last compaction or among the messages it kept, else the model setting. A
+ * value noonsight cannot tell which model it selects leaves the conversation to decide, and below the
+ * setting the session's record does: Claude Code then runs its default model, which noonsight cannot
+ * tell either.
  *
  * One setting outranks the conversation: `haiku`, over a last response from Haiku or Sonnet
  * (keepsHaikuSetting).
@@ -539,8 +575,8 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
   const request = { scope: where.scope.scope, place: where.place.place, triggers: where.triggers };
   const decision = resolve(config, { model: to, ...request });
   const sha = decision.status === 'matched' ? decision.sha256 : null;
-  // A switch right after a delivery that may have been lost makes it again.
-  const unconfirmed = session?.unconfirmed !== undefined;
+  // A switch right after a delivery that may have been lost, or that only the system prompt holds, makes it again.
+  const unconfirmed = session?.unconfirmed !== undefined || session?.inPrompt === true;
   const base = {
     ...decisionFields(decision),
     ...choiceFields(where.scope, where.place),
@@ -588,17 +624,24 @@ function modelSwitch(input: Record<string, unknown>, config: Config, file: strin
 /**
  * The model the person chose, when the switch leaves Claude Code running another in its place, else
  * null. A switch Claude Code makes by itself (`source: "auto"`, as when plan mode on Haiku runs Sonnet)
- * keeps the model chosen before it, until a switch back to that model; a `/model` whose
+ * keeps the model chosen before it, until a switch back to that model, or from Sonnet to Haiku, which
+ * ends plan mode after a `/model haiku` in it that no switch announced; a `/model` whose
  * `requested_model` selects another model than the one it switched to was substituted the same way.
  */
 function chosenModel(input: Record<string, unknown>, from: string, to: string, session: DeliveryState | null, env: Env): string | null {
   if (str(input.source) === 'auto') {
+    if (session?.chosen === undefined && standsIn(from, to)) return null;
     const before = session?.chosen ?? (from || null);
     return before !== null && before !== to ? before : null;
   }
   const requested = str(input.requested_model);
   const asked = requested !== null ? resolveModelValue(requested, env) : null;
   return asked?.kind === 'found' && asked.model !== to ? asked.model : null;
+}
+
+/** Whether Claude Code runs the first model in place of the second: in plan mode, Sonnet for Haiku. */
+function standsIn(running: string | null, chosen: string): boolean {
+  return running !== null && familyOf(running) === 'sonnet' && familyOf(chosen) === 'haiku';
 }
 
 /**

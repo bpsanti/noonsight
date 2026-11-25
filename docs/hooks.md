@@ -64,7 +64,7 @@ The hook decides by how the session started (the `source` field):
 | --- | --- | --- |
 | `startup` | Delivers the rules | A new session |
 | `clear`, `compact` | Delivers them again | The earlier context, and the rules in it, are gone |
-| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply. A fork, whose new session id has no record yet, goes by the record of the conversation it copied ([Forks](#forks)) | The restored conversation already holds them, except a switch's or a resume's that may never have reached it (below, and [PostModelSwitch](#postmodelswitch)) |
+| `resume`, `fork` | Delivers only when the model or the rules changed since this session's record, or when the session's last delivery may never have reached the conversation: a `/model` switch's, or a resume's or a launcher's the conversation has not answered since; with a note that the rules of any other model the conversation may hold no longer apply. A fork, whose new session id has no record yet, goes by the record of the conversation it copied ([Forks](#forks)) | The restored conversation already holds them, except a switch's, a resume's or a launcher's that may never have reached it (below, [PostModelSwitch](#postmodelswitch) and [launcher.md](launcher.md#with-the-hooks)) |
 | Anything else | Delivers | Delivering twice costs little; a missed delivery is the defect noonsight exists to prevent |
 
 The model comes from the first of these that knows it:
@@ -83,19 +83,23 @@ At `resume` and `fork` without a `model` in the input, the order is another, the
 
 1. the `--model` argument of the Claude Code process;
 2. `ANTHROPIC_MODEL`;
-3. the model of the conversation's last response since its last compaction, read from the transcript the input names (`transcript_path`), the session's own messages only (`model_source: "session-transcript"`), except under the `model` setting `haiku` when that response came from Haiku or Sonnet;
+3. the model of the conversation's last response since its last compaction, or, with none since, of the last one among the messages that compaction kept, read from the transcript the input names (`transcript_path`), the session's own messages only (`model_source: "session-transcript"`), except under the `model` setting `haiku` when that response came from Haiku or Sonnet;
 4. the `model` setting;
 5. noonsight's record of the session.
 
 `claude --continue` and `claude --resume` start a new Claude Code process, which reports no model and fires no `PostModelSwitch`.
-It runs the conversation on the model its `--model` or `ANTHROPIC_MODEL` names, else on the model the conversation last answered on, else on its `model` setting, which `/model` in any session changes; a compaction with no response since leaves the conversation no model of its own ([recorded on Claude Code 2.1.327](../test/fixtures/hook-inputs/2.1.327/README.md) and [2.1.328](verification/claude-code.md)).
+It runs the conversation on the model its `--model` or `ANTHROPIC_MODEL` names, else on the model the conversation last answered on, else on its `model` setting, which `/model` in any session changes; a compaction that kept no response, with none since, leaves the conversation no model of its own ([recorded on Claude Code 2.1.327](../test/fixtures/hook-inputs/2.1.327/README.md) and [2.1.328](verification/claude-code.md)).
+A compaction can keep the last messages of the conversation, and names them in its transcript record (`compactMetadata.preservedMessages`); a response among them is the conversation's last one until another comes ([recorded on 2.1.330](verification/claude-code.md)).
 One setting outranks the conversation: under `"model": "haiku"`, written exactly so, a conversation that last answered on Haiku or Sonnet runs on Haiku, while one that last answered on Opus or Fable keeps its model; `opusplan`, `Haiku` and every other setting leave the conversation its model ([recorded on 2.1.328](verification/claude-code.md)).
 A `--model` or `ANTHROPIC_MODEL` value noonsight cannot pin down outranks the setting, as in Claude Code, so the conversation, then the record, decides, and the log line records the value.
-With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides.
+With none of the four, Claude Code runs its default model, which noonsight cannot tell, and the record decides, unless the rules it records were only in a launcher's system prompt: the conversation then holds none of them, so none are delivered and the person is warned.
 After `/clear` and compaction the order stays as listed: the process keeps running the model a `/model` since its start chose, which its command line no longer names.
 One exception comes first: Claude Code can run another model in place of the one the person chose, and in plan mode it runs Sonnet for Haiku.
 It says so with a `PostModelSwitch`: `source: "auto"` as plan mode starts and ends, and `to_model` Sonnet with `requested_model: "haiku"` for a `/model haiku` typed in plan mode; but the start of a compaction, or of a `/resume` typed in the session, in plan mode still reports Haiku, while the requests go on to Sonnet ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
 So the record keeps the model the person chose while another runs in its place, and a start in the same process, a compaction, `/clear`, or a `/resume` or `/branch` typed in the session, whose input reports that chosen model, or none, takes the model the process runs from the process's record; the log line names the chosen model in `chosen_model` and the reported one in `reported_model`.
+One choice comes with no switch: `/model haiku` typed in plan mode on Sonnet, where Sonnet goes on running.
+Claude Code reports every change of the running model as a switch, and runs Sonnet in place of Haiku only, so a compaction, or a `/resume` or `/branch` typed in the session, that reports Haiku in a process whose record says Sonnet is taken as that case: Sonnet runs, and Haiku is the chosen model ([recorded on Claude Code 2.1.330](verification/claude-code.md)).
+A switch the hook could not deliver for, as under a refused configuration, still updates the process's record, so that the report is not mistaken for it.
 A resume or fork in a new process reports no model and starts on the model it is given, as above.
 `/resume` typed inside a running session reports the model in the input.
 When the resumed conversation's record holds the rules of another model, those rules are still in the conversation, so, as for [`PostModelSwitch`](#postmodelswitch), the new model's rules come with a note that they no longer apply, and the log line names the record's model in `from_model`.
@@ -138,6 +142,8 @@ A session started by `noonsight run` already holds its rules in the system promp
 At `startup`, `clear` and `compact`, when the Claude Code process was started with the launcher's file and the file holds exactly the rules decided here, the hook delivers nothing and logs `delivered: "launcher"`.
 After compaction of a session that revealed a trigger, the rules the trigger added are not in the launcher's file, so the hook delivers those, and the line names only them.
 When the launcher's rules are for another model, the hook delivers this model's rules with a note that the others do not apply.
+Claude Code fixes a conversation's system prompt at its first request since it started or was compacted, so a conversation with no response since the start that counted on the launcher's text may never have been sent it.
+At a `resume` or `fork` of such a conversation, the hook delivers the rules again, unless the process was started with a launcher's file that holds them; a `/model` back to the model of the record delivers them again too.
 [launcher.md](launcher.md#with-the-hooks) has the details.
 
 At `startup`, when the installed preset is not the version the configuration accepted (`preset_version`) and the package keeps a copy of that version, the person is warned when the update changes the session's model's rules: rules turned on or off, rules whose text, scopes, places or triggers changed (including those a user rule that replaces them takes), and `enable`, `disable` or `replaces` entries that name a rule the preset no longer has.
