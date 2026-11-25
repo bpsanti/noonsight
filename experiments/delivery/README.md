@@ -211,6 +211,32 @@ Fixed before the run:
 - A failing session under `on` is read one by one, as in the design `after-f1-f2`, and a new defect is recorded, not fixed in the same change.
 - The numbers over the 1000 replace those of the same arms over the 60 and the 300 whatever they show, and a control that does not hold is reported and read session by session.
 
+### The design `on-n1000-after-f10-f12`
+
+The run of 2026-11-24 found F10 to F12 in 4 of its 997 `on` sessions; after their fixes, only the corpus and those four sessions ran.
+This design runs `on` again on the same 1000 sequences, on the fixed build.
+Held fixed: Claude Code 2.1.330, generator 2, seed 1, 2 sessions at once, and the arm's configuration; the build of noonsight, `eea03f7`, is the only change, installed through `--noonsight`.
+Since the run before, the harness sources, the resolver (`src/core`) and the preset's rules did not change.
+`claudemd` and `skills` are not run again, since nothing of noonsight's delivery runs in them; they keep the sessions of that run, which this design's primary comparisons pair with the new `on` sessions.
+At most four sessions can stop failing, too few for a paired test to reach the alpha, so the before and after comparisons are read from the measure alone.
+
+| | Question | Measure | Expects | Paired on |
+| --- | --- | --- | --- | --- |
+| P1 and P2, primary | Subagent coverage is higher under the new `on` than under `claudemd` and `skills` of the run before | Subagent coverage | Higher | Sessions with a subagent request without its right rules |
+| P3 and P4, primary | The same for every request | Coverage | Higher | Sessions with a request without its right rules |
+| K1 | Fewer sessions under `on` break the invariant: none should | Sessions with an unexplained violation, before and after | Lower | Failing sessions |
+| K2 | Coverage under `on` is higher | Coverage, before and after | Higher | Sessions with a request without its right rules |
+| K3 | Under `on`, fewer requests hold another model's rule with no note | Requests with `foreign-unretired` | Lower | |
+| K4 | Under `on`, subagent coverage is no lower | Subagent coverage | Not lower | Sessions with a subagent request without its right rules |
+| S4 | The decision log gives the coverage the stub saw under `on` | `agree.json`, the log against the stub | The same | |
+| R1 to R3 | Under `on`, the own share, the right share and the characters added per request | | Reported only | |
+
+Fixed before the run:
+
+- The same rules as `native-n1000`: numbers are given with their sessions and requests; a session the driver could not run is counted, left out and not run again; with more than 50 such sessions the arm runs again once, from the start, and both runs are reported; an interrupted run continues where it stopped.
+- Every failing session is read and shrunk, and is reported, not fixed in the same change.
+- The numbers replace those of `on` in the run before whatever they show.
+
 ### The decision log
 
 `npm run delivery -- log` computes the same measures from a decision log alone (`~/.local/state/noonsight/decisions.jsonl`, or `--file`), split by the place each session started in, and prints aggregates only.
