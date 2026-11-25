@@ -82,7 +82,7 @@ From the cheapest to the most expensive:
    An entry marked `exact` also fails on a request that holds a rule of its model that is not due there, which the invariant leaves to the precision measure; `subagent-edits` uses it, since a trigger revealed by a subagent's edit would show only that way.
    Run it before each release and on each new Claude Code version.
 2. **Fuzz.**
-   Random sequences from a seed ([fuzz.ts](fuzz.ts)): 300 sessions under `on`, and the first 60 of the same seed under each native arm.
+   Random sequences from a seed ([fuzz.ts](fuzz.ts)): 300 sessions under `on`, and the first 60 of the same seed under each native arm, unless a design says otherwise.
    The same seed always gives the same sequences, so a result names its seed and nothing else is needed to run it again.
    A failing session is reduced by [shrink.ts](shrink.ts) to a shortest sequence that still shows the same class of violation, running every candidate as a real session; it keeps the class, not the cause, so after a fix run the fuzz level again, not only the corpus.
 3. **Self-check.**
@@ -182,6 +182,35 @@ At most the three sessions that failed in that run can stop failing, too few for
 
 A failing session other than `s1-0096` is read one by one as in the design `after-f1-f2`, and a new defect is recorded, not fixed in the same change.
 
+### The design `native-n1000`
+
+The run of 2026-11-23 on Claude Code 2.1.330 measured `on` on 300 sequences and each native arm on the first 60 of them, so its arms do not compare on the same sample.
+The design `native-n1000` runs `on`, `claudemd` and `skills` on the same 1000 sequences, whose first 300 are that run's.
+Held fixed: Claude Code 2.1.330, generator 2, seed 1, 2 sessions at once, and the build of noonsight, `c5b9130`, which every session installs through `--noonsight` while the harness is this checkout's.
+Between `c5b9130` and this checkout, the generator, the stub, the oracle, the arms, the bridge to the terminal, the resolver (`src/core`) and the preset's rules did not change; the harness changed only in how it installs noonsight as a plugin, which this design does not use, and in how it renders and names its results.
+The arms run one after the other.
+`rules` is not run: it keeps its earlier sample of 60, where its subagent coverage was the same as `claudemd`'s ([D28](../../docs/evidence.md#d28), Claude Code 2.1.330), though its coverage over every request was not.
+The design was amended once, to drop `rules`, which it first ran last: the change was made while the first arm, `on`, was running, before any session of a native arm, and it left out the four comparisons of `rules`.
+
+The design's comparisons, in [plan.json](plan.json):
+
+| | Question | Measure | Expects | Paired on |
+| --- | --- | --- | --- | --- |
+| P1 and P2, primary | On the same 1000 sequences, subagent coverage is higher under `on` than under `claudemd` and `skills` | Subagent coverage | Higher | Sessions with a subagent request without its right rules |
+| P3 and P4, primary | The same for every request | Coverage | Higher | Sessions with a request without its right rules |
+| C1 and C2, controls | On its first 60 sequences, each native arm gives the subagent coverage of the run before | Subagent coverage, the 60 of each run | The same | |
+| C3 and C4, controls | The same for every request | Coverage, the 60 of each run | The same | |
+| C5 and C6, controls | On its first 300 sequences, `on` gives the failing sessions and the subagent coverage of the run before | Sessions with an unexplained violation, and subagent coverage | The same | |
+
+Fixed before the run:
+
+- Every number is given with its arm, its sessions measured of the 1000 generated, and its requests.
+- A session the driver could not run is counted, left out and not run again, as in the run before; an arm with more than 50 such sessions of 1000 is run again once, from the start, and both runs are reported.
+- An interrupted arm continues where it stopped.
+- The requests with rules due are not the same number in every arm: under the native arms a session drawn to start in the project is measured against the reference without the project, whose rules make more requests due under `on`.
+- A failing session under `on` is read one by one, as in the design `after-f1-f2`, and a new defect is recorded, not fixed in the same change.
+- The numbers over the 1000 replace those of the same arms over the 60 and the 300 whatever they show, and a control that does not hold is reported and read session by session.
+
 ### The decision log
 
 `npm run delivery -- log` computes the same measures from a decision log alone (`~/.local/state/noonsight/decisions.jsonl`, or `--file`), split by the place each session started in, and prints aggregates only.
@@ -207,7 +236,7 @@ results/
       sessions/       one line per session (not committed: the seed reproduces them)
 ```
 
-The current run is the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)); every run on 2.1.328 is superseded by it, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
+The current run of `on`, `claudemd` and `skills` is the one of 2026-11-24 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md)); the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)) is still the latest of `rules`, the corpus, the self-check and the hook times, and superseded for the rest; every run on 2.1.328 is superseded, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
 The folder for one version holds what was measured on that version; comparing two versions is comparing their `summary.json` and `corpus.json`.
 
 [install-check](install-check/README.md) holds a smaller check, the corpus and 20 sequences under the settings hooks, the plugin and both, which is not a run of the benchmark.
@@ -216,6 +245,7 @@ The folder for one version holds what was measured on that version; comparing tw
 
 The corpus entries that start with `f1-` to `f9-` are the shortest reproductions of nine failures of noonsight: F1 to F4 the fuzzer found, F5 to F9 the paths generator 2 added.
 All nine are fixed, and their entries must pass.
+Three more, F10 to F12, were found by the run on 1000 sequences and are open; they have no corpus entry yet.
 
 - **F1, a pending delivery lost.**
   The hook that runs after `/model` returns the new model's rules and the note, and Claude Code adds them to the next request.
@@ -258,7 +288,18 @@ The run [after the fixes of F3 and F4](results/claude-code-2.1.328/2026-11-21-d5
 
 F5 and F6 showed in the corpus entries written for the paths generator 2 added, and F7 to F9 in fuzz runs of generator 2 (`s1-0088`, `s1-0138` and `s1-0182` of seed 1) before their fixes: on the build before their fix, every one of these entries breaks the invariant (`foreign-unretired` in the session's own requests, with `missing-own` for F7 and F8, and `own-retired` for F9), and on the fixed build they pass.
 
-The current run, [with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md), measured the new paths after the fixes of F5 to F9: 300 sessions were generated under `on`, 299 ran to the end and none of the 299 breaks the invariant, and every request with rules due held them; the other, `s1-0123`, stopped on a turn that got no answer and is not measured.
+The run [of 2026-11-23 with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md), superseded in part, measured the new paths after the fixes of F5 to F9: 300 sessions were generated under `on`, 299 ran to the end and none of the 299 breaks the invariant, and every request with rules due held them; the other, `s1-0123`, stopped on a turn that got no answer and is not measured.
+
+The current run, [on 1000 sequences, on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md), found three failures that are open: 4 sessions of the 997 that ran to the end break the invariant, all in the session's own requests.
+Each reproduces on the build measured and on this checkout's build; the cause is read from the decision logs, and no fix is part of that change.
+
+- **F10, Haiku chosen in plan mode from Sonnet, then a compaction.**
+  In plan mode on Sonnet, `/model haiku` draws no model switch, since Claude Code goes on running Sonnet, so noonsight does not learn that Haiku is the chosen model; a compaction's start then reports Haiku and delivers Haiku's rules to Sonnet's requests (`s1-0345`, `s1-0969`).
+  It is F7 without the switch that F7's fix relies on.
+- **F11, the running model after a compaction and a resume.**
+  After `/model fable`, a resume with `--model haiku`, a turn and a compaction, a resume that names no model ran on Haiku, while noonsight took the `model` setting, `fable`, and its note retired Haiku's rules (`s1-0564`).
+- **F12, a launcher's rules counted as delivered.**
+  In a session `noonsight run` started with rules, they are in the system prompt of that process; after a compaction with no response since, a resume or a fork that names no model starts with no launcher file, and noonsight records the rules as already delivered, though the new process never had them (`s1-0949`).
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 
