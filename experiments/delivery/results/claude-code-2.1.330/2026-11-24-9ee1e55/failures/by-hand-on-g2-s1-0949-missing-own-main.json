@@ -1,0 +1,40 @@
+{
+ "session": "on-g2-s1-0949",
+ "target": {
+  "class": "missing-own",
+  "kind": "main"
+ },
+ "by": "hand: the shrinker kept the class but ended on the documented limit limit-default-model-after-compact, another cause",
+ "minimal": "start(fable, scope=none, unattended, noonsight run) > turn > spawn(general-purpose) > /compact > resume --fork-session > turn",
+ "spec": {
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "launcher": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "spawn",
+    "calls": [
+     {
+      "type": "general-purpose",
+      "model": null
+     }
+    ]
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "resume",
+    "model": null,
+    "fork": true
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

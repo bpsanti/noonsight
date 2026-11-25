@@ -1,0 +1,45 @@
+{
+ "session": "on-g2-s1-0969",
+ "target": {
+  "class": "foreign-unretired",
+  "kind": "main"
+ },
+ "originalSteps": 13,
+ "minimalSteps": 7,
+ "runs": 26,
+ "seconds": 479,
+ "original": "start(sonnet, scope=none, unattended) > turn > spawn(Plan:haiku + Plan + general-purpose:fable edits) > /branch > /plan > /model opus > turn > /model sonnet > /model haiku > /compact > /model sonnet > turn > plan off > turn",
+ "minimal": "start(sonnet, scope=none, unattended) > /plan > /model opus > turn > /model sonnet > /model haiku > /compact > turn",
+ "spec": {
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "plan",
+    "on": true
+   },
+   {
+    "k": "model",
+    "to": "opus"
+   },
+   {
+    "k": "turn"
+   },
+   {
+    "k": "model",
+    "to": "sonnet"
+   },
+   {
+    "k": "model",
+    "to": "haiku"
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

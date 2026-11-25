@@ -1,6 +1,6 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-20, the fuzz level after the fixes of F1 and F2
 
-> **Superseded.** The current run is [2026-11-23 on Claude Code 2.1.330](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md); quote its numbers, not the ones here, which are history.
+> **Superseded.** The current runs are [2026-11-24](../../claude-code-2.1.330/2026-11-24-9ee1e55/README.md) and, for what it did not run, [2026-11-23](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md), both on Claude Code 2.1.330; quote its numbers, not the ones here, which are history.
 
 The fuzz level and the native arms of the delivery benchmark ([experiments/delivery](../../../README.md)) on noonsight with the fixes of F1 and F2 (#46), measured against [the run before the fixes](../2026-11-19-467d465/README.md).
 The design `after-f1-f2` in [plan.json](../../../plan.json) fixed the comparisons before the run, and the delivery README lists them ("The design `after-f1-f2`").

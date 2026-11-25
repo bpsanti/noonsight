@@ -1,0 +1,202 @@
+{
+ "design": "native-n1000",
+ "before": "claude-code-2.1.330/2026-11-23-c5b9130",
+ "comparisons": [
+  {
+   "id": "P1",
+   "primary": true,
+   "question": "On the same 1000 sequences, subagent coverage is higher under `on` than under `claudemd`",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.4826,
+   "b": 1,
+   "pairs": {
+    "sessions": 997,
+    "both": 0,
+    "onlyA": 542,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "g2-s1-0000",
+     "g2-s1-0001",
+     "g2-s1-0002",
+     "g2-s1-0005",
+     "g2-s1-0007"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 1.3892242184281913e-163,
+   "adjustedP": 2.7784484368563826e-163,
+   "verdict": "supported"
+  },
+  {
+   "id": "P2",
+   "primary": true,
+   "question": "On the same 1000 sequences, subagent coverage is higher under `on` than under `skills`",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0,
+   "b": 1,
+   "pairs": {
+    "sessions": 997,
+    "both": 0,
+    "onlyA": 631,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "g2-s1-0000",
+     "g2-s1-0001",
+     "g2-s1-0002",
+     "g2-s1-0005",
+     "g2-s1-0006"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 2.2444127733846436e-190,
+   "adjustedP": 6.733238320153931e-190,
+   "verdict": "supported"
+  },
+  {
+   "id": "P3",
+   "primary": true,
+   "question": "On the same 1000 sequences, coverage is higher under `on` than under `claudemd`",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0.8818,
+   "b": 0.9992,
+   "pairs": {
+    "sessions": 997,
+    "both": 0,
+    "onlyA": 542,
+    "onlyB": 3,
+    "onlyAExamples": [
+     "g2-s1-0000",
+     "g2-s1-0001",
+     "g2-s1-0002",
+     "g2-s1-0005",
+     "g2-s1-0007"
+    ],
+    "onlyBExamples": [
+     "g2-s1-0345",
+     "g2-s1-0564",
+     "g2-s1-0949"
+    ]
+   },
+   "p": 4.685197922233005e-157,
+   "adjustedP": 4.685197922233005e-157,
+   "verdict": "supported"
+  },
+  {
+   "id": "P4",
+   "primary": true,
+   "question": "On the same 1000 sequences, coverage is higher under `on` than under `skills`",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "higher",
+   "a": 0,
+   "b": 0.9992,
+   "pairs": {
+    "sessions": 997,
+    "both": 3,
+    "onlyA": 943,
+    "onlyB": 0,
+    "onlyAExamples": [
+     "g2-s1-0000",
+     "g2-s1-0001",
+     "g2-s1-0002",
+     "g2-s1-0005",
+     "g2-s1-0006"
+    ],
+    "onlyBExamples": []
+   },
+   "p": 2.689949238098915e-284,
+   "adjustedP": 1.075979695239566e-283,
+   "verdict": "supported"
+  },
+  {
+   "id": "C1",
+   "primary": false,
+   "question": "On its first 60 sequences, `claudemd` gives the subagent coverage of the run before",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0.4688,
+   "b": 0.4688,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "C2",
+   "primary": false,
+   "question": "On its first 60 sequences, `skills` gives the subagent coverage of the run before",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0,
+   "b": 0,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "C3",
+   "primary": false,
+   "question": "On its first 60 sequences, `claudemd` gives the coverage of the run before",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0.8819,
+   "b": 0.8836,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "does not hold"
+  },
+  {
+   "id": "C4",
+   "primary": false,
+   "question": "On its first 60 sequences, `skills` gives the coverage of the run before",
+   "measure": "coverage.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 0,
+   "b": 0,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "C5",
+   "primary": false,
+   "question": "On its first 300 sequences, `on` breaks the invariant in no more sessions than in the run before",
+   "measure": "robustness.sessionsFailed",
+   "share": false,
+   "expect": "same",
+   "a": 0,
+   "b": 0,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  },
+  {
+   "id": "C6",
+   "primary": false,
+   "question": "On its first 300 sequences, `on` gives the subagent coverage of the run before",
+   "measure": "coverage.subagents.coverage",
+   "share": true,
+   "expect": "same",
+   "a": 1,
+   "b": 1,
+   "pairs": null,
+   "p": null,
+   "adjustedP": null,
+   "verdict": "holds"
+  }
+ ]
+}

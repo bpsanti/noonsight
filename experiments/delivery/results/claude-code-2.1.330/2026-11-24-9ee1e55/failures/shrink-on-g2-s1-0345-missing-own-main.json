@@ -1,0 +1,37 @@
+{
+ "session": "on-g2-s1-0345",
+ "target": {
+  "class": "missing-own",
+  "kind": "main"
+ },
+ "originalSteps": 13,
+ "minimalSteps": 5,
+ "runs": 20,
+ "seconds": 279,
+ "original": "start(sonnet, scope=none, unattended, project) > spawn(general-purpose:haiku + general-purpose:fable) > spawn(general-purpose:fable edits) > /plan > /model haiku > /compact > turn > turn > /model sonnet > /compact > turn > /model haiku > plan off > turn",
+ "minimal": "start(sonnet, scope=none, unattended) > turn > /plan > /model haiku > /compact > turn",
+ "spec": {
+  "model": "sonnet",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "plan",
+    "on": true
+   },
+   {
+    "k": "model",
+    "to": "haiku"
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

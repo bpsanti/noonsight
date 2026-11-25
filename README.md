@@ -20,31 +20,31 @@ That is delivery, not obedience: a delivered rule is context, and Claude Code sa
 Its known limits are part of it:
 
 - A workflow's agents get nothing, foreground calls of one type that need different rules give their subagents nothing until each one's first Edit, Write or agent call, and a plugin noonsight does not read, such as one an organization syncs, leaves its subagents predicted on their parent's model ([docs/hooks.md](docs/hooks.md#what-the-prediction-does-not-see)).
-- A conversation compacted with no response since and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)); the corpus reproduces it, and it broke no session of the current run.
+- A conversation compacted with no response since or kept, and resumed with nothing that names a model runs on Claude Code's default model, which noonsight cannot tell ([docs/hooks.md](docs/hooks.md#sessionstart)); the corpus reproduces it, and it broke no session of the current run.
 - In a session `noonsight run` started with rules, and only there, `/fork` is not available: Claude Code refuses to fork a session with a system prompt of its own ([docs/launcher.md](docs/launcher.md#other-text-in-the-system-prompt)).
 - Agent teams, routing and the classifier are not measured ([limits](experiments/delivery/README.md#limits)).
 - Claude Code changes how hooks behave, and the results on this page did not all run on the same version of it: each holds for the version it ran on, which [docs/evidence.md](docs/evidence.md#runs-and-versions) gives for every run and every result.
 
 **What was measured.** The delivery benchmark's sessions are real, interactive Claude Code sessions, not simulated ones; only the Messages API is a local stand-in, so every request was read and no model answered ([experiments/delivery](experiments/delivery/README.md)).
-Its current run (2026-11-23) generated 300 random sessions on the four models; 299 ran to the end, and one stopped on an unanswered turn.
-Under noonsight, on the four models together, 0 of 299 sessions broke the invariant ([D18](docs/evidence.md#d18)): every request with rules due held its model's rules, and no other model's rules left unretired.
-Under noonsight, 100% (3,090 of 3,090) of the requests with rules due held them all ([D19](docs/evidence.md#d19)), and of those, the subagents' 100% (763 of 763) ([D20](docs/evidence.md#d20)).
-Those requests include every one after a fork, after `/resume` typed in a session, in plan mode and after subagents that edit a file ([D21](docs/evidence.md#d21)), and every one of the sessions with a repository's configuration or started through `noonsight run` ([D22](docs/evidence.md#d22)).
+Its current run (2026-11-24) generated 1,000 random sessions on the four models; 997 ran to the end under noonsight, and three stopped on a step the benchmark could not drive.
+Under noonsight, on the four models together, 4 of 997 sessions broke the invariant ([D35](docs/evidence.md#d35)): in all the others, every request with rules due held its model's rules, and no other model's rules left unretired.
+Under noonsight, 99.9% (10,237 of 10,245) of the requests with rules due held them all ([D36](docs/evidence.md#d36)), and of those, the subagents' 100% (2,417 of 2,417) ([D37](docs/evidence.md#d37)).
+Of those requests, the ones right after a fork, after `/resume` typed in a session, in plan mode or after subagents that edit a file held them in 100% (1,570 of 1,570) ([D38](docs/evidence.md#d38)), and those of the sessions with a repository's configuration or started through `noonsight run` in 99.9% (4,420 of 4,425) ([D39](docs/evidence.md#d39)).
 noonsight picks a rule by its model, scope, place and trigger, never by its text, so this covers your own rules too, though the sessions carried the preset's.
-The benchmark found nine failures of noonsight, F1 to F9, on builds before the current run's, all fixed before it ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
+The benchmark found nine failures of noonsight, F1 to F9, on builds before the current run's, all fixed before it, and the current run found three more, F10 to F12, all in the session's own requests after a compaction and fixed since; the run was not repeated on the fixed build, so its numbers are those from before these fixes ([experiments/delivery](experiments/delivery/README.md#failures-found-and-a-limit)).
 
-The native ways to give a model rules, each measured without noonsight on the run's first 60 sequences, next to noonsight on all its sessions, those 60 included.
+The native ways to give a model rules, each measured without noonsight, next to noonsight on the same 1,000 sequences, but for `.claude/rules`, which ran the first 60 of them in an earlier run; fewer requests have rules due without noonsight, since a repository's configuration is noonsight's own.
 A cell is the requests with rules due that held them all, on the four models together:
 
 | How every model's rules were given | All requests with rules due, the main conversation's and the subagents' | Of those, the subagents' |
 | --- | --- | --- |
-| noonsight | [100% (3,090 of 3,090)](docs/evidence.md#d19) | [100% (763 of 763)](docs/evidence.md#d20) |
-| A user `CLAUDE.md`, without noonsight | [88.2% (508 of 576)](docs/evidence.md#d25) | [46.9% (60 of 128)](docs/evidence.md#d28) |
-| `.claude/rules`, one file per model, without noonsight | [76.3% (441 of 578)](docs/evidence.md#d26) | [46.9% (60 of 128)](docs/evidence.md#d28) |
-| A skill per model, without noonsight | [0% (0 of 579)](docs/evidence.md#d27) | [0 of 128](docs/evidence.md#d29) |
+| noonsight | [99.9% (10,237 of 10,245)](docs/evidence.md#d36) | [100% (2,417 of 2,417)](docs/evidence.md#d37) |
+| A user `CLAUDE.md`, without noonsight | [88.2% (8,656 of 9,816)](docs/evidence.md#d40) | [48.3% (1,082 of 2,242)](docs/evidence.md#d42) |
+| `.claude/rules`, one file per model, without noonsight, the first 60 sequences only | [76.3% (441 of 578)](docs/evidence.md#d26) | [46.9% (60 of 128)](docs/evidence.md#d43) |
+| A skill per model, without noonsight | [0% (0 of 9,833)](docs/evidence.md#d41) | [0 of 2,242](docs/evidence.md#d44) |
 
-What a `CLAUDE.md` missed were subagents only: it reached every request of the main conversation ([D34](docs/evidence.md#d34)), and never reaches the built-in Explore and Plan subagents, as Claude Code documents ([S4](docs/sources.md#s4)).
-It and `.claude/rules` also give every model the other models' rules, most of the rule text in their requests ([D30](docs/evidence.md#d30)).
+What a `CLAUDE.md` missed were subagents only: it reached every request of the main conversation ([D51](docs/evidence.md#d51)), and never reaches the built-in Explore and Plan subagents, as Claude Code documents ([S4](docs/sources.md#s4)).
+It and `.claude/rules` also give every model the other models' rules, most of the rule text in their requests ([D45](docs/evidence.md#d45), [D46](docs/evidence.md#d46)).
 A skill guarantees only its description until the model decides to open it ([S5](docs/sources.md#s5)).
 
 **What the preset delivers right after install** depends on the model and the place, and `noonsight install` writes it out for each model.

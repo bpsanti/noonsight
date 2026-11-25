@@ -1,0 +1,44 @@
+{
+ "session": "on-g2-s1-0564",
+ "target": {
+  "class": "own-retired",
+  "kind": "main"
+ },
+ "originalSteps": 13,
+ "minimalSteps": 7,
+ "runs": 32,
+ "seconds": 380,
+ "original": "start(haiku, scope=routine, unattended) > /model fable > turn > turn > resume --model haiku > edit(code) > /compact > resume > spawn(general-purpose:opus) > /model fable > /model haiku > /model opus > /model haiku > turn",
+ "minimal": "start(haiku, scope=none, unattended) > /model fable > turn > resume --model haiku > turn > /compact > resume > turn",
+ "spec": {
+  "model": "haiku",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "model",
+    "to": "fable"
+   },
+   {
+    "k": "turn"
+   },
+   {
+    "k": "resume",
+    "model": "haiku"
+   },
+   {
+    "k": "turn"
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "resume",
+    "model": null
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

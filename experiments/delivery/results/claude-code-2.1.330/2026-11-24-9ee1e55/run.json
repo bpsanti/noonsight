@@ -1,0 +1,123 @@
+{
+ "claudeCode": "2.1.330",
+ "commit": "9ee1e55",
+ "preset": "1.3.1",
+ "node": "v26.13.0",
+ "platform": "darwin-arm64",
+ "commands": [
+  {
+   "command": "fuzz",
+   "args": {
+    "arm": "on",
+    "generator": "2",
+    "seed": "1",
+    "n": "1000",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-24T21:10:36.734Z",
+   "seconds": 5211
+  },
+  {
+   "command": "fuzz",
+   "args": {
+    "arm": "claudemd",
+    "generator": "2",
+    "seed": "1",
+    "n": "1000",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-24T22:37:28.204Z",
+   "seconds": 9827
+  },
+  {
+   "command": "fuzz",
+   "args": {
+    "arm": "skills",
+    "generator": "2",
+    "seed": "1",
+    "n": "1000",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T01:21:15.490Z",
+   "seconds": 9846
+  },
+  {
+   "command": "measure",
+   "args": {
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:05:41.249Z",
+   "seconds": 0
+  },
+  {
+   "command": "agree",
+   "args": {
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:05:41.806Z",
+   "seconds": 0
+  },
+  {
+   "command": "compare",
+   "args": {
+    "design": "native-n1000",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:05:42.201Z",
+   "seconds": 1
+  },
+  {
+   "command": "shrink",
+   "args": {
+    "id": "on-g2-s1-0345",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:05:59.241Z",
+   "seconds": 279
+  },
+  {
+   "command": "shrink",
+   "args": {
+    "id": "on-g2-s1-0564",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:10:38.970Z",
+   "seconds": 380
+  },
+  {
+   "command": "shrink",
+   "args": {
+    "id": "on-g2-s1-0949",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:16:58.923Z",
+   "seconds": 208
+  },
+  {
+   "command": "shrink",
+   "args": {
+    "id": "on-g2-s1-0969",
+    "concurrency": "2",
+    "noonsight": "another build"
+   },
+   "commit": "acb4a8d",
+   "at": "2026-11-25T04:20:27.641Z",
+   "seconds": 479
+  }
+ ]
+}
