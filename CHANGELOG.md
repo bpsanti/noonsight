@@ -6,6 +6,12 @@
   Subagent coverage is 100% (2,417 of 2,417) under noonsight, 48.3% (1,082 of 2,242) with a `CLAUDE.md` and 0 of 2,242 with skills.
   The larger sample found three failures of noonsight, F10 to F12, which are open: 4 of 997 sessions break the invariant, and coverage over every request is 99.9% (10,237 of 10,245) (`experiments/delivery/README.md`, "Failures found, and a limit").
 
+## 0.1.2
+
+- The plugin's manifest carries what Anthropic's plugin directory lists: an icon, and the documentation, support and privacy links.
+- The README and `docs/privacy.md` say what noonsight runs, reads, writes and sends.
+- `npm run plugin-folder` writes the plugin as a folder with its compiled code, which the directory needs (`docs/install.md`, "From Anthropic's plugin directory").
+
 ## 0.1.1
 
 - `noonsight watch`: a configuration directory made just after the watcher started, before the system delivered events for the home directory, was never seen; so was any directory whose event was lost.

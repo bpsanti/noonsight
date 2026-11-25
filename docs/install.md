@@ -284,6 +284,20 @@ The plugin is for a login, not for a repository: install it in user scope, and s
 With no configuration file, the first session that starts under the plugin writes it from the preset, as `noonsight install` does, and says so once.
 It never replaces a file, and it never creates the file `NOONSIGHT_CONFIG` names: a missing one is reported, as under any install.
 
+### From Anthropic's plugin directory
+
+A plugin added from Anthropic's directory reaches Claude Code as `noonsight@synced`, through the claude.ai account of the login.
+That kind of plugin leaves no install record, so `noonsight check` and `noonsight install` do not see it, while its hooks deliver as any other copy's do, once per event.
+
+The directory reads committed files and runs no build, and this repository does not commit `dist/`, so a listing follows a branch, `claude-plugin`, that holds the npm package of one release, unpacked.
+To write that folder from a checkout of the release's tag:
+
+```text
+npm ci
+npm run plugin-folder -- <new directory>
+claude plugin validate --strict --profile directory <new directory>
+```
+
 ### Both at once
 
 Use one of them.

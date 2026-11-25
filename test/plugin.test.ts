@@ -72,6 +72,24 @@ test('npm would publish the package, with the files the command line, the hooks,
   for (const bin of Object.values(pkg.bin)) assert.ok(packed.includes(bin), bin);
 });
 
+test('tools/plugin-folder.mjs writes a folder that delivers rules, with no lockfile and no relative README link left', () => {
+  const out = path.join(tempTree({}), 'plugin');
+  const r = spawnSync(process.execPath, [path.join(PACKAGE_ROOT, 'tools', 'plugin-folder.mjs'), out], { cwd: PACKAGE_ROOT, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(path.join(out, 'package-lock.json')), false, 'a lockfile makes Claude Code install packages');
+  for (const f of ['LICENSE', '.claude-plugin/plugin.json', '.claude-plugin/icon.png']) assert.ok(fs.existsSync(path.join(out, f)), f);
+  const links = [...fs.readFileSync(path.join(out, 'README.md'), 'utf8').matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1] as string);
+  assert.deepEqual(links.filter((l) => !/^(#|https:\/\/)/.test(l)), []);
+  assert.ok(links.includes(`https://github.com/bpsanti/noonsight/blob/v${VERSION}/docs/privacy.md`));
+  const hook = spawnSync('/bin/sh', [path.join(out, LAUNCHER), 'hook', 'session-start'], {
+    encoding: 'utf8',
+    input: unattended('folder'),
+    env: { PATH: process.env.PATH, HOME: tempTree({}), NOONSIGHT_NODE: process.execPath, NOONSIGHT_SYSTEM_ROOT: tempTree({}), CLAUDE_CODE_SESSION_ATTENDED: '0' },
+  });
+  assert.match(hook.stdout, /haiku-5-5\/carry-through/);
+  assert.equal(spawnSync(process.execPath, [path.join(PACKAGE_ROOT, 'tools', 'plugin-folder.mjs'), out]).status, 1, 'a folder with files is left alone');
+});
+
 test('messages name the commands a plugin has: its skills, and npx for the rest', () => {
   assert.equal(forPlugin('Run `noonsight check` now, or `noonsight trust` there.'), 'Run `/noonsight:check` now, or `/noonsight:trust` there.');
   assert.equal(forPlugin('`noonsight init`, `noonsight install --account /x`'), '`/noonsight:setup`, `npx noonsight install --account /x`');
