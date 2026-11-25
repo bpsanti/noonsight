@@ -1,0 +1,33 @@
+{
+ "session": "on-g2-s1-0949",
+ "target": {
+  "class": "missing-own",
+  "kind": "main"
+ },
+ "originalSteps": 8,
+ "minimalSteps": 4,
+ "runs": 23,
+ "seconds": 208,
+ "original": "start(fable, scope=build, unattended, noonsight run) > turn > turn > spawn(Explore + general-purpose edits + Explore) > /compact > resume --fork-session > spawn(general-purpose) > /model opus > turn",
+ "minimal": "start(fable, scope=none, unattended) > turn > /compact > resume > turn",
+ "spec": {
+  "model": "fable",
+  "scope": null,
+  "unattended": true,
+  "steps": [
+   {
+    "k": "turn"
+   },
+   {
+    "k": "compact"
+   },
+   {
+    "k": "resume",
+    "model": null
+   },
+   {
+    "k": "turn"
+   }
+  ]
+ }
+}

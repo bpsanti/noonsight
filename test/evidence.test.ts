@@ -27,7 +27,9 @@ const UNVERSIONED_PAGE = 'README.md';
 const DELIVERY_OLD = 'experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f';
 /** The superseded run before that, whose comparisons hold the build before the fixes of F1 and F2 and the native alternatives against `on`. */
 const DELIVERY_BEFORE = 'experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43';
-/** The current delivery run, with generator 2 (experiments/delivery/generate.ts), on Claude Code 2.1.330. */
+/** The current run of the arms on and claudemd, on 1000 sequences, and of skills; on Claude Code 2.1.330. */
+const DELIVERY_N1000 = 'experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55';
+/** The run of 2026-11-23, with generator 2 (experiments/delivery/generate.ts), on Claude Code 2.1.330: the latest of the rules arm, the corpus and the hook times. */
 const DELIVERY = 'experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130';
 const RULES = 'experiments/rules/results';
 
@@ -66,9 +68,18 @@ const ownShare = (m: any): number => {
 };
 const and = (xs: readonly string[]): string => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 
-const summary = (key: string): any => json(`${DELIVERY_OLD}/summary.json`)[key];
-const now = (key: string): any => json(`${DELIVERY}/summary.json`)[key];
+/** The measures of one arm of a delivery run, whose arm is the cell a later run would measure again. */
+function arm(run: string, key: string): any {
+  const m = json(`${run}/summary.json`)[key];
+  assert.ok(m, `${run}: no ${key} in its summary.json`);
+  cellsRead.add(m.arm);
+  return m;
+}
+const summary = (key: string): any => arm(DELIVERY_OLD, key);
+const now = (key: string): any => arm(DELIVERY, key);
 const g2 = (): any => now('on-g2-s1-n300');
+/** An arm of the run on 1000 sequences. */
+const big = (a: string): any => arm(DELIVERY_N1000, `${a}-g2-s1-n1000`);
 /** The paths only generator 2 draws, as measure.ts names them. */
 const G2_PATHS = [
   'a /fork session',
@@ -86,7 +97,16 @@ function failedOfRan(m: any, generated: number, ran: number): string {
   assert.deepEqual([m.sessions, m.harness.ok], [generated, ran], 'the sessions generated and run to the end');
   return of(m.robustness.sessionsFailed, m.harness.ok);
 }
-const comparison = (id: string): any => (json(`${DELIVERY_BEFORE}/comparison.json`).comparisons as any[]).find((c) => c.id === id);
+/** A comparison of the run before, whose `on` level is the cell it reads. */
+function comparison(id: string): any {
+  cellsRead.add('on');
+  return (json(`${DELIVERY_BEFORE}/comparison.json`).comparisons as any[]).find((c) => c.id === id);
+}
+/** A run's corpus and its hook times are cells of their own, apart from its arms. */
+function corpusOf(run: string): any[] {
+  cellsRead.add('corpus');
+  return json(`${run}/corpus.json`) as any[];
+}
 
 /** A cell of a rule effect result: what a later run would have to measure again to supersede it. */
 const cellOf = (r: any): string => [r.task, r.model, r.arm, r.effort].join('/');
@@ -107,6 +127,7 @@ const cost = (rs: readonly any[]): string => usd(mean(rs.map((r) => r.cost_usd))
 /** The arms an entry that compares them reads, in the order it gives them. */
 const ARMS = ['on-g2-s1-n300', 'claudemd-g2-s1-n60', 'rules-g2-s1-n60'];
 function hookTime(file: string): string {
+  cellsRead.add('hooktime');
   const medians = Object.values(json(file).hooks as Record<string, any>).map((h) => h.cpu.median as number);
   return `${Math.min(...medians)} to ${Math.max(...medians)} ms`;
 }
@@ -119,7 +140,7 @@ const COMPUTE: Record<string, () => string> = {
   D2: () => pctOf(summary('on-s1-n300').coverage.covered, summary('on-s1-n300').coverage.due),
   D3: () => pctOf(summary('on-s1-n300').coverage.subagents.covered, summary('on-s1-n300').coverage.subagents.due),
   D4: () => {
-    const earlier = json('experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465/summary.json')['on-s1-n300'];
+    const earlier = arm('experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465', 'on-s1-n300');
     assert.deepEqual([earlier.sessions, earlier.harness], [300, { ok: 296, 'step-timeout': 4 }], 'D4: the earlier run\'s sessions generated and run');
     return of(comparison('P1').a, comparison('P1').pairs.sessions);
   },
@@ -139,7 +160,7 @@ const COMPUTE: Record<string, () => string> = {
   D14: () => and(['on-s1-n300', 'claudemd-s1-n60', 'rules-s1-n60'].map((k) => n(summary(k).robustness.requestsWithViolation['foreign-unretired']))),
   D15: () => hookTime(`${DELIVERY_OLD}/hooktime.json`),
   D16: () => {
-    const corpus = json(`${DELIVERY_OLD}/corpus.json`) as any[];
+    const corpus = corpusOf(DELIVERY_OLD);
     return of(corpus.filter((e) => e.outcome === 'as-expected').length, corpus.length);
   },
   D17: () => {
@@ -159,11 +180,11 @@ const COMPUTE: Record<string, () => string> = {
     return pctOf(starts.reduce((n, x) => n + x.covered, 0), starts.reduce((n, x) => n + x.due, 0));
   },
   D23: () => {
-    const corpus = json(`${DELIVERY}/corpus.json`) as any[];
+    const corpus = corpusOf(DELIVERY);
     return of(corpus.filter((e) => e.outcome === 'as-expected').length, corpus.length);
   },
   D24: () => {
-    const corpus = json(`${DELIVERY}/before-fix/corpus.json`) as any[];
+    const corpus = corpusOf(`${DELIVERY}/before-fix`);
     return of(corpus.filter((e) => e.outcome === 'regressed').length, corpus.length);
   },
   D25: () => pctOf(now('claudemd-g2-s1-n60').coverage.covered, now('claudemd-g2-s1-n60').coverage.due),
@@ -182,6 +203,34 @@ const COMPUTE: Record<string, () => string> = {
   D34: () => {
     const m = now('claudemd-g2-s1-n60');
     for (const [p, x] of Object.entries(m.byPath as Record<string, any>)) if (p !== 'subagent') assert.equal(x.coverage, 1, `D34: ${p}`);
+    return pctOf(m.coverage.covered - m.coverage.subagents.covered, m.coverage.due - m.coverage.subagents.due);
+  },
+  D35: () => failedOfRan(big('on'), 1000, 997),
+  D36: () => pctOf(big('on').coverage.covered, big('on').coverage.due),
+  D37: () => pctOf(big('on').coverage.subagents.covered, big('on').coverage.subagents.due),
+  D38: () => {
+    const paths = G2_PATHS.map((p) => big('on').byPath[p]);
+    assert.ok(paths.every((p) => p !== undefined), 'D38: a path generator 2 added has no requests');
+    return pctOf(paths.reduce((n, p) => n + Math.round(p.coverage * p.due), 0), paths.reduce((n, p) => n + p.due, 0));
+  },
+  D39: () => {
+    const starts = Object.entries(big('on').robustness.byStart as Record<string, any>).filter(([k]) => k !== 'claude').map(([, v]) => v);
+    return pctOf(starts.reduce((n, x) => n + x.covered, 0), starts.reduce((n, x) => n + x.due, 0));
+  },
+  D40: () => pctOf(big('claudemd').coverage.covered, big('claudemd').coverage.due),
+  D41: () => pctOf(big('skills').coverage.covered, big('skills').coverage.due),
+  D42: () => pctOf(big('claudemd').coverage.subagents.covered, big('claudemd').coverage.subagents.due),
+  D43: () => pctOf(now('rules-g2-s1-n60').coverage.subagents.covered, now('rules-g2-s1-n60').coverage.subagents.due),
+  D44: () => of(big('skills').coverage.subagents.covered, big('skills').coverage.subagents.due),
+  D45: () => and(['on', 'claudemd'].map((k) => pct(ownShare(big(k))))),
+  D46: () => pct(ownShare(now('rules-g2-s1-n60'))),
+  D47: () => and(['on', 'claudemd'].map((k) => n(big(k).cost.addedCharsPerAgentRequest))),
+  D48: () => n(now('rules-g2-s1-n60').cost.addedCharsPerAgentRequest),
+  D49: () => and(['on', 'claudemd'].map((k) => n(big(k).robustness.requestsWithViolation['foreign-unretired']))),
+  D50: () => n(now('rules-g2-s1-n60').robustness.requestsWithViolation['foreign-unretired']),
+  D51: () => {
+    const m = big('claudemd');
+    for (const [p, x] of Object.entries(m.byPath as Record<string, any>)) if (p !== 'subagent') assert.equal(x.coverage, 1, `D51: ${p}`);
     return pctOf(m.coverage.covered - m.coverage.subagents.covered, m.coverage.due - m.coverage.subagents.due);
   },
   B1: () => {
@@ -250,7 +299,7 @@ const COMPUTE: Record<string, () => string> = {
 const ALSO: Record<string, () => (number | string)[]> = {
   D1: () => [summary('on-s1-n300').sessions],
   D4: () => {
-    const earlier = json('experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465/summary.json')['on-s1-n300'];
+    const earlier = arm('experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465', 'on-s1-n300');
     return [earlier.sessions, earlier.harness['step-timeout']];
   },
   D5: () => [comparison('P3').pairs.sessions],
@@ -264,6 +313,16 @@ const ALSO: Record<string, () => (number | string)[]> = {
   D29: () => [now('skills-g2-s1-n60').harness.ok],
   D33: () => hookTimeSetup(`${DELIVERY}/hooktime.json`),
   D34: () => [now('claudemd-g2-s1-n60').harness.ok],
+  D35: () => [big('on').sessions, big('on').sessions - big('on').harness.ok],
+  D43: () => [now('rules-g2-s1-n60').harness.ok],
+  D46: () => [now('rules-g2-s1-n60').harness.ok],
+  D48: () => [now('rules-g2-s1-n60').harness.ok],
+  D50: () => [now('rules-g2-s1-n60').harness.ok],
+  D40: () => [big('claudemd').harness.ok],
+  D41: () => [big('skills').harness.ok],
+  D42: () => [big('claudemd').harness.ok],
+  D44: () => [big('skills').harness.ok],
+  D51: () => [big('claudemd').harness.ok],
   R12: () => [...new Set(Object.values(counts(cell('2026-11-20-long', {}, 'pilot/runs.jsonl'))))],
   R10: () => [(fs.readFileSync(path.join(PACKAGE_ROOT, 'experiments/rules/fixtures/pantry-stock/TICKETS.md'), 'utf8').split('\n## Done')[0]?.match(/^### PAN-\d+/gm) ?? []).length],
 };
@@ -303,7 +362,7 @@ function committedRuns(): Run[] {
       const run = load(`${folder}/run.json`);
       assert.equal(v, `claude-code-${run.claudeCode}`, `${folder}: its run.json names another Claude Code version`);
       const arms = exists(`${folder}/summary.json`) ? Object.values(load(`${folder}/summary.json`) as Record<string, any>).filter((m) => !m.plant).map((m) => m.arm as string) : [];
-      out.push({ folder, family: 'delivery', date: d.slice(0, 10), version: run.claudeCode, started: run.commands[0].at, cells: new Set(['corpus', ...arms]) });
+      out.push({ folder, family: 'delivery', date: d.slice(0, 10), version: run.claudeCode, started: run.commands[0].at, cells: new Set([...(['corpus', 'hooktime'] as const).filter((c) => exists(`${folder}/${c}.json`)), ...arms]) });
     }
   for (const family of ['rules', 'benchmark'])
     for (const d of under(`experiments/${family}/results`)) {
@@ -399,7 +458,7 @@ for (const e of ENTRIES) {
     const { files, cells } = compute(e.id);
     const later = files.flatMap((f) => {
       const run = runOf(f);
-      return (run.family === 'rules' ? cells : [...run.cells]).flatMap((c) => laterWith(run, c));
+      return (run.family === 'benchmark' ? [...run.cells] : cells).flatMap((c) => laterWith(run, c));
     });
     const by = supersededBy(e);
     const at = MAP.indexOf(`\n### ${e.id}\n`);

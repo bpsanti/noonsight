@@ -1,6 +1,6 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-21, after the fixes of F3 and F4
 
-> **Superseded.** The current run is [2026-11-23 on Claude Code 2.1.330](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md); quote its numbers, not the ones here, which are history.
+> **Superseded.** The current runs are [2026-11-24](../../claude-code-2.1.330/2026-11-24-9ee1e55/README.md) and, for what it did not run, [2026-11-23](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md), both on Claude Code 2.1.330; quote its numbers, not the ones here, which are history.
 
 The whole delivery benchmark ([experiments/delivery](../../../README.md)) on noonsight with the fixes of F3 and F4 (#53), measured against [the run that found them](../2026-11-20-4e18c43/README.md).
 The design `after-f3-f4` in [plan.json](../../../plan.json) fixed the comparisons before the run, and the delivery README lists them ("The design `after-f3-f4`").

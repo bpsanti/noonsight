@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The delivery benchmark ran noonsight, a `CLAUDE.md` and a skill per model on the same 1,000 sequences (`experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/`, Claude Code 2.1.330), and `docs/evidence.md` gains D35 to D51, which replace the numbers over 300 and 60 sequences.
+  Subagent coverage is 100% (2,417 of 2,417) under noonsight, 48.3% (1,082 of 2,242) with a `CLAUDE.md` and 0 of 2,242 with skills.
+  The larger sample found three failures of noonsight, F10 to F12, which are open: 4 of 997 sessions break the invariant, and coverage over every request is 99.9% (10,237 of 10,245) (`experiments/delivery/README.md`, "Failures found, and a limit").
+
 ## 0.1.1
 
 - `noonsight watch`: a configuration directory made just after the watcher started, before the system delivered events for the home directory, was never seen; so was any directory whose event was lost.
@@ -66,7 +72,7 @@ The first published version.
 - The delivery benchmark (`experiments/delivery`) measures the paths it left out, with a second generator, the default: sessions started through `noonsight run` and in a project with a trusted configuration (`experiments/delivery/project/`), forks with `--fork-session`, `/branch` and `/fork`, `/resume` typed in the session, plan mode, and subagents that edit a file.
   `--generator 1` draws the earlier runs' sequences again, under the names they had; the corpus has an entry for each new path and the reproductions of F5 to F9; a third self-check plant takes away the fork fix; and `--noonsight <dir>` runs the sessions with another build, such as one from before a fix.
   The driver waits for the mode Claude Code's footer names in plan mode, records a `/fork` Claude Code refuses, as it does in a session `noonsight run` started with rules, and stops the daemon a `/fork` leaves behind.
-  The run on Claude Code 2.1.330 after the fixes (`experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/`): 0 of the 299 sessions under noonsight that ran to the end break the invariant (300 generated; `s1-0123` stopped on a turn that got no answer and is not measured), coverage is 100% (3,090 of 3,090 requests, 763 of 763 for subagents), 453 of 453 on the new paths, and all 33 corpus entries have the outcome they record; on `main` before the fixes, all 8 reproductions of F5 to F9 fail.
+  The run on Claude Code 2.1.330 after the fixes (`experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/`): 0 of the 299 sessions under noonsight that ran to the end break the invariant (300 generated; `s1-0123` stopped on a turn that got no answer and is not measured), coverage is 100% (3,090 of 3,090 requests, 763 of 763 for subagents), 453 of 453 on the new paths, and all 33 corpus entries have the outcome they record (the session and coverage numbers are superseded by the run of 2026-11-24); on `main` before the fixes, all 8 reproductions of F5 to F9 fail.
   The README's "Not measured" now names agent teams, routing and the classifier only; `docs/evidence.md` gains D18 to D24, and `docs/verification/claude-code.md` records the Claude Code 2.1.330 behaviors the fixes rely on.
 
 - The agent call hook now reads subagent definitions everywhere Claude Code reads them, in Claude Code's order: managed definitions in `.claude/agents/` of the managed settings directory, `--agents` on the `claude` command line (inline JSON, or a JSON file in `claude -p`), the project's `.claude/agents/` and those of `--add-dir` directories, the user's, and plugins given with `--plugin-dir`, `--plugin-dir-no-mcp` or `CLAUDE_CODE_PLUGIN_DIRS` or installed from a marketplace and enabled for the project; `--setting-sources` leaves out the folders it does not list.
