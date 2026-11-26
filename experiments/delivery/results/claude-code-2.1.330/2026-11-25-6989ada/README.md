@@ -13,6 +13,8 @@ The run started at night and was not interrupted.
 
 ## The result
 
+The first row is the run before, on the build before the fixes, superseded by the second:
+
 | `on` | Sessions measured | Coverage | Subagents | Own share | Characters per request | Requests with another model's rule and no note | Sessions that broke the invariant |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2026-11-24, build `c5b9130` | 997 of 1,000 | 99.9% (10,237 of 10,245) | 100% (2,417 of 2,417) | 78.3% | 1,372 | 7 | 4 |

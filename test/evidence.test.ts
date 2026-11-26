@@ -605,7 +605,7 @@ test('README.md: each line that states a rule effect names its rules, whether al
   assert.deepEqual(problems, []);
 });
 
-/** The tracked Markdown files outside the folder whose own tests fix what it says. */
+/** The tracked Markdown files outside the folder whose own tests fix what it says. A run's summary.md and comparison.md are rendered from its raw files, and a comparison quotes the run it compares against by design. */
 const MARKDOWN = spawnSync('git', ['-C', PACKAGE_ROOT, 'ls-files', '-z', '*.md'], { encoding: 'utf8' })
   .stdout.split('\0')
   .filter((f) => f && !f.startsWith('experiments/adoption/') && exists(f));
@@ -637,7 +637,7 @@ test('no page states a superseded value, or links to a superseded run, without s
   const stale = STALE.map((x) => ({ x, plain: /^[\d,]+$/.test(x), re: new RegExp(`(?<![\\d.,])${x.replace(/[.$]/g, '\\$&')}(?![\\d])`) }));
   const gone = RUNS.filter((r) => statusOf(r) === 'superseded').map((r) => path.basename(r.folder));
   const problems: string[] = [];
-  for (const file of MARKDOWN.filter((f) => !inSupersededRun(f) && !(inAnyRun(f) && path.basename(f) === 'summary.md'))) {
+  for (const file of MARKDOWN.filter((f) => !inSupersededRun(f) && !(inAnyRun(f) && ['summary.md', 'comparison.md'].includes(path.basename(f))))) {
     const text = fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8');
     const lines = text.split('\n');
     const end = file === 'docs/evidence.md' ? text.slice(0, SUPERSEDED_SECTION).split('\n').length : lines.length;
