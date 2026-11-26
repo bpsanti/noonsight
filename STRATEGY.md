@@ -56,7 +56,7 @@ noonsight may also offer an option, off by default and for Explore and Plan too,
 ### Local and private
 
 noonsight reads only local files, opens no connection of its own and has no telemetry.
-Only what the user turns on or starts sends anything: the classifier, off by default, and measuring, run on the user's command, both through the user's own Claude Code login.
+Only what the user turns on or starts sends anything: the classifier, off by default, and measuring, once built, run on the user's command, both through the user's own Claude Code login.
 The decision log records what was delivered and why, never prompts or responses.
 
 ### Scope
