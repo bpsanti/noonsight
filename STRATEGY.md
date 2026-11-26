@@ -48,10 +48,10 @@ Nothing Claude Code already sends is delivered again.
 
 ### The user's rules, the user's call
 
-noonsight helps the user write and keep rules that work: it can point to what a model's guide advises against, and it can measure what a rule changes on the user's own tasks, with the cost shown before anything is spent.
-Measuring runs only when the user starts it with a command, and it keeps a log of every run: what ran, what it cost and how each run was scored, a model's judgement included.
-Advice on a rule's wording is a warning given once; noonsight never refuses, rewrites or drops a rule the user chose to keep.
-As an option, off by default and for Explore and Plan too, noonsight can deliver a `CLAUDE.md` to the subagents Claude Code leaves without it, while `CLAUDE.md` stays the place for rules every model shares.
+noonsight may help the user write and keep rules that work: it may point to what a model's guide advises against, and it may measure what a rule changes on the user's own tasks, with the cost shown before anything is spent.
+When built, measuring runs only when the user starts it with a command, and it keeps a log of every run: what ran, what it cost and how each run was scored, a model's judgement included.
+When built, advice on a rule's wording is a warning given once; noonsight never refuses, rewrites or drops a rule the user chose to keep.
+noonsight may also offer an option, off by default and for Explore and Plan too, to deliver a `CLAUDE.md` to the subagents Claude Code leaves without it, while `CLAUDE.md` stays the place for rules every model shares.
 
 ### Local and private
 
