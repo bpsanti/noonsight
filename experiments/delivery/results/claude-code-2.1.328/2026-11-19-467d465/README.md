@@ -1,6 +1,6 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-19
 
-> **Superseded.** The current runs are [2026-11-24](../../claude-code-2.1.330/2026-11-24-9ee1e55/README.md) and, for what it did not run, [2026-11-23](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md), both on Claude Code 2.1.330; quote its numbers, not the ones here, which are history.
+> **Superseded.** The current runs are [2026-11-25](../../claude-code-2.1.330/2026-11-25-6989ada/README.md) for `on`, [2026-11-24](../../claude-code-2.1.330/2026-11-24-9ee1e55/README.md) for `claudemd` and `skills`, and, for what neither ran, [2026-11-23](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md), all on Claude Code 2.1.330; quote its numbers, not the ones here, which are history.
 
 The first full run of the delivery benchmark ([experiments/delivery](../../../README.md)), on Claude Code 2.1.328 and the `claude` preset 1.3.1, on a laptop with 8 cores (macOS, arm64) shared with other heavy work the whole time.
 `npm run delivery -- all --concurrency 6` ran at commit `467d465` and took 85 minutes.

@@ -20,7 +20,8 @@ No run of this table, and so no entry, covers a version that is not in it; `docs
 
 | Run | Date | Claude Code | Status | Entries |
 | --- | --- | --- | --- | --- |
-| [delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55](../experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md) | 2026-11-24 | 2.1.330 | current | D35 to D42, D44, D45, D47, D49, D51 |
+| [delivery/results/claude-code-2.1.330/2026-11-25-6989ada](../experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/README.md) | 2026-11-25 | 2.1.330 | current | D52 to D57, D59, D61 |
+| [delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55](../experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md) | 2026-11-24 | 2.1.330 | superseded in part | D35 to D42, D44, D45, D47, D49, D51, D58, D60, D62 |
 | [delivery/results/claude-code-2.1.330/2026-11-23-c5b9130](../experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/README.md) | 2026-11-23 | 2.1.330 | superseded in part | D18 to D34, D43, D46, D48, D50 |
 | [delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f](../experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/README.md) | 2026-11-21 | 2.1.328 | superseded | D1 to D3, D6 to D8, D10 to D17 |
 | [delivery/results/claude-code-2.1.328/2026-11-20-4e18c43](../experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/README.md) | 2026-11-20 | 2.1.328 | superseded | D4, D5, D9 |
@@ -43,9 +44,10 @@ The rules run of 2026-11-18 committed no raw file, so nothing in it is an entry.
 The delivery benchmark ([experiments/delivery](../experiments/delivery/README.md)) runs real interactive Claude Code sessions against a local stand-in for the Messages API: the sessions are real, and only the API is not, so no request reaches a model.
 A request "has its rules" when it holds every rule noonsight's resolver gives its model, scope, place and revealed triggers, and no note retires them; a rule of another model may be present only after a note that retires it.
 
-These entries come from two runs on Claude Code 2.1.330, noonsight at commit `c5b9130` and the preset `claude` 1.3.1, with the generator that also starts sessions through `noonsight run` and in a project with a trusted configuration, and draws forks, `/resume` in the session, plan mode and subagents that edit a file.
-Its build includes the fixes of F1 to F9 ([experiments/delivery/README.md](../experiments/delivery/README.md#failures-found-and-a-limit)).
-The run of 2026-11-24 gave noonsight, a `CLAUDE.md` and a skill per model the same sequences; the corpus (D23 and D24), the hook times (D33) and `.claude/rules` (D26, D43, D46, D48 and D50), which it did not run, come from the run of 2026-11-23, where the native alternatives ran the first sequences of the same seed only.
+These entries come from three runs on Claude Code 2.1.330 with the preset `claude` 1.3.1, with the generator that also starts sessions through `noonsight run` and in a project with a trusted configuration, and draws forks, `/resume` in the session, plan mode and subagents that edit a file.
+The run of 2026-11-24 gave noonsight, a `CLAUDE.md` and a skill per model the same sequences, with noonsight at commit `c5b9130`, which includes the fixes of F1 to F9 ([experiments/delivery/README.md](../experiments/delivery/README.md#failures-found-and-a-limit)); the `CLAUDE.md` and skill entries come from it.
+The run of 2026-11-25 ran noonsight again on those sequences, at commit `eea03f7`, which also includes the fixes of F10 to F12; the noonsight entries (D52 to D57, D59 and D61) come from it.
+The corpus (D23 and D24), the hook times (D33) and `.claude/rules` (D26, D43, D46, D48 and D50), which neither ran, come from the run of 2026-11-23, at commit `c5b9130`, where the native alternatives ran the first sequences of the same seed only.
 Under the native alternatives, a session drawn to start through `noonsight run` or in a project starts through `claude` without noonsight's configuration, so fewer of their requests have rules due than under noonsight.
 
 ### D23
@@ -82,51 +84,6 @@ Under the native alternatives, a session drawn to start through `noonsight run` 
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/hooktime.json`.
 - **Measurement:** the lowest and highest `cpu.median` among `hooks`, 40 runs of each hook with recorded inputs; a Node.js process that does nothing takes `baseline.cpu.median`, 20 ms, of it.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** current.
-
-### D35
-
-- **Claim:** sessions under noonsight that broke the invariant, of those that ran to the end: 997 of the 1,000 generated. The other 3 stopped on a step the driver could not run (`step-timeout`, `fork-timeout`, `wrong-mode`).
-- **Value:** `4 of 997`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
-- **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
-- **Status:** current.
-
-### D36
-
-- **Claim:** coverage under noonsight, over every request of the sessions that ran to the end: requests with rules due that held all of them.
-- **Value:** `99.9% (10,237 of 10,245)`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
-- **Measurement:** `coverage.covered` of `coverage.due`.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
-- **Status:** current.
-
-### D37
-
-- **Claim:** coverage of subagent requests under noonsight.
-- **Value:** `100% (2,417 of 2,417)`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
-- **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
-- **Status:** current.
-
-### D38
-
-- **Claim:** coverage under noonsight on the requests of the paths generator 2 added: a `/fork` session, after `/fork`, `/branch`, a forking resume or `/resume` in the session, in and after plan mode, and after starting subagents that edit a file, each counted by the last step before the request. It is a part of the requests D36 counts, not all of them.
-- **Value:** `100% (1,570 of 1,570)`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
-- **Measurement:** the sum of `due` over those paths of `byPath`, each covered at its `coverage`.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
-- **Status:** current.
-
-### D39
-
-- **Claim:** coverage under noonsight in the sessions started through `noonsight run`, in a project with a trusted configuration, or both.
-- **Value:** `99.9% (4,420 of 4,425)`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
-- **Measurement:** `covered` of `due`, summed over `robustness.byStart` but `claude`.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
 - **Status:** current.
 
 ### D40
@@ -174,15 +131,6 @@ Under the native alternatives, a session drawn to start through `noonsight run` 
 - **Date:** 2026-11-24. **Claude Code:** 2.1.330.
 - **Status:** current.
 
-### D45
-
-- **Claim:** the share of the rule text in a request that was written for the request's model, under noonsight and a `CLAUDE.md`.
-- **Value:** `78.3% and 32.3%`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, keys `on-g2-s1-n1000` and `claudemd-g2-s1-n1000`.
-- **Measurement:** of `precision.parts`, the three `own` parts over all but `overhead`, in that order; `precision.ownShare` is the same share already rounded to four decimals.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
-- **Status:** current.
-
 ### D46
 
 - **Claim:** the same share with one `.claude/rules` file per model, on the first 60 sequences.
@@ -192,15 +140,6 @@ Under the native alternatives, a session drawn to start through `noonsight run` 
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
 - **Status:** current.
 
-### D47
-
-- **Claim:** characters added to each request (rules, envelopes and notes), under noonsight and a `CLAUDE.md`.
-- **Value:** `1,372 and 4,509`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, keys `on-g2-s1-n1000` and `claudemd-g2-s1-n1000`.
-- **Measurement:** `cost.addedCharsPerAgentRequest` of each, in that order.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
-- **Status:** current.
-
 ### D48
 
 - **Claim:** the same characters with one `.claude/rules` file per model, on the first 60 sequences.
@@ -208,15 +147,6 @@ Under the native alternatives, a session drawn to start through `noonsight run` 
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, key `rules-g2-s1-n60`.
 - **Measurement:** `cost.addedCharsPerAgentRequest`.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** current.
-
-### D49
-
-- **Claim:** requests holding another model's rule with no note that retires it, under noonsight and a `CLAUDE.md`.
-- **Value:** `7 and 10,897`
-- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, keys `on-g2-s1-n1000` and `claudemd-g2-s1-n1000`.
-- **Measurement:** `robustness.requestsWithViolation.foreign-unretired` of each, in that order.
-- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
 - **Status:** current.
 
 ### D50
@@ -234,6 +164,105 @@ Under the native alternatives, a session drawn to start through `noonsight run` 
 - **Value:** `100% (7,574 of 7,574)`
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `claudemd-g2-s1-n1000`.
 - **Measurement:** `coverage.covered` minus `coverage.subagents.covered`, of `coverage.due` minus `coverage.subagents.due`; `byPath` gives full coverage on every path but `subagent`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D52
+
+- **Claim:** sessions under noonsight that broke the invariant, of those that ran to the end: all 1,000 generated ran to the end.
+- **Value:** `0 of 1,000`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D53
+
+- **Claim:** coverage under noonsight, over every request of the sessions that ran to the end: requests with rules due that held all of them.
+- **Value:** `100% (10,329 of 10,329)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `coverage.covered` of `coverage.due`.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D54
+
+- **Claim:** coverage of subagent requests under noonsight.
+- **Value:** `100% (2,430 of 2,430)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D55
+
+- **Claim:** coverage under noonsight on the requests of the paths generator 2 added: a `/fork` session, after `/fork`, `/branch`, a forking resume or `/resume` in the session, in and after plan mode, and after starting subagents that edit a file, each counted by the last step before the request. It is a part of the requests D53 counts, not all of them.
+- **Value:** `100% (1,583 of 1,583)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** the sum of `due` over those paths of `byPath`, each covered at its `coverage`.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D56
+
+- **Claim:** coverage under noonsight in the sessions started through `noonsight run`, in a project with a trusted configuration, or both.
+- **Value:** `100% (4,467 of 4,467)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `covered` of `due`, summed over `robustness.byStart` but `claude`.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D57
+
+- **Claim:** the share of the rule text in a request that was written for the request's model, under noonsight.
+- **Value:** `78.4%`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** of `precision.parts`, the three `own` parts over all but `overhead`; `precision.ownShare` is the same share already rounded to four decimals.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D58
+
+- **Claim:** the same share with every model's rules in a user `CLAUDE.md`, on the 1,000 sequences.
+- **Value:** `32.3%`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `claudemd-g2-s1-n1000`.
+- **Measurement:** of `precision.parts`, the three `own` parts over all but `overhead`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D59
+
+- **Claim:** characters added to each request (rules, envelopes and notes), under noonsight.
+- **Value:** `1,370`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `cost.addedCharsPerAgentRequest`.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D60
+
+- **Claim:** the same characters with every model's rules in a user `CLAUDE.md`, on the 1,000 sequences.
+- **Value:** `4,509`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `claudemd-g2-s1-n1000`.
+- **Measurement:** `cost.addedCharsPerAgentRequest`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D61
+
+- **Claim:** requests holding another model's rule with no note that retires it, under noonsight.
+- **Value:** `0`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `robustness.requestsWithViolation.foreign-unretired`.
+- **Date:** 2026-11-25. **Claude Code:** 2.1.330.
+- **Status:** current.
+
+### D62
+
+- **Claim:** the same requests with every model's rules in a user `CLAUDE.md`, on the 1,000 sequences.
+- **Value:** `10,897`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `claudemd-g2-s1-n1000`.
+- **Measurement:** `robustness.requestsWithViolation.foreign-unretired`.
 - **Date:** 2026-11-24. **Claude Code:** 2.1.330.
 - **Status:** current.
 
@@ -421,8 +450,80 @@ The pilot ([experiments/benchmark](../experiments/benchmark/README.md)) ran publ
 ## Superseded results
 
 None of these is a current value: each names the entry that replaced it.
-The delivery entries ran on Claude Code 2.1.328, without the paths the current run adds, on builds before the fixes of F5 to F9, so their sequences are not the current run's.
+D35 to D39, D45, D47 and D49 measured noonsight's build before the fixes of F10 to F12, on the sequences of the current run; the other delivery entries ran on fewer sequences, and those on Claude Code 2.1.328 also without the paths the current run adds, on builds before the fixes of F5 to F9.
 R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
+
+### D35
+
+- **Claim:** sessions under noonsight that broke the invariant, of those that ran to the end: 997 of the 1,000 generated. The other 3 stopped on a step the driver could not run (`step-timeout`, `fork-timeout`, `wrong-mode`).
+- **Value:** `4 of 997`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D52](#d52).
+
+### D36
+
+- **Claim:** coverage under noonsight, over every request of the sessions that ran to the end: requests with rules due that held all of them.
+- **Value:** `99.9% (10,237 of 10,245)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `coverage.covered` of `coverage.due`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D53](#d53).
+
+### D37
+
+- **Claim:** coverage of subagent requests under noonsight.
+- **Value:** `100% (2,417 of 2,417)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D54](#d54).
+
+### D38
+
+- **Claim:** coverage under noonsight on the requests of the paths generator 2 added: a `/fork` session, after `/fork`, `/branch`, a forking resume or `/resume` in the session, in and after plan mode, and after starting subagents that edit a file, each counted by the last step before the request. It is a part of the requests D36 counts, not all of them.
+- **Value:** `100% (1,570 of 1,570)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** the sum of `due` over those paths of `byPath`, each covered at its `coverage`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D55](#d55).
+
+### D39
+
+- **Claim:** coverage under noonsight in the sessions started through `noonsight run`, in a project with a trusted configuration, or both.
+- **Value:** `99.9% (4,420 of 4,425)`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, key `on-g2-s1-n1000`.
+- **Measurement:** `covered` of `due`, summed over `robustness.byStart` but `claude`.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D56](#d56).
+
+### D45
+
+- **Claim:** the share of the rule text in a request that was written for the request's model, under noonsight and a `CLAUDE.md`.
+- **Value:** `78.3% and 32.3%`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, keys `on-g2-s1-n1000` and `claudemd-g2-s1-n1000`.
+- **Measurement:** of `precision.parts`, the three `own` parts over all but `overhead`, in that order; `precision.ownShare` is the same share already rounded to four decimals.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D57](#d57).
+
+### D47
+
+- **Claim:** characters added to each request (rules, envelopes and notes), under noonsight and a `CLAUDE.md`.
+- **Value:** `1,372 and 4,509`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, keys `on-g2-s1-n1000` and `claudemd-g2-s1-n1000`.
+- **Measurement:** `cost.addedCharsPerAgentRequest` of each, in that order.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D59](#d59).
+
+### D49
+
+- **Claim:** requests holding another model's rule with no note that retires it, under noonsight and a `CLAUDE.md`.
+- **Value:** `7 and 10,897`
+- **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/summary.json`, keys `on-g2-s1-n1000` and `claudemd-g2-s1-n1000`.
+- **Measurement:** `robustness.requestsWithViolation.foreign-unretired` of each, in that order.
+- **Date:** 2026-11-24. **Claude Code:** 2.1.330.
+- **Status:** superseded by [D61](#d61).
 
 ### D18
 
@@ -431,7 +532,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, key `on-g2-s1-n300`.
 - **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D35](#d35).
+- **Status:** superseded by [D52](#d52).
 
 ### D19
 
@@ -440,7 +541,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, key `on-g2-s1-n300`.
 - **Measurement:** `coverage.covered` of `coverage.due`.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D36](#d36).
+- **Status:** superseded by [D53](#d53).
 
 ### D20
 
@@ -449,7 +550,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, key `on-g2-s1-n300`.
 - **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D37](#d37).
+- **Status:** superseded by [D54](#d54).
 
 ### D21
 
@@ -458,7 +559,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, key `on-g2-s1-n300`.
 - **Measurement:** the sum of `due` over those paths of `byPath`, each covered at its `coverage`.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D38](#d38).
+- **Status:** superseded by [D55](#d55).
 
 ### D22
 
@@ -467,7 +568,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, key `on-g2-s1-n300`.
 - **Measurement:** `covered` of `due`, summed over `robustness.byStart` but `claude`.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D39](#d39).
+- **Status:** superseded by [D56](#d56).
 
 ### D25
 
@@ -512,7 +613,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, keys `on-g2-s1-n300`, `claudemd-g2-s1-n60` and `rules-g2-s1-n60`.
 - **Measurement:** of `precision.parts`, the three `own` parts over all but `overhead`, in that order; `precision.ownShare` is the same share already rounded to four decimals.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D45](#d45).
+- **Status:** superseded by [D57](#d57).
 
 ### D31
 
@@ -521,7 +622,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, keys `on-g2-s1-n300`, `claudemd-g2-s1-n60` and `rules-g2-s1-n60`.
 - **Measurement:** `cost.addedCharsPerAgentRequest` of each, in that order.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D47](#d47).
+- **Status:** superseded by [D59](#d59).
 
 ### D32
 
@@ -530,7 +631,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130/summary.json`, keys `on-g2-s1-n300`, `claudemd-g2-s1-n60` and `rules-g2-s1-n60`.
 - **Measurement:** `robustness.requestsWithViolation.foreign-unretired` of each, in that order.
 - **Date:** 2026-11-23. **Claude Code:** 2.1.330.
-- **Status:** superseded by [D49](#d49).
+- **Status:** superseded by [D61](#d61).
 
 ### D34
 
@@ -548,7 +649,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/summary.json`, key `on-s1-n300`.
 - **Measurement:** `robustness.sessionsFailed` of `harness.ok`, the sessions that ran to the end; `sessions` is the sessions generated.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D35](#d35).
+- **Status:** superseded by [D52](#d52).
 
 ### D2
 
@@ -557,7 +658,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/summary.json`, key `on-s1-n300`.
 - **Measurement:** `coverage.covered` of `coverage.due`.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D36](#d36).
+- **Status:** superseded by [D53](#d53).
 
 ### D3
 
@@ -566,7 +667,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/summary.json`, key `on-s1-n300`.
 - **Measurement:** `coverage.subagents.covered` of `coverage.subagents.due`.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D37](#d37).
+- **Status:** superseded by [D54](#d54).
 
 ### D4
 
@@ -575,7 +676,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/comparison.json`, comparison `P1`, and `experiments/delivery/results/claude-code-2.1.328/2026-11-19-467d465/summary.json`, key `on-s1-n300`.
 - **Measurement:** `a` of `pairs.sessions`.
 - **Date:** 2026-11-19 (the earlier run, `2026-11-19-467d465`), compared on 2026-11-20. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D35](#d35).
+- **Status:** superseded by [D52](#d52).
 
 ### D5
 
@@ -584,7 +685,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/comparison.json`, comparison `P3`.
 - **Measurement:** `b`, the coverage of the first 60 `on` sessions.
 - **Date:** 2026-11-20. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D36](#d36).
+- **Status:** superseded by [D53](#d53).
 
 ### D6
 
@@ -620,7 +721,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43/comparison.json`, comparison `P6`.
 - **Measurement:** `b`, the subagent coverage of the first 60 `on` sessions.
 - **Date:** 2026-11-20. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D37](#d37).
+- **Status:** superseded by [D54](#d54).
 
 ### D10
 
@@ -647,7 +748,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/summary.json`, keys `on-s1-n300`, `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `precision.ownShare` of each, in that order.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D45](#d45).
+- **Status:** superseded by [D57](#d57).
 
 ### D13
 
@@ -656,7 +757,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/summary.json`, keys `on-s1-n300`, `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `cost.addedCharsPerAgentRequest` of each, in that order.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D47](#d47).
+- **Status:** superseded by [D59](#d59).
 
 ### D14
 
@@ -665,7 +766,7 @@ R1 and R2 ran on Claude Code 2.1.328 and were measured again on 2.1.329.
 - **Source:** `experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f/summary.json`, keys `on-s1-n300`, `claudemd-s1-n60` and `rules-s1-n60`.
 - **Measurement:** `robustness.requestsWithViolation.foreign-unretired` of each, in that order.
 - **Date:** 2026-11-21. **Claude Code:** 2.1.328.
-- **Status:** superseded by [D49](#d49).
+- **Status:** superseded by [D61](#d61).
 
 ### D15
 

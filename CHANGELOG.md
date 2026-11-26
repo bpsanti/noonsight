@@ -9,8 +9,10 @@
     When nothing names the resumed model either, no rules are delivered and the person is warned.
 
 - The delivery benchmark ran noonsight, a `CLAUDE.md` and a skill per model on the same 1,000 sequences (`experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55/`, Claude Code 2.1.330), and `docs/evidence.md` gains D35 to D51, which replace the numbers over 300 and 60 sequences.
-  Subagent coverage is 100% (2,417 of 2,417) under noonsight, 48.3% (1,082 of 2,242) with a `CLAUDE.md` and 0 of 2,242 with skills.
-  The larger sample found three failures of noonsight, F10 to F12, fixed since (above): on the build measured, 4 of 997 sessions break the invariant, and coverage over every request is 99.9% (10,237 of 10,245) (`experiments/delivery/README.md`, "Failures found, and a limit").
+  Subagent coverage is 100% (2,417 of 2,417) under noonsight on that build (superseded, below), 48.3% (1,082 of 2,242) with a `CLAUDE.md` and 0 of 2,242 with skills.
+  The larger sample found three failures of noonsight, F10 to F12, fixed since (above): on the build measured, 4 of 997 sessions break the invariant, and coverage over every request is 99.9% (10,237 of 10,245) (`experiments/delivery/README.md`, "Failures found, and a limit"), values now superseded.
+- noonsight's arm ran again on the same 1,000 sequences with the fixes of F10 to F12 (`experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada/`, Claude Code 2.1.330), under the design `on-n1000-after-f10-f12` of `experiments/delivery/plan.json`, and `docs/evidence.md` gains D52 to D62, which supersede D35 to D39, D45, D47 and D49.
+  All 1,000 sessions ran to the end and none breaks the invariant; coverage is 100% (10,329 of 10,329), and 100% (2,430 of 2,430) for subagents.
 
 ## 0.1.2
 

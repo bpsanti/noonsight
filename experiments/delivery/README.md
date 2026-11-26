@@ -262,7 +262,7 @@ results/
       sessions/       one line per session (not committed: the seed reproduces them)
 ```
 
-The current run of `on`, `claudemd` and `skills` is the one of 2026-11-24 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md)); the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)) is still the latest of `rules`, the corpus, the self-check and the hook times, and superseded for the rest; every run on 2.1.328 is superseded, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
+The current run of `on` is the one of 2026-11-25 on Claude Code 2.1.330, after the fixes of F10 to F12 ([README](results/claude-code-2.1.330/2026-11-25-6989ada/README.md)); that of `claudemd` and `skills` is the one of 2026-11-24 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md)), superseded for `on`; the one of 2026-11-23 on Claude Code 2.1.330 ([README](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md)) is still the latest of `rules`, the corpus, the self-check and the hook times, and superseded for the rest; every run on 2.1.328 is superseded, and [docs/evidence.md](../../docs/evidence.md#runs-and-versions) lists them all.
 The folder for one version holds what was measured on that version; comparing two versions is comparing their `summary.json` and `corpus.json`.
 
 [install-check](install-check/README.md) holds a smaller check, the corpus and 20 sequences under the settings hooks, the plugin and both, which is not a run of the benchmark.
@@ -315,7 +315,7 @@ F5 and F6 showed in the corpus entries written for the paths generator 2 added, 
 
 The run [of 2026-11-23 with generator 2 on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-23-c5b9130/README.md), superseded in part, measured the new paths after the fixes of F5 to F9: 300 sessions were generated under `on`, 299 ran to the end and none of the 299 breaks the invariant, and every request with rules due held them; the other, `s1-0123`, stopped on a turn that got no answer and is not measured.
 
-The current run, [on 1000 sequences, on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md), found F10 to F12, which are fixed since: on the build measured, 4 sessions of the 997 that ran to the end break the invariant, all in the session's own requests.
+The run [on 1000 sequences, on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-24-9ee1e55/README.md), superseded for `on`, found F10 to F12, which are fixed since: on the build measured, 4 sessions of the 997 that ran to the end break the invariant, all in the session's own requests.
 
 - **F10, Haiku chosen in plan mode from Sonnet.**
   In plan mode on Sonnet, `/model haiku` draws no model switch, since Claude Code goes on running Sonnet, so noonsight did not learn that Haiku is the chosen model; a compaction's start, or that of a `/branch` or `/resume` typed in the session, then reports Haiku, and Haiku's rules went to Sonnet's requests (`f10-model-haiku-in-plan-mode-from-sonnet`, `f10-model-haiku-after-opus-in-plan-mode`, `f10-branch-in-plan-mode`, `f10-resume-in-plan-mode`).
@@ -329,7 +329,7 @@ The current run, [on 1000 sequences, on Claude Code 2.1.330](results/claude-code
   noonsight now records that the rules are only in the launcher's prompt until a response shows that a request was sent with it, and delivers them again at a resume or a fork before that (`docs/hooks.md`, "SessionStart").
 
 F10 to F12 showed in four of that run's sessions (`s1-0345` and `s1-0969` for F10, `s1-0564` for F11, `s1-0949` for F12): on the build before their fix, every one of their entries breaks the invariant, and on the fixed build they pass, as do the four sessions.
-The fuzz level has not run again since, so that run's numbers are those of the build before the fixes.
+The current run, [`on` again on the same 1000 sequences after the fixes, on Claude Code 2.1.330](results/claude-code-2.1.330/2026-11-25-6989ada/README.md), ran all 1000 sessions to the end, and none breaks the invariant.
 
 `limit-default-model-after-compact` reproduces a documented limit: a conversation compacted with no response since or kept, and resumed with nothing that names a model, runs on Claude Code's default model, which noonsight cannot tell, so the session's record decides.
 `limit-default-model-after-compact-from-the-launcher` is the same for a session `noonsight run` started, whose conversation holds no rules then: noonsight delivers none and warns the person, so no rules of another model reach the request and none count as delivered.
