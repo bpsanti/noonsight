@@ -27,8 +27,10 @@ const UNVERSIONED_PAGE = 'README.md';
 const DELIVERY_OLD = 'experiments/delivery/results/claude-code-2.1.328/2026-11-21-d5fd71f';
 /** The superseded run before that, whose comparisons hold the build before the fixes of F1 and F2 and the native alternatives against `on`. */
 const DELIVERY_BEFORE = 'experiments/delivery/results/claude-code-2.1.328/2026-11-20-4e18c43';
-/** The current run of the arms on and claudemd, on 1000 sequences, and of skills; on Claude Code 2.1.330. */
+/** The run of the arms on, claudemd and skills on 1000 sequences, on Claude Code 2.1.330: the current one of claudemd and skills. */
 const DELIVERY_N1000 = 'experiments/delivery/results/claude-code-2.1.330/2026-11-24-9ee1e55';
+/** The current run of the arm on, on the same 1000 sequences, on the build with the fixes of F10 to F12; on Claude Code 2.1.330. */
+const DELIVERY_ON = 'experiments/delivery/results/claude-code-2.1.330/2026-11-25-6989ada';
 /** The run of 2026-11-23, with generator 2 (experiments/delivery/generate.ts), on Claude Code 2.1.330: the latest of the rules arm, the corpus and the hook times. */
 const DELIVERY = 'experiments/delivery/results/claude-code-2.1.330/2026-11-23-c5b9130';
 const RULES = 'experiments/rules/results';
@@ -80,6 +82,8 @@ const now = (key: string): any => arm(DELIVERY, key);
 const g2 = (): any => now('on-g2-s1-n300');
 /** An arm of the run on 1000 sequences. */
 const big = (a: string): any => arm(DELIVERY_N1000, `${a}-g2-s1-n1000`);
+/** The arm on of the run after the fixes of F10 to F12. */
+const fixed = (): any => arm(DELIVERY_ON, 'on-g2-s1-n1000');
 /** The paths only generator 2 draws, as measure.ts names them. */
 const G2_PATHS = [
   'a /fork session',
@@ -233,6 +237,24 @@ const COMPUTE: Record<string, () => string> = {
     for (const [p, x] of Object.entries(m.byPath as Record<string, any>)) if (p !== 'subagent') assert.equal(x.coverage, 1, `D51: ${p}`);
     return pctOf(m.coverage.covered - m.coverage.subagents.covered, m.coverage.due - m.coverage.subagents.due);
   },
+  D52: () => failedOfRan(fixed(), 1000, 1000),
+  D53: () => pctOf(fixed().coverage.covered, fixed().coverage.due),
+  D54: () => pctOf(fixed().coverage.subagents.covered, fixed().coverage.subagents.due),
+  D55: () => {
+    const paths = G2_PATHS.map((p) => fixed().byPath[p]);
+    assert.ok(paths.every((p) => p !== undefined), 'D55: a path generator 2 added has no requests');
+    return pctOf(paths.reduce((n, p) => n + Math.round(p.coverage * p.due), 0), paths.reduce((n, p) => n + p.due, 0));
+  },
+  D56: () => {
+    const starts = Object.entries(fixed().robustness.byStart as Record<string, any>).filter(([k]) => k !== 'claude').map(([, v]) => v);
+    return pctOf(starts.reduce((n, x) => n + x.covered, 0), starts.reduce((n, x) => n + x.due, 0));
+  },
+  D57: () => pct(ownShare(fixed())),
+  D58: () => pct(ownShare(big('claudemd'))),
+  D59: () => n(fixed().cost.addedCharsPerAgentRequest),
+  D60: () => n(big('claudemd').cost.addedCharsPerAgentRequest),
+  D61: () => n(fixed().robustness.requestsWithViolation['foreign-unretired']),
+  D62: () => n(big('claudemd').robustness.requestsWithViolation['foreign-unretired']),
   B1: () => {
     const passed = (c: string): string => {
       const rs = pilot().filter((r) => r.condition === c && typeof r.resolved === 'boolean');
@@ -323,6 +345,10 @@ const ALSO: Record<string, () => (number | string)[]> = {
   D42: () => [big('claudemd').harness.ok],
   D44: () => [big('skills').harness.ok],
   D51: () => [big('claudemd').harness.ok],
+  D52: () => [fixed().sessions],
+  D58: () => [big('claudemd').harness.ok],
+  D60: () => [big('claudemd').harness.ok],
+  D62: () => [big('claudemd').harness.ok],
   R12: () => [...new Set(Object.values(counts(cell('2026-11-20-long', {}, 'pilot/runs.jsonl'))))],
   R10: () => [(fs.readFileSync(path.join(PACKAGE_ROOT, 'experiments/rules/fixtures/pantry-stock/TICKETS.md'), 'utf8').split('\n## Done')[0]?.match(/^### PAN-\d+/gm) ?? []).length],
 };
@@ -579,7 +605,7 @@ test('README.md: each line that states a rule effect names its rules, whether al
   assert.deepEqual(problems, []);
 });
 
-/** The tracked Markdown files outside the folder whose own tests fix what it says. */
+/** The tracked Markdown files outside the folder whose own tests fix what it says. A run's summary.md and comparison.md are rendered from its raw files, and a comparison quotes the run it compares against by design. */
 const MARKDOWN = spawnSync('git', ['-C', PACKAGE_ROOT, 'ls-files', '-z', '*.md'], { encoding: 'utf8' })
   .stdout.split('\0')
   .filter((f) => f && !f.startsWith('experiments/adoption/') && exists(f));
@@ -611,7 +637,7 @@ test('no page states a superseded value, or links to a superseded run, without s
   const stale = STALE.map((x) => ({ x, plain: /^[\d,]+$/.test(x), re: new RegExp(`(?<![\\d.,])${x.replace(/[.$]/g, '\\$&')}(?![\\d])`) }));
   const gone = RUNS.filter((r) => statusOf(r) === 'superseded').map((r) => path.basename(r.folder));
   const problems: string[] = [];
-  for (const file of MARKDOWN.filter((f) => !inSupersededRun(f) && !(inAnyRun(f) && path.basename(f) === 'summary.md'))) {
+  for (const file of MARKDOWN.filter((f) => !inSupersededRun(f) && !(inAnyRun(f) && ['summary.md', 'comparison.md'].includes(path.basename(f))))) {
     const text = fs.readFileSync(path.join(PACKAGE_ROOT, file), 'utf8');
     const lines = text.split('\n');
     const end = file === 'docs/evidence.md' ? text.slice(0, SUPERSEDED_SECTION).split('\n').length : lines.length;

@@ -59,7 +59,7 @@ The guides of Sonnet 5.5 and Haiku 5.5 describe different habits at the same eff
 
 **Our data: confirms delivery to the main conversation.**
 With every model's rules in a user `CLAUDE.md`, every request of the session's own conversation held them, through `/compact`, `/clear`, `/model` and resumes: 100% (7,574 of 7,574) ([D51](evidence.md#d51), Claude Code 2.1.330).
-What a `CLAUDE.md` cannot do is choose by model: every model reads every other model's rules, and only 32.3% of the rule text in a request was its own, against 78.3% under noonsight ([D45](evidence.md#d45), Claude Code 2.1.330).
+What a `CLAUDE.md` cannot do is choose by model: every model reads every other model's rules, and only 32.3% of the rule text in a request was its own ([D58](evidence.md#d58), Claude Code 2.1.330), against 78.4% under noonsight ([D57](evidence.md#d57), Claude Code 2.1.330).
 noonsight's rules are context in the same way, so the second excerpt holds for them too.
 
 ### S4
@@ -75,7 +75,7 @@ noonsight's rules are context in the same way, so the second excerpt holds for t
 
 **Our data: confirms it.**
 With every model's rules in a `CLAUDE.md`, 48.3% (1,082 of 2,242) of subagent requests held their rules ([D42](evidence.md#d42), Claude Code 2.1.330), and 46.9% (60 of 128) with them in `.claude/rules`, on fewer sequences ([D43](evidence.md#d43), Claude Code 2.1.330): the Explore and Plan subagents never did, and a general-purpose subagent got every model's rules.
-noonsight's `SubagentStart` hook reached 100% (2,417 of 2,417) of subagent requests over 997 sessions ([D37](evidence.md#d37), Claude Code 2.1.330), Explore and Plan included.
+noonsight's `SubagentStart` hook reached 100% (2,430 of 2,430) of subagent requests over 1,000 sessions ([D54](evidence.md#d54), Claude Code 2.1.330), Explore and Plan included.
 
 ### S5
 
@@ -113,7 +113,7 @@ A real model may open the skill; whether it does on the right model, every time,
 The first excerpt is the use noonsight makes of `PostModelSwitch`.
 The second and third are the cause of F1: a switch's text that never reached a request was still taken as delivered, and a later note did not retire the rules the conversation still held.
 Before noonsight treated such a delivery as unconfirmed, 26 of 296 sessions broke the invariant, and 1 of 300 after that fix and those of F2 to F4, in superseded runs on Claude Code 2.1.328 ([D4](evidence.md#d4), [D1](evidence.md#d1)).
-The current run, on other sequences, has 4 of 997 ([D35](evidence.md#d35), Claude Code 2.1.330), from three failures fixed since ([F10 to F12](../experiments/delivery/README.md#failures-found-and-a-limit)).
+The current run, on other sequences, has 0 of 1,000 ([D52](evidence.md#d52), Claude Code 2.1.330), after the fixes of three failures its first build had ([F10 to F12](../experiments/delivery/README.md#failures-found-and-a-limit)).
 The same holds at a resume (F3): what `SessionStart` returns there also reaches the conversation with the process's next request only, so a resume ended before any request loses it.
 noonsight writes its envelope as facts, as the fourth and fifth excerpts ask, and [docs/usage.md](usage.md#choosing-where-a-rule-lives) follows the sixth for rules that are the same for every model.
 
@@ -151,6 +151,6 @@ Emphasis was not measured.
 > Rather than pre-processing all relevant data up front, agents built with the “just in time” approach maintain lightweight identifiers (file paths, stored queries, web links, etc.) and use these references to dynamically load data into context at runtime using tools.
 
 **Our data: consistent with the first, confirms the second for one rule.**
-Delivering only the model's own rules added 1,372 characters to each request under noonsight, against 4,509 with every model's rules in a `CLAUDE.md` ([D47](evidence.md#d47), Claude Code 2.1.330) and 3,889 in `.claude/rules`, on fewer sequences ([D48](evidence.md#d48), Claude Code 2.1.330); whether that changes what the model does was not measured.
+Delivering only the model's own rules added 1,370 characters to each request under noonsight ([D59](evidence.md#d59), Claude Code 2.1.330), against 4,509 with every model's rules in a `CLAUDE.md` ([D60](evidence.md#d60), Claude Code 2.1.330) and 3,889 in `.claude/rules`, on fewer sequences ([D48](evidence.md#d48), Claude Code 2.1.330); whether that changes what the model does was not measured.
 `verify-changes` delivered as one sentence naming the file that holds it was read in 120 of 120 runs ([R4](evidence.md#r4)) and gave the same tests as the rule inline: 30 of 30 against 29 of 30, and 27 of 30 against 27 of 30 ([R5](evidence.md#r5), Claude Code 2.1.329).
 Those sessions were short; a pointer read at the start and then compacted away was not measured.

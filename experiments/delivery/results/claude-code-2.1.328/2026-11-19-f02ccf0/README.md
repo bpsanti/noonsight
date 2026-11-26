@@ -1,6 +1,6 @@
 # Delivery benchmark, Claude Code 2.1.328, 2026-11-19, after the fixes of F1 and F2
 
-> **Superseded.** The current runs are [2026-11-24](../../claude-code-2.1.330/2026-11-24-9ee1e55/README.md) and, for what it did not run, [2026-11-23](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md), both on Claude Code 2.1.330; quote its numbers, not the ones here, which are history.
+> **Superseded.** The current runs are [2026-11-25](../../claude-code-2.1.330/2026-11-25-6989ada/README.md) for `on`, [2026-11-24](../../claude-code-2.1.330/2026-11-24-9ee1e55/README.md) for `claudemd` and `skills`, and, for what neither ran, [2026-11-23](../../claude-code-2.1.330/2026-11-23-c5b9130/README.md), all on Claude Code 2.1.330; quote its numbers, not the ones here, which are history.
 
 The corpus and the self-check on noonsight with the fixes of F1 and F2 (#46), at commit `f02ccf0`, on Claude Code 2.1.328 and the `claude` preset 1.3.1.
 The fuzz level and the native arms on this build are not run here; [the earlier folder](../2026-11-19-467d465/README.md) has them, measured before the fixes, and [the next folder](../2026-11-20-4e18c43/README.md) after them.

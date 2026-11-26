@@ -7,12 +7,12 @@ Every number links to its entry in [docs/evidence.md](evidence.md), and every qu
 ## Choosing where a rule lives
 
 Claude Code already has three places for instructions, and noonsight is a fourth.
-The delivery benchmark put every model's rules in each of them and read every request, for noonsight, a `CLAUDE.md` and skills on the same 1,000 sequences, and for `.claude/rules` on the first 60 of them in an earlier run ([experiments/delivery](../experiments/delivery/README.md), Claude Code 2.1.330):
+The delivery benchmark put every model's rules in each of them and read every request, for noonsight, a `CLAUDE.md` and skills on the same 1,000 sequences (noonsight in a later run, after the fixes of F10 to F12), and for `.claude/rules` on the first 60 of them in an earlier run ([experiments/delivery](../experiments/delivery/README.md), Claude Code 2.1.330):
 
 | Where the rules live | Requests with their rules | Subagent requests with their rules | Rule text that is the model's own | Characters added per request |
 | --- | --- | --- | --- | --- |
-| noonsight | [99.9% (10,237 of 10,245)](evidence.md#d36) | [100% (2,417 of 2,417)](evidence.md#d37) | [78.3%](evidence.md#d45) | [1,372](evidence.md#d47) |
-| A user `CLAUDE.md` | [88.2% (8,656 of 9,816)](evidence.md#d40), and [100% (7,574 of 7,574)](evidence.md#d51) of the main conversation's | [48.3% (1,082 of 2,242)](evidence.md#d42) | [32.3%](evidence.md#d45) | [4,509](evidence.md#d47) |
+| noonsight | [100% (10,329 of 10,329)](evidence.md#d53) | [100% (2,430 of 2,430)](evidence.md#d54) | [78.4%](evidence.md#d57) | [1,370](evidence.md#d59) |
+| A user `CLAUDE.md` | [88.2% (8,656 of 9,816)](evidence.md#d40), and [100% (7,574 of 7,574)](evidence.md#d51) of the main conversation's | [48.3% (1,082 of 2,242)](evidence.md#d42) | [32.3%](evidence.md#d58) | [4,509](evidence.md#d60) |
 | `.claude/rules`, one file per model, first 60 sequences | [76.3% (441 of 578)](evidence.md#d26) | [46.9% (60 of 128)](evidence.md#d43) | [27.9%](evidence.md#d46) | [3,889](evidence.md#d48) |
 | A skill per model | [0% (0 of 9,833)](evidence.md#d41) | [0 of 2,242](evidence.md#d44) | No rule text | None |
 
@@ -79,7 +79,7 @@ On the precise fix, mean cost per run as Claude Code reports it at list price ([
 
 - `carry-through` changed nothing on that task and cost almost nothing.
 - `verify-changes` made the model run the tests, which roughly doubled the cost of a cheap task; on Sonnet the three preset rules together cost less than `verify-changes` alone, which the result's README reads as `stay-in-scope` keeping the runs short, a direction it did not test.
-- The added characters themselves are small: 1,372 and 4,509 characters per request in the delivery benchmark under noonsight and a `CLAUDE.md` ([D47](evidence.md#d47), Claude Code 2.1.330), and 3,889 under `.claude/rules` on fewer sequences ([D48](evidence.md#d48), Claude Code 2.1.330).
+- The added characters themselves are small: 1,370 and 4,509 characters per request in the delivery benchmark under noonsight and a `CLAUDE.md` ([D59](evidence.md#d59), [D60](evidence.md#d60), Claude Code 2.1.330), and 3,889 under `.claude/rules` on fewer sequences ([D48](evidence.md#d48), Claude Code 2.1.330).
 
 `noonsight models` lists each preset rule with the cost its source reports, and `noonsight report` gives the length of each rule's text, so a rule that is long and never changes anything you can see is the first to drop.
 

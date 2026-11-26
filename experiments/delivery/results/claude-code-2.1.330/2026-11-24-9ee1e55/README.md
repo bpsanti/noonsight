@@ -1,8 +1,10 @@
 # Delivery benchmark, Claude Code 2.1.330, 2026-11-24, 1000 sequences
 
+> **Superseded in part.** The arm `on` by [2026-11-25, after the fixes of F10 to F12](../2026-11-25-6989ada/README.md) (Claude Code 2.1.330); `claudemd` and `skills` are current.
+
 The design [`native-n1000`](../../../README.md#the-design-native-n1000): noonsight, a user `CLAUDE.md` and a skill per model on the same 1000 sequences of generator 2, seed 1, so the arms compare on the same sample.
 No request reached Anthropic and no token was spent.
-This is the current run of these three arms: [docs/evidence.md](../../../../../docs/evidence.md#delivery) gives its numbers (D35 to D42, D44, D45, D47, D49 and D51).
+This is the current run of `claudemd` and `skills`, and its `on` arm, the build before the fixes of F10 to F12, is superseded: [docs/evidence.md](../../../../../docs/evidence.md#delivery) gives its numbers (D40 to D42, D44, D51, D58, D60 and D62, and the superseded D35 to D39, D45, D47 and D49).
 `rules`, the corpus, the self-check and the hook times were not run; their latest results are in [2026-11-23](../2026-11-23-c5b9130/README.md), superseded for the rest.
 
 ## How it ran

@@ -1,6 +1,6 @@
 # Delivery benchmark, Claude Code 2.1.330, 2026-11-23, generator 2
 
-> **Superseded in part.** The arms `on`, `claudemd` and `skills` by [2026-11-24 on 1000 sequences](../2026-11-24-9ee1e55/README.md) (Claude Code 2.1.330); the rest, `rules`, the corpus, the self-check and the hook times, is current.
+> **Superseded in part.** The arm `on` by [2026-11-25 on 1000 sequences](../2026-11-25-6989ada/README.md), and `claudemd` and `skills` by [2026-11-24 on the same sequences](../2026-11-24-9ee1e55/README.md) (Claude Code 2.1.330); the rest, `rules`, the corpus, the self-check and the hook times, is current.
 
 The whole delivery benchmark ([experiments/delivery](../../../README.md)) with the second generator, which draws the paths the earlier runs left out: sessions started through `noonsight run` and in a project with a trusted noonsight configuration, forks (`--fork-session`, `/branch`, `/fork`), `/resume` typed in the session, plan mode, and subagents that edit a file.
 No request reached Anthropic and no token was spent.
