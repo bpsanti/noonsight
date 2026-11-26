@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
 
 - Three failures of delivery after a compaction, F10 to F12, are fixed (`experiments/delivery/README.md`, "Failures found, and a limit"):
   - After `/model haiku` in plan mode on Sonnet, which Claude Code goes on running, a compaction, `/branch` or `/resume` delivered Haiku's rules to Sonnet's requests.
