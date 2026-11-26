@@ -10,7 +10,7 @@
       "source": {
         "source": "npm",
         "package": "noonsight",
-        "version": "0.1.2"
+        "version": "0.1.3"
       },
       "description": "Hands every Claude Code session and subagent the rules for the model it actually runs on.",
       "category": "productivity"
